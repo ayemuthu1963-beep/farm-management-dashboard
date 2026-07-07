@@ -1,0 +1,82 @@
+"use client"
+
+import {
+  Home,
+  Sprout,
+  Citrus,
+  Droplets,
+  Gauge,
+  Bug,
+  Wrench,
+  Leaf,
+  BarChart3,
+  Settings,
+  CalendarDays,
+  Clock,
+  type LucideIcon,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+import { todayDate, todayTime } from "@/lib/well-data"
+
+interface NavItem {
+  label: string
+  icon: LucideIcon
+  active?: boolean
+}
+
+const navItems: NavItem[] = [
+  { label: "Dashboard", icon: Home },
+  { label: "Coconut Harvest", icon: Sprout },
+  { label: "Jackfruit Monitoring", icon: Citrus },
+  { label: "Well Water", icon: Droplets, active: true },
+  { label: "Motor Runtime", icon: Gauge },
+  { label: "Beetle Trap", icon: Bug },
+  { label: "Pipeline Inspection", icon: Wrench },
+  { label: "Fertiliser Management", icon: Leaf },
+  { label: "Reports", icon: BarChart3 },
+  { label: "Settings", icon: Settings },
+]
+
+export function Sidebar() {
+  return (
+    <nav
+      aria-label="Main navigation"
+      className="flex h-full flex-col gap-1 overflow-y-auto bg-sidebar p-3"
+    >
+      <ul className="flex flex-col gap-1">
+        {navItems.map((item) => {
+          const Icon = item.icon
+          return (
+            <li key={item.label}>
+              <a
+                href="#"
+                aria-current={item.active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  item.active
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                )}
+              >
+                <Icon className="size-5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{item.label}</span>
+              </a>
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="mt-6 rounded-xl border border-sidebar-border bg-card p-4">
+        <p className="text-sm font-semibold text-foreground">Today&apos;s Date &amp; Time</p>
+        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+          <span>{todayDate}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="size-4 text-primary" aria-hidden="true" />
+          <span>{todayTime}</span>
+        </div>
+      </div>
+    </nav>
+  )
+}
