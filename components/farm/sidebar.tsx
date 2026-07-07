@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Home,
   Sprout,
@@ -21,23 +23,25 @@ import { todayDate, todayTime } from "@/lib/well-data"
 interface NavItem {
   label: string
   icon: LucideIcon
-  active?: boolean
+  href: string
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", icon: Home },
-  { label: "Coconut Harvest", icon: Sprout },
-  { label: "Jackfruit Monitoring", icon: Citrus },
-  { label: "Well Water", icon: Droplets, active: true },
-  { label: "Motor Runtime", icon: Gauge },
-  { label: "Beetle Trap", icon: Bug },
-  { label: "Pipeline Inspection", icon: Wrench },
-  { label: "Fertiliser Management", icon: Leaf },
-  { label: "Reports", icon: BarChart3 },
-  { label: "Settings", icon: Settings },
+  { label: "Dashboard", icon: Home, href: "/" },
+  { label: "Coconut Harvest", icon: Sprout, href: "#" },
+  { label: "Jackfruit Monitoring", icon: Citrus, href: "#" },
+  { label: "Well Water", icon: Droplets, href: "/well-water" },
+  { label: "Motor Runtime", icon: Gauge, href: "#" },
+  { label: "Beetle Trap", icon: Bug, href: "#" },
+  { label: "Pipeline Inspection", icon: Wrench, href: "#" },
+  { label: "Fertiliser Management", icon: Leaf, href: "#" },
+  { label: "Reports", icon: BarChart3, href: "#" },
+  { label: "Settings", icon: Settings, href: "#" },
 ]
 
 export function Sidebar() {
+  const pathname = usePathname()
+
   return (
     <nav
       aria-label="Main navigation"
@@ -46,21 +50,22 @@ export function Sidebar() {
       <ul className="flex flex-col gap-1">
         {navItems.map((item) => {
           const Icon = item.icon
+          const active = item.href !== "#" && pathname === item.href
           return (
             <li key={item.label}>
-              <a
-                href="#"
-                aria-current={item.active ? "page" : undefined}
+              <Link
+                href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  item.active
+                  active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
                 <span className="truncate">{item.label}</span>
-              </a>
+              </Link>
             </li>
           )
         })}

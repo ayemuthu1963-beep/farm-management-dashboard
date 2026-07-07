@@ -1,4 +1,5 @@
 import Image from "next/image"
+import Link from "next/link"
 import { Home, LogOut, CheckCircle2 } from "lucide-react"
 
 const taglines = ["DATA DRIVEN", "SMARTER DECISIONS", "BETTER YIELD"]
@@ -49,13 +50,13 @@ export function Header() {
 
         {/* Actions */}
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
+          <Link
+            href="/"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
           >
             <Home className="size-4" aria-hidden="true" />
             Home
-          </button>
+          </Link>
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
