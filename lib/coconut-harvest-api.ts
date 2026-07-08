@@ -50,6 +50,23 @@ interface ApiTreePerformanceDetail {
   missed_harvests: number | null
 }
 
+export interface TreePerformanceCategoryRow {
+  treeNo: string
+  totalNutsLast10Cycles: number
+  averageNuts: number
+  harvestsCount: number
+  missedHarvests: number
+  minNuts: number
+  maxNuts: number
+}
+
+export interface TreePerformanceCategoryData {
+  plot: string
+  category: string
+  rows: TreePerformanceCategoryRow[]
+  usedMockFallback: boolean
+}
+
 export interface CycleViewData {
   cycleSummary: CycleSummary
   harvestCycleRows: HarvestCycleRow[]
@@ -170,6 +187,10 @@ function categoryWithBadge(category: string): string {
   return `${badgeByCategory[category] ?? ""} ${category}`.trim()
 }
 
+function categoryWithoutBadge(category: string): string {
+  return category.replace(/^[^\p{L}\p{N}]+/u, "").trim()
+}
+
 function mapPerformanceRow(row: ApiTreePerformanceRow): PerformanceRow {
   return {
     rank: row.rank_order ?? 0,
@@ -179,6 +200,31 @@ function mapPerformanceRow(row: ApiTreePerformanceRow): PerformanceRow {
     minNuts: row.min_nuts ?? 0,
     maxNuts: row.max_nuts ?? 0,
     averageNuts: toNumber(row.average_nuts),
+  }
+}
+
+async function mapPerformanceCategoryDetail(
+  detail: ApiTreePerformanceDetail,
+  authHeader: string,
+  lastCycles: Set<number>,
+): Promise<TreePerformanceCategoryRow> {
+  const records = (await fetchRawTreeHistory(detail.tree_no, authHeader)).filter((record) => {
+    return lastCycles.has(toCycleNumber(record.harvest_cycle ?? "0"))
+  })
+
+  const nutsByHarvest = records.map((record) => record.total_nuts ?? 0)
+  const totalNutsLast10Cycles = nutsByHarvest.reduce((sum, nuts) => sum + nuts, 0)
+  const minNuts = nutsByHarvest.length > 0 ? Math.min(...nutsByHarvest) : 0
+  const maxNuts = nutsByHarvest.length > 0 ? Math.max(...nutsByHarvest) : 0
+
+  return {
+    treeNo: detail.tree_no,
+    totalNutsLast10Cycles,
+    averageNuts: lastCycles.size > 0 ? totalNutsLast10Cycles / lastCycles.size : 0,
+    harvestsCount: records.length,
+    missedHarvests: detail.missed_harvests ?? 0,
+    minNuts,
+    maxNuts,
   }
 }
 
@@ -307,6 +353,65 @@ export async function fetchTreePerformanceData(): Promise<TreePerformanceData> {
     performanceCyclesUsed: data.last_cycles.map((cycle) => toCycleNumber(cycle.harvest_cycle)),
     plot1Performance: data.rows.filter((row) => row.plot === "Plot 1").map(mapPerformanceRow),
     plot2Performance: data.rows.filter((row) => row.plot === "Plot 2").map(mapPerformanceRow),
+  }
+}
+
+export async function fetchTreePerformanceCategoryData(
+  plot: string,
+  category: string,
+): Promise<TreePerformanceCategoryData> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
+  }
+
+  const performance = (await response.json()) as {
+    last_cycles: ApiTreePerformanceCycle[]
+    details: ApiTreePerformanceDetail[]
+  }
+
+  const lastCycles = new Set(performance.last_cycles.map((cycle) => toCycleNumber(cycle.harvest_cycle)))
+  const cleanCategory = categoryWithoutBadge(category)
+
+  const selectedDetails = performance.details.filter((detail) => {
+    return detail.plot === plot && detail.category === cleanCategory
+  })
+
+  const rows: TreePerformanceCategoryRow[] = []
+  const batchSize = 25
+
+  for (let index = 0; index < selectedDetails.length; index += batchSize) {
+    const batch = selectedDetails.slice(index, index + batchSize)
+    rows.push(...(await Promise.all(batch.map((detail) => mapPerformanceCategoryDetail(detail, authHeader, lastCycles)))))
+  }
+
+  rows.sort((a, b) => {
+    const totalCompare = b.totalNutsLast10Cycles - a.totalNutsLast10Cycles
+    if (totalCompare !== 0) {
+      return totalCompare
+    }
+
+    return a.treeNo.localeCompare(b.treeNo, undefined, { numeric: true, sensitivity: "base" })
+  })
+
+  return {
+    plot,
+    category: cleanCategory,
+    rows,
+    usedMockFallback: false,
   }
 }
 
