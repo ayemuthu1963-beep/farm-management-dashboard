@@ -1,16 +1,30 @@
-import { DashboardShell } from "@/components/farm/dashboard-shell"
-import { HomeHero } from "@/components/farm/home-hero"
-import { WeatherWidget } from "@/components/farm/weather-widget"
-import { ModuleGrid } from "@/components/farm/module-grid"
+import { HomeHeader } from "@/components/home/home-header"
+import { WeatherCard } from "@/components/home/weather-card"
+import { ModuleCard } from "@/components/home/module-card"
+import { HomeFooter } from "@/components/home/home-footer"
+import { moduleCards, weatherData } from "@/lib/home-data"
 
 export default function HomePage() {
   return (
-    <DashboardShell>
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-3 sm:p-5">
-        <HomeHero />
-        <WeatherWidget />
-        <ModuleGrid />
+    <main className="min-h-screen bg-[#f3fbf4]">
+      <div className="mx-auto max-w-[1536px] px-4 py-6 sm:px-6">
+        <HomeHeader />
+
+        <section
+          aria-label="Farm modules"
+          className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          {/* 1. Today's Weather */}
+          <WeatherCard data={weatherData} />
+
+          {/* 2-8. Module cards (order frozen per approved reference) */}
+          {moduleCards.map((card) => (
+            <ModuleCard key={card.id} data={card} />
+          ))}
+        </section>
+
+        <HomeFooter />
       </div>
-    </DashboardShell>
+    </main>
   )
 }
