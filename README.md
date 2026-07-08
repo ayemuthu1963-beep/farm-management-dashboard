@@ -36,7 +36,11 @@ Then open http://localhost:3000
 | Route                    | File                                | Status            |
 | ------------------------ | ----------------------------------- | ----------------- |
 | `/`                      | `app/page.tsx`                      | Home (approved)   |
-| `/coconut-harvest`       | `app/coconut-harvest/page.tsx`      | Approved          |
+| `/coconut-harvest`       | `app/coconut-harvest/page.tsx`      | Hub — 4 view cards |
+| `/coconut-harvest/tree-view`        | `app/coconut-harvest/tree-view/page.tsx`        | Per-tree harvest history |
+| `/coconut-harvest/cycle-view`       | `app/coconut-harvest/cycle-view/page.tsx`       | Cycle & date-range summary |
+| `/coconut-harvest/tree-performance` | `app/coconut-harvest/tree-performance/page.tsx` | Plot 1 & Plot 2 classification |
+| `/coconut-harvest/detailed-query`   | `app/coconut-harvest/detailed-query/page.tsx`   | Multi-filter search form |
 | `/jackfruit-monitoring`  | `app/jackfruit-monitoring/page.tsx` | Approved          |
 | `/well-water`            | `app/well-water/page.tsx`           | Approved          |
 | `/motor-runtime`         | `app/motor-runtime/page.tsx`        | Approved          |
@@ -57,8 +61,13 @@ There is **one data file per page**:
 - **Home page:** `lib/home-data.ts`
   - `weatherData: WeatherData` — the summary values shown on the weather card
   - `moduleCards: ModuleCardData[]` — the 11 module launcher cards (order is frozen)
-- **Coconut Harvest:** `lib/coconut-data.ts`
-  - `coconutSummary`, `harvestCycles`, `treePerformance`, `recentHarvest`, `coconutTrend`
+- **Coconut Harvest (all 5 pages share one file):** `lib/coconut-harvest-data.ts`
+  - `treeNumbers`, `harvestCycleOptions`, `treeClassifications` — dropdown option lists
+  - `treeHarvestHistory` — Tree View per-tree history rows
+  - `cycleSummary`, `harvestCycleRows` — Cycle & Harvest View summary + table
+  - `plot1Performance`, `plot2Performance`, `performanceCyclesUsed` — Tree Performance bands
+  - `formatRupees()` — helper that formats numbers with Indian digit grouping (money is stored as plain numbers)
+  - Currently **mock JSON only** — Codex will connect the real harvest database/API later, keeping the same shapes. Export to Excel is **visual only**.
 - **Jackfruit Monitoring:** `lib/jackfruit-data.ts`
   - `jackfruitSummary`, `jackfruitTrees`, `stageDistribution`
 - **Well Water:** `lib/well-data.ts`
@@ -78,7 +87,7 @@ There is **one data file per page**:
 Keeping the same shapes lets real data drop in without touching UI components:
 
 - `lib/home-data.ts`: `WeatherData`, `ModuleCardData`
-- `lib/coconut-data.ts`: `CoconutSummary`, `HarvestCycle`, `TreePerformance`, `HarvestRecord`, `CoconutTrendPoint`
+- `lib/coconut-harvest-data.ts`: `TreeHarvestRow`, `CycleSummary`, `HarvestCycleRow`, `CycleStatus`, `PerformanceRow`
 - `lib/jackfruit-data.ts`: `JackfruitSummary`, `RipenessStage`, `JackfruitTree`, `StageDistribution`
 - `lib/well-data.ts`: `WellId`, `WellDailyRecord`, `SummaryStat`, `ChartPoint`
 - `lib/motor-data.ts`: `MotorId`, `MotorInfo`, `MotorDailyRecord`, `MotorStatus`, `MotorSummaryStat`, `MotorChartPoint`, `ValveRecord`, `ValveGroup`
@@ -98,7 +107,7 @@ Reusable components are grouped by area:
   `date-range-selector.tsx`, `stat-card.tsx` (`StatCard` + `StatGrid`), `export-button.tsx` (visual only),
   plus Well Water: `well-table.tsx`, `well-chart.tsx`, `well-section.tsx`, `summary-cards.tsx`
 - `components/motor/` — Motor Runtime: `motor-status-cards.tsx`, `motor-table.tsx`, `motor-chart.tsx`, `motor-log-section.tsx`, `motor-valves-section.tsx`, `motor-summary-cards.tsx`
-- `components/coconut/` — `coconut-chart.tsx`
+- `components/coconut/` — Coconut Harvest: `harvest-hub-card.tsx` (landing cards), `coconut-subheader.tsx` (breadcrumb + title + Back + Export)
 - `components/jackfruit/` — `jackfruit-chart.tsx`
 - `components/beetle/` — `beetle-chart.tsx`
 - `components/fertiliser/` — `fertiliser-chart.tsx`

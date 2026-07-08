@@ -52,8 +52,12 @@ lib/fertiliser-api.ts  Fertiliser Management data integration
 ## Mock data files (one per page — may remain as fallback)
 
 ```
-lib/home-data.ts        WeatherData, ModuleCardData
-lib/coconut-data.ts     CoconutSummary, HarvestCycle, TreePerformance, HarvestRecord, ...
+lib/home-data.ts             WeatherData, ModuleCardData
+lib/coconut-harvest-data.ts  TreeHarvestRow, CycleSummary, HarvestCycleRow, PerformanceRow, ...
+                             (one file shared by all 5 Coconut Harvest pages:
+                              /coconut-harvest, /tree-view, /cycle-view,
+                              /tree-performance, /detailed-query — mock JSON only,
+                              Export to Excel is visual only)
 lib/jackfruit-data.ts   JackfruitSummary, JackfruitTree, StageDistribution, ...
 lib/well-data.ts        WellDailyRecord, SummaryStat, ChartPoint, wellCapacity, ...  (figures in Litres)
 lib/motor-data.ts       MotorInfo, MotorDailyRecord, MotorStatus, ValveGroup, ...
