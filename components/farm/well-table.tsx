@@ -7,10 +7,10 @@ interface WellTableProps {
 }
 
 const columns = [
-  { key: "morningWater", label: "Morning Water", unit: "(Lacs Litres)" },
-  { key: "eveningWater", label: "Evening Water", unit: "(Lacs Litres)" },
-  { key: "waterPumpedOut", label: "Water Pumped Out", unit: "(Lacs Litres)" },
-  { key: "rechargedSinceYesterday", label: "Recharged Since Yesterday", unit: "(Lacs Litres)" },
+  { key: "morningWater", label: "Morning Water", unit: "(Litres)" },
+  { key: "eveningWater", label: "Evening Water", unit: "(Litres)" },
+  { key: "waterPumpedOut", label: "Water Pumped Out", unit: "(Litres)" },
+  { key: "rechargedSinceYesterday", label: "Recharged Since Yesterday", unit: "(Litres)" },
 ] as const
 
 const remarkStyles: Record<string, string> = {
@@ -38,10 +38,7 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
         <tbody>
           {records.map((record) => (
             <tr key={record.date} className="border-t border-border hover:bg-muted/50">
-              <td className="whitespace-nowrap px-3 py-3 text-foreground">
-                {record.date}
-                <span className="block text-[10px] text-muted-foreground">({record.relativeLabel})</span>
-              </td>
+              <td className="whitespace-nowrap px-3 py-3 text-foreground">{record.date}</td>
               <td className="px-3 py-3 text-foreground">{record.morningWater.toFixed(2)}</td>
               <td className="px-3 py-3 text-foreground">{record.eveningWater.toFixed(2)}</td>
               <td className="px-3 py-3 text-foreground">{record.waterPumpedOut.toFixed(2)}</td>

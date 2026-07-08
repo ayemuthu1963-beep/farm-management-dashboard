@@ -28,10 +28,7 @@ export function MotorTable({ records, headerClassName }: MotorTableProps) {
         <tbody>
           {records.map((r) => (
             <tr key={r.date} className="border-b border-border last:border-0">
-              <td className="whitespace-nowrap px-3 py-2.5 text-foreground">
-                {r.date}
-                <span className="ml-1 text-[11px] text-muted-foreground">({r.relativeLabel})</span>
-              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-foreground">{r.date}</td>
               <td className="px-3 py-2.5 text-right font-medium text-foreground">{r.runHours.toFixed(1)}</td>
               <td className="px-3 py-2.5 text-right text-muted-foreground">{r.starts}</td>
               <td className="px-3 py-2.5 text-right text-muted-foreground">{r.energyUnits.toFixed(1)}</td>

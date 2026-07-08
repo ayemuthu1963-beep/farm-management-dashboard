@@ -1,29 +1,21 @@
 // Mock data for the Well Water dashboard. No backend — all figures are static.
-// All water figures are in "Lacs Litres".
+// All water figures are in Litres.
+//
+// Future backend calculation rules (documented for Codex, NOT implemented here):
+//   North Well: 1 inch = 1,650 litres
+//   South Well: 1 inch = 1,300 litres
+//   Pumped Out  = Morning reading - Evening reading
+//   Recharged   = Evening reading - Next Morning reading
 
 export type WellId = "north" | "south"
 
 export interface WellDailyRecord {
   date: string
-  relativeLabel: string
   morningWater: number
   eveningWater: number
   waterPumpedOut: number
   rechargedSinceYesterday: number
   remarks: string
-}
-
-export interface MotorRecord {
-  label: string
-  connectionNo: string
-}
-
-export interface WellInfo {
-  id: WellId
-  name: string
-  fullCapacity: number
-  statusColor: string
-  motors: MotorRecord[]
 }
 
 export interface SummaryStat {
@@ -34,32 +26,17 @@ export interface SummaryStat {
   icon: "drop" | "drop-alt" | "pump" | "recharge"
 }
 
-// Well & Motor information table
-export const wellInfo: WellInfo[] = [
-  {
-    id: "north",
-    name: "Well 1 - North",
-    fullCapacity: 50.0,
-    statusColor: "bg-primary",
-    motors: [
-      { label: "M1 - 12.5 / 10 HP", connectionNo: "78" },
-      { label: "M2 - 10 HP", connectionNo: "197" },
-    ],
-  },
-  {
-    id: "south",
-    name: "Well 2 - South",
-    fullCapacity: 45.0,
-    statusColor: "bg-chart-3",
-    motors: [{ label: "M3 - 10 HP", connectionNo: "199" }],
-  },
-]
+// Full storage capacity per well, shown beside each well heading.
+// (Maximum water that can be taken from bottom to Pampari.)
+export const wellCapacity: Record<WellId, string> = {
+  north: "11,28,270 litres",
+  south: "6,32,500 litres",
+}
 
 // North well — most recent day first (matches the table order in the design)
 export const northWellRecords: WellDailyRecord[] = [
   {
     date: "06-07-2026",
-    relativeLabel: "Today - 1",
     morningWater: 32.5,
     eveningWater: 29.8,
     waterPumpedOut: 2.7,
@@ -68,7 +45,6 @@ export const northWellRecords: WellDailyRecord[] = [
   },
   {
     date: "05-07-2026",
-    relativeLabel: "Today - 2",
     morningWater: 31.3,
     eveningWater: 28.4,
     waterPumpedOut: 2.9,
@@ -77,7 +53,6 @@ export const northWellRecords: WellDailyRecord[] = [
   },
   {
     date: "04-07-2026",
-    relativeLabel: "Today - 3",
     morningWater: 30.4,
     eveningWater: 27.8,
     waterPumpedOut: 2.6,
@@ -86,7 +61,6 @@ export const northWellRecords: WellDailyRecord[] = [
   },
   {
     date: "03-07-2026",
-    relativeLabel: "Today - 4",
     morningWater: 29.7,
     eveningWater: 27.1,
     waterPumpedOut: 2.6,
@@ -95,7 +69,6 @@ export const northWellRecords: WellDailyRecord[] = [
   },
   {
     date: "02-07-2026",
-    relativeLabel: "Today - 5",
     morningWater: 28.6,
     eveningWater: 26.2,
     waterPumpedOut: 2.4,
@@ -108,7 +81,6 @@ export const northWellRecords: WellDailyRecord[] = [
 export const southWellRecords: WellDailyRecord[] = [
   {
     date: "06-07-2026",
-    relativeLabel: "Today - 1",
     morningWater: 28.1,
     eveningWater: 25.4,
     waterPumpedOut: 2.7,
@@ -117,7 +89,6 @@ export const southWellRecords: WellDailyRecord[] = [
   },
   {
     date: "05-07-2026",
-    relativeLabel: "Today - 2",
     morningWater: 27.1,
     eveningWater: 24.3,
     waterPumpedOut: 2.8,
@@ -126,7 +97,6 @@ export const southWellRecords: WellDailyRecord[] = [
   },
   {
     date: "04-07-2026",
-    relativeLabel: "Today - 3",
     morningWater: 26.5,
     eveningWater: 23.8,
     waterPumpedOut: 2.7,
@@ -135,7 +105,6 @@ export const southWellRecords: WellDailyRecord[] = [
   },
   {
     date: "03-07-2026",
-    relativeLabel: "Today - 4",
     morningWater: 26.0,
     eveningWater: 23.3,
     waterPumpedOut: 2.7,
@@ -144,7 +113,6 @@ export const southWellRecords: WellDailyRecord[] = [
   },
   {
     date: "02-07-2026",
-    relativeLabel: "Today - 5",
     morningWater: 25.2,
     eveningWater: 22.7,
     waterPumpedOut: 2.5,

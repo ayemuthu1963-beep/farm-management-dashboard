@@ -37,7 +37,7 @@ export function WellChart({ data }: WellChartProps) {
             tickLine={false}
             axisLine={false}
             label={{
-              value: "Lacs Litres",
+              value: "Litres",
               angle: -90,
               position: "insideLeft",
               style: { fill: "var(--muted-foreground)", fontSize: 11, textAnchor: "middle" },
