@@ -38,18 +38,37 @@ shadows · border radius · responsive behaviour · component visual structure.
 ## Suggested API service structure
 
 ```
-lib/api.ts          Common fetch helper (base URL, error handling, JSON parsing)
-lib/weather-api.ts  Weather / Ambient Weather integration
-lib/well-api.ts     Well Water data integration
-lib/motor-api.ts    Motor Runtime data integration
+lib/api.ts             Common fetch helper (base URL, error handling, JSON parsing)
+lib/weather-api.ts     Weather / Ambient Weather integration
+lib/coconut-api.ts     Coconut Harvest data integration
+lib/jackfruit-api.ts   Jackfruit Monitoring data integration
+lib/well-api.ts        Well Water data integration
+lib/motor-api.ts       Motor Runtime data integration
+lib/beetle-api.ts      Beetle Trap data integration
+lib/pipeline-api.ts    Pipeline Inspection data integration
+lib/fertiliser-api.ts  Fertiliser Management data integration
 ```
 
-## Mock data files (may remain as fallback)
+## Mock data files (one per page — may remain as fallback)
 
 ```
-lib/home-data.ts    WeatherData, ModuleCardData
-lib/well-data.ts    WellInfo, WellDailyRecord, SummaryStat, ChartPoint, ...
-lib/motor-data.ts   MotorInfo, MotorDailyRecord, MotorStatus, MotorSummaryStat, ...
+lib/home-data.ts        WeatherData, ModuleCardData
+lib/coconut-data.ts     CoconutSummary, HarvestCycle, TreePerformance, HarvestRecord, ...
+lib/jackfruit-data.ts   JackfruitSummary, JackfruitTree, StageDistribution, ...
+lib/well-data.ts        WellDailyRecord, SummaryStat, ChartPoint, wellCapacity, ...  (figures in Litres)
+lib/motor-data.ts       MotorInfo, MotorDailyRecord, MotorStatus, ValveGroup, ...
+lib/beetle-data.ts      BeetleSummary, TrapRecord, BeetleTrendPoint, ...
+lib/pipeline-data.ts    PipelineSummary, PipelineSegment, PipelineIssue, ...
+lib/fertiliser-data.ts  FertiliserSummary, FertiliserSchedule, StockItem, UsagePoint, ...
+```
+
+### Well Water calculation rules (for the backend)
+
+```
+North Well: 1 inch = 1,650 litres
+South Well: 1 inch = 1,300 litres
+Pumped Out  = Morning reading - Evening reading
+Recharged   = Evening reading - Next Morning reading
 ```
 
 ## Recommended pattern

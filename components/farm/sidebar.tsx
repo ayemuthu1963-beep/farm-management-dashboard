@@ -28,13 +28,13 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: Home, href: "/" },
-  { label: "Coconut Harvest", icon: Sprout, href: "#" },
-  { label: "Jackfruit Monitoring", icon: Citrus, href: "#" },
+  { label: "Coconut Harvest", icon: Sprout, href: "/coconut-harvest" },
+  { label: "Jackfruit Monitoring", icon: Citrus, href: "/jackfruit-monitoring" },
   { label: "Well Water", icon: Droplets, href: "/well-water" },
   { label: "Motor Runtime", icon: Gauge, href: "/motor-runtime" },
-  { label: "Beetle Trap", icon: Bug, href: "#" },
-  { label: "Pipeline Inspection", icon: Wrench, href: "#" },
-  { label: "Fertiliser Management", icon: Leaf, href: "#" },
+  { label: "Beetle Trap", icon: Bug, href: "/beetle-trap" },
+  { label: "Pipeline Inspection", icon: Wrench, href: "/pipeline-layout" },
+  { label: "Fertiliser Management", icon: Leaf, href: "/fertiliser-management" },
   { label: "Reports", icon: BarChart3, href: "#" },
   { label: "Settings", icon: Settings, href: "#" },
 ]
