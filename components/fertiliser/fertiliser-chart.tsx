@@ -37,7 +37,7 @@ export function FertiliserChart() {
             }}
             cursor={{ fill: "var(--muted)", opacity: 0.4 }}
           />
-          <Bar dataKey="quantityKg" name="Applied (kg)" fill="var(--chart-4)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="quantityKg" name="Applied (kg)" fill="var(--chart-4)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

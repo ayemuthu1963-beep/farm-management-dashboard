@@ -46,6 +46,7 @@ export function BeetleChart() {
             strokeWidth={2}
             dot={{ r: 3 }}
             activeDot={{ r: 5 }}
+            isAnimationActive={false}
           />
           <Line
             type="monotone"
@@ -55,6 +56,7 @@ export function BeetleChart() {
             strokeWidth={2}
             dot={{ r: 3 }}
             activeDot={{ r: 5 }}
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>

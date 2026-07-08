@@ -37,7 +37,7 @@ export function JackfruitChart() {
             }}
             cursor={{ fill: "var(--muted)", opacity: 0.4 }}
           />
-          <Bar dataKey="count" name="Fruits" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="count" name="Fruits" fill="var(--chart-2)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

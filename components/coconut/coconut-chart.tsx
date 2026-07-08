@@ -37,7 +37,7 @@ export function CoconutChart() {
             }}
             cursor={{ fill: "var(--muted)", opacity: 0.4 }}
           />
-          <Bar dataKey="nuts" name="Nuts Harvested" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="nuts" name="Nuts Harvested" fill="var(--chart-1)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>
