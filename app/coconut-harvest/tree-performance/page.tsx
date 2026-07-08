@@ -1,9 +1,18 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Trophy } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
 import { plot1Performance, plot2Performance, performanceCyclesUsed, type PerformanceRow } from "@/lib/coconut-harvest-data"
+
+interface TreePerformanceData {
+  performanceCyclesUsed: number[]
+  plot1Performance: PerformanceRow[]
+  plot2Performance: PerformanceRow[]
+}
 
 function PerformanceTable({ rows }: { rows: PerformanceRow[] }) {
   return (
@@ -42,6 +51,37 @@ function PerformanceTable({ rows }: { rows: PerformanceRow[] }) {
 }
 
 export default function TreePerformancePage() {
+  const [treePerformanceData, setTreePerformanceData] = useState<TreePerformanceData>({
+    performanceCyclesUsed,
+    plot1Performance,
+    plot2Performance,
+  })
+
+  useEffect(() => {
+    let active = true
+
+    async function loadTreePerformanceData() {
+      try {
+        const response = await fetch("/api/coconut-harvest/tree-performance")
+        if (!response.ok) {
+          return
+        }
+        const data = (await response.json()) as TreePerformanceData
+        if (active && data.plot1Performance.length > 0 && data.plot2Performance.length > 0) {
+          setTreePerformanceData(data)
+        }
+      } catch {
+        // Keep approved mock data fallback if the real API is unavailable.
+      }
+    }
+
+    loadTreePerformanceData()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <DashboardShell>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 p-3 sm:p-5">
@@ -49,15 +89,15 @@ export default function TreePerformancePage() {
         <CoconutSubheader breadcrumb="Tree Performance View" title="Plot 1 and Plot 2 Performance" />
 
         <p className="text-sm text-muted-foreground">
-          Last 10 cycles used: <span className="font-medium text-foreground">{performanceCyclesUsed.join(", ")}</span>
+          Last 10 cycles used: <span className="font-medium text-foreground">{treePerformanceData.performanceCyclesUsed.join(", ")}</span>
         </p>
 
         <Panel title="Plot 1: Tree numbers 1 to 999" icon={Trophy}>
-          <PerformanceTable rows={plot1Performance} />
+          <PerformanceTable rows={treePerformanceData.plot1Performance} />
         </Panel>
 
         <Panel title="Plot 2: Tree numbers above 1000" icon={Trophy}>
-          <PerformanceTable rows={plot2Performance} />
+          <PerformanceTable rows={treePerformanceData.plot2Performance} />
         </Panel>
       </div>
     </DashboardShell>

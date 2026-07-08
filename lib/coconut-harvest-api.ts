@@ -1,5 +1,5 @@
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import type { CycleSummary, HarvestCycleRow, CycleStatus, TreeHarvestRow } from "@/lib/coconut-harvest-data"
+import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHarvestRow } from "@/lib/coconut-harvest-data"
 
 interface ApiCycleRow {
   harvest_cycle: string
@@ -28,6 +28,21 @@ interface ApiTreeHistoryRecord {
   total_sale: string | number | null
 }
 
+interface ApiTreePerformanceCycle {
+  harvest_cycle: string
+}
+
+interface ApiTreePerformanceRow {
+  plot: "Plot 1" | "Plot 2" | string
+  category: string
+  criteria: string
+  rank_order: number | null
+  tree_count: number | null
+  min_nuts: number | null
+  max_nuts: number | null
+  average_nuts: string | number | null
+}
+
 export interface CycleViewData {
   cycleSummary: CycleSummary
   harvestCycleRows: HarvestCycleRow[]
@@ -37,6 +52,12 @@ export interface CycleViewData {
 export interface TreeViewData {
   treeNo: string
   treeHarvestHistory: TreeHarvestRow[]
+}
+
+export interface TreePerformanceData {
+  performanceCyclesUsed: number[]
+  plot1Performance: PerformanceRow[]
+  plot2Performance: PerformanceRow[]
 }
 
 export class HarvestApiError extends Error {
@@ -90,6 +111,30 @@ function mapTreeHistoryRecord(row: ApiTreeHistoryRecord): TreeHarvestRow {
     totalBunches: row.total_bunches ?? 0,
     totalNuts: row.total_nuts ?? 0,
     totalSale: toNumber(row.total_sale),
+  }
+}
+
+function categoryWithBadge(category: string): string {
+  const badgeByCategory: Record<string, string> = {
+    "Century Maker": "\u{1F4AF}",
+    "Match Winner": "\u{1F525}",
+    "Reliable Batter": "\u{1F44D}",
+    "Tail Ender": "\u{1F62C}",
+    "Bench Player": "\u{1FA91}",
+  }
+
+  return `${badgeByCategory[category] ?? ""} ${category}`.trim()
+}
+
+function mapPerformanceRow(row: ApiTreePerformanceRow): PerformanceRow {
+  return {
+    rank: row.rank_order ?? 0,
+    category: categoryWithBadge(row.category),
+    criteria: row.criteria,
+    treeCount: row.tree_count ?? 0,
+    minNuts: row.min_nuts ?? 0,
+    maxNuts: row.max_nuts ?? 0,
+    averageNuts: toNumber(row.average_nuts),
   }
 }
 
@@ -187,5 +232,36 @@ export async function fetchTreeViewData(treeNo: string): Promise<TreeViewData> {
   return {
     treeNo: data.tree?.tree_no ?? treeNo,
     treeHarvestHistory: data.records.map(mapTreeHistoryRecord),
+  }
+}
+
+export async function fetchTreePerformanceData(): Promise<TreePerformanceData> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
+  }
+
+  const data = (await response.json()) as {
+    last_cycles: ApiTreePerformanceCycle[]
+    rows: ApiTreePerformanceRow[]
+  }
+
+  return {
+    performanceCyclesUsed: data.last_cycles.map((cycle) => toCycleNumber(cycle.harvest_cycle)),
+    plot1Performance: data.rows.filter((row) => row.plot === "Plot 1").map(mapPerformanceRow),
+    plot2Performance: data.rows.filter((row) => row.plot === "Plot 2").map(mapPerformanceRow),
   }
 }
