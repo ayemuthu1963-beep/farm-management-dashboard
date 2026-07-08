@@ -43,6 +43,13 @@ interface ApiTreePerformanceRow {
   average_nuts: string | number | null
 }
 
+interface ApiTreePerformanceDetail {
+  plot: "Plot 1" | "Plot 2" | string
+  category: string
+  tree_no: string
+  missed_harvests: number | null
+}
+
 export interface CycleViewData {
   cycleSummary: CycleSummary
   harvestCycleRows: HarvestCycleRow[]
@@ -58,6 +65,43 @@ export interface TreePerformanceData {
   performanceCyclesUsed: number[]
   plot1Performance: PerformanceRow[]
   plot2Performance: PerformanceRow[]
+}
+
+export interface DetailedQueryFilters {
+  treeFrom?: string
+  treeTo?: string
+  cycleFrom?: string
+  cycleTo?: string
+  dateFrom?: string
+  dateTo?: string
+  nutsFrom?: string
+  nutsTo?: string
+  saleFrom?: string
+  saleTo?: string
+  missedFrom?: string
+  missedTo?: string
+  plot1Classification?: string
+  plot2Classification?: string
+}
+
+export interface DetailedQueryRow {
+  treeNo: string
+  harvestCycle: string
+  harvestDate: string
+  nutsB1: number
+  nutsB2: number
+  nutsB3: number
+  totalBunches: number
+  totalNuts: number
+  totalSale: number
+  missedHarvests: number
+  plot: string
+  classification: string
+}
+
+export interface DetailedQueryData {
+  rows: DetailedQueryRow[]
+  usedMockFallback: boolean
 }
 
 export class HarvestApiError extends Error {
@@ -263,5 +307,178 @@ export async function fetchTreePerformanceData(): Promise<TreePerformanceData> {
     performanceCyclesUsed: data.last_cycles.map((cycle) => toCycleNumber(cycle.harvest_cycle)),
     plot1Performance: data.rows.filter((row) => row.plot === "Plot 1").map(mapPerformanceRow),
     plot2Performance: data.rows.filter((row) => row.plot === "Plot 2").map(mapPerformanceRow),
+  }
+}
+
+function isBlank(value: string | undefined): boolean {
+  return value === undefined || value.trim() === ""
+}
+
+function isAll(value: string | undefined): boolean {
+  return isBlank(value) || value === "All"
+}
+
+function inTextRange(value: string, from: string | undefined, to: string | undefined): boolean {
+  if (!isBlank(from) && value.localeCompare(from!.trim()) < 0) {
+    return false
+  }
+
+  if (!isBlank(to) && value.localeCompare(to!.trim()) > 0) {
+    return false
+  }
+
+  return true
+}
+
+function toOptionalNumber(value: string | undefined): number | null {
+  if (isBlank(value)) {
+    return null
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function inNumberRange(value: number, from: string | undefined, to: string | undefined): boolean {
+  const min = toOptionalNumber(from)
+  const max = toOptionalNumber(to)
+
+  if (min !== null && value < min) {
+    return false
+  }
+
+  if (max !== null && value > max) {
+    return false
+  }
+
+  return true
+}
+
+function inDateRange(value: string, from: string | undefined, to: string | undefined): boolean {
+  if (!isBlank(from) && value < from!.trim()) {
+    return false
+  }
+
+  if (!isBlank(to) && value > to!.trim()) {
+    return false
+  }
+
+  return true
+}
+
+function detailMatchesClassification(detail: ApiTreePerformanceDetail, filters: DetailedQueryFilters): boolean {
+  const plot1 = filters.plot1Classification
+  const plot2 = filters.plot2Classification
+
+  if (isAll(plot1) && isAll(plot2)) {
+    return true
+  }
+
+  if (!isAll(plot1) && detail.plot === "Plot 1" && detail.category === plot1) {
+    return true
+  }
+
+  if (!isAll(plot2) && detail.plot === "Plot 2" && detail.category === plot2) {
+    return true
+  }
+
+  return false
+}
+
+async function fetchRawTreeHistory(treeNo: string, authHeader: string): Promise<ApiTreeHistoryRecord[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/trees/${encodeURIComponent(treeNo)}`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    return []
+  }
+
+  const data = (await response.json()) as { records: ApiTreeHistoryRecord[] }
+  return data.records
+}
+
+export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Promise<DetailedQueryData> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
+  }
+
+  const performance = (await response.json()) as {
+    details: ApiTreePerformanceDetail[]
+  }
+
+  const candidateDetails = performance.details.filter((detail) => {
+    return (
+      inTextRange(detail.tree_no, filters.treeFrom, filters.treeTo) &&
+      inNumberRange(detail.missed_harvests ?? 0, filters.missedFrom, filters.missedTo) &&
+      detailMatchesClassification(detail, filters)
+    )
+  })
+
+  const rows: DetailedQueryRow[] = []
+
+  for (const detail of candidateDetails) {
+    const records = await fetchRawTreeHistory(detail.tree_no, authHeader)
+
+    for (const record of records) {
+      const harvestCycle = record.harvest_cycle ?? ""
+      const cycleNumber = toCycleNumber(harvestCycle)
+      const totalNuts = record.total_nuts ?? 0
+      const totalSale = toNumber(record.total_sale)
+
+      if (
+        inNumberRange(cycleNumber, filters.cycleFrom, filters.cycleTo) &&
+        inDateRange(record.harvest_date, filters.dateFrom, filters.dateTo) &&
+        inNumberRange(totalNuts, filters.nutsFrom, filters.nutsTo) &&
+        inNumberRange(totalSale, filters.saleFrom, filters.saleTo)
+      ) {
+        rows.push({
+          treeNo: detail.tree_no,
+          harvestCycle,
+          harvestDate: record.harvest_date,
+          nutsB1: record.bunch1_nuts ?? 0,
+          nutsB2: record.bunch2_nuts ?? 0,
+          nutsB3: record.bunch3_nuts ?? 0,
+          totalBunches: record.total_bunches ?? 0,
+          totalNuts,
+          totalSale,
+          missedHarvests: detail.missed_harvests ?? 0,
+          plot: detail.plot,
+          classification: detail.category,
+        })
+      }
+    }
+  }
+
+  rows.sort((a, b) => {
+    const dateCompare = b.harvestDate.localeCompare(a.harvestDate)
+    if (dateCompare !== 0) {
+      return dateCompare
+    }
+
+    return a.treeNo.localeCompare(b.treeNo)
+  })
+
+  return {
+    rows: rows.slice(0, 500),
+    usedMockFallback: false,
   }
 }
