@@ -18,19 +18,16 @@ export function HomeHero() {
       {/* Readability overlay, darker on the left where the text sits */}
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background/85 via-background/45 to-transparent" />
 
-      {/* DJI Mavic 3 Multispectral (M3M) precision agriculture drone */}
-      <div className="pointer-events-none absolute right-2 top-14 z-10 w-28 overflow-hidden rounded-xl bg-card/95 shadow-lg ring-1 ring-border backdrop-blur sm:right-8 sm:top-16 sm:w-40 lg:right-14 lg:w-48">
+      {/* Muthu Farms brand logo */}
+      <div className="pointer-events-none absolute right-2 top-12 z-10 w-24 sm:right-8 sm:top-14 sm:w-36 lg:right-14 lg:w-44">
         <Image
-          src="/m3m-drone.png"
-          alt="DJI Mavic 3 Multispectral (M3M) precision agriculture drone"
-          width={320}
-          height={240}
+          src="/muthu-farms-logo-full.png"
+          alt="Muthu Farms logo"
+          width={360}
+          height={360}
           priority
-          className="w-full object-cover"
+          className="w-full object-contain drop-shadow-xl"
         />
-        <span className="block bg-primary px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-primary-foreground sm:text-xs">
-          DJI M3M · Precision Ag
-        </span>
       </div>
 
       {/* Top bar */}
