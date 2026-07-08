@@ -11,20 +11,20 @@ const pills = [
 export function HomeHeader() {
   return (
     <header className="relative overflow-hidden rounded-2xl bg-[#eaf6df] shadow-[0_8px_30px_rgba(0,0,0,0.12)] lg:min-h-[360px]">
-      {/* Faded coconut plantation background */}
+      {/* Coconut plantation background */}
       <Image
-        src="/mfms/header/coconut-faded-background.png"
+        src="/mfms/header/coconut-plantation-bg.png"
         alt=""
         fill
         priority
         aria-hidden="true"
-        className="object-cover opacity-40"
+        className="object-cover"
       />
-      {/* Readability overlay, lighter on the left where the title sits.
-          Kept strong on the right so the faint baked-in artwork stays subtle. */}
+      {/* Readability overlay, lighter on the left where the title sits,
+          softer on the right so the plantation stays clearly visible. */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-r from-[#f5fcf0]/95 via-[#eef8e6]/88 to-[#eef8e6]/78"
+        className="absolute inset-0 bg-gradient-to-r from-[#f5fcf0]/85 via-[#eef8e6]/55 to-[#eef8e6]/30"
       />
 
       {/* Top-right actions */}
