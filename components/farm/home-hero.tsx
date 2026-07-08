@@ -19,7 +19,7 @@ export function HomeHero() {
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background/85 via-background/45 to-transparent" />
 
       {/* Muthu Farms brand logo */}
-      <div className="pointer-events-none absolute right-2 top-12 z-10 w-24 sm:right-8 sm:top-14 sm:w-36 lg:right-14 lg:w-44">
+      <div className="pointer-events-none absolute left-2 top-10 z-10 w-24 sm:left-6 sm:top-10 sm:w-36 lg:left-10 lg:w-44">
         <Image
           src="/muthu-farms-logo-full.png"
           alt="Muthu Farms logo"
@@ -31,17 +31,7 @@ export function HomeHero() {
       </div>
 
       {/* Top bar */}
-      <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
-        <div className="flex items-center gap-2 rounded-full bg-card/85 px-3 py-1.5 shadow-sm ring-1 ring-border backdrop-blur">
-          <Image
-            src="/muthu-farms-logo.png"
-            alt="Muthu Farms logo"
-            width={40}
-            height={40}
-            className="size-8 rounded-full object-cover"
-          />
-          <span className="text-sm font-bold text-primary">Muthu Farms</span>
-        </div>
+      <div className="flex items-center justify-end gap-2 p-3 sm:p-4">
         <button
           type="button"
           className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
@@ -52,7 +42,7 @@ export function HomeHero() {
       </div>
 
       {/* Title block */}
-      <div className="max-w-2xl px-4 pb-6 pt-6 sm:px-8 sm:pb-12 sm:pt-10 lg:pt-16">
+      <div className="max-w-2xl pl-28 pr-4 pb-6 pt-6 sm:pb-12 sm:pt-10 lg:pt-16 sm:pl-44 lg:pl-56 sm:pr-8">
         <h1 className="text-3xl font-extrabold leading-none tracking-tight text-primary drop-shadow-sm sm:text-5xl lg:text-6xl">
           MUTHU&apos;S
         </h1>
