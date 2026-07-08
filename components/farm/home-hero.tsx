@@ -18,6 +18,21 @@ export function HomeHero() {
       {/* Readability overlay, darker on the left where the text sits */}
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background/85 via-background/45 to-transparent" />
 
+      {/* DJI Mavic 3 Multispectral (M3M) precision agriculture drone */}
+      <div className="pointer-events-none absolute right-2 top-14 z-10 w-28 overflow-hidden rounded-xl bg-card/95 shadow-lg ring-1 ring-border backdrop-blur sm:right-8 sm:top-16 sm:w-40 lg:right-14 lg:w-48">
+        <Image
+          src="/m3m-drone.png"
+          alt="DJI Mavic 3 Multispectral (M3M) precision agriculture drone"
+          width={320}
+          height={240}
+          priority
+          className="w-full object-cover"
+        />
+        <span className="block bg-primary px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-primary-foreground sm:text-xs">
+          DJI M3M · Precision Ag
+        </span>
+      </div>
+
       {/* Top bar */}
       <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
         <div className="flex items-center gap-2 rounded-full bg-card/85 px-3 py-1.5 shadow-sm ring-1 ring-border backdrop-blur">
