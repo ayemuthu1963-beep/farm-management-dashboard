@@ -1,20 +1,77 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CalendarRange, Nut, Layers, Sigma, IndianRupee, RotateCw } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard, StatGrid } from "@/components/farm/stat-card"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
-import { cycleSummary, harvestCycleRows, harvestCycleOptions, formatRupees } from "@/lib/coconut-harvest-data"
+import {
+  cycleSummary as mockCycleSummary,
+  harvestCycleRows as mockHarvestCycleRows,
+  harvestCycleOptions as mockHarvestCycleOptions,
+  formatRupees,
+  type CycleSummary,
+  type HarvestCycleRow,
+} from "@/lib/coconut-harvest-data"
 import { cn } from "@/lib/utils"
 
+interface CycleViewData {
+  cycleSummary: CycleSummary
+  harvestCycleRows: HarvestCycleRow[]
+  harvestCycleOptions: number[]
+}
+
 export default function CycleViewPage() {
-  const [cycle, setCycle] = useState(String(harvestCycleOptions[0]))
+  const [cycleViewData, setCycleViewData] = useState<CycleViewData>({
+    cycleSummary: mockCycleSummary,
+    harvestCycleRows: mockHarvestCycleRows,
+    harvestCycleOptions: mockHarvestCycleOptions,
+  })
+  const [cycle, setCycle] = useState(String(mockHarvestCycleOptions[0]))
   const [startDate, setStartDate] = useState("2026-01-01")
   const [endDate, setEndDate] = useState("2026-07-02")
   const [showAll, setShowAll] = useState(true)
+  const { harvestCycleRows, harvestCycleOptions } = cycleViewData
+  const selectedCycleRow = useMemo(
+    () => harvestCycleRows.find((row) => String(row.cycle) === cycle),
+    [cycle, harvestCycleRows],
+  )
+  const cycleSummary = selectedCycleRow
+    ? {
+        totalHarvests: selectedCycleRow.trees,
+        totalNuts: selectedCycleRow.nuts,
+        averageNuts: selectedCycleRow.trees > 0 ? selectedCycleRow.nuts / selectedCycleRow.trees : 0,
+        lifetimeSale: selectedCycleRow.totalSale,
+      }
+    : cycleViewData.cycleSummary
+
+  useEffect(() => {
+    let active = true
+
+    async function loadCycleData() {
+      try {
+        const response = await fetch("/api/coconut-harvest/cycles")
+        if (!response.ok) {
+          return
+        }
+        const data = (await response.json()) as CycleViewData
+        if (active && data.harvestCycleRows.length > 0) {
+          setCycleViewData(data)
+          setCycle(String(data.harvestCycleOptions[0]))
+        }
+      } catch {
+        // Keep approved mock data fallback if the real API is unavailable.
+      }
+    }
+
+    loadCycleData()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <DashboardShell>
