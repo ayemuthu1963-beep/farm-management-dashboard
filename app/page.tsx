@@ -6,7 +6,7 @@ import { moduleCards, weatherData } from "@/lib/home-data"
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#f3fbf4]">
+    <main className="min-h-screen bg-gradient-to-b from-[#e6f4e1] via-[#f0f9ec] to-[#dcefd4]">
       <div className="mx-auto max-w-[1536px] px-4 py-6 sm:px-6">
         <HomeHeader />
 
