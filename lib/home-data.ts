@@ -65,8 +65,8 @@ export const moduleCards: ModuleCardData[] = [
     title: "Motor Runtime",
     description: "Pump run hours and motor performance",
     icon: "/mfms/icons/motor-runtime.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/motor-runtime",
+    ctaLabel: "Open Dashboard",
   },
   {
     id: "beetle-trap-monitoring",
