@@ -89,7 +89,7 @@ export const traps: Trap[] = [
 export const topTraps: Trap[] = [...traps].sort((a, b) => b.cumulativeCount - a.cumulativeCount).slice(0, 10)
 
 // ---------------------------------------------------------------------------
-// Daily beetle counts — last 10 inspection dates (kept separate, no totals)
+// Daily beetle counts — last 15 inspection dates (kept separate, no totals)
 // ---------------------------------------------------------------------------
 export interface DailyCount {
   date: string
@@ -108,6 +108,11 @@ export const dailyCounts: DailyCount[] = [
   { date: "02 Jun 2026", rhinoceros: 16, redPalmWeevil: 10 },
   { date: "31 May 2026", rhinoceros: 12, redPalmWeevil: 9 },
   { date: "29 May 2026", rhinoceros: 10, redPalmWeevil: 8 },
+  { date: "27 May 2026", rhinoceros: 13, redPalmWeevil: 7 },
+  { date: "25 May 2026", rhinoceros: 11, redPalmWeevil: 9 },
+  { date: "23 May 2026", rhinoceros: 9, redPalmWeevil: 6 },
+  { date: "21 May 2026", rhinoceros: 8, redPalmWeevil: 7 },
+  { date: "19 May 2026", rhinoceros: 7, redPalmWeevil: 5 },
 ]
 
 // ---------------------------------------------------------------------------

@@ -78,7 +78,7 @@ There is **one data file per page**:
 - **Beetle Trap:** `lib/beetle-data.ts`
   - `beetleSummary` — the 6 top summary cards
   - `traps` — single source of truth for all traps (plot, `x`/`y` map %, `lastCount`, `cumulativeCount`, `risk`, type); `topTraps` is derived (highest cumulative first)
-  - `dailyCounts` — last 10 inspection dates, **Rhinoceros vs Red Palm Weevil kept separate (no totals)**
+  - `dailyCounts` — last 15 inspection dates, **Rhinoceros vs Red Palm Weevil kept separate (no totals)**; rendered as a line chart
   - `areaInfections`, `resetSchedule`, `plotMaps`, `countBands` + `bandForCount()` (icon-size band from cumulative count)
   - **Placeholder map only** — Codex connects `plot1.mbtiles`/`plot2.mbtiles`, `Beetle_Traps.geojson`, and the beetle SVG icons later. `x`/`y` are placeholder positions to be replaced by real GPS coords.
 - **Pipeline Layout & Inspection:** `lib/pipeline-data.ts`
@@ -113,7 +113,7 @@ Reusable components are grouped by area:
 - `components/motor/` — Motor Runtime: `motor-status-cards.tsx`, `motor-table.tsx`, `motor-chart.tsx`, `motor-log-section.tsx`, `motor-valves-section.tsx`, `motor-summary-cards.tsx`
 - `components/coconut/` — Coconut Harvest: `harvest-hub-card.tsx` (landing cards), `coconut-subheader.tsx` (breadcrumb + title + Back + Export)
 - `components/jackfruit/` — `jackfruit-chart.tsx`
-- `components/beetle/` — Beetle Trap: `beetle-map-section.tsx` (client: plot tabs, orthomosaic + count-scaled markers, legend, selected-trap panel, Top 10 table), `beetle-daily-chart.tsx` (grouped bar chart, separate counts)
+- `components/beetle/` — Beetle Trap: `beetle-map-section.tsx` (client: plot tabs, orthomosaic + count-scaled markers, legend, selected-trap panel, Top 10 table with a "Show all traps" toggle), `beetle-daily-chart.tsx` (line chart, 15 dates, separate counts)
 - `components/fertiliser/` — `fertiliser-chart.tsx`
 - `components/ui/` — shadcn/ui primitives
 

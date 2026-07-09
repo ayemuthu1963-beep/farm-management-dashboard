@@ -61,8 +61,10 @@ lib/coconut-harvest-data.ts  TreeHarvestRow, CycleSummary, HarvestCycleRow, Perf
 lib/jackfruit-data.ts   JackfruitSummary, JackfruitTree, StageDistribution, ...
 lib/well-data.ts        WellDailyRecord, SummaryStat, ChartPoint, wellCapacity, ...  (figures in Litres)
 lib/motor-data.ts       MotorInfo, MotorDailyRecord, MotorStatus, ValveGroup, ...
-lib/beetle-data.ts      BeetleSummary, Trap (single source; topTraps derived),
-                        DailyCount (rhino/weevil kept separate, no totals),
+lib/beetle-data.ts      BeetleSummary, Trap (single source; topTraps derived,
+                        Top 10 table has a "Show all traps" toggle),
+                        DailyCount (last 15 inspection dates, LINE chart,
+                        rhino/weevil kept separate, no totals),
                         AreaInfection, PlotMap, CountBandInfo, resetSchedule, ...
                         MAP IS PLACEHOLDER: connect plot1.mbtiles / plot2.mbtiles
                         (drone orthomosaics), Beetle_Traps.geojson (trap GPS + type),

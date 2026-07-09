@@ -96,7 +96,7 @@ export default function BeetleTrapPage() {
 
         {/* Daily beetle counts */}
         <Panel
-          title="Daily Beetle Count – Last 10 Inspection Dates"
+          title="Daily Beetle Count – Last 15 Inspection Dates"
           icon={CalendarDays}
           headerRight={<ExportButton label="Export" />}
         >

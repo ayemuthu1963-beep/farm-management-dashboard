@@ -33,10 +33,15 @@ const beetleColor: Record<BeetleType, string> = {
 export function BeetleMapSection() {
   const [activePlot, setActivePlot] = useState<PlotId>("plot1")
   const [selectedTrapNo, setSelectedTrapNo] = useState<string | null>(null)
+  const [showAllTraps, setShowAllTraps] = useState(false)
 
   const activeMap = plotMaps.find((p) => p.id === activePlot) ?? plotMaps[0]
   const plotTraps = traps.filter((t) => t.plot === activePlot)
   const selectedTrap = traps.find((t) => t.trapNo === selectedTrapNo) ?? null
+
+  // All traps sorted by cumulative count (highest first); Top 10 is the default view.
+  const allTrapsSorted = [...traps].sort((a, b) => b.cumulativeCount - a.cumulativeCount)
+  const trapRows = showAllTraps ? allTrapsSorted : topTraps
 
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
@@ -188,7 +193,7 @@ export function BeetleMapSection() {
                 </tr>
               </thead>
               <tbody>
-                {topTraps.map((t, i) => (
+                {trapRows.map((t, i) => (
                   <tr
                     key={t.trapNo}
                     onClick={() => setSelectedTrapNo(t.trapNo)}
@@ -211,6 +216,15 @@ export function BeetleMapSection() {
               </tbody>
             </table>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAllTraps((v) => !v)}
+            className="mt-3 w-full rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+            aria-expanded={showAllTraps}
+          >
+            {showAllTraps ? "Show top 10 only" : `Show all traps (${allTrapsSorted.length})`}
+          </button>
         </Panel>
       </div>
     </div>
