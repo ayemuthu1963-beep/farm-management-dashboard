@@ -195,7 +195,7 @@ function mapPerformanceRow(row: ApiTreePerformanceRow): PerformanceRow {
   return {
     rank: row.rank_order ?? 0,
     category: categoryWithBadge(row.category),
-    criteria: row.criteria,
+    criteria: row.criteria.replaceAll("cycles", "harvests"),
     treeCount: row.tree_count ?? 0,
     minNuts: row.min_nuts ?? 0,
     maxNuts: row.max_nuts ?? 0,
@@ -228,6 +228,77 @@ async function mapPerformanceCategoryDetail(
   }
 }
 
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = []
+  let current = ""
+  let inQuotes = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    const next = line[index + 1]
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"'
+      index += 1
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (char === "," && !inQuotes) {
+      cells.push(current)
+      current = ""
+      continue
+    }
+
+    current += char
+  }
+
+  cells.push(current)
+  return cells
+}
+
+async function fetchTreesHarvestedWithNuts(row: HarvestCycleRow, authHeader: string): Promise<number | null> {
+  const params = new URLSearchParams({
+    start_date: row.startDate,
+    end_date: row.endDate,
+  })
+
+  const response = await fetch(`${getApiBaseUrl()}/api/export/csv?${params.toString()}`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "text/csv",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  const csv = await response.text()
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "")
+
+  if (lines.length <= 1 || lines[0] === "no_records") {
+    return 0
+  }
+
+  const headers = parseCsvLine(lines[0])
+  const totalNutsIndex = headers.indexOf("total_nuts")
+
+  if (totalNutsIndex === -1) {
+    return null
+  }
+
+  return lines.slice(1).reduce((count, line) => {
+    const cells = parseCsvLine(line)
+    return toNumber(cells[totalNutsIndex]) > 0 ? count + 1 : count
+  }, 0)
+}
+
 export async function fetchCycleViewData(): Promise<CycleViewData> {
   const authHeader = getBasicAuthHeader()
 
@@ -248,7 +319,13 @@ export async function fetchCycleViewData(): Promise<CycleViewData> {
   }
 
   const apiRows = (await response.json()) as ApiCycleRow[]
-  const harvestCycleRows = apiRows.map(mapCycleRow)
+  const initialHarvestCycleRows = apiRows.map(mapCycleRow)
+  const harvestCycleRows = await Promise.all(
+    initialHarvestCycleRows.map(async (row) => {
+      const treesHarvestedWithNuts = await fetchTreesHarvestedWithNuts(row, authHeader)
+      return treesHarvestedWithNuts === null ? row : { ...row, trees: treesHarvestedWithNuts }
+    }),
+  )
   const latest = harvestCycleRows[0]
 
   return {
@@ -257,12 +334,14 @@ export async function fetchCycleViewData(): Promise<CycleViewData> {
     cycleSummary: latest
       ? {
           totalHarvests: latest.trees,
+          totalBunches: latest.bunches,
           totalNuts: latest.nuts,
           averageNuts: latest.trees > 0 ? latest.nuts / latest.trees : 0,
           lifetimeSale: latest.totalSale,
         }
       : {
           totalHarvests: 0,
+          totalBunches: 0,
           totalNuts: 0,
           averageNuts: 0,
           lifetimeSale: 0,

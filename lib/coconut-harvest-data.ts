@@ -82,6 +82,7 @@ export const treeHarvestHistory: TreeHarvestRow[] = [
 
 export interface CycleSummary {
   totalHarvests: number
+  totalBunches: number
   totalNuts: number
   averageNuts: number
   lifetimeSale: number
@@ -90,6 +91,7 @@ export interface CycleSummary {
 /** Headline totals shown as summary cards on the Cycle View page. */
 export const cycleSummary: CycleSummary = {
   totalHarvests: 1482,
+  totalBunches: 2641,
   totalNuts: 28302,
   averageNuts: 19.1,
   lifetimeSale: 982000,
@@ -131,7 +133,7 @@ export const harvestCycleRows: HarvestCycleRow[] = [
 // 3) Tree Performance — Plot 1 & Plot 2 classification bands
 // ===========================================================================
 
-/** Cycles included in the performance calculation window (newest first). */
+/** Harvests included in the performance calculation window (newest first). */
 export const performanceCyclesUsed: number[] = [18, 17, 16, 15, 14, 13, 12, 11, 10, 9]
 
 export interface PerformanceRow {
@@ -147,17 +149,17 @@ export interface PerformanceRow {
 
 /** Plot 1 — tree numbers 1 to 999. */
 export const plot1Performance: PerformanceRow[] = [
-  { rank: 1, category: "💯 Century Maker", criteria: "Over 400 nuts in last 10 cycles", treeCount: 62, minNuts: 401, maxNuts: 545, averageNuts: 434.58 },
-  { rank: 2, category: "🔥 Match Winner", criteria: "300 to 399 nuts in last 10 cycles", treeCount: 275, minNuts: 300, maxNuts: 398, averageNuts: 341.62 },
-  { rank: 3, category: "👍 Reliable Batter", criteria: "225 to 299 nuts in last 10 cycles", treeCount: 208, minNuts: 225, maxNuts: 299, averageNuts: 264.79 },
-  { rank: 4, category: "😬 Tail Ender", criteria: "175 to 224 nuts in last 10 cycles", treeCount: 68, minNuts: 176, maxNuts: 224, averageNuts: 199.31 },
-  { rank: 5, category: "🪑 Bench Player", criteria: "Less than 175 nuts in last 10 cycles", treeCount: 341, minNuts: 0, maxNuts: 172, averageNuts: 26.37 },
+  { rank: 1, category: "💯 Century Maker", criteria: "Over 400 nuts in last 10 harvests", treeCount: 62, minNuts: 401, maxNuts: 545, averageNuts: 434.58 },
+  { rank: 2, category: "🔥 Match Winner", criteria: "300 to 399 nuts in last 10 harvests", treeCount: 275, minNuts: 300, maxNuts: 398, averageNuts: 341.62 },
+  { rank: 3, category: "👍 Reliable Batter", criteria: "225 to 299 nuts in last 10 harvests", treeCount: 208, minNuts: 225, maxNuts: 299, averageNuts: 264.79 },
+  { rank: 4, category: "😬 Tail Ender", criteria: "175 to 224 nuts in last 10 harvests", treeCount: 68, minNuts: 176, maxNuts: 224, averageNuts: 199.31 },
+  { rank: 5, category: "🪑 Bench Player", criteria: "Less than 175 nuts in last 10 harvests", treeCount: 341, minNuts: 0, maxNuts: 172, averageNuts: 26.37 },
 ]
 
 /** Plot 2 — tree numbers above 1000. */
 export const plot2Performance: PerformanceRow[] = [
-  { rank: 1, category: "🔥 Match Winner", criteria: "200 to 299 nuts in last 10 cycles", treeCount: 36, minNuts: 200, maxNuts: 290, averageNuts: 224.58 },
-  { rank: 2, category: "👍 Reliable Batter", criteria: "150 to 199 nuts in last 10 cycles", treeCount: 145, minNuts: 150, maxNuts: 198, averageNuts: 170.91 },
-  { rank: 3, category: "😬 Tail Ender", criteria: "100 to 149 nuts in last 10 cycles", treeCount: 359, minNuts: 100, maxNuts: 149, averageNuts: 123.9 },
-  { rank: 4, category: "🪑 Bench Player", criteria: "Less than 100 nuts in last 10 cycles", treeCount: 623, minNuts: 0, maxNuts: 99, averageNuts: 39.33 },
+  { rank: 1, category: "🔥 Match Winner", criteria: "200 to 299 nuts in last 10 harvests", treeCount: 36, minNuts: 200, maxNuts: 290, averageNuts: 224.58 },
+  { rank: 2, category: "👍 Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests", treeCount: 145, minNuts: 150, maxNuts: 198, averageNuts: 170.91 },
+  { rank: 3, category: "😬 Tail Ender", criteria: "100 to 149 nuts in last 10 harvests", treeCount: 359, minNuts: 100, maxNuts: 149, averageNuts: 123.9 },
+  { rank: 4, category: "🪑 Bench Player", criteria: "Less than 100 nuts in last 10 harvests", treeCount: 623, minNuts: 0, maxNuts: 99, averageNuts: 39.33 },
 ]

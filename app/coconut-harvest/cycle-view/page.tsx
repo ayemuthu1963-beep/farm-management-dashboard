@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarRange, Nut, Layers, Sigma, IndianRupee, RotateCw } from "lucide-react"
+import { BarChart3, CalendarRange, Nut, Layers, Sigma, IndianRupee, RotateCw } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
-import { StatCard, StatGrid } from "@/components/farm/stat-card"
+import { StatCard } from "@/components/farm/stat-card"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
 import {
   cycleSummary as mockCycleSummary,
@@ -41,6 +41,7 @@ export default function CycleViewPage() {
   const cycleSummary = selectedCycleRow
     ? {
         totalHarvests: selectedCycleRow.trees,
+        totalBunches: selectedCycleRow.bunches,
         totalNuts: selectedCycleRow.nuts,
         averageNuts: selectedCycleRow.trees > 0 ? selectedCycleRow.nuts / selectedCycleRow.trees : 0,
         lifetimeSale: selectedCycleRow.totalSale,
@@ -77,7 +78,7 @@ export default function CycleViewPage() {
     <DashboardShell>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 p-3 sm:p-5">
         <Header />
-        <CoconutSubheader breadcrumb="Cycle & Harvest View" title="Cycle and Date Range Summary" />
+        <CoconutSubheader breadcrumb="Cycle & Harvest View" title="Harvest and Date Range Summary" />
 
         {/* Controls */}
         <Panel title="Filters" icon={CalendarRange}>
@@ -147,12 +148,13 @@ export default function CycleViewPage() {
         </Panel>
 
         {/* Summary cards */}
-        <StatGrid>
-          <StatCard icon={Sigma} label="Total Harvests" value={cycleSummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard icon={Sigma} label="Total Trees Harvested" value={cycleSummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
+          <StatCard icon={Layers} label="Total Bunches" value={cycleSummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
           <StatCard icon={Nut} label="Total Nuts" value={cycleSummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
-          <StatCard icon={Layers} label="Average Nuts" value={cycleSummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
-          <StatCard icon={IndianRupee} label="Lifetime Sale" value={formatRupees(cycleSummary.lifetimeSale)} accent="bg-chart-4/15 text-chart-4" />
-        </StatGrid>
+          <StatCard icon={BarChart3} label="Average Nuts" value={cycleSummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
+          <StatCard icon={IndianRupee} label="Lifetime Sale" value={cycleSummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
+        </div>
 
         {/* All harvest cycles table */}
         {showAll ? (

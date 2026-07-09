@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -18,7 +19,6 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { todayDate, todayTime } from "@/lib/well-data"
 
 interface NavItem {
   label: string
@@ -41,6 +41,30 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setNow(new Date())
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const liveDate = now
+    ? now.toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "--"
+  const liveTime = now
+    ? now.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+    : "--"
 
   return (
     <nav
@@ -75,11 +99,11 @@ export function Sidebar() {
         <p className="text-sm font-semibold text-foreground">Today&apos;s Date &amp; Time</p>
         <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-4 text-primary" aria-hidden="true" />
-          <span>{todayDate}</span>
+          <span>{liveDate}</span>
         </div>
         <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="size-4 text-primary" aria-hidden="true" />
-          <span>{todayTime}</span>
+          <span>{liveTime}</span>
         </div>
       </div>
     </nav>

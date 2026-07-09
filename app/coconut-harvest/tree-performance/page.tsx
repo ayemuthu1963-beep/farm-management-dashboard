@@ -129,7 +129,7 @@ function CategoryDetailTable({
             <thead>
               <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
                 <th className="px-3 py-2.5">Tree No</th>
-                <th className="px-3 py-2.5 text-right">Total Nuts Last 10 Cycles</th>
+                <th className="px-3 py-2.5 text-right">Total Nuts Last 10 Harvests</th>
                 <th className="px-3 py-2.5 text-right">Average Nuts</th>
                 <th className="px-3 py-2.5 text-right">Harvests Count</th>
                 <th className="px-3 py-2.5 text-right">Missed Harvests</th>
@@ -229,7 +229,7 @@ export default function TreePerformancePage() {
         <CoconutSubheader breadcrumb="Tree Performance View" title="Plot 1 and Plot 2 Performance" />
 
         <p className="text-sm text-muted-foreground">
-          Last 10 cycles used: <span className="font-medium text-foreground">{treePerformanceData.performanceCyclesUsed.join(", ")}</span>
+          Last 10 harvests used: <span className="font-medium text-foreground">{treePerformanceData.performanceCyclesUsed.join(", ")}</span>
         </p>
 
         <Panel title="Plot 1: Tree numbers 1 to 999" icon={Trophy}>

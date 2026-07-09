@@ -37,9 +37,21 @@ export function TreeViewClient({
   const [dataStatus, setDataStatus] = useState(initialDataStatus)
   const [showPerformance, setShowPerformance] = useState(false)
 
-  const totalNuts = useMemo(() => treeHistory.reduce((sum, r) => sum + r.totalNuts, 0), [treeHistory])
-  const totalSale = useMemo(() => treeHistory.reduce((sum, r) => sum + r.totalSale, 0), [treeHistory])
-  const avgNuts = treeHistory.length > 0 ? totalNuts / treeHistory.length : 0
+  const last10Harvests = useMemo(() => treeHistory.slice(0, 10), [treeHistory])
+  const sinceJan2025Harvests = useMemo(
+    () => treeHistory.filter((r) => r.harvestDate >= "2025-01-01"),
+    [treeHistory],
+  )
+
+  function performanceSummary(rows: TreeHarvestRow[]) {
+    const nuts = rows.reduce((sum, r) => sum + r.totalNuts, 0)
+    const sale = rows.reduce((sum, r) => sum + r.totalSale, 0)
+    const average = rows.length > 0 ? nuts / rows.length : 0
+    return { nuts, sale, average }
+  }
+
+  const last10Summary = performanceSummary(last10Harvests)
+  const sinceJan2025Summary = performanceSummary(sinceJan2025Harvests)
 
   async function loadTreeOptions(query: string) {
     try {
@@ -157,18 +169,45 @@ export function TreeViewClient({
             </div>
 
             {showPerformance ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="rounded-lg border border-border bg-muted/40 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total Nuts</p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">{totalNuts.toLocaleString("en-IN")}</p>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="mb-3 text-sm font-black uppercase italic tracking-wide text-destructive">
+                    Last 10 Harvest
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="rounded-lg border border-border bg-muted/40 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total Nuts</p>
+                      <p className="mt-1 text-2xl font-bold text-foreground">{last10Summary.nuts.toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/40 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Average Nuts / Harvest</p>
+                      <p className="mt-1 text-2xl font-bold text-foreground">{last10Summary.average.toFixed(1)}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/40 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Sale</p>
+                      <p className="mt-1 text-2xl font-bold text-foreground">{formatRupees(last10Summary.sale)}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="rounded-lg border border-border bg-muted/40 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Average Nuts / Cycle</p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">{avgNuts.toFixed(1)}</p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/40 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lifetime Sale</p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">{formatRupees(totalSale)}</p>
+
+                <div className="border-t border-border pt-4">
+                  <p className="mb-3 text-sm font-black uppercase italic tracking-wide text-destructive">
+                    Since Jan 2025
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="rounded-lg border border-border bg-muted/40 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total Nuts</p>
+                      <p className="mt-1 text-2xl font-bold text-foreground">{sinceJan2025Summary.nuts.toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/40 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Average Nuts / Harvest</p>
+                      <p className="mt-1 text-2xl font-bold text-foreground">{sinceJan2025Summary.average.toFixed(1)}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/40 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Sale</p>
+                      <p className="mt-1 text-2xl font-bold text-foreground">{formatRupees(sinceJan2025Summary.sale)}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : null}
