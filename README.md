@@ -76,7 +76,11 @@ There is **one data file per page**:
 - **Motor Runtime:** `lib/motor-data.ts`
   - `motorInfo`, `motorStatuses`, `m1Records`/`m2Records`/`m3Records`, `motorSummaryStats`, `motorSeriesConfig`, `toRuntimeChartData()`, `valveGroups`
 - **Beetle Trap:** `lib/beetle-data.ts`
-  - `beetleSummary`, `trapRecords`, `beetleTrend`
+  - `beetleSummary` — the 6 top summary cards
+  - `traps` — single source of truth for all traps (plot, `x`/`y` map %, `lastCount`, `cumulativeCount`, `risk`, type); `topTraps` is derived (highest cumulative first)
+  - `dailyCounts` — last 10 inspection dates, **Rhinoceros vs Red Palm Weevil kept separate (no totals)**
+  - `areaInfections`, `resetSchedule`, `plotMaps`, `countBands` + `bandForCount()` (icon-size band from cumulative count)
+  - **Placeholder map only** — Codex connects `plot1.mbtiles`/`plot2.mbtiles`, `Beetle_Traps.geojson`, and the beetle SVG icons later. `x`/`y` are placeholder positions to be replaced by real GPS coords.
 - **Pipeline Layout & Inspection:** `lib/pipeline-data.ts`
   - `pipelineSummary`, `pipelineSegments`, `pipelineIssues`
 - **Fertiliser Management:** `lib/fertiliser-data.ts`
@@ -91,7 +95,7 @@ Keeping the same shapes lets real data drop in without touching UI components:
 - `lib/jackfruit-data.ts`: `JackfruitSummary`, `RipenessStage`, `JackfruitTree`, `StageDistribution`
 - `lib/well-data.ts`: `WellId`, `WellDailyRecord`, `SummaryStat`, `ChartPoint`
 - `lib/motor-data.ts`: `MotorId`, `MotorInfo`, `MotorDailyRecord`, `MotorStatus`, `MotorSummaryStat`, `MotorChartPoint`, `ValveRecord`, `ValveGroup`
-- `lib/beetle-data.ts`: `BeetleSummary`, `TrapStatus`, `TrapRecord`, `BeetleTrendPoint`
+- `lib/beetle-data.ts`: `PlotId`, `BeetleType`, `RiskLevel`, `CountBand`, `BeetleSummary`, `Trap`, `DailyCount`, `AreaInfection`, `PlotMap`, `CountBandInfo`
 - `lib/pipeline-data.ts`: `PipelineSummary`, `SegmentStatus`, `PipelineSegment`, `IssueSeverity`, `PipelineIssue`
 - `lib/fertiliser-data.ts`: `FertiliserSummary`, `ScheduleStatus`, `FertiliserSchedule`, `StockLevel`, `StockItem`, `UsagePoint`
 
@@ -109,7 +113,7 @@ Reusable components are grouped by area:
 - `components/motor/` — Motor Runtime: `motor-status-cards.tsx`, `motor-table.tsx`, `motor-chart.tsx`, `motor-log-section.tsx`, `motor-valves-section.tsx`, `motor-summary-cards.tsx`
 - `components/coconut/` — Coconut Harvest: `harvest-hub-card.tsx` (landing cards), `coconut-subheader.tsx` (breadcrumb + title + Back + Export)
 - `components/jackfruit/` — `jackfruit-chart.tsx`
-- `components/beetle/` — `beetle-chart.tsx`
+- `components/beetle/` — Beetle Trap: `beetle-map-section.tsx` (client: plot tabs, orthomosaic + count-scaled markers, legend, selected-trap panel, Top 10 table), `beetle-daily-chart.tsx` (grouped bar chart, separate counts)
 - `components/fertiliser/` — `fertiliser-chart.tsx`
 - `components/ui/` — shadcn/ui primitives
 
@@ -131,6 +135,8 @@ public/mfms/
            pipeline-layout-inspection.png, fertiliser-management.png,
            todays-weather.png, weather-history.png, farm-reports.png,
            worker-management.png, inventory-management.png
+  beetle/  plot1-orthomosaic.png, plot2-orthomosaic.png
+           (PLACEHOLDER drone maps — Codex replaces with real plot1/plot2.mbtiles tiles)
 public/
   farm-banner.png          (Well Water / Motor Runtime header banner)
   muthu-farms-logo.png     (Well Water / Motor Runtime header logo)
