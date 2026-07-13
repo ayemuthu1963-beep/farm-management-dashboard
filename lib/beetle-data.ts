@@ -17,11 +17,13 @@ export type CountBand = "Very Low" | "Low" | "Medium" | "High" | "Very High"
 // ---------------------------------------------------------------------------
 // Shared pheromone reset schedule (identical for both trap types)
 // ---------------------------------------------------------------------------
+export const pheromoneInstalledOn = "03 Jul 2026"
+
 export const resetSchedule = {
-  pheromoneInstalledOn: "18 Mar 2026",
+  pheromoneInstalledOn,
   pheromoneChangeOn: "16 Jun 2026",
   changeIntervalDays: 90,
-  cumulativeCountStartDate: "18 Mar 2026",
+  cumulativeCountStartDate: pheromoneInstalledOn,
   daysRemaining: 2,
 } as const
 
@@ -83,6 +85,25 @@ export const traps: Trap[] = [
   { trapNo: "Trap 40", type: "Red Palm Weevil", plot: "plot2", x: 40, y: 78, lastCount: 0, cumulativeCount: 4, risk: "Low", lastInspection: lastInspectionDate },
   { trapNo: "Trap 55", type: "Rhinoceros", plot: "plot1", x: 70, y: 74, lastCount: 0, cumulativeCount: 2, risk: "Low", lastInspection: lastInspectionDate },
   { trapNo: "Trap 18", type: "Red Palm Weevil", plot: "plot2", x: 60, y: 82, lastCount: 0, cumulativeCount: 1, risk: "Low", lastInspection: lastInspectionDate },
+  // Placeholder static rows so the mock full list represents all 78 farm traps.
+  ...Array.from({ length: 78 }, (_, index): Trap | null => {
+    const trapNumber = index + 1
+    const existingTrapNumbers = new Set([3, 5, 8, 12, 18, 21, 27, 31, 36, 40, 48, 55, 60, 64, 67, 73])
+
+    if (existingTrapNumbers.has(trapNumber)) return null
+
+    return {
+      trapNo: `Trap ${String(trapNumber).padStart(2, "0")}`,
+      type: trapNumber % 2 === 0 ? "Rhinoceros" : "Red Palm Weevil",
+      plot: trapNumber <= 39 ? "plot1" : "plot2",
+      x: 12 + ((trapNumber * 11) % 76),
+      y: 14 + ((trapNumber * 17) % 72),
+      lastCount: 0,
+      cumulativeCount: 0,
+      risk: "Low",
+      lastInspection: lastInspectionDate,
+    }
+  }).filter((trap): trap is Trap => trap !== null),
 ]
 
 // Top 10 traps since last reset (derived — highest cumulative first)
@@ -114,6 +135,16 @@ export const dailyCounts: DailyCount[] = [
   { date: "21 May 2026", rhinoceros: 8, redPalmWeevil: 7 },
   { date: "19 May 2026", rhinoceros: 7, redPalmWeevil: 5 },
 ]
+
+// Compatibility export for the older BeetleChart component.
+// The amended dashboard uses dailyCounts directly; this keeps strict TypeScript
+// checks passing without changing the visible Beetle Trap page.
+export const beetleTrend = dailyCounts.map((entry) => ({
+  week: entry.date,
+  rhinoceros: entry.rhinoceros,
+  redPalmWeevil: entry.redPalmWeevil,
+}))
+
 
 // ---------------------------------------------------------------------------
 // Beetle infection by area (horizontal bars, highest first)
