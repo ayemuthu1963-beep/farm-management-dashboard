@@ -10,13 +10,13 @@ export function IrrigationMapSection() {
   const [selectedZoneId, setSelectedZoneId] = useState<ZoneId>("P1E")
   const selectedZone = zones.find((z) => z.id === selectedZoneId)
 
-  // SVG zone map layout — all five zones visible with large bold labels
+  // SVG zone map layout — all five zones visible without scrolling
   const zoneShapes = [
-    { id: "P1E" as const, label: "PLOT 1 EAST", path: "M 10 5 L 30 5 L 30 35 L 10 35 Z", labelX: 20, labelY: 22 },
-    { id: "P1W" as const, label: "PLOT 1 WEST", path: "M 10 40 L 30 40 L 30 70 L 10 70 Z", labelX: 20, labelY: 57 },
-    { id: "P2E" as const, label: "PLOT 2 EAST", path: "M 70 5 L 90 5 L 90 35 L 70 35 Z", labelX: 80, labelY: 22 },
-    { id: "P2W" as const, label: "PLOT 2 WEST", path: "M 70 40 L 90 40 L 90 70 L 70 70 Z", labelX: 80, labelY: 57 },
-    { id: "JF" as const, label: "JACKFRUIT", path: "M 35 75 L 65 75 L 65 95 L 35 95 Z", labelX: 50, labelY: 87 },
+    { id: "P1E" as const, label: "PLOT 1 EAST", path: "M 8 8 L 28 8 L 28 28 L 8 28 Z", labelX: 18, labelY: 18 },
+    { id: "P1W" as const, label: "PLOT 1 WEST", path: "M 8 38 L 28 38 L 28 58 L 8 58 Z", labelX: 18, labelY: 48 },
+    { id: "P2E" as const, label: "PLOT 2 EAST", path: "M 72 8 L 92 8 L 92 28 L 72 28 Z", labelX: 82, labelY: 18 },
+    { id: "P2W" as const, label: "PLOT 2 WEST", path: "M 72 38 L 92 38 L 92 58 L 72 58 Z", labelX: 82, labelY: 48 },
+    { id: "JF" as const, label: "JACKFRUIT", path: "M 36 68 L 64 68 L 64 88 L 36 88 Z", labelX: 50, labelY: 78 },
   ]
 
   return (
