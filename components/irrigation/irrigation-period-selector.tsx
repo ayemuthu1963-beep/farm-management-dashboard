@@ -14,11 +14,31 @@ const periodOptions = [
   { id: "custom", label: "Custom Date Range" },
 ]
 
-export function IrrigationPeriodSelector() {
-  const [activePeriod, setActivePeriod] = useState("today")
+interface IrrigationPeriodSelectorProps {
+  onPeriodChange: (query: string) => void
+  onRefresh: () => void
+}
+
+export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: IrrigationPeriodSelectorProps) {
+  const [activePeriod, setActivePeriod] = useState("last7")
   const [showCustom, setShowCustom] = useState(false)
   const [startDate, setStartDate] = useState("2026-07-13")
   const [endDate, setEndDate] = useState("2026-07-13")
+
+  function applyPeriod(periodId: string) {
+    setActivePeriod(periodId)
+    if (periodId === "custom") {
+      setShowCustom(true)
+      return
+    }
+
+    setShowCustom(false)
+    onPeriodChange(`period=${periodId}`)
+  }
+
+  function applyCustomRange() {
+    onPeriodChange(`period=custom&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`)
+  }
 
   return (
     <Panel
@@ -28,6 +48,7 @@ export function IrrigationPeriodSelector() {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={onRefresh}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
             <RefreshCw className="size-4" aria-hidden="true" />
@@ -44,14 +65,7 @@ export function IrrigationPeriodSelector() {
             <button
               key={period.id}
               type="button"
-              onClick={() => {
-                setActivePeriod(period.id)
-                if (period.id !== "custom") {
-                  setShowCustom(false)
-                } else {
-                  setShowCustom(true)
-                }
-              }}
+              onClick={() => applyPeriod(period.id)}
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm font-semibold transition-colors",
                 activePeriod === period.id
@@ -93,6 +107,7 @@ export function IrrigationPeriodSelector() {
             </div>
             <button
               type="button"
+              onClick={applyCustomRange}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Apply

@@ -1,14 +1,18 @@
 import { BarChart, Bar, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { zones, waterPerTreeTrend } from "@/lib/irrigation-data"
+import type { TrendPoint, Zone } from "@/lib/irrigation-data"
 import { Panel } from "@/components/farm/panel"
 
-// Prepare bar chart data
-const zoneWaterData = zones.map((z) => ({
-  name: z.name,
-  water: z.totalWaterSupplied,
-}))
+interface IrrigationChartsProps {
+  zones: Zone[]
+  waterPerTreeTrend: TrendPoint[]
+}
 
-export function IrrigationCharts() {
+export function IrrigationCharts({ zones, waterPerTreeTrend }: IrrigationChartsProps) {
+  const zoneWaterData = zones.map((z) => ({
+    name: z.name,
+    water: z.totalWaterSupplied,
+  }))
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Water Supplied by Zone - Bar Chart */}

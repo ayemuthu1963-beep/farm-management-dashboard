@@ -1,16 +1,16 @@
 "use client"
 
-import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { zones, statusColors, type ZoneId } from "@/lib/irrigation-data"
+import { statusColors, type Zone, type ZoneId } from "@/lib/irrigation-data"
 import { Panel } from "@/components/farm/panel"
 
 interface IrrigationZoneTableProps {
+  zones: Zone[]
   onSelectZone?: (zoneId: ZoneId) => void
   selectedZoneId?: ZoneId
 }
 
-export function IrrigationZoneTable({ onSelectZone, selectedZoneId }: IrrigationZoneTableProps) {
+export function IrrigationZoneTable({ zones, onSelectZone, selectedZoneId }: IrrigationZoneTableProps) {
   return (
     <Panel title="Irrigation by Zone">
       <div className="overflow-x-auto">
@@ -21,7 +21,7 @@ export function IrrigationZoneTable({ onSelectZone, selectedZoneId }: Irrigation
               <th className="px-2.5 py-2 text-left font-semibold text-foreground">Motor</th>
               <th className="px-2.5 py-2 text-left font-semibold text-foreground">Valve Open Time</th>
               <th className="px-2.5 py-2 text-right font-semibold text-foreground">Total Water (L)</th>
-              <th className="px-2.5 py-2 text-right font-semibold text-foreground">Trees</th>
+              <th className="px-2.5 py-2 text-right font-semibold text-foreground">Records</th>
               <th className="px-2.5 py-2 text-right font-semibold text-foreground">Water/Tree (L)</th>
               <th className="px-2.5 py-2 text-left font-semibold text-foreground">Last Irrigated</th>
               <th className="px-2.5 py-2 text-left font-semibold text-foreground">Status</th>
@@ -43,8 +43,8 @@ export function IrrigationZoneTable({ onSelectZone, selectedZoneId }: Irrigation
                 <td className="px-2.5 py-3 text-right font-semibold text-foreground">
                   {zone.totalWaterSupplied.toLocaleString("en-IN")}
                 </td>
-                <td className="px-2.5 py-3 text-right text-muted-foreground">{zone.numberOfTrees}</td>
-                <td className="px-2.5 py-3 text-right font-medium text-foreground">{zone.waterPerTree}</td>
+                <td className="px-2.5 py-3 text-right text-muted-foreground">{zone.recordsCount}</td>
+                <td className="px-2.5 py-3 text-right font-medium text-foreground">{zone.waterPerTreeDisplay}</td>
                 <td className="px-2.5 py-3 text-muted-foreground text-xs">{zone.lastIrrigatedDate}</td>
                 <td className="px-2.5 py-3">
                   <span
