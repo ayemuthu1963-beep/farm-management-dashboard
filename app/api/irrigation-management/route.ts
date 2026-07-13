@@ -215,7 +215,7 @@ export async function GET(request: Request) {
       headers.Authorization = authHeader
     }
 
-    const response = await fetch(`${getApiBaseUrl()}/api/admin/motor-runtime/entries?limit=100`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/motor-runtime/entries?limit=100`, {
       headers,
       cache: "no-store",
     })
