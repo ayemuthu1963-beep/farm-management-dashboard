@@ -129,9 +129,9 @@ export const moduleCards: ModuleCardData[] = [
   {
     id: "inventory-management",
     title: "Inventory Management",
-    description: "Stock, tools and supplies tracking",
+    description: "Stock received, stock used, expiry and current farm inventory balance",
     icon: "/mfms/icons/inventory-management.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/inventory-management",
+    ctaLabel: "Open Dashboard",
   },
 ]
