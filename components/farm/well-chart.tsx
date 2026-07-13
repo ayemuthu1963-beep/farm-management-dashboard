@@ -31,8 +31,6 @@ export function WellChart({ data }: WellChartProps) {
           />
           <YAxis
             width={44}
-            domain={[0, 60]}
-            ticks={[0, 10, 20, 30, 40, 50, 60]}
             tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
             tickLine={false}
             axisLine={false}

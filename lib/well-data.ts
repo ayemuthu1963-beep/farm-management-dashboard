@@ -1,18 +1,46 @@
-// Mock data for the Well Water dashboard. No backend — all figures are static.
-// All water figures are in Litres.
-//
-// Future backend calculation rules (documented for Codex, NOT implemented here):
-//   North Well: 1 inch = 1,650 litres
-//   South Well: 1 inch = 1,300 litres
-//   Pumped Out  = Morning reading - Evening reading
-//   Recharged   = Evening reading - Next Morning reading
+// ============================================================================
+// WELL WATER DASHBOARD DATA CONTRACT
+// Uses the existing backend /api/well-water/dashboard response as source of truth.
+// No duplicate tables; calculations reuse well_water_wells + vw_well_water_readings.
+// ============================================================================
 
 export type WellId = "north" | "south"
+export type WellCode = "well1" | "well2"
+
+export interface WellDashboardRow {
+  reading_id: number
+  reading_date: string
+  reading_time: string
+  well_code: WellCode
+  well_name: string
+  feet: number
+  inches: number
+  total_inches: number
+  previous_total_inches: number | null
+  change_inches: number | null
+  pumped_out_liters: number
+  recharge_liters: number
+  capacity_liters: number
+  liters_per_inch: number
+  level_feet_decimal: number
+}
+
+export interface WellDashboardResponse {
+  summary: {
+    total_readings: number
+    first_reading_date: string | null
+    latest_reading_date: string | null
+  }
+  north_rows: WellDashboardRow[]
+  south_rows: WellDashboardRow[]
+}
 
 export interface WellDailyRecord {
   date: string
-  morningWater: number
-  eveningWater: number
+  morningWater: number | null
+  eveningWater: number | null
+  morningWaterDisplay: string
+  eveningWaterDisplay: string
   waterPumpedOut: number
   rechargedSinceYesterday: number
   remarks: string
@@ -26,112 +54,14 @@ export interface SummaryStat {
   icon: "drop" | "drop-alt" | "pump" | "recharge"
 }
 
-// Full storage capacity per well, shown beside each well heading.
-// (Maximum water that can be taken from bottom to Pampari.)
-export const wellCapacity: Record<WellId, string> = {
-  north: "11,28,270 litres",
-  south: "6,32,500 litres",
+export interface WellDashboardData {
+  northWellRecords: WellDailyRecord[]
+  southWellRecords: WellDailyRecord[]
+  wellCapacity: Record<WellId, string>
+  summaryStats: SummaryStat[]
+  totalReadings: number
+  latestReadingDate: string
 }
-
-// North well — most recent day first (matches the table order in the design)
-export const northWellRecords: WellDailyRecord[] = [
-  {
-    date: "06-07-2026",
-    morningWater: 32.5,
-    eveningWater: 29.8,
-    waterPumpedOut: 2.7,
-    rechargedSinceYesterday: 1.2,
-    remarks: "Normal",
-  },
-  {
-    date: "05-07-2026",
-    morningWater: 31.3,
-    eveningWater: 28.4,
-    waterPumpedOut: 2.9,
-    rechargedSinceYesterday: 0.9,
-    remarks: "Normal",
-  },
-  {
-    date: "04-07-2026",
-    morningWater: 30.4,
-    eveningWater: 27.8,
-    waterPumpedOut: 2.6,
-    rechargedSinceYesterday: 0.7,
-    remarks: "Slight Rain",
-  },
-  {
-    date: "03-07-2026",
-    morningWater: 29.7,
-    eveningWater: 27.1,
-    waterPumpedOut: 2.6,
-    rechargedSinceYesterday: 1.1,
-    remarks: "Normal",
-  },
-  {
-    date: "02-07-2026",
-    morningWater: 28.6,
-    eveningWater: 26.2,
-    waterPumpedOut: 2.4,
-    rechargedSinceYesterday: 0.8,
-    remarks: "Normal",
-  },
-]
-
-// South well — most recent day first
-export const southWellRecords: WellDailyRecord[] = [
-  {
-    date: "06-07-2026",
-    morningWater: 28.1,
-    eveningWater: 25.4,
-    waterPumpedOut: 2.7,
-    rechargedSinceYesterday: 1.0,
-    remarks: "Normal",
-  },
-  {
-    date: "05-07-2026",
-    morningWater: 27.1,
-    eveningWater: 24.3,
-    waterPumpedOut: 2.8,
-    rechargedSinceYesterday: 0.6,
-    remarks: "Normal",
-  },
-  {
-    date: "04-07-2026",
-    morningWater: 26.5,
-    eveningWater: 23.8,
-    waterPumpedOut: 2.7,
-    rechargedSinceYesterday: 0.5,
-    remarks: "Normal",
-  },
-  {
-    date: "03-07-2026",
-    morningWater: 26.0,
-    eveningWater: 23.3,
-    waterPumpedOut: 2.7,
-    rechargedSinceYesterday: 0.8,
-    remarks: "Light Rain",
-  },
-  {
-    date: "02-07-2026",
-    morningWater: 25.2,
-    eveningWater: 22.7,
-    waterPumpedOut: 2.5,
-    rechargedSinceYesterday: 0.7,
-    remarks: "Normal",
-  },
-]
-
-// Summary stats for the selected period
-export const summaryStats: SummaryStat[] = [
-  { well: "North Well", wellId: "north", label: "Avg Morning Water", value: 30.1, icon: "drop" },
-  { well: "North Well", wellId: "north", label: "Avg Evening Water", value: 27.86, icon: "drop-alt" },
-  { well: "North Well", wellId: "north", label: "Total Pumped Out", value: 13.2, icon: "pump" },
-  { well: "North Well", wellId: "north", label: "Total Recharged", value: 4.7, icon: "recharge" },
-  { well: "South Well", wellId: "south", label: "Avg Morning Water", value: 26.18, icon: "drop" },
-  { well: "South Well", wellId: "south", label: "Avg Evening Water", value: 23.5, icon: "drop-alt" },
-  { well: "South Well", wellId: "south", label: "Total Pumped Out", value: 13.4, icon: "pump" },
-  { well: "South Well", wellId: "south", label: "Total Recharged", value: 3.6, icon: "recharge" },
-]
 
 export interface ChartPoint {
   date: string
@@ -141,17 +71,35 @@ export interface ChartPoint {
   recharged: number
 }
 
-// Chart data is ordered oldest -> newest (left to right on the x-axis)
-export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
-  return [...records]
-    .reverse()
-    .map((r) => ({
-      date: r.date,
-      morningWater: r.morningWater,
-      eveningWater: r.eveningWater,
-      pumpedOut: r.waterPumpedOut,
-      recharged: r.rechargedSinceYesterday,
-    }))
+const WELL_ID_BY_CODE: Record<WellCode, WellId> = {
+  well1: "north",
+  well2: "south",
+}
+
+const WELL_NAME_BY_ID: Record<WellId, string> = {
+  north: "North Well",
+  south: "South Well",
+}
+
+export const emptyWellDashboardData: WellDashboardData = {
+  northWellRecords: [],
+  southWellRecords: [],
+  wellCapacity: {
+    north: "--",
+    south: "--",
+  },
+  summaryStats: [
+    { well: "North Well", wellId: "north", label: "Avg Morning Water", value: 0, icon: "drop" },
+    { well: "North Well", wellId: "north", label: "Avg Evening Water", value: 0, icon: "drop-alt" },
+    { well: "North Well", wellId: "north", label: "Total Pumped Out", value: 0, icon: "pump" },
+    { well: "North Well", wellId: "north", label: "Total Recharged", value: 0, icon: "recharge" },
+    { well: "South Well", wellId: "south", label: "Avg Morning Water", value: 0, icon: "drop" },
+    { well: "South Well", wellId: "south", label: "Avg Evening Water", value: 0, icon: "drop-alt" },
+    { well: "South Well", wellId: "south", label: "Total Pumped Out", value: 0, icon: "pump" },
+    { well: "South Well", wellId: "south", label: "Total Recharged", value: 0, icon: "recharge" },
+  ],
+  totalReadings: 0,
+  latestReadingDate: "--",
 }
 
 export const seriesConfig = [
@@ -161,5 +109,152 @@ export const seriesConfig = [
   { key: "recharged", label: "Recharged", color: "var(--chart-4)" },
 ] as const
 
-export const todayDate = "06 Jul 2026"
-export const todayTime = "08:15 AM"
+export function formatNumberIN(num: number): string {
+  return num.toLocaleString("en-IN")
+}
+
+function formatCapacity(liters: number | null | undefined): string {
+  if (!liters) return "--"
+  return `${formatNumberIN(liters)} litres`
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "--"
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function formatTableDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+}
+
+function waterAvailableLiters(row: WellDashboardRow): number | null {
+  if (row.well_code === "well2") {
+    return null
+  }
+
+  // Confirmed for North Well: readings are depth from the reference point
+  // down to the water surface.
+  return row.capacity_liters - row.total_inches * row.liters_per_inch
+}
+
+function waterDisplay(row: WellDashboardRow): string {
+  const availableWater = waterAvailableLiters(row)
+  if (availableWater === null) return "Configuration requires verification"
+  return formatNumberIN(Math.round(availableWater))
+}
+
+function average(values: Array<number | null>): number {
+  const validValues = values.filter((value): value is number => value !== null)
+  if (validValues.length === 0) return 0
+  return Math.round(validValues.reduce((sum, value) => sum + value, 0) / validValues.length)
+}
+
+function toDailyRecords(rows: WellDashboardRow[]): WellDailyRecord[] {
+  const rowsByDate = new Map<string, WellDashboardRow[]>()
+
+  for (const row of rows) {
+    const dayRows = rowsByDate.get(row.reading_date) ?? []
+    dayRows.push(row)
+    rowsByDate.set(row.reading_date, dayRows)
+  }
+
+  return Array.from(rowsByDate.entries())
+    .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+    .map(([date, dayRows]) => {
+      const sortedRows = [...dayRows].sort((a, b) => {
+        const timeCompare = a.reading_time.localeCompare(b.reading_time)
+        if (timeCompare !== 0) return timeCompare
+        return a.reading_id - b.reading_id
+      })
+
+      const morningRow = sortedRows[0]
+      const eveningRow = sortedRows.at(-1) ?? morningRow
+      const pumpedOut = sortedRows.reduce((sum, row) => sum + (row.pumped_out_liters ?? 0), 0)
+      const recharged = sortedRows.reduce((sum, row) => sum + (row.recharge_liters ?? 0), 0)
+
+      return {
+        date: formatTableDate(date),
+        morningWater: waterAvailableLiters(morningRow),
+        eveningWater: waterAvailableLiters(eveningRow),
+        morningWaterDisplay: waterDisplay(morningRow),
+        eveningWaterDisplay: waterDisplay(eveningRow),
+        waterPumpedOut: pumpedOut,
+        rechargedSinceYesterday: recharged,
+        remarks: morningRow.well_code === "well2" ? "Verify Config" : "Live Data",
+      }
+    })
+}
+
+function capacityFromRows(rows: WellDashboardRow[]): string {
+  return formatCapacity(rows[0]?.capacity_liters)
+}
+
+function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
+  const well = WELL_NAME_BY_ID[wellId]
+  return [
+    { well, wellId, label: "Avg Morning Water", value: average(records.map((record) => record.morningWater)), icon: "drop" },
+    {
+      well,
+      wellId,
+      label: "Avg Evening Water",
+      value: average(records.map((record) => record.eveningWater)),
+      icon: "drop-alt",
+    },
+    {
+      well,
+      wellId,
+      label: "Total Pumped Out",
+      value: records.reduce((sum, record) => sum + record.waterPumpedOut, 0),
+      icon: "pump",
+    },
+    {
+      well,
+      wellId,
+      label: "Total Recharged",
+      value: records.reduce((sum, record) => sum + record.rechargedSinceYesterday, 0),
+      icon: "recharge",
+    },
+  ]
+}
+
+export function buildWellDashboardData(payload: WellDashboardResponse): WellDashboardData {
+  const northWellRecords = toDailyRecords(payload.north_rows ?? [])
+  const southWellRecords = toDailyRecords(payload.south_rows ?? [])
+
+  return {
+    northWellRecords,
+    southWellRecords,
+    wellCapacity: {
+      north: capacityFromRows(payload.north_rows ?? []),
+      south: capacityFromRows(payload.south_rows ?? []),
+    },
+    summaryStats: [...buildStats(WELL_ID_BY_CODE.well1, northWellRecords), ...buildStats(WELL_ID_BY_CODE.well2, southWellRecords)],
+    totalReadings: payload.summary?.total_readings ?? 0,
+    latestReadingDate: formatDate(payload.summary?.latest_reading_date),
+  }
+}
+
+// Chart data is ordered oldest -> newest (left to right on the x-axis)
+export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
+  return [...records]
+    .reverse()
+    .map((record) => ({
+      date: record.date,
+      morningWater: record.morningWater ?? 0,
+      eveningWater: record.eveningWater ?? 0,
+      pumpedOut: record.waterPumpedOut,
+      recharged: record.rechargedSinceYesterday,
+    }))
+}
