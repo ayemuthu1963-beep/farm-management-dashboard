@@ -31,13 +31,11 @@ export function WellChart({ data }: WellChartProps) {
           />
           <YAxis
             width={44}
-            domain={[0, 60]}
-            ticks={[0, 10, 20, 30, 40, 50, 60]}
             tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
             tickLine={false}
             axisLine={false}
             label={{
-              value: "Lacs Litres",
+              value: "Litres",
               angle: -90,
               position: "insideLeft",
               style: { fill: "var(--muted-foreground)", fontSize: 11, textAnchor: "middle" },
@@ -68,6 +66,7 @@ export function WellChart({ data }: WellChartProps) {
               strokeWidth={2}
               dot={{ r: 3, fill: series.color }}
               activeDot={{ r: 5 }}
+              isAnimationActive={false}
             />
           ))}
         </LineChart>

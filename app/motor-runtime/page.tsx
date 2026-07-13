@@ -4,9 +4,9 @@ import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { DateRangeSelector } from "@/components/farm/date-range-selector"
 import { MotorStatusCards } from "@/components/motor/motor-status-cards"
-import { MotorInfo } from "@/components/motor/motor-info"
 import { MotorLogSection } from "@/components/motor/motor-log-section"
 import { MotorChart } from "@/components/motor/motor-chart"
+import { MotorValvesSection } from "@/components/motor/motor-valves-section"
 import { MotorSummaryCards } from "@/components/motor/motor-summary-cards"
 
 export default function MotorRuntimePage() {
@@ -31,11 +31,8 @@ export default function MotorRuntimePage() {
         {/* Live status */}
         <MotorStatusCards />
 
-        {/* Info + date range */}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <MotorInfo />
-          <DateRangeSelector />
-        </div>
+        {/* Date range (full width) */}
+        <DateRangeSelector />
 
         {/* Daily log + runtime trend */}
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -44,6 +41,9 @@ export default function MotorRuntimePage() {
             <MotorChart />
           </Panel>
         </div>
+
+        {/* Valves opened / closed log */}
+        <MotorValvesSection />
 
         {/* Summary */}
         <MotorSummaryCards />

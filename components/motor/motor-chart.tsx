@@ -59,6 +59,7 @@ export function MotorChart() {
               strokeWidth={2}
               dot={{ r: 3, fill: series.color }}
               activeDot={{ r: 5 }}
+              isAnimationActive={false}
             />
           ))}
         </LineChart>
