@@ -17,6 +17,12 @@ const remarkStyles: Record<string, string> = {
   Normal: "bg-secondary text-secondary-foreground",
   "Slight Rain": "bg-chart-1/15 text-chart-1",
   "Light Rain": "bg-chart-1/15 text-chart-1",
+  "Configuration requires verification": "bg-amber-100 text-amber-800",
+}
+
+function formatLitres(value: number | null): string {
+  if (value === null) return "—"
+  return formatNumberIN(Math.round(value))
 }
 
 export function WellTable({ records, headerClassName }: WellTableProps) {
@@ -48,10 +54,8 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
               <td className="whitespace-nowrap px-3 py-3 text-foreground">{record.date}</td>
               <td className="px-3 py-3 text-foreground">{record.morningWaterDisplay}</td>
               <td className="px-3 py-3 text-foreground">{record.eveningWaterDisplay}</td>
-              <td className="px-3 py-3 text-foreground">{formatNumberIN(Math.round(record.waterPumpedOut))}</td>
-              <td className="px-3 py-3 text-foreground">
-                {formatNumberIN(Math.round(record.rechargedSinceYesterday))}
-              </td>
+              <td className="px-3 py-3 text-foreground">{formatLitres(record.waterPumpedOut)}</td>
+              <td className="px-3 py-3 text-foreground">{formatLitres(record.rechargedSinceYesterday)}</td>
               <td className="px-3 py-3">
                 <span
                   className={cn(

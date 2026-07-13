@@ -27,8 +27,17 @@ function StatCard({ stat }: { stat: SummaryStat }) {
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-primary">{stat.well}</p>
         <p className="text-[11px] leading-tight text-muted-foreground">{stat.label}</p>
-        <p className="mt-1 text-2xl font-bold text-foreground">{formatNumberIN(Math.round(stat.value))}</p>
-        <p className="text-[11px] text-muted-foreground">Litres</p>
+        {stat.value === null ? (
+          <>
+            <p className="mt-1 text-sm font-semibold leading-snug text-amber-700">{stat.warning}</p>
+            <p className="text-[11px] text-muted-foreground">Calculated litres hidden</p>
+          </>
+        ) : (
+          <>
+            <p className="mt-1 text-2xl font-bold text-foreground">{formatNumberIN(Math.round(stat.value))}</p>
+            <p className="text-[11px] text-muted-foreground">Litres</p>
+          </>
+        )}
       </div>
     </div>
   )
