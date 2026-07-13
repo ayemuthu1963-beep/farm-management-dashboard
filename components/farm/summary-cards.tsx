@@ -1,5 +1,5 @@
 import { Droplet, Droplets, ArrowUpFromLine, RotateCw, type LucideIcon } from "lucide-react"
-import { summaryStats, type SummaryStat } from "@/lib/well-data"
+import { formatNumberIN, type SummaryStat } from "@/lib/well-data"
 import { cn } from "@/lib/utils"
 
 const iconMap: Record<SummaryStat["icon"], LucideIcon> = {
@@ -27,19 +27,32 @@ function StatCard({ stat }: { stat: SummaryStat }) {
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-primary">{stat.well}</p>
         <p className="text-[11px] leading-tight text-muted-foreground">{stat.label}</p>
-        <p className="mt-1 text-2xl font-bold text-foreground">{stat.value.toFixed(2)}</p>
-        <p className="text-[11px] text-muted-foreground">Lacs Litres</p>
+        {stat.value === null ? (
+          <>
+            <p className="mt-1 text-sm font-semibold leading-snug text-amber-700">{stat.warning}</p>
+            <p className="text-[11px] text-muted-foreground">Calculated litres hidden</p>
+          </>
+        ) : (
+          <>
+            <p className="mt-1 text-2xl font-bold text-foreground">{formatNumberIN(Math.round(stat.value))}</p>
+            <p className="text-[11px] text-muted-foreground">Litres</p>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-export function SummaryCards() {
+interface SummaryCardsProps {
+  stats: SummaryStat[]
+}
+
+export function SummaryCards({ stats }: SummaryCardsProps) {
   return (
     <section className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
       <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-foreground">Summary (Selected Period)</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {summaryStats.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={`${stat.wellId}-${stat.label}`} stat={stat} />
         ))}
       </div>

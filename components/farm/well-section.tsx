@@ -9,11 +9,34 @@ interface WellSectionProps {
   icon: LucideIcon
   records: WellDailyRecord[]
   tableHeaderClassName?: string
+  iconClassName?: string
+  /** full storage capacity, shown to the right of the well heading */
+  capacity?: string
 }
 
-export function WellSection({ title, icon, records, tableHeaderClassName }: WellSectionProps) {
+export function WellSection({
+  title,
+  icon,
+  records,
+  tableHeaderClassName,
+  iconClassName,
+  capacity,
+}: WellSectionProps) {
   return (
-    <Panel title={title} icon={icon} bodyClassName="space-y-5 p-4 sm:p-5">
+    <Panel
+      title={title}
+      icon={icon}
+      iconClassName={iconClassName}
+      bodyClassName="space-y-5 p-4 sm:p-5"
+      headerRight={
+        capacity ? (
+          <span className="text-[11px] font-medium normal-case tracking-normal text-muted-foreground">
+            Full Capacity
+            <span className="block text-sm font-bold text-foreground">{capacity}</span>
+          </span>
+        ) : undefined
+      }
+    >
       <WellTable records={records} headerClassName={tableHeaderClassName} />
       <div>
         <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-foreground">

@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Home, LogOut, Leaf, BarChart3 } from "lucide-react"
@@ -9,8 +12,37 @@ const pills = [
 ]
 
 export function HomeHeader() {
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setNow(new Date())
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const dateText = now
+    ? now.toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "Loading date..."
+
+  const timeText = now
+    ? now.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+    : "Loading time..."
+
   return (
-    <header className="relative overflow-hidden rounded-2xl bg-[#eaf6df] shadow-[0_8px_30px_rgba(0,0,0,0.12)] lg:min-h-[360px]">
+    <header
+      className="relative overflow-hidden rounded-2xl bg-[#eaf6df] shadow-[0_8px_30px_rgba(0,0,0,0.12)]"
+      style={{ minHeight: 400 }}
+    >
       {/* Coconut plantation background */}
       <Image
         src="/mfms/header/coconut-plantation-bg.png"
@@ -83,6 +115,14 @@ export function HomeHeader() {
               </span>
             )
           })}
+        </div>
+
+      </div>
+
+      <div className="relative z-10 mx-5 mb-4 text-[#0b3b1b] sm:mx-9 lg:absolute lg:bottom-4 lg:left-14 lg:mx-0 lg:mb-0">
+        <div className="rounded-2xl border border-[#d9e7d8] bg-white/75 px-4 py-2 shadow-sm backdrop-blur lg:min-w-[210px]">
+          <p className="text-sm font-extrabold leading-tight">{dateText}</p>
+          <p className="text-sm font-extrabold leading-tight">{timeText}</p>
         </div>
       </div>
     </header>

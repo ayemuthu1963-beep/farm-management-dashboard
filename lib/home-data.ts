@@ -35,22 +35,24 @@ export interface ModuleCardData {
 }
 
 // Card order is frozen per the approved reference.
+// Cards 2-8 are built dashboards; cards 9-12 are future modules (Coming Soon).
+// (Card 1 "Today's Weather" is rendered separately by <WeatherCard />.)
 export const moduleCards: ModuleCardData[] = [
   {
     id: "coconut-harvest",
     title: "Coconut Harvest",
     description: "Track yields, harvest cycles and tree health",
     icon: "/mfms/icons/coconut-harvest.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/coconut-harvest",
+    ctaLabel: "Open Dashboard",
   },
   {
     id: "jackfruit-monitoring",
     title: "Jackfruit Monitoring",
     description: "Monitor growth stages and ripeness",
     icon: "/mfms/icons/jackfruit-monitoring.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/jackfruit-monitoring",
+    ctaLabel: "Open Dashboard",
   },
   {
     id: "well-water-level",
@@ -69,27 +71,67 @@ export const moduleCards: ModuleCardData[] = [
     ctaLabel: "Open Dashboard",
   },
   {
+    id: "irrigation-management",
+    title: "Irrigation Management",
+    description: "Monitor irrigation water supplied to each farm zone, water per tree, motor runtime and irrigation history.",
+    icon: "/mfms/icons/pipeline-layout-inspection.png",
+    href: "/irrigation-management",
+    ctaLabel: "Open Dashboard",
+  },
+  {
     id: "beetle-trap-monitoring",
     title: "Beetle Trap Monitoring",
     description: "Pheromone trap catches and pest alerts",
     icon: "/mfms/icons/beetle-trap-monitoring.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/beetle-trap",
+    ctaLabel: "Open Dashboard",
   },
   {
     id: "pipeline-layout-inspection",
     title: "Pipeline Layout & Inspection",
     description: "Irrigation network status and leaks",
     icon: "/mfms/icons/pipeline-layout-inspection.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/pipeline-layout",
+    ctaLabel: "Open Dashboard",
   },
   {
     id: "fertiliser-management",
     title: "Fertiliser Management",
     description: "Application schedules and stock levels",
     icon: "/mfms/icons/fertiliser-management.png",
+    href: "/fertiliser-management",
+    ctaLabel: "Open Dashboard",
+  },
+  {
+    id: "weather-history",
+    title: "Weather History",
+    description: "Past weather records and seasonal trends",
+    icon: "/mfms/icons/weather-history.png",
     href: "/under-construction",
     comingSoon: true,
+  },
+  {
+    id: "farm-reports",
+    title: "Farm Reports",
+    description: "Consolidated reports and analytics",
+    icon: "/mfms/icons/farm-reports.png",
+    href: "/under-construction",
+    comingSoon: true,
+  },
+  {
+    id: "worker-management",
+    title: "Worker Management",
+    description: "Labour records, attendance and tasks",
+    icon: "/mfms/icons/worker-management.png",
+    href: "/under-construction",
+    comingSoon: true,
+  },
+  {
+    id: "inventory-management",
+    title: "Inventory Management",
+    description: "Stock received, stock used, expiry and current farm inventory balance",
+    icon: "/mfms/icons/inventory-management.png",
+    href: "/inventory-management",
+    ctaLabel: "Open Dashboard",
   },
 ]

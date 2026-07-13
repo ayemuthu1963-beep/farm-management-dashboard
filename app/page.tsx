@@ -17,7 +17,7 @@ export default function HomePage() {
           {/* 1. Today's Weather */}
           <WeatherCard data={weatherData} />
 
-          {/* 2-8. Module cards (order frozen per approved reference) */}
+          {/* 2-12. Module cards: 3 rows x 4 columns on desktop (order frozen per approved reference) */}
           {moduleCards.map((card) => (
             <ModuleCard key={card.id} data={card} />
           ))}
