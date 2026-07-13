@@ -10,13 +10,13 @@ export function IrrigationMapSection() {
   const [selectedZoneId, setSelectedZoneId] = useState<ZoneId>("P1E")
   const selectedZone = zones.find((z) => z.id === selectedZoneId)
 
-  // SVG zone map layout — normalized coordinates as percentages
+  // SVG zone map layout — all five zones visible with large bold labels
   const zoneShapes = [
-    { id: "P1E" as const, label: "Plot 1 East", path: "M 20 15 L 40 15 L 40 45 L 20 45 Z" },
-    { id: "P1W" as const, label: "Plot 1 West", path: "M 20 50 L 40 50 L 40 80 L 20 80 Z" },
-    { id: "P2E" as const, label: "Plot 2 East", path: "M 60 15 L 80 15 L 80 45 L 60 45 Z" },
-    { id: "P2W" as const, label: "Plot 2 West", path: "M 60 50 L 80 50 L 80 80 L 60 80 Z" },
-    { id: "JF" as const, label: "Jackfruit", path: "M 35 85 L 65 85 L 65 100 L 35 100 Z" },
+    { id: "P1E" as const, label: "PLOT 1 EAST", path: "M 10 5 L 30 5 L 30 35 L 10 35 Z", labelX: 20, labelY: 22 },
+    { id: "P1W" as const, label: "PLOT 1 WEST", path: "M 10 40 L 30 40 L 30 70 L 10 70 Z", labelX: 20, labelY: 57 },
+    { id: "P2E" as const, label: "PLOT 2 EAST", path: "M 70 5 L 90 5 L 90 35 L 70 35 Z", labelX: 80, labelY: 22 },
+    { id: "P2W" as const, label: "PLOT 2 WEST", path: "M 70 40 L 90 40 L 90 70 L 70 70 Z", labelX: 80, labelY: 57 },
+    { id: "JF" as const, label: "JACKFRUIT", path: "M 35 75 L 65 75 L 65 95 L 35 95 Z", labelX: 50, labelY: 87 },
   ]
 
   return (
@@ -46,63 +46,24 @@ export function IrrigationMapSection() {
                     <path
                       d={shape.path}
                       fill={statusColor.svg}
-                      fillOpacity={isSelected ? 0.4 : 0.2}
+                      fillOpacity={isSelected ? 0.35 : 0.15}
                       stroke={statusColor.svg}
-                      strokeWidth="1"
-                      className="transition-all cursor-pointer hover:fill-opacity-35"
+                      strokeWidth="1.5"
+                      className="transition-all cursor-pointer hover:fill-opacity-3"
                       onClick={() => setSelectedZoneId(shape.id)}
                     />
-                    {/* Zone label + water per tree */}
-                    {shape.id === "P1E" && (
-                      <>
-                        <text x="30" y="25" fontSize="3" fontWeight="600" fill="#1f2937" textAnchor="middle">
-                          {shape.label}
-                        </text>
-                        <text x="30" y="35" fontSize="2" fill="#6b7280" textAnchor="middle">
-                          {zone.waterPerTree} L/tree
-                        </text>
-                      </>
-                    )}
-                    {shape.id === "P1W" && (
-                      <>
-                        <text x="30" y="60" fontSize="3" fontWeight="600" fill="#1f2937" textAnchor="middle">
-                          {shape.label}
-                        </text>
-                        <text x="30" y="70" fontSize="2" fill="#6b7280" textAnchor="middle">
-                          {zone.waterPerTree} L/tree
-                        </text>
-                      </>
-                    )}
-                    {shape.id === "P2E" && (
-                      <>
-                        <text x="70" y="25" fontSize="3" fontWeight="600" fill="#1f2937" textAnchor="middle">
-                          {shape.label}
-                        </text>
-                        <text x="70" y="35" fontSize="2" fill="#6b7280" textAnchor="middle">
-                          {zone.waterPerTree} L/tree
-                        </text>
-                      </>
-                    )}
-                    {shape.id === "P2W" && (
-                      <>
-                        <text x="70" y="60" fontSize="3" fontWeight="600" fill="#1f2937" textAnchor="middle">
-                          {shape.label}
-                        </text>
-                        <text x="70" y="70" fontSize="2" fill="#6b7280" textAnchor="middle">
-                          {zone.waterPerTree} L/tree
-                        </text>
-                      </>
-                    )}
-                    {shape.id === "JF" && (
-                      <>
-                        <text x="50" y="90" fontSize="3" fontWeight="600" fill="#1f2937" textAnchor="middle">
-                          {shape.label}
-                        </text>
-                        <text x="50" y="97" fontSize="2" fill="#6b7280" textAnchor="middle">
-                          {zone.waterPerTree} L/tree
-                        </text>
-                      </>
-                    )}
+                    {/* Zone label — large, bold */}
+                    <text
+                      x={shape.labelX}
+                      y={shape.labelY}
+                      fontSize="4"
+                      fontWeight="700"
+                      fill="#1f2937"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {shape.label}
+                    </text>
                   </g>
                 )
               })}
@@ -143,17 +104,15 @@ export function IrrigationMapSection() {
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Total Water Supplied</dt>
-              <dd className="mt-0.5 text-foreground font-semibold">
-                {selectedZone.totalWaterSupplied.toLocaleString("en-IN")} L
-              </dd>
+              <dd className="mt-0.5 text-foreground font-semibold">Database Value</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Number of Trees</dt>
-              <dd className="mt-0.5 text-foreground">{selectedZone.numberOfTrees}</dd>
+              <dd className="mt-0.5 text-foreground">Database Value</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Water per Tree</dt>
-              <dd className="mt-0.5 text-foreground font-semibold">{selectedZone.waterPerTree} L</dd>
+              <dd className="mt-0.5 text-foreground font-semibold">Database Value</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Last Irrigated</dt>
@@ -161,7 +120,7 @@ export function IrrigationMapSection() {
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Days Since Irrigation</dt>
-              <dd className="mt-0.5 text-foreground">{selectedZone.daysSinceIrrigation}</dd>
+              <dd className="mt-0.5 text-foreground">--</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Status</dt>

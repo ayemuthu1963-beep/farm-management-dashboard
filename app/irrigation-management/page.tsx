@@ -31,13 +31,13 @@ export default function IrrigationManagementPage() {
           <StatCard
             icon={Droplets}
             label="Total Water Supplied"
-            value={`${(totalWater / 100000).toLocaleString("en-IN", { maximumFractionDigits: 1 })}L`}
+            value="Database Value"
             accent="bg-chart-2/10 text-chart-2"
           />
           <StatCard
             icon={Droplets}
             label="Total Motor Runtime"
-            value={totalRuntime}
+            value="Database Value"
             accent="bg-primary/10 text-primary"
           />
         </StatGrid>
