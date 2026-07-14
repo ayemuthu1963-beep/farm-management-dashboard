@@ -29,7 +29,7 @@ export function WeatherCard({ data }: WeatherCardProps) {
           className="size-20 shrink-0 rounded-2xl object-contain sm:size-24"
         />
         <div className="flex flex-1 flex-col">
-          <h3 className="text-lg font-extrabold tracking-wide text-[#0d3f1e]">TODAY&apos;S WEATHER</h3>
+          <h3 className="text-lg font-extrabold tracking-wide text-[#0d3f1e]">LIVE WEATHER – MUTHU FARMS</h3>
           <div className="mt-2 flex flex-1 items-start justify-between gap-3">
             <div>
               <p className="text-4xl font-black leading-none">
