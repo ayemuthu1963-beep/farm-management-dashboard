@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Download, Trophy } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ChevronDown, ChevronUp, ChevronsUpDown, Download, Trophy } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
@@ -37,12 +37,87 @@ interface SelectedCategory {
   category: string
 }
 
+type SortDirection = "asc" | "desc"
+type CategorySortKey = keyof Pick<
+  TreePerformanceCategoryRow,
+  "treeNo" | "totalNutsLast10Cycles" | "averageNuts" | "harvestsCount" | "missedHarvests" | "minNuts" | "maxNuts"
+>
+
+interface CategorySortConfig {
+  key: CategorySortKey
+  direction: SortDirection
+}
+
+const numericTextCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
+
 function cleanCategory(category: string): string {
   return category.replace(/^[^\p{L}\p{N}]+/u, "").trim()
 }
 
 function waitForBrowserPaint() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+function sortCategoryRows(
+  rows: TreePerformanceCategoryRow[],
+  sortConfig: CategorySortConfig | null,
+): TreePerformanceCategoryRow[] {
+  if (!sortConfig) {
+    return rows
+  }
+
+  return [...rows].sort((a, b) => {
+    const directionMultiplier = sortConfig.direction === "asc" ? 1 : -1
+
+    if (sortConfig.key === "treeNo") {
+      return numericTextCollator.compare(a.treeNo, b.treeNo) * directionMultiplier
+    }
+
+    return (Number(a[sortConfig.key]) - Number(b[sortConfig.key])) * directionMultiplier
+  })
+}
+
+function SortIndicator({ direction }: { direction?: SortDirection }) {
+  if (direction === "asc") {
+    return <ChevronUp className="size-3.5 text-primary" aria-hidden="true" />
+  }
+
+  if (direction === "desc") {
+    return <ChevronDown className="size-3.5 text-primary" aria-hidden="true" />
+  }
+
+  return <ChevronsUpDown className="size-3.5 text-primary/45" aria-hidden="true" />
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  align = "left",
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: CategorySortKey
+  align?: "left" | "right"
+  sortConfig: CategorySortConfig | null
+  onSort: (key: CategorySortKey) => void
+}) {
+  const direction = sortConfig?.key === sortKey ? sortConfig.direction : undefined
+
+  return (
+    <th className="px-3 py-2.5" scope="col" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full cursor-pointer items-center gap-1.5 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          align === "right" ? "justify-end text-right" : "justify-start text-left"
+        }`}
+      >
+        <span>{label}</span>
+        <SortIndicator direction={direction} />
+      </button>
+    </th>
+  )
 }
 
 function PerformanceTable({
@@ -110,7 +185,19 @@ function CategoryDetailTable({
   onRetry?: () => void
 }) {
   const [exportStatus, setExportStatus] = useState<"idle" | "preparing" | "success" | "error">("idle")
+  const [sortConfig, setSortConfig] = useState<CategorySortConfig | null>(null)
   const exportRequestInFlight = useRef(false)
+  const sortedRows = useMemo(() => sortCategoryRows(data?.rows ?? [], sortConfig), [data?.rows, sortConfig])
+
+  function handleSort(key: CategorySortKey) {
+    setSortConfig((current) => {
+      if (current?.key === key) {
+        return { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      }
+
+      return { key, direction: "asc" }
+    })
+  }
 
   async function exportCategory() {
     if (!data || exportRequestInFlight.current) {
@@ -203,17 +290,17 @@ function CategoryDetailTable({
           <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead>
               <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-                <th className="px-3 py-2.5">Tree No</th>
-                <th className="px-3 py-2.5 text-right">Total Nuts Last 10 Harvests</th>
-                <th className="px-3 py-2.5 text-right">Average Nuts</th>
-                <th className="px-3 py-2.5 text-right">Harvests Count</th>
-                <th className="px-3 py-2.5 text-right">Missed Harvests</th>
-                <th className="px-3 py-2.5 text-right">Min Nuts</th>
-                <th className="px-3 py-2.5 text-right">Max Nuts</th>
+                <SortableHeader label="Tree No" sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Total Nuts Last 10 Harvests" sortKey="totalNutsLast10Cycles" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Average Nuts" sortKey="averageNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Harvests Count" sortKey="harvestsCount" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Missed Harvests" sortKey="missedHarvests" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Min Nuts" sortKey="minNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Max Nuts" sortKey="maxNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
               </tr>
             </thead>
             <tbody>
-              {data?.rows.map((row) => (
+              {sortedRows.map((row) => (
                 <tr key={row.treeNo} className="border-b border-border last:border-0">
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
                   <td className="px-3 py-2.5 text-right text-foreground">{row.totalNutsLast10Cycles.toLocaleString("en-IN")}</td>

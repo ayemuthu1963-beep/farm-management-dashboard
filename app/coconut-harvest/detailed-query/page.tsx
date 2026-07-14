@@ -1,7 +1,7 @@
 "use client"
 
-import { type KeyboardEvent, useRef, useState } from "react"
-import { Download, Search, RotateCcw, SlidersHorizontal } from "lucide-react"
+import { type KeyboardEvent, useMemo, useRef, useState } from "react"
+import { ChevronDown, ChevronUp, ChevronsUpDown, Download, Search, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
@@ -53,29 +53,131 @@ function ClassificationField({ label, id, name }: { label: string; id: string; n
 }
 
 type QueryStatus = "idle" | "loading" | "real" | "empty" | "error"
+type SortDirection = "asc" | "desc"
+type DetailedSortKey = keyof Pick<
+  DetailedQueryRow,
+  | "treeNo"
+  | "harvestCycle"
+  | "harvestDate"
+  | "nutsB1"
+  | "nutsB2"
+  | "nutsB3"
+  | "totalBunches"
+  | "totalNuts"
+  | "totalSale"
+  | "missedHarvests"
+  | "plot"
+  | "classification"
+>
+
+interface DetailedSortConfig {
+  key: DetailedSortKey
+  direction: SortDirection
+}
+
+const numericTextCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
+
+function compareDetailedRows(a: DetailedQueryRow, b: DetailedQueryRow, key: DetailedSortKey) {
+  if (key === "treeNo" || key === "plot" || key === "classification") {
+    return numericTextCollator.compare(String(a[key]), String(b[key]))
+  }
+
+  if (key === "harvestDate") {
+    return new Date(a.harvestDate).getTime() - new Date(b.harvestDate).getTime()
+  }
+
+  return Number(a[key]) - Number(b[key])
+}
+
+function sortDetailedRows(rows: DetailedQueryRow[], sortConfig: DetailedSortConfig | null): DetailedQueryRow[] {
+  if (!sortConfig) {
+    return rows
+  }
+
+  return [...rows].sort((a, b) => {
+    const directionMultiplier = sortConfig.direction === "asc" ? 1 : -1
+    return compareDetailedRows(a, b, sortConfig.key) * directionMultiplier
+  })
+}
+
+function SortIndicator({ direction }: { direction?: SortDirection }) {
+  if (direction === "asc") {
+    return <ChevronUp className="size-3.5 text-primary" aria-hidden="true" />
+  }
+
+  if (direction === "desc") {
+    return <ChevronDown className="size-3.5 text-primary" aria-hidden="true" />
+  }
+
+  return <ChevronsUpDown className="size-3.5 text-primary/45" aria-hidden="true" />
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  align = "left",
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: DetailedSortKey
+  align?: "left" | "right"
+  sortConfig: DetailedSortConfig | null
+  onSort: (key: DetailedSortKey) => void
+}) {
+  const direction = sortConfig?.key === sortKey ? sortConfig.direction : undefined
+
+  return (
+    <th className="px-3 py-2.5" scope="col" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full cursor-pointer items-center gap-1.5 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          align === "right" ? "justify-end text-right" : "justify-start text-left"
+        }`}
+      >
+        <span>{label}</span>
+        <SortIndicator direction={direction} />
+      </button>
+    </th>
+  )
+}
 
 function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
+  const [sortConfig, setSortConfig] = useState<DetailedSortConfig | null>(null)
+  const sortedRows = useMemo(() => sortDetailedRows(rows, sortConfig), [rows, sortConfig])
+
+  function handleSort(key: DetailedSortKey) {
+    setSortConfig((current) => {
+      if (current?.key === key) {
+        return { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      }
+
+      return { key, direction: "asc" }
+    })
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1100px] border-collapse text-sm">
         <thead>
           <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-            <th className="px-3 py-2.5">Tree No</th>
-            <th className="px-3 py-2.5">Cycle</th>
-            <th className="px-3 py-2.5">Harvest Date</th>
-            <th className="px-3 py-2.5 text-right">Nuts-B1</th>
-            <th className="px-3 py-2.5 text-right">Nuts-B2</th>
-            <th className="px-3 py-2.5 text-right">Nuts-B3</th>
-            <th className="px-3 py-2.5 text-right">Total-B</th>
-            <th className="px-3 py-2.5 text-right">Total Nuts</th>
-            <th className="px-3 py-2.5 text-right">Total Sale</th>
-            <th className="px-3 py-2.5 text-right">Missed</th>
-            <th className="px-3 py-2.5">Plot</th>
-            <th className="px-3 py-2.5">Classification</th>
+            <SortableHeader label="Tree No" sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Cycle" sortKey="harvestCycle" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Harvest Date" sortKey="harvestDate" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Nuts-B1" sortKey="nutsB1" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Nuts-B2" sortKey="nutsB2" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Nuts-B3" sortKey="nutsB3" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Total-B" sortKey="totalBunches" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Total Nuts" sortKey="totalNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Total Sale" sortKey="totalSale" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Missed" sortKey="missedHarvests" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Plot" sortKey="plot" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Classification" sortKey="classification" sortConfig={sortConfig} onSort={handleSort} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {sortedRows.map((row) => (
             <tr key={`${row.treeNo}-${row.harvestCycle}-${row.harvestDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
               <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{row.treeNo}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.harvestCycle}</td>
