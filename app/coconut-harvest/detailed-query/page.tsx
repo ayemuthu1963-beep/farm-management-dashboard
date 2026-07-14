@@ -222,14 +222,19 @@ export default function DetailedQueryPage() {
     try {
       const response = await fetch(`/api/coconut-harvest/detailed-query?${query}`)
       if (!response.ok) {
-        throw new Error("Unable to load detailed query data")
+        const errorData = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(errorData?.error || "Unable to load detailed query data")
       }
 
       const data = (await response.json()) as { rows: DetailedQueryRow[] }
       setRows(data.rows)
       setStatus(data.rows.length > 0 ? "real" : "empty")
-    } catch {
-      setErrorMessage("Unable to load harvest data. Please check the connection and try again.")
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error && error.message.startsWith("Tree Number")
+          ? error.message
+          : "Unable to load harvest data. Please check the connection and try again.",
+      )
       setStatus("error")
     } finally {
       queryInFlight.current = false

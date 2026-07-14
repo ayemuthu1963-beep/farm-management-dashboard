@@ -27,6 +27,10 @@ export async function GET(request: Request) {
     const data = await fetchDetailedQueryData(readFilters(request))
     return NextResponse.json(data)
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Tree Number")) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Unable to fetch detailed query data",

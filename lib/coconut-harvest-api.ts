@@ -577,12 +577,78 @@ function isAll(value: string | undefined): boolean {
   return isBlank(value) || value === "All"
 }
 
-function inTextRange(value: string, from: string | undefined, to: string | undefined): boolean {
-  if (!isBlank(from) && value.localeCompare(from!.trim()) < 0) {
+const numericTreeIdentifierPattern = /^\d+(?:\.\d+)?$/
+
+function normalizeNumericTreeIdentifier(value: string): string {
+  const [wholePart, fractionalPart = ""] = value.split(".")
+  const normalizedWhole = wholePart.replace(/^0+(?=\d)/, "")
+  const normalizedFraction = fractionalPart.replace(/0+$/, "")
+  return normalizedFraction ? `${normalizedWhole}.${normalizedFraction}` : normalizedWhole
+}
+
+function compareNumericTreeIdentifiers(left: string, right: string): number {
+  const [leftWhole, leftFraction = ""] = normalizeNumericTreeIdentifier(left).split(".")
+  const [rightWhole, rightFraction = ""] = normalizeNumericTreeIdentifier(right).split(".")
+
+  if (leftWhole.length !== rightWhole.length) {
+    return leftWhole.length - rightWhole.length
+  }
+
+  const wholeCompare = leftWhole.localeCompare(rightWhole)
+  if (wholeCompare !== 0) {
+    return wholeCompare
+  }
+
+  const fractionalLength = Math.max(leftFraction.length, rightFraction.length)
+  const normalizedLeftFraction = leftFraction.padEnd(fractionalLength, "0")
+  const normalizedRightFraction = rightFraction.padEnd(fractionalLength, "0")
+  return normalizedLeftFraction.localeCompare(normalizedRightFraction)
+}
+
+function parseTreeRangeBoundary(value: string | undefined): string | null {
+  if (isBlank(value)) {
+    return null
+  }
+
+  const trimmed = value!.trim()
+  if (!numericTreeIdentifierPattern.test(trimmed)) {
+    throw new Error("Tree Number range requires complete numeric tree identifiers.")
+  }
+
+  return normalizeNumericTreeIdentifier(trimmed)
+}
+
+function parseNumericTreeIdentifier(value: string): string | null {
+  const trimmed = value.trim()
+  if (!numericTreeIdentifierPattern.test(trimmed)) {
+    return null
+  }
+
+  return normalizeNumericTreeIdentifier(trimmed)
+}
+
+function inTreeNumberRange(value: string, from: string | undefined, to: string | undefined): boolean {
+  if (isBlank(from) && isBlank(to)) {
+    return true
+  }
+
+  const min = parseTreeRangeBoundary(from)
+  const max = parseTreeRangeBoundary(to)
+
+  if (min !== null && max !== null && compareNumericTreeIdentifiers(min, max) > 0) {
+    throw new Error("Tree Number From cannot be greater than Tree Number To.")
+  }
+
+  const numericTreeNo = parseNumericTreeIdentifier(value)
+  if (numericTreeNo === null) {
     return false
   }
 
-  if (!isBlank(to) && value.localeCompare(to!.trim()) > 0) {
+  if (min !== null && compareNumericTreeIdentifiers(numericTreeNo, min) < 0) {
+    return false
+  }
+
+  if (max !== null && compareNumericTreeIdentifiers(numericTreeNo, max) > 0) {
     return false
   }
 
@@ -686,7 +752,7 @@ export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Pro
 
   const candidateDetails = performance.details.filter((detail) => {
     return (
-      inTextRange(detail.tree_no, filters.treeFrom, filters.treeTo) &&
+      inTreeNumberRange(detail.tree_no, filters.treeFrom, filters.treeTo) &&
       inNumberRange(detail.missed_harvests ?? 0, filters.missedFrom, filters.missedTo) &&
       detailMatchesClassification(detail, filters)
     )
