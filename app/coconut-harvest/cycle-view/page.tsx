@@ -1,12 +1,13 @@
 "use client"
 
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { BarChart3, CalendarRange, Nut, Layers, Sigma, IndianRupee, RotateCw } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
+import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import {
   formatRupees,
   type CycleSummary,
@@ -51,6 +52,8 @@ export default function CycleViewPage() {
   const [summaryLabel, setSummaryLabel] = useState("Latest harvest cycle")
   const [dataStatus, setDataStatus] = useState<"loading" | "real" | "empty" | "error">("loading")
   const [errorMessage, setErrorMessage] = useState("")
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false)
+  const summaryRequestInFlight = useRef(false)
   const { harvestCycleRows, harvestCycleOptions } = cycleViewData
   const selectedCycleRow = useMemo(
     () => harvestCycleRows.find((row) => String(row.cycle) === cycle),
@@ -71,40 +74,32 @@ export default function CycleViewPage() {
   )
   const [displaySummary, setDisplaySummary] = useState<CycleSummary>(emptySummary)
 
-  useEffect(() => {
-    let active = true
-
-    async function loadCycleData() {
-      try {
-        const response = await fetch("/api/coconut-harvest/cycles")
-        if (!response.ok) {
-          throw new Error("Unable to load harvest cycle data")
-        }
-        const data = (await response.json()) as CycleViewData
-        if (active && data.harvestCycleRows.length > 0) {
-          setCycleViewData(data)
-          setCycle(String(data.harvestCycleOptions[0]))
-          setDisplaySummary(data.cycleSummary)
-          setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
-          setDataStatus("real")
-          return
-        }
-        if (active) {
-          setDataStatus("empty")
-        }
-      } catch (error) {
-        if (active) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load harvest cycle data")
-          setDataStatus("error")
-        }
+  async function loadCycleData() {
+    setDataStatus("loading")
+    setErrorMessage("")
+    try {
+      const response = await fetch("/api/coconut-harvest/cycles")
+      if (!response.ok) {
+        throw new Error("Unable to load harvest cycle data")
       }
+      const data = (await response.json()) as CycleViewData
+      if (data.harvestCycleRows.length > 0) {
+        setCycleViewData(data)
+        setCycle(String(data.harvestCycleOptions[0]))
+        setDisplaySummary(data.cycleSummary)
+        setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
+        setDataStatus("real")
+        return
+      }
+      setDataStatus("empty")
+    } catch {
+      setErrorMessage("Please check the connection and try again.")
+      setDataStatus("error")
     }
+  }
 
+  useEffect(() => {
     loadCycleData()
-
-    return () => {
-      active = false
-    }
   }, [])
 
   useEffect(() => {
@@ -112,10 +107,13 @@ export default function CycleViewPage() {
   }, [defaultCycleSummary])
 
   async function loadCycleSummary() {
-    if (!cycle) {
+    if (!cycle || summaryRequestInFlight.current || dataStatus === "loading") {
       return
     }
 
+    summaryRequestInFlight.current = true
+    setIsSummaryLoading(true)
+    setErrorMessage("")
     try {
       const response = await fetch(`/api/coconut-harvest/harvest-summary?harvest_cycle=${encodeURIComponent(cycle)}`)
       if (!response.ok) {
@@ -131,13 +129,23 @@ export default function CycleViewPage() {
       })
       setSummaryLabel(data.label)
       setDataStatus("real")
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load selected cycle summary")
+    } catch {
+      setErrorMessage("Please check the connection and try again.")
       setDataStatus("error")
+    } finally {
+      summaryRequestInFlight.current = false
+      setIsSummaryLoading(false)
     }
   }
 
   async function loadDateRangeSummary() {
+    if (summaryRequestInFlight.current || dataStatus === "loading") {
+      return
+    }
+
+    summaryRequestInFlight.current = true
+    setIsSummaryLoading(true)
+    setErrorMessage("")
     try {
       const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
       const response = await fetch(`/api/coconut-harvest/harvest-summary?${params.toString()}`)
@@ -154,9 +162,12 @@ export default function CycleViewPage() {
       })
       setSummaryLabel(`${data.startDate} to ${data.endDate}`)
       setDataStatus("real")
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load date-range summary")
+    } catch {
+      setErrorMessage("Please check the connection and try again.")
       setDataStatus("error")
+    } finally {
+      summaryRequestInFlight.current = false
+      setIsSummaryLoading(false)
     }
   }
 
@@ -205,10 +216,11 @@ export default function CycleViewPage() {
               </div>
               <button
                 type="submit"
-                disabled={!cycle}
+                disabled={!cycle || isSummaryLoading || dataStatus === "loading"}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
-                Show Cycle
+                {isSummaryLoading ? <HarvestButtonSpinner /> : null}
+                {isSummaryLoading ? "Loading..." : "Show Cycle"}
               </button>
             </form>
 
@@ -239,9 +251,11 @@ export default function CycleViewPage() {
               </div>
               <button
                 type="submit"
+                disabled={isSummaryLoading || dataStatus === "loading"}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
-                Show Date Range
+                {isSummaryLoading ? <HarvestButtonSpinner /> : null}
+                {isSummaryLoading ? "Loading..." : "Show Date Range"}
               </button>
             </form>
             <button
@@ -261,9 +275,12 @@ export default function CycleViewPage() {
           </div>
           <div className="mt-3">
             {dataStatus === "loading" ? (
-              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                Loading live PostgreSQL harvest data...
-              </p>
+              <HarvestRequestState tone="loading" message="Loading harvest data..." compact />
+            ) : null}
+            {isSummaryLoading && dataStatus !== "loading" ? (
+              <div className="mt-3">
+                <HarvestRequestState tone="loading" message="Calculating harvest summary..." compact />
+              </div>
             ) : null}
             {dataStatus === "real" ? (
               <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
@@ -271,29 +288,36 @@ export default function CycleViewPage() {
               </p>
             ) : null}
             {dataStatus === "empty" ? (
-              <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-xs font-medium text-chart-4">
-                No harvest cycle records found.
-              </p>
+              <HarvestRequestState tone="empty" message="No harvest cycle records found." compact />
             ) : null}
             {dataStatus === "error" ? (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-                {errorMessage}
-              </p>
+              <HarvestRequestState
+                tone="error"
+                message="Unable to load harvest data."
+                detail={errorMessage || "Please check the connection and try again."}
+                onRetry={harvestCycleRows.length === 0 ? loadCycleData : undefined}
+              />
             ) : null}
           </div>
         </Panel>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
-          <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
-          <StatCard icon={Nut} label="Total Nuts" value={displaySummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
-          <StatCard icon={BarChart3} label="Average Nuts" value={displaySummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
-          <StatCard icon={IndianRupee} label="Total Sale" value={displaySummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
-        </div>
+        {dataStatus === "loading" ? (
+          <Panel title="Harvest Summary" icon={Sigma}>
+            <HarvestRequestState tone="loading" message="Loading harvest data..." />
+          </Panel>
+        ) : dataStatus === "real" || harvestCycleRows.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
+            <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
+            <StatCard icon={Nut} label="Total Nuts" value={displaySummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
+            <StatCard icon={BarChart3} label="Average Nuts" value={displaySummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
+            <StatCard icon={IndianRupee} label="Total Sale" value={displaySummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
+          </div>
+        ) : null}
 
         {/* All harvest cycles table */}
-        {showAll ? (
+        {showAll && harvestCycleRows.length > 0 ? (
           <Panel title="All Harvest Cycles" icon={RotateCw}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[860px] border-collapse text-sm">

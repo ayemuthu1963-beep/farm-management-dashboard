@@ -1,11 +1,12 @@
 "use client"
 
-import { type KeyboardEvent, useState } from "react"
+import { type KeyboardEvent, useRef, useState } from "react"
 import { Search, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
+import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import { formatRupees, treeClassifications } from "@/lib/coconut-harvest-data"
 import type { DetailedQueryRow } from "@/lib/coconut-harvest-api"
 
@@ -51,7 +52,7 @@ function ClassificationField({ label, id, name }: { label: string; id: string; n
   )
 }
 
-type QueryStatus = "idle" | "real" | "empty" | "error"
+type QueryStatus = "idle" | "loading" | "real" | "empty" | "error"
 
 function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
   return (
@@ -100,9 +101,38 @@ export default function DetailedQueryPage() {
   const [rows, setRows] = useState<DetailedQueryRow[]>([])
   const [status, setStatus] = useState<QueryStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
+  const [lastQuery, setLastQuery] = useState("")
+  const queryInFlight = useRef(false)
+
+  async function runQuery(query: string) {
+    if (queryInFlight.current) {
+      return
+    }
+    queryInFlight.current = true
+    setStatus("loading")
+    setErrorMessage("")
+    try {
+      const response = await fetch(`/api/coconut-harvest/detailed-query?${query}`)
+      if (!response.ok) {
+        throw new Error("Unable to load detailed query data")
+      }
+
+      const data = (await response.json()) as { rows: DetailedQueryRow[] }
+      setRows(data.rows)
+      setStatus(data.rows.length > 0 ? "real" : "empty")
+    } catch {
+      setErrorMessage("Unable to load harvest data. Please check the connection and try again.")
+      setStatus("error")
+    } finally {
+      queryInFlight.current = false
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (queryInFlight.current) {
+      return
+    }
     const formData = new FormData(event.currentTarget)
     const params = new URLSearchParams()
 
@@ -113,20 +143,9 @@ export default function DetailedQueryPage() {
       }
     }
 
-    try {
-      const response = await fetch(`/api/coconut-harvest/detailed-query?${params.toString()}`)
-      if (!response.ok) {
-        throw new Error("Unable to load detailed query data")
-      }
-
-      const data = (await response.json()) as { rows: DetailedQueryRow[] }
-      setRows(data.rows)
-      setStatus(data.rows.length > 0 ? "real" : "empty")
-    } catch (error) {
-      setRows([])
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load detailed query data")
-      setStatus("error")
-    }
+    const query = params.toString()
+    setLastQuery(query)
+    await runQuery(query)
   }
 
   function exportDisplayedRows() {
@@ -189,6 +208,8 @@ export default function DetailedQueryPage() {
             onReset={() => {
               setRows([])
               setStatus("idle")
+              setErrorMessage("")
+              setLastQuery("")
             }}
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -205,10 +226,11 @@ export default function DetailedQueryPage() {
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <button
                 type="submit"
+                disabled={status === "loading"}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
-                <Search className="size-4" aria-hidden="true" />
-                Show Results
+                {status === "loading" ? <HarvestButtonSpinner /> : <Search className="size-4" aria-hidden="true" />}
+                {status === "loading" ? "Searching..." : "Show Results"}
               </button>
               <button
                 type="reset"
@@ -223,6 +245,16 @@ export default function DetailedQueryPage() {
 
         {status === "idle" ? null : (
           <Panel title="Detailed Query Results" icon={Search}>
+            {status === "loading" ? (
+              <div className="mb-3">
+                <HarvestRequestState
+                  tone="loading"
+                  message="Searching harvest records..."
+                  detail={rows.length > 0 ? "Previous results remain visible until the new search completes." : undefined}
+                  compact={rows.length > 0}
+                />
+              </div>
+            ) : null}
             {status === "real" ? (
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
@@ -238,14 +270,17 @@ export default function DetailedQueryPage() {
               </div>
             ) : null}
             {status === "empty" ? (
-              <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-8 text-center text-sm font-medium text-chart-4">
-                No records found for selected filters.
-              </p>
+              <HarvestRequestState tone="empty" message="No harvest records found for the selected filters." />
             ) : null}
             {status === "error" ? (
-              <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-                {errorMessage || "Unable to load live PostgreSQL detailed query data."}
-              </p>
+              <div className="mb-3">
+                <HarvestRequestState
+                  tone="error"
+                  message="Unable to load harvest data."
+                  detail={errorMessage || "Please check the connection and try again."}
+                  onRetry={lastQuery ? () => runQuery(lastQuery) : undefined}
+                />
+              </div>
             ) : null}
             {rows.length > 0 ? <ResultsTable rows={rows} /> : null}
           </Panel>

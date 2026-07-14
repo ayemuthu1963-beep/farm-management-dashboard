@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Trophy } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
+import { HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import type { PerformanceRow } from "@/lib/coconut-harvest-data"
 
 interface TreePerformanceData {
@@ -96,15 +97,19 @@ function PerformanceTable({
 function CategoryDetailTable({
   data,
   status,
+  isLoading,
+  onRetry,
 }: {
   data: TreePerformanceCategoryData | null
   status: string
+  isLoading: boolean
+  onRetry?: () => void
 }) {
-  if (!data) {
+  if (!data && !isLoading && !status.toLowerCase().startsWith("unable")) {
     return null
   }
 
-  const title = `${data.plot} - ${data.category} Trees`
+  const title = data ? `${data.plot} - ${data.category} Trees` : "Loading category details"
 
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card/80 p-4 shadow-sm">
@@ -113,20 +118,38 @@ function CategoryDetailTable({
           <h3 className="text-lg font-bold text-primary">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{status}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const params = new URLSearchParams({ plot: data.plot, category: data.category })
-            window.location.href = `/api/coconut-harvest/tree-performance/export?${params.toString()}`
-          }}
-          className="rounded-md border border-primary/30 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
-        >
-          Export This Category to Excel
-        </button>
+        {data ? (
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => {
+              const params = new URLSearchParams({ plot: data.plot, category: data.category })
+              window.location.href = `/api/coconut-harvest/tree-performance/export?${params.toString()}`
+            }}
+            className="rounded-md border border-primary/30 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
+          >
+            Export This Category to Excel
+          </button>
+        ) : null}
       </div>
 
-      {data.rows.length === 0 ? (
-        <p className="mt-4 rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">No trees found for this category.</p>
+      {isLoading ? (
+        <div className="mt-4">
+          <HarvestRequestState tone="loading" message="Loading harvest data..." compact />
+        </div>
+      ) : status.toLowerCase().startsWith("unable") ? (
+        <div className="mt-4">
+          <HarvestRequestState
+            tone="error"
+            message="Unable to load harvest data."
+            detail="Please check the connection and try again."
+            onRetry={onRetry}
+          />
+        </div>
+      ) : data?.rows.length === 0 ? (
+        <div className="mt-4">
+          <HarvestRequestState tone="empty" message="No harvest records found for this tree category." />
+        </div>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[820px] border-collapse text-sm">
@@ -142,7 +165,7 @@ function CategoryDetailTable({
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((row) => (
+              {data?.rows.map((row) => (
                 <tr key={row.treeNo} className="border-b border-border last:border-0">
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
                   <td className="px-3 py-2.5 text-right text-foreground">{row.totalNutsLast10Cycles.toLocaleString("en-IN")}</td>
@@ -170,44 +193,50 @@ export default function TreePerformancePage() {
   const [selectedCategory, setSelectedCategory] = useState<SelectedCategory | null>(null)
   const [categoryDetailData, setCategoryDetailData] = useState<TreePerformanceCategoryData | null>(null)
   const [categoryStatus, setCategoryStatus] = useState("")
+  const [categoryLoading, setCategoryLoading] = useState(false)
   const [pageStatus, setPageStatus] = useState<"loading" | "real" | "empty" | "error">("loading")
+  const pageRequestInFlight = useRef(false)
+  const categoryRequestInFlight = useRef(false)
+
+  async function loadTreePerformanceData() {
+    if (pageRequestInFlight.current) {
+      return
+    }
+    pageRequestInFlight.current = true
+    setPageStatus("loading")
+    try {
+      const response = await fetch("/api/coconut-harvest/tree-performance")
+      if (!response.ok) {
+        throw new Error("Unable to load tree performance data")
+      }
+      const data = (await response.json()) as TreePerformanceData
+      if (data.plot1Performance.length > 0 && data.plot2Performance.length > 0) {
+        setTreePerformanceData(data)
+        setPageStatus("real")
+        return
+      }
+      setPageStatus("empty")
+    } catch {
+      setPageStatus("error")
+    } finally {
+      pageRequestInFlight.current = false
+    }
+  }
 
   useEffect(() => {
-    let active = true
-
-    async function loadTreePerformanceData() {
-      try {
-        const response = await fetch("/api/coconut-harvest/tree-performance")
-        if (!response.ok) {
-          throw new Error("Unable to load tree performance data")
-        }
-        const data = (await response.json()) as TreePerformanceData
-        if (active && data.plot1Performance.length > 0 && data.plot2Performance.length > 0) {
-          setTreePerformanceData(data)
-          setPageStatus("real")
-          return
-        }
-        if (active) {
-          setPageStatus("empty")
-        }
-      } catch {
-        if (active) {
-          setPageStatus("error")
-        }
-      }
-    }
-
     loadTreePerformanceData()
-
-    return () => {
-      active = false
-    }
   }, [])
 
   async function loadCategoryDetails(selection: SelectedCategory) {
+    if (categoryRequestInFlight.current) {
+      return
+    }
+
+    categoryRequestInFlight.current = true
     setSelectedCategory(selection)
     setCategoryDetailData(null)
-    setCategoryStatus(`Loading real data for ${selection.plot} - ${selection.category}...`)
+    setCategoryLoading(true)
+    setCategoryStatus(`Loading harvest data for ${selection.plot} - ${selection.category}...`)
 
     try {
       const params = new URLSearchParams({
@@ -226,6 +255,9 @@ export default function TreePerformancePage() {
     } catch {
       setCategoryDetailData(null)
       setCategoryStatus(`Unable to load live data for ${selection.plot} - ${selection.category}`)
+    } finally {
+      categoryRequestInFlight.current = false
+      setCategoryLoading(false)
     }
   }
 
@@ -236,28 +268,52 @@ export default function TreePerformancePage() {
         <CoconutSubheader breadcrumb="Tree Performance View" title="Plot 1 and Plot 2 Performance" />
 
         <p className="text-sm text-muted-foreground">
-          Last 10 harvests used: <span className="font-medium text-foreground">{treePerformanceData.performanceCyclesUsed.join(", ") || "Loading..."}</span>
+          Last 10 harvests used: <span className="font-medium text-foreground">{treePerformanceData.performanceCyclesUsed.join(", ") || (pageStatus === "loading" ? "Loading..." : "Not available")}</span>
         </p>
+        {pageStatus === "loading" ? (
+          <Panel title="Tree Performance" icon={Trophy}>
+            <HarvestRequestState tone="loading" message="Loading harvest data..." />
+          </Panel>
+        ) : null}
         {pageStatus === "error" ? (
-          <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-            Unable to load live PostgreSQL tree performance data.
-          </p>
+          <HarvestRequestState
+            tone="error"
+            message="Unable to load harvest data."
+            detail="Please check the connection and try again."
+            onRetry={loadTreePerformanceData}
+          />
         ) : null}
         {pageStatus === "empty" ? (
-          <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-xs font-medium text-chart-4">
-            No tree performance data found.
-          </p>
+          <HarvestRequestState tone="empty" message="No harvest records found for tree performance." />
         ) : null}
 
-        <Panel title="Plot 1: Tree numbers 1 to 999" icon={Trophy}>
-          <PerformanceTable rows={treePerformanceData.plot1Performance} plot="Plot 1" onSelect={loadCategoryDetails} />
-          {selectedCategory?.plot === "Plot 1" && <CategoryDetailTable data={categoryDetailData} status={categoryStatus} />}
-        </Panel>
+        {pageStatus === "real" ? (
+          <>
+            <Panel title="Plot 1: Tree numbers 1 to 999" icon={Trophy}>
+              <PerformanceTable rows={treePerformanceData.plot1Performance} plot="Plot 1" onSelect={loadCategoryDetails} />
+              {selectedCategory?.plot === "Plot 1" && (
+                <CategoryDetailTable
+                  data={categoryDetailData}
+                  status={categoryStatus}
+                  isLoading={categoryLoading}
+                  onRetry={selectedCategory ? () => loadCategoryDetails(selectedCategory) : undefined}
+                />
+              )}
+            </Panel>
 
-        <Panel title="Plot 2: Tree numbers above 1000" icon={Trophy}>
-          <PerformanceTable rows={treePerformanceData.plot2Performance} plot="Plot 2" onSelect={loadCategoryDetails} />
-          {selectedCategory?.plot === "Plot 2" && <CategoryDetailTable data={categoryDetailData} status={categoryStatus} />}
-        </Panel>
+            <Panel title="Plot 2: Tree numbers above 1000" icon={Trophy}>
+              <PerformanceTable rows={treePerformanceData.plot2Performance} plot="Plot 2" onSelect={loadCategoryDetails} />
+              {selectedCategory?.plot === "Plot 2" && (
+                <CategoryDetailTable
+                  data={categoryDetailData}
+                  status={categoryStatus}
+                  isLoading={categoryLoading}
+                  onRetry={selectedCategory ? () => loadCategoryDetails(selectedCategory) : undefined}
+                />
+              )}
+            </Panel>
+          </>
+        ) : null}
       </div>
     </DashboardShell>
   )
