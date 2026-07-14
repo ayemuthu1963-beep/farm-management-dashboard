@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
 import { BarChart3, CalendarRange, Nut, Layers, Sigma, IndianRupee, RotateCw } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
@@ -27,6 +27,15 @@ const emptySummary: CycleSummary = {
   totalNuts: 0,
   averageNuts: 0,
   lifetimeSale: 0,
+}
+
+function submitParentFormFromSelect(event: KeyboardEvent<HTMLSelectElement>) {
+  if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return
+  }
+
+  event.preventDefault()
+  event.currentTarget.form?.requestSubmit()
 }
 
 export default function CycleViewPage() {
@@ -156,6 +165,16 @@ export default function CycleViewPage() {
     window.location.href = `/api/coconut-harvest/export?${params.toString()}`
   }
 
+  function handleCycleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loadCycleSummary()
+  }
+
+  function handleDateRangeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loadDateRangeSummary()
+  }
+
   return (
     <DashboardShell>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 p-3 sm:p-5">
@@ -165,63 +184,66 @@ export default function CycleViewPage() {
         {/* Controls */}
         <Panel title="Filters" icon={CalendarRange}>
           <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
-            <div className="lg:w-48">
-              <label htmlFor="cycle" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Harvest Cycle
-              </label>
-              <select
-                id="cycle"
-                value={cycle}
-                onChange={(e) => setCycle(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            <form onSubmit={handleCycleSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="lg:w-48">
+                <label htmlFor="cycle" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Harvest Cycle
+                </label>
+                <select
+                  id="cycle"
+                  value={cycle}
+                  onChange={(e) => setCycle(e.target.value)}
+                  onKeyDown={submitParentFormFromSelect}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {harvestCycleOptions.map((c) => (
+                    <option key={c} value={c}>
+                      Cycle {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={!cycle}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
-                {harvestCycleOptions.map((c) => (
-                  <option key={c} value={c}>
-                    Cycle {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={loadCycleSummary}
-              disabled={!cycle}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            >
-              Show Cycle
-            </button>
+                Show Cycle
+              </button>
+            </form>
 
-            <div className="lg:w-44">
-              <label htmlFor="start" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Start Date
-              </label>
-              <input
-                id="start"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div className="lg:w-44">
-              <label htmlFor="end" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                End Date
-              </label>
-              <input
-                id="end"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={loadDateRangeSummary}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            >
-              Show Date Range
-            </button>
+            <form onSubmit={handleDateRangeSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="lg:w-44">
+                <label htmlFor="start" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Start Date
+                </label>
+                <input
+                  id="start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="lg:w-44">
+                <label htmlFor="end" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  End Date
+                </label>
+                <input
+                  id="end"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+              >
+                Show Date Range
+              </button>
+            </form>
             <button
               type="button"
               onClick={exportDateRange}

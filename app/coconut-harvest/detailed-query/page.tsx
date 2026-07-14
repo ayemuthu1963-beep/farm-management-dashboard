@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { type KeyboardEvent, useState } from "react"
 import { Search, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
@@ -11,6 +11,15 @@ import type { DetailedQueryRow } from "@/lib/coconut-harvest-api"
 
 const inputClass =
   "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+
+function submitParentFormFromSelect(event: KeyboardEvent<HTMLSelectElement>) {
+  if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return
+  }
+
+  event.preventDefault()
+  event.currentTarget.form?.requestSubmit()
+}
 
 function RangeField({ label, id, type = "number" }: { label: string; id: string; type?: string }) {
   return (
@@ -31,7 +40,7 @@ function ClassificationField({ label, id, name }: { label: string; id: string; n
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-muted-foreground">
         {label}
       </label>
-      <select id={id} name={name} defaultValue="All" className={inputClass}>
+      <select id={id} name={name} defaultValue="All" onKeyDown={submitParentFormFromSelect} className={inputClass}>
         {treeClassifications.map((c) => (
           <option key={c} value={c}>
             {c}

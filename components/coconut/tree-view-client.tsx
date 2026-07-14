@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { Trees, History, Eraser, BarChart3 } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
@@ -100,6 +100,11 @@ export function TreeViewClient({
     loadTreeOptions(treeNo)
   }, [treeNo])
 
+  function handleTreeSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loadTreeHistory()
+  }
+
   return (
     <DashboardShell>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 p-3 sm:p-5">
@@ -109,7 +114,7 @@ export function TreeViewClient({
         {/* Controls */}
         <Panel title="Tree Selection" icon={Trees}>
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <form onSubmit={handleTreeSearchSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
               <div className="flex-1">
                 <label htmlFor="tree-no" className="mb-1.5 block text-xs font-medium text-muted-foreground">
                   Tree Number
@@ -133,8 +138,7 @@ export function TreeViewClient({
                 </datalist>
               </div>
               <button
-                type="button"
-                onClick={() => loadTreeHistory()}
+                type="submit"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
                 <History className="size-4" aria-hidden="true" />
@@ -153,7 +157,7 @@ export function TreeViewClient({
                 <Eraser className="size-4" aria-hidden="true" />
                 Clear
               </button>
-            </div>
+            </form>
 
             <div>
               <button

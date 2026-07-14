@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { type FormEvent, useState } from "react"
 import { Panel } from "@/components/farm/panel"
 import { ExportButton } from "@/components/farm/export-button"
 import { RefreshCw, CalendarRange } from "lucide-react"
@@ -38,6 +38,11 @@ export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: Irrigati
 
   function applyCustomRange() {
     onPeriodChange(`period=custom&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`)
+  }
+
+  function handleCustomRangeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    applyCustomRange()
   }
 
   return (
@@ -80,7 +85,7 @@ export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: Irrigati
 
         {/* Custom date range (hidden by default) */}
         {showCustom && (
-          <div className="flex flex-col gap-3 rounded-lg bg-muted/30 p-3 lg:flex-row lg:items-end">
+          <form onSubmit={handleCustomRangeSubmit} className="flex flex-col gap-3 rounded-lg bg-muted/30 p-3 lg:flex-row lg:items-end">
             <div className="flex-1">
               <label htmlFor="start-date" className="mb-1 block text-xs font-medium text-muted-foreground">
                 Start Date
@@ -106,13 +111,12 @@ export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: Irrigati
               />
             </div>
             <button
-              type="button"
-              onClick={applyCustomRange}
+              type="submit"
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Apply
             </button>
-          </div>
+          </form>
         )}
       </div>
     </Panel>
