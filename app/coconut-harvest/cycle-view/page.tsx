@@ -171,11 +171,6 @@ export default function CycleViewPage() {
     }
   }
 
-  function exportDateRange() {
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
-    window.location.href = `/api/coconut-harvest/export?${params.toString()}`
-  }
-
   function handleCycleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     loadCycleSummary()
@@ -258,13 +253,6 @@ export default function CycleViewPage() {
                 {isSummaryLoading ? "Loading..." : "Show Date Range"}
               </button>
             </form>
-            <button
-              type="button"
-              onClick={exportDateRange}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
-            >
-              Export Date Range to Excel
-            </button>
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}

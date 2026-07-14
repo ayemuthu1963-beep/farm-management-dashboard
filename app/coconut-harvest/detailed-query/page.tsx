@@ -1,7 +1,7 @@
 "use client"
 
 import { type KeyboardEvent, useRef, useState } from "react"
-import { Search, RotateCcw, SlidersHorizontal } from "lucide-react"
+import { Download, Search, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
@@ -97,12 +97,18 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
   )
 }
 
+function waitForBrowserPaint() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
 export default function DetailedQueryPage() {
   const [rows, setRows] = useState<DetailedQueryRow[]>([])
   const [status, setStatus] = useState<QueryStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
   const [lastQuery, setLastQuery] = useState("")
+  const [exportStatus, setExportStatus] = useState<"idle" | "preparing" | "success" | "error">("idle")
   const queryInFlight = useRef(false)
+  const exportRequestInFlight = useRef(false)
 
   async function runQuery(query: string) {
     if (queryInFlight.current) {
@@ -148,48 +154,63 @@ export default function DetailedQueryPage() {
     await runQuery(query)
   }
 
-  function exportDisplayedRows() {
-    if (rows.length === 0) {
+  async function exportDisplayedRows() {
+    if (rows.length === 0 || exportRequestInFlight.current) {
       return
     }
 
-    const headers = [
-      "Tree No",
-      "Cycle",
-      "Harvest Date",
-      "Nuts-B1",
-      "Nuts-B2",
-      "Nuts-B3",
-      "Total-B",
-      "Total Nuts",
-      "Total Sale",
-      "Missed",
-      "Plot",
-      "Classification",
-    ]
-    const csvRows = rows.map((row) => [
-      row.treeNo,
-      row.harvestCycle,
-      row.harvestDate,
-      row.nutsB1,
-      row.nutsB2,
-      row.nutsB3,
-      row.totalBunches,
-      row.totalNuts,
-      row.totalSale,
-      row.missedHarvests,
-      row.plot,
-      row.classification,
-    ])
-    const escapeCell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
-    const csv = [headers, ...csvRows].map((line) => line.map(escapeCell).join(",")).join("\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = "detailed-query-results.csv"
-    link.click()
-    URL.revokeObjectURL(url)
+    exportRequestInFlight.current = true
+    setExportStatus("preparing")
+
+    try {
+      await waitForBrowserPaint()
+
+      const headers = [
+        "Tree No",
+        "Cycle",
+        "Harvest Date",
+        "Nuts-B1",
+        "Nuts-B2",
+        "Nuts-B3",
+        "Total-B",
+        "Total Nuts",
+        "Total Sale",
+        "Missed",
+        "Plot",
+        "Classification",
+      ]
+      const csvRows = rows.map((row) => [
+        row.treeNo,
+        row.harvestCycle,
+        row.harvestDate,
+        row.nutsB1,
+        row.nutsB2,
+        row.nutsB3,
+        row.totalBunches,
+        row.totalNuts,
+        row.totalSale,
+        row.missedHarvests,
+        row.plot,
+        row.classification,
+      ])
+      const escapeCell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
+      const csv = [headers, ...csvRows].map((line) => line.map(escapeCell).join(",")).join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = "detailed-query-results.csv"
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      await waitForBrowserPaint()
+      setExportStatus("success")
+    } catch {
+      setExportStatus("error")
+    } finally {
+      exportRequestInFlight.current = false
+    }
   }
 
   return (
@@ -210,6 +231,7 @@ export default function DetailedQueryPage() {
               setStatus("idle")
               setErrorMessage("")
               setLastQuery("")
+              setExportStatus("idle")
             }}
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -262,11 +284,17 @@ export default function DetailedQueryPage() {
                 </p>
                 <button
                   type="button"
+                  disabled={exportStatus === "preparing"}
                   onClick={exportDisplayedRows}
-                  className="inline-flex items-center justify-center rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
+                  className="inline-flex min-w-[190px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Export Results to Excel
+                  {exportStatus === "preparing" ? <HarvestButtonSpinner /> : <Download className="size-4" aria-hidden="true" />}
+                  {exportStatus === "preparing" ? "Preparing export…" : "Export Results to CSV"}
                 </button>
+                <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+                  {exportStatus === "success" ? "CSV download started." : null}
+                  {exportStatus === "error" ? "Unable to prepare the CSV file. Please try again." : null}
+                </p>
               </div>
             ) : null}
             {status === "empty" ? (

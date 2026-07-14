@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Trophy } from "lucide-react"
+import { Download, Trophy } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
-import { HarvestRequestState } from "@/components/coconut/harvest-request-state"
+import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import type { PerformanceRow } from "@/lib/coconut-harvest-data"
 
 interface TreePerformanceData {
@@ -39,6 +39,10 @@ interface SelectedCategory {
 
 function cleanCategory(category: string): string {
   return category.replace(/^[^\p{L}\p{N}]+/u, "").trim()
+}
+
+function waitForBrowserPaint() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 }
 
 function PerformanceTable({
@@ -105,6 +109,46 @@ function CategoryDetailTable({
   isLoading: boolean
   onRetry?: () => void
 }) {
+  const [exportStatus, setExportStatus] = useState<"idle" | "preparing" | "success" | "error">("idle")
+  const exportRequestInFlight = useRef(false)
+
+  async function exportCategory() {
+    if (!data || exportRequestInFlight.current) {
+      return
+    }
+
+    exportRequestInFlight.current = true
+    setExportStatus("preparing")
+
+    try {
+      const params = new URLSearchParams({ plot: data.plot, category: data.category })
+      const response = await fetch(`/api/coconut-harvest/tree-performance/export?${params.toString()}`)
+
+      if (!response.ok) {
+        throw new Error("Unable to prepare category export")
+      }
+
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get("content-disposition") ?? ""
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i)
+      const filename = filenameMatch?.[1] ?? `tree-performance-${data.plot}-${data.category}.xlsx`
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      await waitForBrowserPaint()
+      setExportStatus("success")
+    } catch {
+      setExportStatus("error")
+    } finally {
+      exportRequestInFlight.current = false
+    }
+  }
+
   if (!data && !isLoading && !status.toLowerCase().startsWith("unable")) {
     return null
   }
@@ -119,17 +163,21 @@ function CategoryDetailTable({
           <p className="mt-1 text-sm text-muted-foreground">{status}</p>
         </div>
         {data ? (
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => {
-              const params = new URLSearchParams({ plot: data.plot, category: data.category })
-              window.location.href = `/api/coconut-harvest/tree-performance/export?${params.toString()}`
-            }}
-            className="rounded-md border border-primary/30 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
-          >
-            Export This Category to Excel
-          </button>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <button
+              type="button"
+              disabled={isLoading || exportStatus === "preparing"}
+              onClick={exportCategory}
+              className="inline-flex min-w-[210px] cursor-pointer items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {exportStatus === "preparing" ? <HarvestButtonSpinner /> : <Download className="size-4" aria-hidden="true" />}
+              {exportStatus === "preparing" ? "Preparing Excel…" : "Export This Category to Excel"}
+            </button>
+            <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+              {exportStatus === "success" ? "Excel download started." : null}
+              {exportStatus === "error" ? "Unable to prepare the Excel file. Please try again." : null}
+            </p>
+          </div>
         ) : null}
       </div>
 
