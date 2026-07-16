@@ -11,20 +11,6 @@ import { products, transactions, futureRequirements, getCurrentStock, getExpiryS
 
 export default function FertiliserManagementPage() {
   const [activeTab, setActiveTab] = useState('overview')
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(categories))
-  
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories)
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category)
-    } else {
-      newExpanded.add(category)
-    }
-    setExpandedCategories(newExpanded)
-  }
-  
-  const expandAll = () => setExpandedCategories(new Set(categories))
-  const collapseAll = () => setExpandedCategories(new Set())
   
   const groupedProducts = categories.map(cat => ({
     category: cat,
@@ -87,57 +73,76 @@ export default function FertiliserManagementPage() {
           </StatGrid>
 
           <Panel title="Complete Product and Stock Register">
-            <div className="space-y-2 mb-4 flex gap-2">
-              <button onClick={expandAll} className="text-xs font-semibold text-primary hover:underline">Expand All</button>
-              <span className="text-muted-foreground">•</span>
-              <button onClick={collapseAll} className="text-xs font-semibold text-primary hover:underline">Collapse All</button>
-            </div>
-            <div className="space-y-0">
-              {groupedProducts.map((group) => (
-                <div key={group.category} className="border border-border rounded mb-4 overflow-hidden">
-                  {/* Category header */}
-                  <button
-                    onClick={() => toggleCategory(group.category)}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-muted/50 hover:bg-muted font-semibold text-sm text-foreground border-b border-border"
-                  >
-                    <span className="text-xs">{expandedCategories.has(group.category) ? '▼' : '▶'}</span>
-                    <span>{group.category}</span>
-                    <span className="ml-auto text-xs font-normal text-muted-foreground">({group.items.length} items)</span>
-                  </button>
-                  
-                  {/* Category products */}
-                  {expandedCategories.has(group.category) && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {group.items.map((product) => {
-                            const stock = getCurrentStock(product.id)
-                            const expiryStatus = getExpiryStatus(product.expiryDate)
-                            const statusDisplay = expiryStatus === 'expired' ? 'Expired' : expiryStatus === 'expiring-soon' ? 'Expiring Soon' : expiryStatus === 'none' ? 'No Expiry' : 'Valid'
-                            return (
-                              <tr key={product.id} className="border-b border-border hover:bg-muted/30 last:border-0">
-                                <td className="px-4 py-2.5 text-muted-foreground min-w-[60px]">{product.name}</td>
-                                <td className="px-4 py-2.5 text-foreground font-semibold text-right min-w-[80px]">{stock > 0 ? stock : 'Not Entered'}</td>
-                                <td className="px-4 py-2.5 text-muted-foreground min-w-[70px]">{stock > 0 ? product.unit : '--'}</td>
-                                <td className="px-4 py-2.5 text-muted-foreground min-w-[110px]">{product.expiryDate || 'No Expiry'}</td>
-                                <td className="px-4 py-2.5">
-                                  <span className={`inline-block px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap ${
-                                    expiryStatus === 'expired' ? 'bg-destructive/20 text-destructive' :
-                                    expiryStatus === 'expiring-soon' ? 'bg-chart-3/20 text-chart-3' :
-                                    'bg-chart-2/20 text-chart-2'
-                                  }`}>
-                                    {statusDisplay}
-                                  </span>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-border bg-muted/50">
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[140px]">Category</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[140px]">Product Name</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-foreground min-w-[100px]">Quantity</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[70px]">Unit</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[110px]">Expiry Date</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[110px]">Expiry Status</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[100px]">Stock Status</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[110px]">Last Movement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedProducts.map((group, groupIdx) => {
+                    const groupRows = group.items.map((product, itemIdx) => {
+                      const stock = getCurrentStock(product.id)
+                      const expiryStatus = getExpiryStatus(product.expiryDate)
+                      const statusDisplay = expiryStatus === 'expired' ? 'Expired' : expiryStatus === 'expiring-soon' ? 'Expiring Soon' : expiryStatus === 'none' ? 'No Expiry' : 'Valid'
+                      const stockStatus = stock === 0 ? 'Out of Stock' : stock < product.minimumStock ? 'Low Stock' : 'In Stock'
+                      
+                      return (
+                        <tr key={product.id} className="border-b border-border hover:bg-muted/30 last:border-0">
+                          {/* Category cell - only show for first product in group */}
+                          {itemIdx === 0 ? (
+                            <td rowSpan={group.items.length} className="px-4 py-2.5 font-semibold text-foreground bg-muted/20 border-r-2 border-border align-top">
+                              {group.category}
+                            </td>
+                          ) : null}
+                          <td className="px-4 py-2.5 text-foreground">{product.name}</td>
+                          <td className="px-4 py-2.5 text-foreground font-semibold text-right">{stock > 0 ? stock : 'Not Entered'}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{stock > 0 ? product.unit : '--'}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{product.expiryDate || 'No Expiry'}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-block px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                              expiryStatus === 'expired' ? 'bg-destructive/20 text-destructive' :
+                              expiryStatus === 'expiring-soon' ? 'bg-chart-3/20 text-chart-3' :
+                              'bg-chart-2/20 text-chart-2'
+                            }`}>
+                              {statusDisplay}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                              stockStatus === 'Out of Stock' ? 'bg-destructive/20 text-destructive' :
+                              stockStatus === 'Low Stock' ? 'bg-chart-3/20 text-chart-3' :
+                              'bg-chart-2/20 text-chart-2'
+                            }`}>
+                              {stockStatus}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground text-xs">Database Value</td>
+                        </tr>
+                      )
+                    })
+                    
+                    // Add separator row between category groups
+                    const rows = [...groupRows]
+                    if (groupIdx < groupedProducts.length - 1) {
+                      rows.push(
+                        <tr key={`separator-${group.category}`} className="h-1 bg-border/30">
+                          <td colSpan={8}></td>
+                        </tr>
+                      )
+                    }
+                    return rows
+                  }).flat()}
+                </tbody>
+              </table>
             </div>
             <p className="text-xs text-muted-foreground mt-4">All {products.length} products displayed across {categories.length} categories.</p>
           </Panel>
@@ -488,52 +493,58 @@ export default function FertiliserManagementPage() {
           </div>
 
           <Panel title="Product Master">
-            <div className="space-y-2 mb-4 flex gap-2">
-              <button onClick={expandAll} className="text-xs font-semibold text-primary hover:underline">Expand All</button>
-              <span className="text-muted-foreground">•</span>
-              <button onClick={collapseAll} className="text-xs font-semibold text-primary hover:underline">Collapse All</button>
-            </div>
-            <div className="space-y-0">
-              {groupedProducts.map((group) => (
-                <div key={group.category} className="border border-border rounded mb-4 overflow-hidden">
-                  {/* Category header */}
-                  <button
-                    onClick={() => toggleCategory(group.category)}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-muted/50 hover:bg-muted font-semibold text-sm text-foreground border-b border-border"
-                  >
-                    <span className="text-xs">{expandedCategories.has(group.category) ? '▼' : '▶'}</span>
-                    <span>{group.category}</span>
-                    <span className="ml-auto text-xs font-normal text-muted-foreground">({group.items.length} items)</span>
-                  </button>
-                  
-                  {/* Category products */}
-                  {expandedCategories.has(group.category) && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {group.items.map((product) => (
-                            <tr key={product.id} className="border-b border-border hover:bg-muted/30 last:border-0">
-                              <td className="px-4 py-2.5 font-medium text-foreground min-w-[150px]">{product.name}</td>
-                              <td className="px-4 py-2.5 text-muted-foreground min-w-[70px]">{product.unit}</td>
-                              <td className="px-4 py-2.5 text-muted-foreground min-w-[80px] text-right">{product.minimumStock}</td>
-                              <td className="px-4 py-2.5 text-muted-foreground min-w-[100px]">Yes</td>
-                              <td className="px-4 py-2.5">
-                                <span className={`text-xs px-2 py-1 rounded font-semibold whitespace-nowrap ${product.status === 'active' ? 'bg-chart-2/20 text-chart-2' : 'bg-muted'}`}>
-                                  {product.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5 whitespace-nowrap">
-                                <button className="text-primary text-xs font-semibold hover:underline mr-3">Edit</button>
-                                <button className="text-primary text-xs font-semibold hover:underline">Toggle</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-border bg-muted/50">
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[140px]">Category</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[140px]">Product Name</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[90px]">Default Unit</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-foreground min-w-[120px]">Min Stock Level</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[110px]">Expiry Required</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[100px]">Status</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground min-w-[100px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedProducts.map((group, groupIdx) => {
+                    const groupRows = group.items.map((product, itemIdx) => (
+                      <tr key={product.id} className="border-b border-border hover:bg-muted/30 last:border-0">
+                        {/* Category cell - only show for first product in group */}
+                        {itemIdx === 0 ? (
+                          <td rowSpan={group.items.length} className="px-4 py-2.5 font-semibold text-foreground bg-muted/20 border-r-2 border-border align-top">
+                            {group.category}
+                          </td>
+                        ) : null}
+                        <td className="px-4 py-2.5 font-medium text-foreground">{product.name}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{product.unit}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground text-right">{product.minimumStock}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">Yes</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-xs px-2 py-1 rounded font-semibold whitespace-nowrap ${product.status === 'active' ? 'bg-chart-2/20 text-chart-2' : 'bg-muted'}`}>
+                            {product.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <button className="text-primary text-xs font-semibold hover:underline mr-3">Edit</button>
+                          <button className="text-primary text-xs font-semibold hover:underline">Toggle</button>
+                        </td>
+                      </tr>
+                    ))
+                    
+                    // Add separator row between category groups
+                    const rows = [...groupRows]
+                    if (groupIdx < groupedProducts.length - 1) {
+                      rows.push(
+                        <tr key={`separator-${group.category}`} className="h-1 bg-border/30">
+                          <td colSpan={7}></td>
+                        </tr>
+                      )
+                    }
+                    return rows
+                  }).flat()}
+                </tbody>
+              </table>
             </div>
             <p className="text-xs text-muted-foreground mt-4">All {products.length} products displayed across {categories.length} categories.</p>
           </Panel>
