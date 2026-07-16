@@ -1,8 +1,4 @@
-// All 54 products imported from Excel, mock transactions, and future requirements
-// This is the single source of truth for fertiliser management
-export interface Product { id: string; sNo: number; category: string; name: string; quantity: number; unit: string; qtyDisplay: string; expiryDate: string | null; minimumStock: number; status: 'active' | 'inactive' }
-export interface Transaction { id: string; type: 'opening' | 'incoming' | 'outgoing' | 'adjustment'; date: string; productId: string; productName: string; category: string; quantity: number; unit: string; reference: string; remarks: string }
-export interface FutureRequirement { id: string; requirementDate: string; requiredByDate: string; category: string; productId: string; productName: string; requiredQty: number; unit: string; currentStock: number; shortfall: number; purpose: string; crop: string; plot: string; plannedDate: string; priority: 'Low' | 'Normal' | 'High' | 'Urgent'; status: 'Planned' | 'Approved' | 'Ordered' | 'Partially Received' | 'Received' | 'Cancelled'; estimatedCost: number }
+import { FertiliserProduct, FertiliserTransaction, FertiliserFutureRequirement } from './fertiliser-types'
 
 // All 54 products from Excel file
 const rawProducts = [
@@ -63,30 +59,70 @@ const rawProducts = [
 ]
 
 // Build products with all 54 items
-export const products: Product[] = rawProducts.map((p, idx) => ({ id: `P${String(idx+1).padStart(3,'0')}`, sNo: p.sNo || idx+1, category: p.category || 'Other', name: p.name || `Product ${idx+1}`, quantity: p.quantity || 0, unit: p.unit || 'unit', qtyDisplay: p.qtyDisplay || 'Not Entered', expiryDate: p.expiryDate || null, minimumStock: 5, status: 'active' as const }))
+export const products: FertiliserProduct[] = rawProducts.map((p, idx) => {
+  const id = `P${String(idx+1).padStart(3,'0')}`
+  const categoryId = `CAT${String(idx+1).padStart(3,'0')}`
+  return {
+    id,
+    categoryId,
+    category: p.category || 'Other',
+    name: p.name || `Product ${idx+1}`,
+    unit: p.unit || 'unit',
+    minimumStock: 5,
+    status: 'active' as const,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01'
+  }
+})
 
 // Mock transactions: opening stock + 6 sample movements
-export const transactions: Transaction[] = [
-  ...products.filter(p => p.quantity > 0).map(p => ({ id: `TXN-OPEN-${p.id}`, type: 'opening' as const, date: '2026-01-01', productId: p.id, productName: p.name, category: p.category, quantity: p.quantity, unit: p.unit, reference: 'Opening Stock', remarks: 'Initial inventory' })),
-  { id: 'TXN-001', type: 'incoming' as const, date: '2026-06-10', productId: 'P001', productName: 'Grosure', category: 'Insecticide', quantity: 5, unit: 'kg', reference: 'PO-2026-001', remarks: 'Purchased from Supplier A' },
-  { id: 'TXN-002', type: 'incoming' as const, date: '2026-06-15', productId: 'P015', productName: 'NPK 20:20:20', category: 'NPK Fertilizer', quantity: 50, unit: 'kg', reference: 'PO-2026-002', remarks: 'Bulk order' },
-  { id: 'TXN-003', type: 'outgoing' as const, date: '2026-06-20', productId: 'P001', productName: 'Grosure', category: 'Insecticide', quantity: 3, unit: 'kg', reference: 'APP-2026-001', remarks: 'Pest control - Plot 1' },
-  { id: 'TXN-004', type: 'outgoing' as const, date: '2026-07-01', productId: 'P015', productName: 'NPK 20:20:20', category: 'NPK Fertilizer', quantity: 25, unit: 'kg', reference: 'APP-2026-002', remarks: 'Top dressing - Coconut' },
-  { id: 'TXN-005', type: 'adjustment' as const, date: '2026-07-10', productId: 'P003', productName: 'Verticill', category: 'Other Fertilizer / Chemicals', quantity: -2, unit: 'litre', reference: 'ADJ-2026-001', remarks: 'Stock reconciliation' },
+export const transactions: FertiliserTransaction[] = [
+  { id: 'TXN-OPEN-001', type: 'opening', date: '2026-01-01', productId: 'P001', productName: 'Grosure', category: 'Insecticide', quantity: 16, unit: 'kg', reference: 'Opening Stock', remarks: 'Initial inventory', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'TXN-OPEN-002', type: 'opening', date: '2026-01-01', productId: 'P002', productName: 'Abamek', category: 'Other Fertilizer / Chemicals', quantity: 8, unit: 'litre', reference: 'Opening Stock', remarks: 'Initial inventory', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'TXN-OPEN-003', type: 'opening', date: '2026-01-01', productId: 'P003', productName: 'Verticill', category: 'Other Fertilizer / Chemicals', quantity: 25, unit: 'litre', reference: 'Opening Stock', remarks: 'Initial inventory', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'TXN-OPEN-004', type: 'opening', date: '2026-01-01', productId: 'P004', productName: 'V-Kill', category: 'Other Fertilizer / Chemicals', quantity: 10, unit: 'litre', reference: 'Opening Stock', remarks: 'Initial inventory', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'TXN-OPEN-005', type: 'opening', date: '2026-01-01', productId: 'P005', productName: 'Varunastra', category: 'Other Fertilizer / Chemicals', quantity: 20, unit: 'litre', reference: 'Opening Stock', remarks: 'Initial inventory', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'TXN-INC-001', type: 'incoming', date: '2026-06-10', productId: 'P001', productName: 'Grosure', category: 'Insecticide', quantity: 5, unit: 'kg', reference: 'PO-2026-001', remarks: 'Purchased from Supplier A', createdAt: '2026-06-10', updatedAt: '2026-06-10' },
+  { id: 'TXN-INC-002', type: 'incoming', date: '2026-06-15', productId: 'P015', productName: 'NPK 20:20:20', category: 'NPK Fertilizer', quantity: 50, unit: 'kg', reference: 'PO-2026-002', remarks: 'Bulk order received', createdAt: '2026-06-15', updatedAt: '2026-06-15' },
+  { id: 'TXN-OUT-001', type: 'outgoing', date: '2026-06-20', productId: 'P001', productName: 'Grosure', category: 'Insecticide', quantity: 3, unit: 'kg', reference: 'APP-2026-001', remarks: 'Pest control application - Plot 1', createdAt: '2026-06-20', updatedAt: '2026-06-20' },
+  { id: 'TXN-OUT-002', type: 'outgoing', date: '2026-07-01', productId: 'P015', productName: 'NPK 20:20:20', category: 'NPK Fertilizer', quantity: 25, unit: 'kg', reference: 'APP-2026-002', remarks: 'Top dressing - Coconut plantation', createdAt: '2026-07-01', updatedAt: '2026-07-01' },
+  { id: 'TXN-ADJ-001', type: 'adjustment', date: '2026-07-10', productId: 'P003', productName: 'Verticill', category: 'Other Fertilizer / Chemicals', quantity: -2, unit: 'litre', reference: 'ADJ-2026-001', remarks: 'Stock reconciliation - spillage', createdAt: '2026-07-10', updatedAt: '2026-07-10' },
 ]
 
 // Mock future requirements
-export const futureRequirements: FutureRequirement[] = [
-  { id: 'FR001', requirementDate: '2026-07-15', requiredByDate: '2026-08-15', category: 'Insecticide', productId: 'P001', productName: 'Grosure', requiredQty: 10, unit: 'kg', currentStock: 18, shortfall: 0, purpose: 'Pest Control', crop: 'Coconut', plot: 'Plot 1', plannedDate: '2026-08-10', priority: 'High', status: 'Planned', estimatedCost: 2000 },
-  { id: 'FR002', requirementDate: '2026-07-20', requiredByDate: '2026-09-01', category: 'NPK Fertilizer', productId: 'P015', productName: 'NPK 20:20:20', requiredQty: 100, unit: 'kg', currentStock: 25, shortfall: 75, purpose: 'Top Dressing', crop: 'Jackfruit', plot: 'Plot 2', plannedDate: '2026-08-20', priority: 'Normal', status: 'Approved', estimatedCost: 1500 },
+export const futureRequirements: FertiliserFutureRequirement[] = [
+  { id: 'FR001', productId: 'P001', productName: 'Grosure', category: 'Insecticide', requiredQuantity: 10, unit: 'kg', currentStock: 18, shortfall: 0, requiredByDate: '2026-08-15', plannedApplicationDate: '2026-08-10', purpose: 'Pest Control', crop: 'Coconut', plot: 'Plot 1', priority: 'High', status: 'Planned', estimatedUnitCost: 200, estimatedTotalCost: 2000, supplier: 'Supplier A', remarks: 'Regular pest control cycle', createdAt: '2026-07-15', updatedAt: '2026-07-15' },
+  { id: 'FR002', productId: 'P015', productName: 'NPK 20:20:20', category: 'NPK Fertilizer', requiredQuantity: 100, unit: 'kg', currentStock: 25, shortfall: 75, requiredByDate: '2026-09-01', plannedApplicationDate: '2026-08-20', purpose: 'Top Dressing', crop: 'Jackfruit', plot: 'Plot 2', priority: 'Normal', status: 'Approved', estimatedUnitCost: 15, estimatedTotalCost: 1500, supplier: 'Supplier B', remarks: 'Monsoon season requirement', createdAt: '2026-07-20', updatedAt: '2026-07-20' },
 ]
 
-export const categories = [...new Set(products.map(p => p.category))].sort()
-export const purposes = ['Basal Fertiliser Application', 'Top Dressing', 'Micronutrient Application', 'Foliar Spray', 'Pest Control', 'Disease Control', 'Weed Control', 'Soil Treatment', 'Bio-fertiliser Application', 'Other']
+export const categories = Array.from(new Set(products.map(p => p.category))).sort()
+
+export const purposes = [
+  'Basal Fertiliser Application',
+  'Top Dressing',
+  'Micronutrient Application',
+  'Foliar Spray',
+  'Pest Control',
+  'Disease Control',
+  'Weed Control',
+  'Soil Treatment',
+  'Bio-fertiliser Application',
+  'Other',
+]
+
 export const crops = ['Coconut', 'Jackfruit', 'Nutmeg', 'General Farm Use', 'Other']
 
+export const locations = ['Plot 1', 'Plot 2', 'North Well', 'South Well', 'Main Storage', 'Shed 1', 'Shed 2']
+
+export const suppliers = ['Supplier A', 'Supplier B', 'Supplier C', 'Local Distributor', 'Online Supplier']
+
+export const statuses = ['Planned', 'Approved', 'Ordered', 'Partially Received', 'Received', 'Cancelled']
+
+export const priorities = ['Low', 'Normal', 'High', 'Urgent']
+
 export const getProductsByCategory = (category: string) => products.filter(p => p.category === category && p.status === 'active')
-export const getExpiryStatus = (expiryDate: string | null) => {
+
+export const getExpiryStatus = (expiryDate: string | null): 'expired' | 'expiring-soon' | 'valid' | 'none' => {
   if (!expiryDate) return 'none'
   const expiry = new Date(expiryDate)
   const today = new Date('2026-07-16')
@@ -95,7 +131,8 @@ export const getExpiryStatus = (expiryDate: string | null) => {
   if (days < 90) return 'expiring-soon'
   return 'valid'
 }
-export const getCurrentStock = (productId: string) => {
+
+export const getCurrentStock = (productId: string): number => {
   const opening = transactions.filter(t => t.type === 'opening' && t.productId === productId).reduce((sum, t) => sum + t.quantity, 0)
   const incoming = transactions.filter(t => t.type === 'incoming' && t.productId === productId).reduce((sum, t) => sum + t.quantity, 0)
   const outgoing = transactions.filter(t => t.type === 'outgoing' && t.productId === productId).reduce((sum, t) => sum + t.quantity, 0)
