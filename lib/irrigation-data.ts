@@ -3,8 +3,18 @@
 // Static data only — suitable for UI review before database integration
 // ============================================================================
 
-// Zone IDs
-export type ZoneId = "P1E" | "P1W" | "P2E" | "P2W" | "JF"
+// Zone IDs — includes Nutmeg (NM) which overlaps P1E and P2W
+export type ZoneId = "P1E" | "P1W" | "P2E" | "P2W" | "JF" | "NM"
+
+// Zone overlay information — indicates which physical zones Nutmeg overlaps
+export const zoneOverlaps: Record<ZoneId, ZoneId[]> = {
+  P1E: [],
+  P1W: [],
+  P2E: [],
+  P2W: [],
+  JF: [],
+  NM: ["P1E", "P2W"], // Nutmeg overlaps portions of Plot 1 East and Plot 2 West
+}
 
 // Status colors
 export type IrrigationStatus = "above-target" | "target" | "low" | "critical" | "very-low" | "no-data"
@@ -96,6 +106,20 @@ export const zones: Zone[] = [
     status: "critical",
     statusLabel: "Critical",
   },
+  {
+    id: "NM",
+    name: "Nutmeg",
+    plot: "Overlaps P1E & P2W",
+    motor: "Database Value",
+    valveOpenTime: "--",
+    totalWaterSupplied: 0,
+    numberOfTrees: 0,
+    waterPerTree: 0,
+    lastIrrigatedDate: "--",
+    daysSinceIrrigation: 0,
+    status: "target",
+    statusLabel: "Target Achieved",
+  },
 ]
 
 // Summary totals
@@ -117,6 +141,7 @@ export function getTotalMotorRuntime(): string {
 }
 
 // Recent trend data for "Water per Tree Trend" chart — last 10 inspection dates
+// Nutmeg uses fixed rate: 80 litres per tree per hour (independent of P1E and P2W)
 export interface TrendPoint {
   date: string
   P1E: number
@@ -124,19 +149,20 @@ export interface TrendPoint {
   P2E: number
   P2W: number
   JF: number
+  NM: number
 }
 
 export const waterPerTreeTrend: TrendPoint[] = [
-  { date: "04 Jul", P1E: 642, P1W: 580, P2E: 451, P2W: 410, JF: 265 },
-  { date: "05 Jul", P1E: 655, P1W: 592, P2E: 463, P2W: 425, JF: 270 },
-  { date: "06 Jul", P1E: 668, P1W: 603, P2E: 471, P2W: 438, JF: 275 },
-  { date: "07 Jul", P1E: 673, P1W: 610, P2E: 474, P2W: 442, JF: 277 },
-  { date: "08 Jul", P1E: 671, P1W: 608, P2E: 476, P2W: 445, JF: 279 },
-  { date: "09 Jul", P1E: 674, P1W: 609, P2E: 475, P2W: 447, JF: 280 },
-  { date: "10 Jul", P1E: 675, P1W: 611, P2E: 477, P2W: 448, JF: 280 },
-  { date: "11 Jul", P1E: 676, P1W: 611, P2E: 477, P2W: 448, JF: 280 },
-  { date: "12 Jul", P1E: 676, P1W: 611, P2E: 477, P2W: 448, JF: 280 },
-  { date: "13 Jul", P1E: 677, P1W: 611, P2E: 477, P2W: 448, JF: 280 },
+  { date: "04 Jul", P1E: 642, P1W: 580, P2E: 451, P2W: 410, JF: 265, NM: 80 },
+  { date: "05 Jul", P1E: 655, P1W: 592, P2E: 463, P2W: 425, JF: 270, NM: 80 },
+  { date: "06 Jul", P1E: 668, P1W: 603, P2E: 471, P2W: 438, JF: 275, NM: 80 },
+  { date: "07 Jul", P1E: 673, P1W: 610, P2E: 474, P2W: 442, JF: 277, NM: 80 },
+  { date: "08 Jul", P1E: 671, P1W: 608, P2E: 476, P2W: 445, JF: 279, NM: 80 },
+  { date: "09 Jul", P1E: 674, P1W: 609, P2E: 475, P2W: 447, JF: 280, NM: 80 },
+  { date: "10 Jul", P1E: 675, P1W: 611, P2E: 477, P2W: 448, JF: 280, NM: 80 },
+  { date: "11 Jul", P1E: 676, P1W: 611, P2E: 477, P2W: 448, JF: 280, NM: 80 },
+  { date: "12 Jul", P1E: 676, P1W: 611, P2E: 477, P2W: 448, JF: 280, NM: 80 },
+  { date: "13 Jul", P1E: 677, P1W: 611, P2E: 477, P2W: 448, JF: 280, NM: 80 },
 ]
 
 // Status color map (tailwind + inline rgb for SVG)
@@ -152,4 +178,21 @@ export const statusColors = {
 // Format large numbers with Indian digit grouping
 export function formatNumberIN(num: number): string {
   return num.toLocaleString("en-IN")
+}
+
+// Nutmeg-specific calculation: 80 litres per tree per hour
+const NUTMEG_LITRES_PER_TREE_PER_HOUR = 80
+
+export function calculateNutmegWaterPerTree(runtimeHours: number): number {
+  return runtimeHours * NUTMEG_LITRES_PER_TREE_PER_HOUR
+}
+
+// Helper to check if a zone is physically separate or overlapping
+export function isOverlappingZone(zoneId: ZoneId): boolean {
+  return zoneId === "NM"
+}
+
+// Helper to get zones that a given zone overlaps
+export function getOverlappingZones(zoneId: ZoneId): ZoneId[] {
+  return zoneOverlaps[zoneId]
 }
