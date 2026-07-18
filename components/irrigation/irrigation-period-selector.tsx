@@ -14,11 +14,31 @@ const periodOptions = [
   { id: "custom", label: "Custom Date Range" },
 ]
 
-export function IrrigationPeriodSelector() {
+interface IrrigationPeriodSelectorProps {
+  onDateChange?: (dateStr: string) => void
+}
+
+export function IrrigationPeriodSelector({ onDateChange }: IrrigationPeriodSelectorProps) {
   const [activePeriod, setActivePeriod] = useState("today")
   const [showCustom, setShowCustom] = useState(false)
-  const [startDate, setStartDate] = useState("2026-07-13")
-  const [endDate, setEndDate] = useState("2026-07-13")
+  const [startDate, setStartDate] = useState("2026-07-16")
+  const [endDate, setEndDate] = useState("2026-07-16")
+
+  const handlePeriodChange = (periodId: string) => {
+    setActivePeriod(periodId)
+    if (periodId !== "custom") {
+      setShowCustom(false)
+      // Update date based on period
+      if (periodId === "today") {
+        onDateChange?.("2026-07-16")
+      } else if (periodId === "yesterday") {
+        onDateChange?.("2026-07-15")
+      }
+      // Other periods would typically require a date range, but we focus on single dates for now
+    } else {
+      setShowCustom(true)
+    }
+  }
 
   return (
     <Panel
@@ -44,14 +64,7 @@ export function IrrigationPeriodSelector() {
             <button
               key={period.id}
               type="button"
-              onClick={() => {
-                setActivePeriod(period.id)
-                if (period.id !== "custom") {
-                  setShowCustom(false)
-                } else {
-                  setShowCustom(true)
-                }
-              }}
+              onClick={() => handlePeriodChange(period.id)}
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm font-semibold transition-colors",
                 activePeriod === period.id
@@ -93,6 +106,7 @@ export function IrrigationPeriodSelector() {
             </div>
             <button
               type="button"
+              onClick={() => onDateChange?.(startDate)}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Apply
