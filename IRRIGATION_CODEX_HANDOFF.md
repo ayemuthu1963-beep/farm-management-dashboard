@@ -350,18 +350,67 @@ async function handleRefresh() {
 
 ---
 
-## Known Mock-Only Interactions
+## Table Controls Implementation Status
 
-These features use mock behavior and require backend integration:
+### Fully Implemented (Frontend/Mock)
 
-1. **Refresh Button**: Does not actually refresh data; mock-only
-2. **Export Button**: Opens a mock export dialog; no real export function
-3. **Custom Date Range**: Date selection works, but only "Today" and "Yesterday" actually change displayed records
-4. **Last 7 Days / Current Cycle**: Period buttons are visible but filter mock data to today only
-5. **Search**: No search functionality implemented; table shows all records for date
-6. **Sorting**: Works on mock data; requires real API to sort on backend
-7. **Pagination**: No pagination implemented; all records shown
-8. **Motor/Valve Filters**: Not implemented; zone filter only
+1. **Search** ✅
+   - Searches across: zone, motor, valve, crop, remarks
+   - Case-insensitive text matching
+   - Clear button to reset search
+   - Resets pagination to page 1
+
+2. **Zone Filter** ✅
+   - Dropdown with all 6 zones + "All Zones"
+   - Updates table in real-time
+   - Resets pagination to page 1
+
+3. **Motor Filter** ✅
+   - Dropdown showing all unique motors from mock data
+   - Updates table in real-time
+   - Resets pagination to page 1
+
+4. **Date Filter** ✅
+   - Dropdown with "Selected Date" and "Yesterday" options
+   - Connected to page period selector
+   - Resets pagination to page 1
+
+5. **Sorting** ✅
+   - All columns sortable (click header)
+   - Bi-directional sort (asc/desc)
+   - Visual sort indicators (chevron icons)
+   - Works on mock data
+
+6. **Pagination** ✅
+   - Records per page: 10 (configurable)
+   - Previous/Next buttons
+   - Page dropdown selector
+   - Total record count display
+   - Current page indicator
+
+7. **Loading State** ✅
+   - Placeholder for loading UI
+   - Currently shows "Loading records..." (mock)
+
+8. **Empty State** ✅
+   - Shows when no records match filters
+   - Displays appropriate message
+   - Offers clear search option
+
+### Partially Implemented (Mock Only)
+
+1. **Refresh Button**: Mock button (no real data reload)
+2. **Export Button**: Mock button (no real export function)
+3. **Last 7 Days / Current Cycle**: Period buttons visible but not filtering properly
+4. **Date Range Picker**: Custom range UI present but limited to "Today"/"Yesterday"
+
+### Not Implemented (Future Backend)
+
+1. **Advanced Date Range**: Full date range selection for filtering
+2. **Remarks Search**: Currently searches remarks but backend should support
+3. **Backend Sorting**: Currently sorts mock data; backend should sort at source
+4. **API Pagination**: Currently client-side; should be server-side with real data
+5. **Export Formats**: CSV, Excel, PDF (design ready, API needed)
 
 ---
 
@@ -369,26 +418,81 @@ These features use mock behavior and require backend integration:
 
 ### Pre-Integration QA
 
-- [ ] All 6 zones display in zone status cards
-- [ ] Selecting a zone highlights it in the map and updates the detail panel
+**Six-Zone Verification:**
+- [ ] All 6 zones display in zone status cards (P1E, P1W, P2E, P2W, JF, NM)
+- [ ] All 6 zones appear in summary calculation (6/6 zones irrigated)
+- [ ] All 6 zones appear in map (5 physical + 1 Nutmeg overlay)
+- [ ] All 6 zones appear in all 3 charts
+- [ ] All 6 zones available in zone filter dropdown
+- [ ] All 6 zones appear in table records
+
+**Zone Selection and Map Interaction:**
+- [ ] Selecting a zone highlights it in the map
+- [ ] Selecting a zone updates the detail panel
 - [ ] Nutmeg overlay shows as hatched pattern on P1E and P2W
-- [ ] Selecting Nutmeg highlights both overlay sections
-- [ ] Selecting P1E or P2W does NOT select Nutmeg
-- [ ] 5 summary cards calculate correctly
-- [ ] 3 charts display all 6 zones
-- [ ] Chart 1: Runtime in hours, Water in thousands litres (dual-axis)
-- [ ] Chart 2: Water per tree shows crop rates (NM=80, Coconut=100, JF=60)
-- [ ] Chart 3: Daily trend spans 10 days, dual-axis
-- [ ] Table displays all records for the date
-- [ ] Zone filter in table works (All Zones, P1E, P1W, P2E, P2W, JF, NM)
-- [ ] Table columns are sortable
-- [ ] Indian number formatting applied (1,23,456)
-- [ ] Operational alerts show for missing/partial zones
-- [ ] No page-level horizontal scroll on mobile
-- [ ] Map remains readable on mobile
-- [ ] Charts scale appropriately on tablet and mobile
-- [ ] Period selector buttons are functional (mock behavior acceptable)
-- [ ] Refresh and Export buttons are present (mock behavior acceptable)
+- [ ] Selecting Nutmeg highlights BOTH overlay sections
+- [ ] Selecting P1E does NOT auto-select Nutmeg
+- [ ] Selecting P2W does NOT auto-select Nutmeg
+- [ ] Selecting P1E or P2W updates detail panel for that zone only
+
+**Summary Cards:**
+- [ ] 5 summary cards display correctly
+- [ ] Total Runtime calculates correctly
+- [ ] Total Water Pumped shows Indian format (1,23,456)
+- [ ] Zones Irrigated count matches actual records
+- [ ] Zones Not Irrigated count correct
+- [ ] Average Water per Tree calculates correctly
+
+**Charts:**
+- [ ] Chart 1 (Runtime & Water): Dual-axis bar chart with all 6 zones
+- [ ] Chart 1: Runtime in hours, Water in thousands litres
+- [ ] Chart 2 (Water per Tree): Bar chart with all 6 zones
+- [ ] Chart 2: Crop rates displayed (NM=80, Coconut=100, JF=60)
+- [ ] Chart 3 (Daily Trend): Dual-axis line chart spanning 10 days
+- [ ] All charts include Nutmeg (NM) in data
+
+**Table Controls:**
+- [ ] Table displays all records for selected date
+- [ ] Search field works (searches zone, motor, valve, crop, remarks)
+- [ ] Zone filter dropdown works (All Zones + each of 6 zones)
+- [ ] Motor filter dropdown works (shows available motors)
+- [ ] Date filter dropdown works (Selected Date, Yesterday)
+- [ ] Sorting works on all sortable columns
+- [ ] Sort indicators (chevrons) show direction
+- [ ] Pagination works (Previous/Next/Page dropdown)
+- [ ] Page count displays correctly
+- [ ] Records per page = 10
+- [ ] Empty state shows when no records match
+- [ ] Loading state present (ready for async)
+- [ ] Record count displayed
+
+**Formatting:**
+- [ ] Water values in Indian format (1,23,456 L)
+- [ ] Runtime in format (3h 30m, not 3.5h)
+- [ ] All text readable and aligned
+
+**Alerts:**
+- [ ] Operational alerts show for missing zones
+- [ ] Operational alerts show for partial zones
+- [ ] Alerts disappear when zones are irrigated
+
+**Responsive Design:**
+- [ ] Desktop (1200px): All content visible
+- [ ] Tablet (768px): No page-level horizontal overflow
+- [ ] Mobile (390px): NO page-level horizontal overflow
+- [ ] Map readable on all viewports
+- [ ] Charts scale appropriately
+- [ ] Table has isolated horizontal scroll (not page-level)
+- [ ] Period controls functional on mobile
+- [ ] Buttons touch-friendly on mobile
+
+**UI Elements:**
+- [ ] Period selector buttons functional
+- [ ] Refresh button present
+- [ ] Export button present
+- [ ] Header with navigation present
+- [ ] Home button works
+- [ ] Sidebar visible
 
 ### Post-Integration Testing
 
@@ -433,24 +537,124 @@ These features use mock behavior and require backend integration:
 
 ## Files to Integrate Into Main Project
 
+### New Implementation Files to Copy
+
+Copy these 8 new files to your MFMS project, maintaining the folder structure:
+
 ```
-Copy these files to your existing MFMS project:
+app/irrigation-management/page.tsx                      (94 lines)
+lib/irrigation-mock-data.ts                             (285 lines)
+components/irrigation/irrigation-period-selector.tsx    (variable)
+components/irrigation/irrigation-summary-cards.tsx      (variable)
+components/irrigation/zone-status-cards.tsx             (variable)
+components/irrigation/irrigation-map-with-details.tsx   (223 lines)
+components/irrigation/irrigation-charts-hybrid.tsx      (155 lines)
+components/irrigation/irrigation-zone-table-hybrid.tsx  (343 lines)
+```
 
-app/irrigation-management/page.tsx                      → Main page
-lib/irrigation-mock-data.ts                              → Mock data
-components/irrigation/irrigation-period-selector.tsx     → Period controls
-components/irrigation/irrigation-summary-cards.tsx       → Summary stat cards
-components/irrigation/zone-status-cards.tsx              → 6 zone cards
-components/irrigation/irrigation-map-with-details.tsx    → Map + detail panel
-components/irrigation/irrigation-charts-hybrid.tsx       → 3 charts
-components/irrigation/irrigation-zone-table-hybrid.tsx   → Records table
+### Required MFMS Farm Components (Must Already Exist)
 
-Dependencies (already exist in MFMS):
-  components/farm/dashboard-shell.tsx
-  components/farm/header.tsx
-  components/farm/panel.tsx
-  components/farm/export-button.tsx
-  lib/utils.ts
+These must be retained in your MFMS project. The irrigation module imports these:
+
+```
+components/farm/dashboard-shell.tsx     → Page shell/wrapper
+components/farm/header.tsx              → Navigation header
+components/farm/panel.tsx               → Generic panel component
+components/farm/export-button.tsx       → Export button element
+components/farm/stat-card.tsx           → Statistics card component
+lib/utils.ts                            → Utility functions (cn, classNameUtils, etc.)
+```
+
+### Complete Import Dependency Map
+
+**app/irrigation-management/page.tsx imports:**
+```
+"use client"
+import { useState } from "react"
+import { DashboardShell } from "@/components/farm/dashboard-shell"
+import { Header } from "@/components/farm/header"
+import { AlertTriangle } from "lucide-react"
+import { IrrigationPeriodSelector } from "@/components/irrigation/irrigation-period-selector"
+import { IrrigationSummaryCards } from "@/components/irrigation/irrigation-summary-cards"
+import { ZoneStatusCards } from "@/components/irrigation/zone-status-cards"
+import { IrrigationMapWithDetails } from "@/components/irrigation/irrigation-map-with-details"
+import { IrrigationChartsHybrid } from "@/components/irrigation/irrigation-charts-hybrid"
+import { IrrigationZoneTableHybrid } from "@/components/irrigation/irrigation-zone-table-hybrid"
+```
+
+**components/irrigation/zone-status-cards.tsx imports:**
+```
+"use client"
+import { ZONE_CONFIG, type ZoneId, getZoneDetails, getZoneStatus, formatWaterLitres, formatRuntimeMinutes } from "@/lib/irrigation-mock-data"
+import { Droplets, Zap, CheckCircle2, AlertCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
+```
+
+**components/irrigation/irrigation-summary-cards.tsx imports:**
+```
+import { StatCard, StatGrid } from "@/components/farm/stat-card"
+import { calculateSummary, formatRuntimeMinutes, formatWaterLitres } from "@/lib/irrigation-mock-data"
+```
+
+**components/irrigation/irrigation-period-selector.tsx imports:**
+```
+"use client"
+import { useState } from "react"
+import { Panel } from "@/components/farm/panel"
+import { ExportButton } from "@/components/farm/export-button"
+import { RefreshCw, CalendarRange } from "lucide-react"
+import { cn } from "@/lib/utils"
+```
+
+**components/irrigation/irrigation-map-with-details.tsx imports:**
+```
+"use client"
+import { useState } from "react"
+import { Panel } from "@/components/farm/panel"
+import { ZONE_CONFIG, type ZoneId, getZoneDetails, getZoneStatus, formatWaterLitres, formatRuntimeMinutes } from "@/lib/irrigation-mock-data"
+import { cn } from "@/lib/utils"
+```
+
+**components/irrigation/irrigation-charts-hybrid.tsx imports:**
+```
+"use client"
+import { Panel } from "@/components/farm/panel"
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { IRRIGATION_RECORDS, ZONE_CONFIG, formatWaterLitres } from "@/lib/irrigation-mock-data"
+```
+
+**components/irrigation/irrigation-zone-table-hybrid.tsx imports:**
+```
+"use client"
+import { useState, useMemo } from "react"
+import { Panel } from "@/components/farm/panel"
+import { IRRIGATION_RECORDS, ZONE_CONFIG, formatWaterLitres, formatRuntimeMinutes, type ZoneId } from "@/lib/irrigation-mock-data"
+import { ChevronDown, ChevronUp, Search } from "lucide-react"
+```
+
+### NPM Dependencies Required
+
+These npm packages must be installed (they should already exist in MFMS):
+
+```
+"react": "^18+" or "^19+"
+"lucide-react": "^1.16.0"  (for icons)
+"recharts": "^3.9.2"       (for charts)
+"tailwindcss": "^3+" or "^4+"  (for styling)
+```
+
+### Configuration Files to Reference
+
+These MFMS configuration files must exist and be referenced (do NOT copy these, they're project-wide):
+
+```
+tsconfig.json              → TypeScript config with path aliases (@/)
+tailwind.config.ts/js      → Tailwind CSS configuration
+next.config.ts/js          → Next.js configuration
+components.json            → shadcn components config (if using)
+package.json               → npm dependencies
+.eslintrc.json            → ESLint config (if using)
+globals.css               → Global styles (imported in layout.tsx)
 ```
 
 ---
@@ -482,6 +686,8 @@ Dependencies (already exist in MFMS):
 
 ## Summary
 
-This frontend redesign provides a complete, production-ready irrigation management interface ready for Codex backend integration. All 6 zones are fully supported with Nutmeg as an independent operational overlay. Replace mock data functions with real API calls, ensure backend supports the six-zone system and independent Nutmeg status, and the module is ready for production deployment.
+This frontend redesign provides a complete irrigation management interface ready for Codex backend integration. All 6 zones are fully supported with Nutmeg as an independent operational overlay. All table controls (search, filters, sorting, pagination) are fully implemented. Replace mock data functions with real API calls, ensure backend supports the six-zone system and independent Nutmeg status, and the module is ready for production deployment after API integration.
 
 **Status**: Frontend redesign complete and ready for Codex integration with the existing MFMS API.
+
+(Note: This is a frontend-only redesign. Live API integration, database connection, and MFMS regression testing will be completed by Codex during backend implementation.)
