@@ -6,10 +6,21 @@ import { Panel } from "@/components/farm/panel"
 
 const dayOptions = ["5 Days", "7 Days", "15 Days", "30 Days"]
 
-export function DateRangeSelector() {
+interface DateRangeSelectorProps {
+  onChange?: (query: string) => void
+}
+
+export function DateRangeSelector({ onChange }: DateRangeSelectorProps) {
   const [startDate, setStartDate] = useState("2026-07-02")
   const [endDate, setEndDate] = useState("2026-07-06")
   const [days, setDays] = useState("5 Days")
+
+  function applyDateRange() {
+    const daysValue = Number.parseInt(days, 10) || 5
+    onChange?.(
+      `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&days=${encodeURIComponent(daysValue)}`,
+    )
+  }
 
   return (
     <Panel title="Select Date Range" icon={CalendarRange}>
@@ -60,6 +71,7 @@ export function DateRangeSelector() {
 
         <button
           type="button"
+          onClick={applyDateRange}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           <RefreshCw className="size-4" aria-hidden="true" />

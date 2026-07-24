@@ -6,7 +6,7 @@ import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
-import { formatRupees, treeClassifications, treeHarvestHistory } from "@/lib/coconut-harvest-data"
+import { formatRupees, treeClassifications } from "@/lib/coconut-harvest-data"
 import type { DetailedQueryRow } from "@/lib/coconut-harvest-api"
 
 const inputClass =
@@ -42,22 +42,7 @@ function ClassificationField({ label, id, name }: { label: string; id: string; n
   )
 }
 
-const mockDetailedRows: DetailedQueryRow[] = treeHarvestHistory.slice(0, 5).map((record) => ({
-  treeNo: "123",
-  harvestCycle: String(record.cycle),
-  harvestDate: record.harvestDate,
-  nutsB1: record.nutsB1,
-  nutsB2: record.nutsB2,
-  nutsB3: record.nutsB3,
-  totalBunches: record.totalBunches,
-  totalNuts: record.totalNuts,
-  totalSale: record.totalSale,
-  missedHarvests: 0,
-  plot: "Plot 1",
-  classification: "Sample",
-}))
-
-type QueryStatus = "idle" | "real" | "empty" | "mock"
+type QueryStatus = "idle" | "real" | "empty" | "error"
 
 function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
   return (
@@ -105,6 +90,7 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
 export default function DetailedQueryPage() {
   const [rows, setRows] = useState<DetailedQueryRow[]>([])
   const [status, setStatus] = useState<QueryStatus>("idle")
+  const [errorMessage, setErrorMessage] = useState("")
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -121,18 +107,61 @@ export default function DetailedQueryPage() {
     try {
       const response = await fetch(`/api/coconut-harvest/detailed-query?${params.toString()}`)
       if (!response.ok) {
-        setRows(mockDetailedRows)
-        setStatus("mock")
-        return
+        throw new Error("Unable to load detailed query data")
       }
 
       const data = (await response.json()) as { rows: DetailedQueryRow[] }
       setRows(data.rows)
       setStatus(data.rows.length > 0 ? "real" : "empty")
-    } catch {
-      setRows(mockDetailedRows)
-      setStatus("mock")
+    } catch (error) {
+      setRows([])
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load detailed query data")
+      setStatus("error")
     }
+  }
+
+  function exportDisplayedRows() {
+    if (rows.length === 0) {
+      return
+    }
+
+    const headers = [
+      "Tree No",
+      "Cycle",
+      "Harvest Date",
+      "Nuts-B1",
+      "Nuts-B2",
+      "Nuts-B3",
+      "Total-B",
+      "Total Nuts",
+      "Total Sale",
+      "Missed",
+      "Plot",
+      "Classification",
+    ]
+    const csvRows = rows.map((row) => [
+      row.treeNo,
+      row.harvestCycle,
+      row.harvestDate,
+      row.nutsB1,
+      row.nutsB2,
+      row.nutsB3,
+      row.totalBunches,
+      row.totalNuts,
+      row.totalSale,
+      row.missedHarvests,
+      row.plot,
+      row.classification,
+    ])
+    const escapeCell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
+    const csv = [headers, ...csvRows].map((line) => line.map(escapeCell).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "detailed-query-results.csv"
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -186,18 +215,27 @@ export default function DetailedQueryPage() {
         {status === "idle" ? null : (
           <Panel title="Detailed Query Results" icon={Search}>
             {status === "real" ? (
-              <p className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
-                Real data loaded. Showing {rows.length.toLocaleString("en-IN")} matching records.
-              </p>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
+                  Real data loaded. Showing {rows.length.toLocaleString("en-IN")} matching records.
+                </p>
+                <button
+                  type="button"
+                  onClick={exportDisplayedRows}
+                  className="inline-flex items-center justify-center rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
+                >
+                  Export Results to Excel
+                </button>
+              </div>
             ) : null}
             {status === "empty" ? (
               <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-8 text-center text-sm font-medium text-chart-4">
                 No records found for selected filters.
               </p>
             ) : null}
-            {status === "mock" ? (
+            {status === "error" ? (
               <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-                API unavailable — showing sample mock data.
+                {errorMessage || "Unable to load live PostgreSQL detailed query data."}
               </p>
             ) : null}
             {rows.length > 0 ? <ResultsTable rows={rows} /> : null}

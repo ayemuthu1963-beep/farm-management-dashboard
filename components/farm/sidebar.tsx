@@ -32,6 +32,7 @@ const navItems: NavItem[] = [
   { label: "Jackfruit Monitoring", icon: Citrus, href: "/jackfruit-monitoring" },
   { label: "Well Water", icon: Droplets, href: "/well-water" },
   { label: "Motor Runtime", icon: Gauge, href: "/motor-runtime" },
+  { label: "Irrigation Management", icon: Droplets, href: "/irrigation-management" },
   { label: "Beetle Trap", icon: Bug, href: "/beetle-trap" },
   { label: "Pipeline Inspection", icon: Wrench, href: "/pipeline-layout" },
   { label: "Fertiliser Management", icon: Leaf, href: "/fertiliser-management" },

@@ -1,4 +1,4 @@
-import type { WellDailyRecord } from "@/lib/well-data"
+import { formatNumberIN, type WellDailyRecord } from "@/lib/well-data"
 import { cn } from "@/lib/utils"
 
 interface WellTableProps {
@@ -17,6 +17,12 @@ const remarkStyles: Record<string, string> = {
   Normal: "bg-secondary text-secondary-foreground",
   "Slight Rain": "bg-chart-1/15 text-chart-1",
   "Light Rain": "bg-chart-1/15 text-chart-1",
+  "Configuration requires verification": "bg-amber-100 text-amber-800",
+}
+
+function formatLitres(value: number | null): string {
+  if (value === null) return "—"
+  return formatNumberIN(Math.round(value))
 }
 
 export function WellTable({ records, headerClassName }: WellTableProps) {
@@ -36,13 +42,20 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
           </tr>
         </thead>
         <tbody>
+          {records.length === 0 && (
+            <tr className="border-t border-border">
+              <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                No well water readings found for the selected period.
+              </td>
+            </tr>
+          )}
           {records.map((record) => (
             <tr key={record.date} className="border-t border-border hover:bg-muted/50">
               <td className="whitespace-nowrap px-3 py-3 text-foreground">{record.date}</td>
-              <td className="px-3 py-3 text-foreground">{record.morningWater.toFixed(2)}</td>
-              <td className="px-3 py-3 text-foreground">{record.eveningWater.toFixed(2)}</td>
-              <td className="px-3 py-3 text-foreground">{record.waterPumpedOut.toFixed(2)}</td>
-              <td className="px-3 py-3 text-foreground">{record.rechargedSinceYesterday.toFixed(2)}</td>
+              <td className="px-3 py-3 text-foreground">{record.morningWaterDisplay}</td>
+              <td className="px-3 py-3 text-foreground">{record.eveningWaterDisplay}</td>
+              <td className="px-3 py-3 text-foreground">{formatLitres(record.waterPumpedOut)}</td>
+              <td className="px-3 py-3 text-foreground">{formatLitres(record.rechargedSinceYesterday)}</td>
               <td className="px-3 py-3">
                 <span
                   className={cn(

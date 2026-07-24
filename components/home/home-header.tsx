@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Home, LogOut, Leaf, BarChart3 } from "lucide-react"
+import { Home, Leaf, BarChart3 } from "lucide-react"
 
 const pills = [
   { label: "DATA DRIVEN", icon: Leaf },
@@ -68,13 +68,6 @@ export function HomeHeader() {
           <Home className="size-5" aria-hidden="true" />
           Home
         </Link>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-lg bg-[#087637] px-4 py-2.5 text-base font-extrabold text-white shadow-md transition-colors hover:bg-[#0a8641]"
-        >
-          <LogOut className="size-5" aria-hidden="true" />
-          Logout
-        </button>
       </div>
 
       {/* Main content */}

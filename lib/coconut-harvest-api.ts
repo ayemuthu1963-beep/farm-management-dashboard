@@ -73,6 +73,19 @@ export interface CycleViewData {
   harvestCycleOptions: number[]
 }
 
+export interface HarvestSummaryData {
+  label: string
+  harvestCycle: string | null
+  startDate: string
+  endDate: string
+  gapDays: number | null
+  treesHarvested: number
+  totalBunches: number
+  totalNuts: number
+  salePrice: number
+  totalSale: number
+}
+
 export interface TreeViewData {
   treeNo: string
   treeHarvestHistory: TreeHarvestRow[]
@@ -346,6 +359,68 @@ export async function fetchCycleViewData(): Promise<CycleViewData> {
           averageNuts: 0,
           lifetimeSale: 0,
         },
+  }
+}
+
+export async function fetchHarvestSummaryData(params: {
+  harvestCycle?: string
+  startDate?: string
+  endDate?: string
+}): Promise<HarvestSummaryData> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const searchParams = new URLSearchParams()
+  if (params.harvestCycle) {
+    searchParams.set("harvest_cycle", params.harvestCycle)
+  } else {
+    if (params.startDate) {
+      searchParams.set("start_date", params.startDate)
+    }
+    if (params.endDate) {
+      searchParams.set("end_date", params.endDate)
+    }
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/harvest-summary?${searchParams.toString()}`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
+  }
+
+  const row = (await response.json()) as {
+    label: string
+    harvest_cycle: string | null
+    start_date: string
+    end_date: string
+    gap_days: number | null
+    trees_harvested: number | null
+    total_bunches: number | null
+    total_nuts: number | null
+    sale_price: string | number | null
+    total_sale: string | number | null
+  }
+
+  return {
+    label: row.label,
+    harvestCycle: row.harvest_cycle,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    gapDays: row.gap_days,
+    treesHarvested: row.trees_harvested ?? 0,
+    totalBunches: row.total_bunches ?? 0,
+    totalNuts: row.total_nuts ?? 0,
+    salePrice: toNumber(row.sale_price),
+    totalSale: toNumber(row.total_sale),
   }
 }
 

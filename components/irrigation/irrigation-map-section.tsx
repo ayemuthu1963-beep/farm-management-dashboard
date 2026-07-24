@@ -2,11 +2,19 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+<<<<<<< HEAD
 import { zones, statusColors, type ZoneId, getOverlappingZones, isOverlappingZone } from "@/lib/irrigation-data"
+=======
+import { statusColors, type Zone, type ZoneId } from "@/lib/irrigation-data"
+>>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
 import { Panel } from "@/components/farm/panel"
 import { Droplets } from "lucide-react"
 
-export function IrrigationMapSection() {
+interface IrrigationMapSectionProps {
+  zones: Zone[]
+}
+
+export function IrrigationMapSection({ zones }: IrrigationMapSectionProps) {
   const [selectedZoneId, setSelectedZoneId] = useState<ZoneId>("P1E")
   const selectedZone = zones.find((z) => z.id === selectedZoneId)
 
@@ -160,15 +168,17 @@ export function IrrigationMapSection() {
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Total Water Supplied</dt>
-              <dd className="mt-0.5 text-foreground font-semibold">Database Value</dd>
+              <dd className="mt-0.5 text-foreground font-semibold">
+                {selectedZone.totalWaterSupplied.toLocaleString("en-IN")} L
+              </dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase text-muted-foreground">Number of Trees</dt>
-              <dd className="mt-0.5 text-foreground">Database Value</dd>
+              <dt className="text-xs font-semibold uppercase text-muted-foreground">Runtime Records</dt>
+              <dd className="mt-0.5 text-foreground">{selectedZone.recordsCount}</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Water per Tree</dt>
-              <dd className="mt-0.5 text-foreground font-semibold">Database Value</dd>
+              <dd className="mt-0.5 text-foreground font-semibold">{selectedZone.waterPerTreeDisplay}</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted-foreground">Last Irrigated</dt>

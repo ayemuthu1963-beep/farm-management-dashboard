@@ -8,13 +8,11 @@ import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
 import {
-  cycleSummary as mockCycleSummary,
-  harvestCycleRows as mockHarvestCycleRows,
-  harvestCycleOptions as mockHarvestCycleOptions,
   formatRupees,
   type CycleSummary,
   type HarvestCycleRow,
 } from "@/lib/coconut-harvest-data"
+import type { HarvestSummaryData } from "@/lib/coconut-harvest-api"
 import { cn } from "@/lib/utils"
 
 interface CycleViewData {
@@ -23,30 +21,46 @@ interface CycleViewData {
   harvestCycleOptions: number[]
 }
 
+const emptySummary: CycleSummary = {
+  totalHarvests: 0,
+  totalBunches: 0,
+  totalNuts: 0,
+  averageNuts: 0,
+  lifetimeSale: 0,
+}
+
 export default function CycleViewPage() {
   const [cycleViewData, setCycleViewData] = useState<CycleViewData>({
-    cycleSummary: mockCycleSummary,
-    harvestCycleRows: mockHarvestCycleRows,
-    harvestCycleOptions: mockHarvestCycleOptions,
+    cycleSummary: emptySummary,
+    harvestCycleRows: [],
+    harvestCycleOptions: [],
   })
-  const [cycle, setCycle] = useState(String(mockHarvestCycleOptions[0]))
+  const [cycle, setCycle] = useState("")
   const [startDate, setStartDate] = useState("2026-01-01")
   const [endDate, setEndDate] = useState("2026-07-02")
   const [showAll, setShowAll] = useState(true)
+  const [summaryLabel, setSummaryLabel] = useState("Latest harvest cycle")
+  const [dataStatus, setDataStatus] = useState<"loading" | "real" | "empty" | "error">("loading")
+  const [errorMessage, setErrorMessage] = useState("")
   const { harvestCycleRows, harvestCycleOptions } = cycleViewData
   const selectedCycleRow = useMemo(
     () => harvestCycleRows.find((row) => String(row.cycle) === cycle),
     [cycle, harvestCycleRows],
   )
-  const cycleSummary = selectedCycleRow
-    ? {
-        totalHarvests: selectedCycleRow.trees,
-        totalBunches: selectedCycleRow.bunches,
-        totalNuts: selectedCycleRow.nuts,
-        averageNuts: selectedCycleRow.trees > 0 ? selectedCycleRow.nuts / selectedCycleRow.trees : 0,
-        lifetimeSale: selectedCycleRow.totalSale,
-      }
-    : cycleViewData.cycleSummary
+  const defaultCycleSummary = useMemo(
+    () =>
+      selectedCycleRow
+        ? {
+            totalHarvests: selectedCycleRow.trees,
+            totalBunches: selectedCycleRow.bunches,
+            totalNuts: selectedCycleRow.nuts,
+            averageNuts: selectedCycleRow.trees > 0 ? selectedCycleRow.nuts / selectedCycleRow.trees : 0,
+            lifetimeSale: selectedCycleRow.totalSale,
+          }
+        : cycleViewData.cycleSummary,
+    [cycleViewData.cycleSummary, selectedCycleRow],
+  )
+  const [displaySummary, setDisplaySummary] = useState<CycleSummary>(emptySummary)
 
   useEffect(() => {
     let active = true
@@ -55,15 +69,25 @@ export default function CycleViewPage() {
       try {
         const response = await fetch("/api/coconut-harvest/cycles")
         if (!response.ok) {
-          return
+          throw new Error("Unable to load harvest cycle data")
         }
         const data = (await response.json()) as CycleViewData
         if (active && data.harvestCycleRows.length > 0) {
           setCycleViewData(data)
           setCycle(String(data.harvestCycleOptions[0]))
+          setDisplaySummary(data.cycleSummary)
+          setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
+          setDataStatus("real")
+          return
         }
-      } catch {
-        // Keep approved mock data fallback if the real API is unavailable.
+        if (active) {
+          setDataStatus("empty")
+        }
+      } catch (error) {
+        if (active) {
+          setErrorMessage(error instanceof Error ? error.message : "Unable to load harvest cycle data")
+          setDataStatus("error")
+        }
       }
     }
 
@@ -73,6 +97,64 @@ export default function CycleViewPage() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    setDisplaySummary(defaultCycleSummary)
+  }, [defaultCycleSummary])
+
+  async function loadCycleSummary() {
+    if (!cycle) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/coconut-harvest/harvest-summary?harvest_cycle=${encodeURIComponent(cycle)}`)
+      if (!response.ok) {
+        throw new Error("Unable to load selected cycle summary")
+      }
+      const data = (await response.json()) as HarvestSummaryData
+      setDisplaySummary({
+        totalHarvests: data.treesHarvested,
+        totalBunches: data.totalBunches,
+        totalNuts: data.totalNuts,
+        averageNuts: data.treesHarvested > 0 ? data.totalNuts / data.treesHarvested : 0,
+        lifetimeSale: data.totalSale,
+      })
+      setSummaryLabel(data.label)
+      setDataStatus("real")
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load selected cycle summary")
+      setDataStatus("error")
+    }
+  }
+
+  async function loadDateRangeSummary() {
+    try {
+      const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+      const response = await fetch(`/api/coconut-harvest/harvest-summary?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error("Unable to load date-range summary")
+      }
+      const data = (await response.json()) as HarvestSummaryData
+      setDisplaySummary({
+        totalHarvests: data.treesHarvested,
+        totalBunches: data.totalBunches,
+        totalNuts: data.totalNuts,
+        averageNuts: data.treesHarvested > 0 ? data.totalNuts / data.treesHarvested : 0,
+        lifetimeSale: data.totalSale,
+      })
+      setSummaryLabel(`${data.startDate} to ${data.endDate}`)
+      setDataStatus("real")
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load date-range summary")
+      setDataStatus("error")
+    }
+  }
+
+  function exportDateRange() {
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+    window.location.href = `/api/coconut-harvest/export?${params.toString()}`
+  }
 
   return (
     <DashboardShell>
@@ -102,6 +184,8 @@ export default function CycleViewPage() {
             </div>
             <button
               type="button"
+              onClick={loadCycleSummary}
+              disabled={!cycle}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               Show Cycle
@@ -133,9 +217,17 @@ export default function CycleViewPage() {
             </div>
             <button
               type="button"
+              onClick={loadDateRangeSummary}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               Show Date Range
+            </button>
+            <button
+              type="button"
+              onClick={exportDateRange}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
+            >
+              Export Date Range to Excel
             </button>
             <button
               type="button"
@@ -145,15 +237,37 @@ export default function CycleViewPage() {
               {showAll ? "Hide All Harvests" : "Show All Harvests"}
             </button>
           </div>
+          <div className="mt-3">
+            {dataStatus === "loading" ? (
+              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                Loading live PostgreSQL harvest data...
+              </p>
+            ) : null}
+            {dataStatus === "real" ? (
+              <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
+                Real PostgreSQL data loaded: {summaryLabel}.
+              </p>
+            ) : null}
+            {dataStatus === "empty" ? (
+              <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-xs font-medium text-chart-4">
+                No harvest cycle records found.
+              </p>
+            ) : null}
+            {dataStatus === "error" ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+                {errorMessage}
+              </p>
+            ) : null}
+          </div>
         </Panel>
 
         {/* Summary cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard icon={Sigma} label="Total Trees Harvested" value={cycleSummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
-          <StatCard icon={Layers} label="Total Bunches" value={cycleSummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
-          <StatCard icon={Nut} label="Total Nuts" value={cycleSummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
-          <StatCard icon={BarChart3} label="Average Nuts" value={cycleSummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
-          <StatCard icon={IndianRupee} label="Lifetime Sale" value={cycleSummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
+          <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
+          <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
+          <StatCard icon={Nut} label="Total Nuts" value={displaySummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
+          <StatCard icon={BarChart3} label="Average Nuts" value={displaySummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
+          <StatCard icon={IndianRupee} label="Total Sale" value={displaySummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
         </div>
 
         {/* All harvest cycles table */}

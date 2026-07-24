@@ -7,8 +7,6 @@ import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
 import {
-  treeNumbers as mockTreeNumbers,
-  treeHarvestHistory as mockTreeHarvestHistory,
   formatRupees,
   type TreeHarvestRow,
 } from "@/lib/coconut-harvest-data"
@@ -22,7 +20,7 @@ interface TreeViewClientProps {
   initialTreeNo: string
   initialTreeOptions: string[]
   initialTreeHistory: TreeHarvestRow[]
-  initialDataStatus: "idle" | "real" | "mock" | "empty"
+  initialDataStatus: "idle" | "real" | "empty" | "error"
 }
 
 export function TreeViewClient({
@@ -35,6 +33,7 @@ export function TreeViewClient({
   const [treeOptions, setTreeOptions] = useState<string[]>(initialTreeOptions)
   const [treeHistory, setTreeHistory] = useState<TreeHarvestRow[]>(initialTreeHistory)
   const [dataStatus, setDataStatus] = useState(initialDataStatus)
+  const [errorMessage, setErrorMessage] = useState("")
   const [showPerformance, setShowPerformance] = useState(false)
 
   const last10Harvests = useMemo(() => treeHistory.slice(0, 10), [treeHistory])
@@ -64,7 +63,7 @@ export function TreeViewClient({
         setTreeOptions(data.treeNumbers)
       }
     } catch {
-      // Keep approved mock dropdown options if the real API is unavailable.
+      setTreeOptions([])
     }
   }
 
@@ -84,17 +83,16 @@ export function TreeViewClient({
         return
       }
       if (!response.ok) {
-        setTreeHistory(mockTreeHarvestHistory)
-        setDataStatus("mock")
-        return
+        throw new Error("Unable to load tree harvest history")
       }
       const data = (await response.json()) as TreeViewData
       setTreeNo(data.treeNo)
       setTreeHistory(data.treeHarvestHistory)
       setDataStatus(data.treeHarvestHistory.length > 0 ? "real" : "empty")
-    } catch {
-      setTreeHistory(mockTreeHarvestHistory)
-      setDataStatus("mock")
+    } catch (error) {
+      setTreeHistory([])
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load tree harvest history")
+      setDataStatus("error")
     }
   }
 
@@ -147,7 +145,7 @@ export function TreeViewClient({
                 onClick={() => {
                   setTreeNo("")
                   setTreeHistory([])
-                  setTreeOptions(mockTreeNumbers.map(String))
+                  setTreeOptions([])
                   setDataStatus("idle")
                 }}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-5 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
@@ -227,9 +225,9 @@ export function TreeViewClient({
                 No records found for Tree {treeNo}.
               </p>
             ) : null}
-            {dataStatus === "mock" ? (
+            {dataStatus === "error" ? (
               <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-                API unavailable — showing sample mock data.
+                {errorMessage || "Unable to load live PostgreSQL harvest data."}
               </p>
             ) : null}
           </div>

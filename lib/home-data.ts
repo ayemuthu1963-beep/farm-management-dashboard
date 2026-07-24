@@ -71,6 +71,14 @@ export const moduleCards: ModuleCardData[] = [
     ctaLabel: "Open Dashboard",
   },
   {
+    id: "irrigation-management",
+    title: "Irrigation Management",
+    description: "Monitor irrigation water supplied to each farm zone, water per tree, motor runtime and irrigation history.",
+    icon: "/mfms/icons/pipeline-layout-inspection.png",
+    href: "/irrigation-management",
+    ctaLabel: "Open Dashboard",
+  },
+  {
     id: "beetle-trap-monitoring",
     title: "Beetle Trap Monitoring",
     description: "Pheromone trap catches and pest alerts",
@@ -121,9 +129,9 @@ export const moduleCards: ModuleCardData[] = [
   {
     id: "inventory-management",
     title: "Inventory Management",
-    description: "Stock, tools and supplies tracking",
+    description: "Stock received, stock used, expiry and current farm inventory balance",
     icon: "/mfms/icons/inventory-management.png",
-    href: "/under-construction",
-    comingSoon: true,
+    href: "/inventory-management",
+    ctaLabel: "Open Dashboard",
   },
 ]
