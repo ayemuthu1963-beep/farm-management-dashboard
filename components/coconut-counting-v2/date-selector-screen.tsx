@@ -150,6 +150,7 @@ export function DateSelectorScreen({ onBack }: DateSelectorScreenProps) {
         title="COUNT HISTORY BY DATE"
         showBackButton
         onBack={onBack}
+        todayDate="24-07-2026"
       />
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">

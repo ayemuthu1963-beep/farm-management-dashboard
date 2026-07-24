@@ -26,7 +26,7 @@ export function MainCountingScreen({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CoconutHeader title="COCONUT COUNTING FORM" />
+      <CoconutHeader title="COCONUT COUNTING FORM" todayDate="24-07-2026" />
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="space-y-8">
@@ -36,28 +36,28 @@ export function MainCountingScreen({
               grade="A"
               type="fixed"
               fixedCount={200}
-              label="GARDE A — 200 × 1"
+              label="GRADE A — 200 × 1"
               value={200}
             />
             <GradeCountCard
               grade="B"
               type="fixed"
               fixedCount={400}
-              label="GARDE B — 400/200 × 1"
+              label="GRADE B — 400/200 × 1"
               value={200}
             />
             <GradeCountCard
               grade="A"
               type="manual"
               maxCount={199}
-              label="GARDE A — UP TO 199"
+              label="GRADE A — UP TO 199"
               value={0}
             />
             <GradeCountCard
               grade="B"
               type="manual"
               maxCount={199}
-              label="GARDE B — UP TO 199"
+              label="GRADE B — UP TO 199"
               value={0}
             />
           </div>

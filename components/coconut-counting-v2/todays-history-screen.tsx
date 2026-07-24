@@ -153,9 +153,10 @@ export function TodaysHistoryScreen({ onBack }: TodaysHistoryScreenProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       <CoconutHeader
-        title="TODAY'S COUNT HISTORY"
+        title="TODAY'S HISTORY"
         showBackButton
         onBack={onBack}
+        todayDate="24-07-2026"
       />
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -163,7 +164,7 @@ export function TodaysHistoryScreen({ onBack }: TodaysHistoryScreenProps) {
           {/* Date and GPS Note */}
           <div className="space-y-3">
             <div className="text-base sm:text-lg font-semibold text-gray-900">
-              Date: <span className="font-bold text-lg sm:text-xl">23-07-2026</span>
+              Date: <span className="font-bold text-lg sm:text-xl">24-07-2026</span>
             </div>
             <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-4 border-2 border-blue-200">
               <MapPin className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
