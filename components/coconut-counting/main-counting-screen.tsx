@@ -1,190 +1,132 @@
+/**
+ * Main Counting Screen
+ * Mobile-only Android portrait (412×915 px)
+ * Shows count tiles, live session summary, action buttons
+ */
+
 'use client'
 
 import { useState } from 'react'
-import { Send, RotateCcw } from 'lucide-react'
+import { CoconutCountingHeader } from './coconut-counting-header'
+import { CountTile } from './count-tile'
+import { CompactTotalTile } from './compact-total-tile'
+import { LiveSessionSummary } from './live-session-summary'
+import { ActionButton } from './action-button'
+import { ResetConfirmationDialog } from './reset-confirmation-dialog'
+import { mockLiveSessionState } from './mock-data'
 
-export default function MainCountingScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
+interface MainCountingScreenProps {
+  onHistoryClick?: () => void
+  onDateClick?: () => void
+  onResetClick?: () => void
+}
+
+export function MainCountingScreen({
+  onHistoryClick,
+  onDateClick,
+  onResetClick,
+}: MainCountingScreenProps) {
   const [showResetDialog, setShowResetDialog] = useState(false)
 
+  const handleResetConfirm = () => {
+    setShowResetDialog(false)
+    onResetClick?.()
+  }
+
+  const { totals, lastEntry } = mockLiveSessionState
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="fixed inset-0 bg-gray-50 flex flex-col" style={{ width: '412px', height: '915px' }}>
       {/* Header */}
-      <div className="rounded-b-3xl bg-green-700 px-6 py-8 text-center shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-4xl">🌴</div>
-          <h1 className="flex-1 text-3xl font-bold text-white md:text-4xl">
-            COCONUT COUNTING FORM
-          </h1>
-          <div className="text-4xl">🥥</div>
-        </div>
-      </div>
+      <CoconutCountingHeader todayDate="24-07-2026" />
 
-      {/* Main Content */}
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        {/* 2x2 Cards Grid */}
-        <div className="mb-8 grid gap-6 md:grid-cols-2">
-          {/* Grade A Fixed - 200 × 1 */}
-          <div className="rounded-xl border-2 border-green-200 bg-green-50 p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between rounded-lg bg-green-600 px-4 py-2 text-white">
-              <h2 className="font-bold">GRADE A — 200 × 1</h2>
-            </div>
-            <div className="mb-6 flex items-center justify-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-600 font-bold text-white text-2xl">
-                A1
-              </div>
-              <div className="text-4xl">🥥</div>
-            </div>
-            <div className="mb-6 text-center">
-              <p className="text-sm font-semibold text-green-700">COUNT</p>
-              <p className="text-5xl font-bold text-green-700">200</p>
-            </div>
-            <button className="w-full rounded-lg bg-green-600 px-6 py-4 font-bold text-white hover:bg-green-700 flex items-center justify-center gap-2 text-lg">
-              <Send className="h-5 w-5" /> SEND
-            </button>
-          </div>
-
-          {/* Grade B Fixed - 400/200 × 1 */}
-          <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between rounded-lg bg-blue-600 px-4 py-2 text-white">
-              <h2 className="font-bold">GRADE B — 400/200 × 1</h2>
-            </div>
-            <div className="mb-6 flex items-center justify-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-2xl">
-                B1
-              </div>
-              <div className="flex gap-1 text-3xl">
-                🥥 🥥 🥥
-              </div>
-            </div>
-            <div className="mb-6 text-center">
-              <p className="text-sm font-semibold text-blue-700">ENTRY ANY NUMBER UP TO 199</p>
-            </div>
-            <input
-              type="number"
-              placeholder="Entry any number up to 199"
-              className="mb-4 w-full rounded-lg border border-gray-300 px-4 py-3 text-center focus:border-blue-500 focus:outline-none"
-            />
-            <button className="w-full rounded-lg bg-blue-600 px-6 py-4 font-bold text-white hover:bg-blue-700 flex items-center justify-center gap-2 text-lg">
-              <Send className="h-5 w-5" /> SEND
-            </button>
-          </div>
-
-          {/* Grade A Manual - UP TO 199 */}
-          <div className="rounded-xl border-2 border-green-200 bg-green-50 p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between rounded-lg bg-green-600 px-4 py-2 text-white">
-              <h2 className="font-bold">GRADE A — UP TO 199</h2>
-            </div>
-            <div className="mb-6 flex items-center justify-center">
-              <div className="text-5xl text-green-600">📋</div>
-            </div>
-            <div className="mb-4 text-center">
-              <p className="text-sm font-semibold text-green-700">COUNT</p>
-              <p className="text-sm text-gray-600">Enter any number up to 199</p>
-            </div>
-            <input
-              type="number"
-              placeholder="Entry any number up to 199"
-              className="mb-4 w-full rounded-lg border border-gray-300 px-4 py-3 text-center focus:border-green-500 focus:outline-none"
-            />
-            <button className="w-full rounded-lg bg-green-600 px-6 py-4 font-bold text-white hover:bg-green-700 flex items-center justify-center gap-2 text-lg">
-              <Send className="h-5 w-5" /> SEND
-            </button>
-          </div>
-
-          {/* Grade B Manual - UP TO 199 */}
-          <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between rounded-lg bg-blue-600 px-4 py-2 text-white">
-              <h2 className="font-bold">GRADE B — UP TO 199</h2>
-            </div>
-            <div className="mb-6 flex items-center justify-center">
-              <div className="text-5xl text-blue-600">📋</div>
-            </div>
-            <div className="mb-4 text-center">
-              <p className="text-sm font-semibold text-blue-700">COUNT</p>
-              <p className="text-sm text-gray-600">Enter any number up to 199</p>
-            </div>
-            <input
-              type="number"
-              placeholder="Entry any number up to 199"
-              className="mb-4 w-full rounded-lg border border-gray-300 px-4 py-3 text-center focus:border-blue-500 focus:outline-none"
-            />
-            <button className="w-full rounded-lg bg-blue-600 px-6 py-4 font-bold text-white hover:bg-blue-700 flex items-center justify-center gap-2 text-lg">
-              <Send className="h-5 w-5" /> SEND
-            </button>
-          </div>
+      {/* Main Content - No scroll, fit exactly on screen */}
+      <div className="flex-1 px-3 py-2 flex flex-col gap-1.5 overflow-hidden">
+        {/* 2×2 Count Tiles Grid */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <CountTile
+            grade="A"
+            type="fixed"
+            title="GRADE A — 200"
+            badgeLabel="A1"
+            value={200}
+            onSend={() => {}}
+          />
+          <CountTile
+            grade="B"
+            type="fixed"
+            title="GRADE B — 400/200"
+            badgeLabel="B1"
+            value={400}
+            onSend={() => {}}
+          />
+          <CountTile
+            grade="A"
+            type="manual"
+            title="GRADE A — 1 TO 199"
+            badgeLabel="A2"
+            value={0}
+            onSend={() => {}}
+          />
+          <CountTile
+            grade="B"
+            type="manual"
+            title="GRADE B — 1 TO 199"
+            badgeLabel="B2"
+            value={0}
+            onSend={() => {}}
+          />
         </div>
 
-        {/* Totals Section */}
-        <div className="mb-8 grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border-2 border-green-200 bg-white p-6 text-center">
-            <p className="mb-3 flex items-center justify-center gap-2 text-sm font-semibold text-green-700">
-              ☑ TOTAL GRADE A
-            </p>
-            <p className="text-4xl font-bold text-green-700">308</p>
-          </div>
-          <div className="rounded-lg border-2 border-blue-200 bg-white p-6 text-center">
-            <p className="mb-3 flex items-center justify-center gap-2 text-sm font-semibold text-blue-700">
-              ☑ TOTAL GRADE B
-            </p>
-            <p className="text-4xl font-bold text-blue-700">222</p>
-          </div>
-          <div className="rounded-lg border-2 border-teal-400 bg-white p-6 text-center">
-            <p className="mb-3 text-sm font-semibold text-gray-700">TOTAL A + B</p>
-            <p className="text-4xl font-bold text-teal-600">530</p>
-          </div>
+        {/* Compact Totals Row */}
+        <div className="flex gap-1.5">
+          <CompactTotalTile label="TOTAL A" value={totals.totalA} variant="a" />
+          <CompactTotalTile label="TOTAL B" value={totals.totalB} variant="b" />
+          <CompactTotalTile label="TOTAL A+B" value={totals.totalCombined} variant="combined" />
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <button
-            onClick={() => onNavigate('history')}
-            className="rounded-lg border-2 border-gray-300 bg-white px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 text-lg"
-          >
-            📜 HISTORY
-          </button>
-          <button
-            onClick={() => onNavigate('dateHistory')}
-            className="rounded-lg border-2 border-gray-300 bg-white px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 text-lg"
-          >
-            📅 DATE
-          </button>
-          <button
+        {/* Live Session Summary - Centre */}
+        <div className="flex-1 min-h-0 flex items-center justify-center px-1">
+          <LiveSessionSummary
+            totalCoconuts={totals.totalCombined}
+            lastEntryGrade={lastEntry?.grade}
+            lastEntryValue={lastEntry?.count}
+            lastEntryTime={lastEntry?.time}
+            entriesCount={totals.entries}
+            gpsActive={totals.gpsActive}
+            unsynced={totals.unsynced}
+          />
+        </div>
+
+        {/* Action Buttons Row - Bottom */}
+        <div className="flex gap-1.5">
+          <ActionButton
+            icon="🕐"
+            label="HISTORY"
+            variant="history"
+            onClick={onHistoryClick}
+          />
+          <ActionButton
+            icon="📅"
+            label="DATE"
+            variant="date"
+            onClick={onDateClick}
+          />
+          <ActionButton
+            icon="⟳"
+            label="RESET"
+            variant="reset"
             onClick={() => setShowResetDialog(true)}
-            className="rounded-lg border-2 border-red-300 bg-white px-6 py-4 font-bold text-red-600 hover:bg-red-50 text-lg flex items-center justify-center gap-2"
-          >
-            <RotateCcw className="h-5 w-5" /> RESET
-          </button>
+          />
         </div>
       </div>
 
       {/* Reset Confirmation Dialog */}
-      {showResetDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
-            <h3 className="mb-2 text-center text-xl font-bold text-gray-900">RESET CURRENT COUNT?</h3>
-            <p className="mb-6 text-center text-sm text-gray-600">
-              This will reset the current active totals to zero. Past history will not be deleted.
-            </p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowResetDialog(false)}
-                className="flex-1 rounded-lg border-2 border-gray-300 px-4 py-3 font-bold text-gray-700 hover:bg-gray-50"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={() => {
-                  setShowResetDialog(false)
-                  // Reset logic would go here in Phase 2
-                }}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-3 font-bold text-white hover:bg-red-700"
-              >
-                RESET CURRENT COUNT
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ResetConfirmationDialog
+        isOpen={showResetDialog}
+        onCancel={() => setShowResetDialog(false)}
+        onConfirm={handleResetConfirm}
+      />
     </div>
   )
 }

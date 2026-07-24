@@ -1,8 +1,23 @@
+/**
+ * Today's History Screen
+ * Shows today's count entries with GPS info, totals, and export button
+ */
+
 'use client'
 
-import { ArrowLeft } from 'lucide-react'
+import { useState } from 'react'
+import { CoconutCountingHeader } from './coconut-counting-header'
+import { HistorySummaryTiles } from './history-summary-tiles'
+import { HistoryEntryCard } from './history-entry-card'
+import { ExportConfirmationDialog } from './export-confirmation-dialog'
+import { mockTodaysEntries } from './mock-data'
 
-const mockHistoryData = [
+interface TodaysHistoryScreenProps {
+  onBack?: () => void
+  onExport?: (date: string) => void
+}
+
+const mockHistoryDataOld = [
   {
     id: 1,
     date: '23-07-2026',
@@ -70,133 +85,76 @@ const mockHistoryData = [
   },
 ]
 
-export default function TodaysHistoryScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="rounded-b-3xl bg-green-700 px-6 py-8 shadow-lg">
-        <h1 className="text-center text-3xl font-bold text-white md:text-4xl">
-          TODAY'S COUNT HISTORY
-        </h1>
-        <p className="mt-2 text-center text-lg text-green-100">23 July 2026</p>
-      </div>
+export function TodaysHistoryScreen({ onBack, onExport }: TodaysHistoryScreenProps) {
+  const [showExportDialog, setShowExportDialog] = useState(false)
 
-      {/* Content */}
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        {/* Summary Cards */}
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
-          <div className="rounded-lg border-2 border-green-200 bg-white p-4 text-center">
-            <p className="text-xs font-semibold text-green-700">TOTAL GRADE A</p>
-            <p className="mt-2 text-3xl font-bold text-green-700">308</p>
-          </div>
-          <div className="rounded-lg border-2 border-blue-200 bg-white p-4 text-center">
-            <p className="text-xs font-semibold text-blue-700">TOTAL GRADE B</p>
-            <p className="mt-2 text-3xl font-bold text-blue-700">222</p>
-          </div>
-          <div className="rounded-lg border-2 border-teal-400 bg-white p-4 text-center">
-            <p className="text-xs font-semibold text-gray-700">TOTAL A + B</p>
-            <p className="mt-2 text-3xl font-bold text-teal-600">530</p>
-          </div>
-          <div className="rounded-lg border-2 border-gray-300 bg-white p-4 text-center">
-            <p className="text-xs font-semibold text-gray-700">TOTAL ENTRIES</p>
-            <p className="mt-2 text-3xl font-bold text-gray-700">5</p>
-          </div>
+  const todayDate = '24-07-2026'
+  const totalA = mockTodaysEntries.reduce((sum, e) => (e.grade === 'A' ? sum + e.count : sum), 0)
+  const totalB = mockTodaysEntries.reduce((sum, e) => (e.grade === 'B' ? sum + e.count : sum), 0)
+
+  return (
+    <div className="fixed inset-0 bg-gray-50 flex flex-col" style={{ width: '412px', height: '915px' }}>
+      <CoconutCountingHeader todayDate={todayDate} />
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3">
+        {/* Title */}
+        <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+          <span>🕐</span>
+          TODAY&apos;S HISTORY
+        </h1>
+
+        {/* GPS Banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2">
+          <span className="text-lg flex-shrink-0">📍</span>
+          <p className="text-xs text-blue-700">
+            GPS is captured automatically in the background for every SEND entry.
+          </p>
         </div>
+
+        {/* Summary Tiles */}
+        <HistorySummaryTiles
+          totalA={totalA}
+          totalB={totalB}
+          totalAB={totalA + totalB}
+          entriesCount={mockTodaysEntries.length}
+        />
 
         {/* Export Button */}
-        <button className="mb-8 w-full rounded-lg bg-green-600 px-6 py-4 font-bold text-white hover:bg-green-700 text-lg">
-          📊 EXPORT TODAY TO EXCEL
+        <button
+          onClick={() => setShowExportDialog(true)}
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+        >
+          <span>📊</span>
+          <span>EXPORT TODAY TO EXCEL</span>
         </button>
 
-        {/* Desktop Table */}
-        <div className="mb-8 hidden overflow-x-auto rounded-lg border border-gray-200 md:block">
-          <table className="w-full">
-            <thead className="bg-gray-100">
-              <tr className="text-left text-sm font-semibold text-gray-700">
-                <th className="border-b px-4 py-3">Entry #</th>
-                <th className="border-b px-4 py-3">Date</th>
-                <th className="border-b px-4 py-3">Time</th>
-                <th className="border-b px-4 py-3">Grade</th>
-                <th className="border-b px-4 py-3">Entry Type</th>
-                <th className="border-b px-4 py-3">Count</th>
-                <th className="border-b px-4 py-3">GPS Location</th>
-                <th className="border-b px-4 py-3">Accuracy</th>
-                <th className="border-b px-4 py-3">Running A</th>
-                <th className="border-b px-4 py-3">Running B</th>
-                <th className="border-b px-4 py-3">Running Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockHistoryData.map((row) => (
-                <tr key={row.id} className="border-b text-sm text-gray-700 hover:bg-gray-50">
-                  <td className="px-4 py-3">{row.id}</td>
-                  <td className="px-4 py-3">{row.date}</td>
-                  <td className="px-4 py-3">{row.time}</td>
-                  <td className="px-4 py-3 font-semibold">{row.grade}</td>
-                  <td className="px-4 py-3">{row.entryType}</td>
-                  <td className="px-4 py-3 font-bold">{row.count}</td>
-                  <td className="px-4 py-3 text-xs">{row.location}</td>
-                  <td className="px-4 py-3 text-xs">{row.accuracy}</td>
-                  <td className="px-4 py-3 font-bold text-green-600">{row.runningA}</td>
-                  <td className="px-4 py-3 font-bold text-blue-600">{row.runningB}</td>
-                  <td className="px-4 py-3 font-bold text-teal-600">{row.runningTotal}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Card View */}
-        <div className="mb-8 space-y-4 md:hidden">
-          {mockHistoryData.map((row) => (
-            <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="mb-3 flex items-center justify-between border-b pb-3">
-                <span className="text-xs font-semibold text-gray-500">Entry #{row.id}</span>
-                <span className="text-xs font-semibold text-gray-500">{row.time}</span>
-              </div>
-              <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-xs text-gray-500">Grade</p>
-                  <p className="font-semibold text-gray-700">{row.grade}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Entry Type</p>
-                  <p className="font-semibold text-gray-700">{row.entryType}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Count</p>
-                  <p className="font-bold text-gray-900">{row.count}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">GPS Accuracy</p>
-                  <p className="font-semibold text-gray-700">{row.accuracy}</p>
-                </div>
-              </div>
-              <div className="border-t pt-3 text-xs">
-                <p className="mb-1 text-gray-500">GPS: {row.location}</p>
-                <div className="flex gap-4">
-                  <div className="font-semibold text-green-600">A: {row.runningA}</div>
-                  <div className="font-semibold text-blue-600">B: {row.runningB}</div>
-                  <div className="font-semibold text-teal-600">Total: {row.runningTotal}</div>
-                </div>
-              </div>
-            </div>
+        {/* Entry Cards - Scrollable */}
+        <div className="space-y-2 flex-1 overflow-y-auto">
+          {mockTodaysEntries.map((entry) => (
+            <HistoryEntryCard key={entry.id} entry={entry} />
           ))}
-        </div>
-
-        {/* GPS Info Note */}
-        <div className="mb-8 rounded-lg bg-blue-50 p-4 text-center text-sm text-blue-700">
-          🛰 GPS captured automatically in background
         </div>
 
         {/* Back Button */}
         <button
-          onClick={() => onNavigate('main')}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-gray-300 bg-white px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 text-lg"
+          onClick={onBack}
+          className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
         >
-          <ArrowLeft className="h-5 w-5" /> BACK TO COUNTING
+          <span>⬅</span>
+          <span>BACK TO COUNTING</span>
         </button>
       </div>
+
+      <ExportConfirmationDialog
+        isOpen={showExportDialog}
+        date={todayDate}
+        entryCount={mockTodaysEntries.length}
+        onCancel={() => setShowExportDialog(false)}
+        onConfirm={() => {
+          onExport?.(todayDate)
+          setShowExportDialog(false)
+        }}
+      />
     </div>
   )
 }
