@@ -1,15 +1,9 @@
 import Link from "next/link"
-import { Bug, Droplets, Gauge, PackageCheck, ShieldCheck, Sprout } from "lucide-react"
+import { Bug, CalendarRange, Droplets, Gauge, PackageCheck, ShieldCheck } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 
 const adminTiles = [
-  {
-    title: "Harvest Data Entry",
-    description: "Add coconut harvest records for local testing and confirm harvest dashboard updates.",
-    href: "/admin/harvest",
-    icon: Sprout,
-  },
   {
     title: "Motor Runtime Entry",
     description: "Add pump runtime records for local testing and irrigation calculation checks.",
@@ -27,6 +21,12 @@ const adminTiles = [
     description: "Add local trap count readings and confirm marker/count updates.",
     href: "/admin/beetle-trap",
     icon: Bug,
+  },
+  {
+    title: "Harvest Cycle Admin",
+    description: "Open and maintain Preview harvest cycles with database-write validation.",
+    href: "/admin/harvest-cycle",
+    icon: CalendarRange,
   },
   {
     title: "Fertiliser & Pesticide Inventory Entry",

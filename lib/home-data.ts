@@ -95,6 +95,14 @@ export const moduleCards: ModuleCardData[] = [
     ctaLabel: "Open Dashboard",
   },
   {
+    id: "farm-map",
+    title: "Farm Map",
+    description: "Combined drone orthomosaic view of the farm",
+    icon: "/mfms/icons/pipeline-layout-inspection.png",
+    href: "/farm-map",
+    ctaLabel: "Open Map",
+  },
+  {
     id: "fertiliser-management",
     title: "Fertiliser Management",
     description: "Application schedules and stock levels",
@@ -133,5 +141,13 @@ export const moduleCards: ModuleCardData[] = [
     icon: "/mfms/icons/inventory-management.png",
     href: "/inventory-management",
     ctaLabel: "Open Dashboard",
+  },
+  {
+    id: "admin-console",
+    title: "Admin Console",
+    description: "Local entry hub for farm operations testing and controlled data entry",
+    icon: "/mfms/icons/farm-reports.png",
+    href: "/admin",
+    ctaLabel: "Open Console",
   },
 ]

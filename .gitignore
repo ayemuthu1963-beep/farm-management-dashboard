@@ -13,3 +13,9 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Local RC database snapshots and disposable data
+*.sql
+*.dump
+local-backups/
+local-data/

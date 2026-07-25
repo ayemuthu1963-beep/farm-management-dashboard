@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, Merriweather } from 'next/font/google'
+import { LocalEnvironmentBanner } from '@/components/farm/local-environment-banner'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -49,6 +50,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${merriweather.variable} bg-background`}>
       <body className="font-sans antialiased">
+        <LocalEnvironmentBanner />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

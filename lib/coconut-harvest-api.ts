@@ -4,7 +4,7 @@ import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHa
 interface ApiCycleRow {
   harvest_cycle: string
   harvest_start_date: string
-  harvest_end_date: string
+  harvest_end_date: string | null
   harvest_status: string
   total_sale_value: string | number | null
   total_trees_harvested: number | null
@@ -165,7 +165,7 @@ function mapCycleRow(row: ApiCycleRow): HarvestCycleRow {
   return {
     cycle: toCycleNumber(row.harvest_cycle),
     startDate: row.harvest_start_date,
-    endDate: row.harvest_end_date,
+    endDate: row.harvest_end_date ?? "",
     status: toStatus(row.harvest_status),
     trees: row.total_trees_harvested ?? 0,
     bunches: row.total_bunches ?? 0,

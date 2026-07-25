@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 interface CycleSummaryRow {
   harvest_cycle: string
   harvest_start_date: string
-  harvest_end_date: string
+  harvest_end_date: string | null
   total_sale_value: string | number | null
   total_nuts: number | null
   sale_price_per_nut: string | number | null

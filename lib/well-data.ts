@@ -22,6 +22,9 @@ export interface WellDashboardRow {
   recharge_liters: number
   capacity_liters: number
   liters_per_inch: number
+  total_depth_inches?: number | null
+  calculation_method?: string | null
+  reference_offset_inches?: number | null
   level_feet_decimal: number
 }
 
@@ -85,6 +88,9 @@ const WELL_NAME_BY_ID: Record<WellId, string> = {
 
 export const SOUTH_WELL_CONFIGURATION_WARNING = "Configuration requires verification"
 
+const CAPACITY_MINUS_TAPE = "CAPACITY_MINUS_TAPE"
+const REMAINING_COLUMN_CAPPED = "REMAINING_COLUMN_CAPPED"
+
 export const emptyWellDashboardData: WellDashboardData = {
   northWellRecords: [],
   southWellRecords: [],
@@ -144,19 +150,30 @@ function formatTableDate(value: string): string {
 }
 
 function waterAvailableLiters(row: WellDashboardRow): number | null {
-  if (row.well_code === "well2") {
-    return null
+  const method = row.calculation_method ?? CAPACITY_MINUS_TAPE
+
+  if (method === REMAINING_COLUMN_CAPPED) {
+    if (!row.total_depth_inches || row.total_depth_inches <= 0) return null
+    const remainingWaterInches = row.total_depth_inches - row.total_inches
+    const rawLiters = remainingWaterInches * row.liters_per_inch
+    return Math.min(row.capacity_liters, Math.max(0, rawLiters))
   }
 
   // Confirmed for North Well: readings are depth from the reference point
   // down to the water surface.
-  return row.capacity_liters - row.total_inches * row.liters_per_inch
+  const rawLiters = row.capacity_liters - row.total_inches * row.liters_per_inch
+  return rawLiters < 0 ? null : rawLiters
 }
 
 function waterDisplay(row: WellDashboardRow): string {
   const availableWater = waterAvailableLiters(row)
   if (availableWater === null) return SOUTH_WELL_CONFIGURATION_WARNING
   return formatNumberIN(Math.round(availableWater))
+}
+
+function optionalWaterDisplay(row: WellDashboardRow | undefined): string {
+  if (!row) return "--"
+  return waterDisplay(row)
 }
 
 function average(values: Array<number | null>): number {
@@ -184,25 +201,27 @@ function toDailyRecords(rows: WellDashboardRow[]): WellDailyRecord[] {
       })
 
       const morningRow = sortedRows[0]
-      const eveningRow = sortedRows.at(-1) ?? morningRow
-      const requiresConfigurationVerification = morningRow.well_code === "well2"
-      const pumpedOut = requiresConfigurationVerification
-        ? null
-        : sortedRows.reduce((sum, row) => sum + (row.pumped_out_liters ?? 0), 0)
-      const recharged = requiresConfigurationVerification
-        ? null
-        : sortedRows.reduce((sum, row) => sum + (row.recharge_liters ?? 0), 0)
+      const eveningRow = sortedRows.length >= 2 ? sortedRows.at(-1) : undefined
+      const morningWater = waterAvailableLiters(morningRow)
+      const eveningWater = eveningRow ? waterAvailableLiters(eveningRow) : null
+      const hasCompletePair = sortedRows.length >= 2 && morningWater !== null && eveningWater !== null
+      const pumpedOut = hasCompletePair && morningWater > eveningWater ? morningWater - eveningWater : null
+      const recharged = hasCompletePair && eveningWater > morningWater ? eveningWater - morningWater : null
+      const configurationWarning =
+        morningWater === null || (eveningRow && eveningWater === null)
+          ? SOUTH_WELL_CONFIGURATION_WARNING
+          : undefined
 
       return {
         date: formatTableDate(date),
-        morningWater: waterAvailableLiters(morningRow),
-        eveningWater: waterAvailableLiters(eveningRow),
+        morningWater,
+        eveningWater,
         morningWaterDisplay: waterDisplay(morningRow),
-        eveningWaterDisplay: waterDisplay(eveningRow),
+        eveningWaterDisplay: optionalWaterDisplay(eveningRow),
         waterPumpedOut: pumpedOut,
         rechargedSinceYesterday: recharged,
-        remarks: requiresConfigurationVerification ? SOUTH_WELL_CONFIGURATION_WARNING : "Live Data",
-        configurationWarning: requiresConfigurationVerification ? SOUTH_WELL_CONFIGURATION_WARNING : undefined,
+        remarks: configurationWarning ? SOUTH_WELL_CONFIGURATION_WARNING : "Live Data",
+        configurationWarning,
       }
     })
 }
@@ -213,13 +232,15 @@ function capacityFromRows(rows: WellDashboardRow[]): string {
 
 function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
   const well = WELL_NAME_BY_ID[wellId]
-  const warning = wellId === "south" ? SOUTH_WELL_CONFIGURATION_WARNING : undefined
+  const warning = records.some((record) => record.configurationWarning)
+    ? SOUTH_WELL_CONFIGURATION_WARNING
+    : undefined
   return [
     {
       well,
       wellId,
       label: "Avg Morning Water",
-      value: wellId === "south" ? null : average(records.map((record) => record.morningWater)),
+      value: warning && records.every((record) => record.morningWater === null) ? null : average(records.map((record) => record.morningWater)),
       icon: "drop",
       warning,
     },
@@ -227,7 +248,7 @@ function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
       well,
       wellId,
       label: "Avg Evening Water",
-      value: wellId === "south" ? null : average(records.map((record) => record.eveningWater)),
+      value: warning && records.every((record) => record.eveningWater === null) ? null : average(records.map((record) => record.eveningWater)),
       icon: "drop-alt",
       warning,
     },
@@ -235,10 +256,9 @@ function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
       well,
       wellId,
       label: "Total Pumped Out",
-      value:
-        wellId === "south"
-          ? null
-          : records.reduce((sum, record) => sum + (record.waterPumpedOut ?? 0), 0),
+      value: warning && records.every((record) => record.waterPumpedOut === null)
+        ? null
+        : records.reduce((sum, record) => sum + (record.waterPumpedOut ?? 0), 0),
       icon: "pump",
       warning,
     },
@@ -246,10 +266,9 @@ function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
       well,
       wellId,
       label: "Total Recharged",
-      value:
-        wellId === "south"
-          ? null
-          : records.reduce((sum, record) => sum + (record.rechargedSinceYesterday ?? 0), 0),
+      value: warning && records.every((record) => record.rechargedSinceYesterday === null)
+        ? null
+        : records.reduce((sum, record) => sum + (record.rechargedSinceYesterday ?? 0), 0),
       icon: "recharge",
       warning,
     },
