@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Bug, CalendarRange, Droplets, Gauge, PackageCheck, ShieldCheck } from "lucide-react"
+import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, PackageCheck, ShieldCheck } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 
@@ -27,6 +27,12 @@ const adminTiles = [
     description: "Open and maintain Preview harvest cycles with database-write validation.",
     href: "/admin/harvest-cycle",
     icon: CalendarRange,
+  },
+  {
+    title: "Harvest ODK Sync",
+    description: "Scan Project 17, review duplicate/unmatched entries and import approved Harvest records.",
+    href: "/admin/harvest-sync",
+    icon: DatabaseZap,
   },
   {
     title: "Fertiliser & Pesticide Inventory Entry",
