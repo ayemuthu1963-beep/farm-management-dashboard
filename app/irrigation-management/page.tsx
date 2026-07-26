@@ -64,7 +64,7 @@ export default function IrrigationManagementPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-foreground">IRRIGATION MANAGEMENT</h1>
-            <p className="mt-1 text-muted-foreground">Six-zone water distribution with independent Nutmeg overlay</p>
+            <p className="mt-1 text-muted-foreground">Six-zone water distribution with an independent Nutmeg box</p>
           </div>
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-emerald-700">
             <Database className="size-3.5" aria-hidden="true" /> {liveDataLabel}

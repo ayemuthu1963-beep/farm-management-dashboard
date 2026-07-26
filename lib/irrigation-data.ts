@@ -34,7 +34,7 @@ export const zoneConfigs: Record<ZoneId, ZoneConfig> = {
   P2E: { id: "P2E", name: "Plot 2 East", abbr: "P2E", plot: "Plot2_East", crop: "Coconut", physicalPlot: "Plot 2 East", configuredMotorValves: ["Motor 1 Valve 1", "Motor 2 Valve 7", "Motor 3 Valve 13"] },
   P2W: { id: "P2W", name: "Plot 2 West", abbr: "P2W", plot: "Plot2_West", crop: "Coconut", physicalPlot: "Plot 2 West", configuredMotorValves: ["Motor 1 Valve 2", "Motor 2 Valve 8", "Motor 3 Valve 14"] },
   JF: { id: "JF", name: "Jackfruit", abbr: "JF", plot: "Jack_Fruit", crop: "Jackfruit", physicalPlot: "Jackfruit block", configuredMotorValves: ["Motor 1 Valve 6", "Motor 2 Valve 12", "Motor 3 Valve 15"] },
-  NM: { id: "NM", name: "Nutmeg", abbr: "NM", plot: "Nutmug", crop: "Nutmeg", physicalPlot: "Operational overlay on Plot 1 East and Plot 2 West", overlaps: ["P1E", "P2W"], configuredMotorValves: ["Motor 1 Valve 5", "Motor 2 Valve 11"] },
+  NM: { id: "NM", name: "Nutmeg", abbr: "NM", plot: "Nutmug", crop: "Nutmeg", physicalPlot: "Nutmeg operational zone", overlaps: ["P1E", "P2W"], configuredMotorValves: ["Motor 1 Valve 5", "Motor 2 Valve 11"] },
 }
 
 export const zoneNames = Object.fromEntries(zoneOrder.map((id) => [id, zoneConfigs[id].name])) as Record<ZoneId, string>
@@ -47,6 +47,15 @@ export const statusColors = {
 } satisfies Record<IrrigationStatus, { label: string; bg: string; border: string; text: string; svg: string }>
 
 export interface CropWaterFigure { crop: CropType; litresPerTree: number }
+
+export interface ZoneFiveDayHistory {
+  date: string
+  displayDate: string
+  totalMinutes: number
+  perTreeLitres: number | null
+  status: "Irrigated" | "No Record" | "Data Issue"
+  isCurrentIncompleteDay?: boolean
+}
 
 export interface Zone extends ZoneConfig {
   motor: string
@@ -62,6 +71,7 @@ export interface Zone extends ZoneConfig {
   recordsCount: number
   status: IrrigationStatus
   statusLabel: string
+  fiveDayHistory: ZoneFiveDayHistory[]
 }
 
 export interface IrrigationRecord {
@@ -136,7 +146,7 @@ export const emptyIrrigationData: IrrigationData = {
   summary: { totalWaterSupplied: 0, totalMotorRuntime: "0 h 0 m", totalMotorRuntimeMinutes: 0, zonesIrrigated: 0, zonesNotIrrigated: zoneOrder.length, averageWaterPerTree: 0, latestIrrigation: "--" },
   zones: zoneOrder.map((id) => {
     const config = zoneConfigs[id]
-    return { ...config, motor: config.configuredMotorValves.join(", "), valveOpenTime: "--", totalRuntimeMinutes: 0, totalRuntimeHours: 0, totalWaterSupplied: 0, waterPerTree: 0, waterPerTreeDisplay: "No runtime recorded", cropWater: [{ crop: config.crop, litresPerTree: 0 }], lastIrrigatedDate: "--", daysSinceIrrigation: null, recordsCount: 0, status: "no-record", statusLabel: statusColors["no-record"].label }
+    return { ...config, motor: config.configuredMotorValves.join(", "), valveOpenTime: "--", totalRuntimeMinutes: 0, totalRuntimeHours: 0, totalWaterSupplied: 0, waterPerTree: 0, waterPerTreeDisplay: "No runtime recorded", cropWater: [{ crop: config.crop, litresPerTree: 0 }], lastIrrigatedDate: "--", daysSinceIrrigation: null, recordsCount: 0, status: "no-record", statusLabel: statusColors["no-record"].label, fiveDayHistory: [] }
   }),
   records: [],
   trend: [],
