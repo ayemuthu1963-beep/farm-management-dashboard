@@ -17,6 +17,7 @@ interface TreePerformanceDetail {
 }
 
 interface HarvestCsvRow {
+  harvest_record_id?: string
   tree_no?: string
   harvest_date?: string
   bunch1_nuts?: string
@@ -25,7 +26,13 @@ interface HarvestCsvRow {
   total_bunches?: string
   total_nuts?: string
   remarks?: string
+  source?: string
+  created_at?: string
+  harvest_cycle?: string
 }
+
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 function parseCsvLine(line: string): string[] {
   const cells: string[] = []
@@ -85,14 +92,23 @@ function toNumber(value: string | number | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function todayInTimeZone(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date())
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const cycle = searchParams.get("cycle")
-  const startDate = searchParams.get("startDate")
-  const endDate = searchParams.get("endDate")
 
-  if (!cycle || !startDate || !endDate) {
-    return NextResponse.json({ error: "cycle, startDate and endDate are required" }, { status: 400 })
+  if (!cycle) {
+    return NextResponse.json({ error: "cycle is required" }, { status: 400 })
   }
 
   const authHeader = getBasicAuthHeader()
@@ -101,11 +117,30 @@ export async function GET(request: NextRequest) {
   }
 
   const apiBase = getApiBaseUrl()
-  const [cyclesResponse, exportResponse, performanceResponse] = await Promise.all([
-    fetch(`${apiBase}/api/cycles`, {
-      headers: { Authorization: authHeader, Accept: "application/json" },
-      cache: "no-store",
-    }),
+  const cyclesResponse = await fetch(`${apiBase}/api/cycles`, {
+    headers: { Authorization: authHeader, Accept: "application/json" },
+    cache: "no-store",
+  })
+
+  if (!cyclesResponse.ok) {
+    return NextResponse.json({ error: "Unable to load cycle list" }, { status: 503 })
+  }
+
+  const cycles = (await cyclesResponse.json()) as CycleSummaryRow[]
+  const selectedCycle = cycles.find((row) => String(row.harvest_cycle) === cycle)
+
+  if (!selectedCycle) {
+    return NextResponse.json({ error: `Harvest Cycle ${cycle} was not found` }, { status: 404 })
+  }
+
+  const startDate = selectedCycle.harvest_start_date
+  const endDate = selectedCycle.harvest_end_date || todayInTimeZone("Asia/Kolkata")
+
+  if (!startDate) {
+    return NextResponse.json({ error: `Harvest Cycle ${cycle} does not have a start date` }, { status: 422 })
+  }
+
+  const [exportResponse, performanceResponse] = await Promise.all([
     fetch(`${apiBase}/api/export/csv?${new URLSearchParams({ start_date: startDate, end_date: endDate }).toString()}`, {
       headers: { Authorization: authHeader, Accept: "text/csv" },
       cache: "no-store",
@@ -116,13 +151,15 @@ export async function GET(request: NextRequest) {
     }),
   ])
 
-  if (!cyclesResponse.ok || !exportResponse.ok || !performanceResponse.ok) {
-    return NextResponse.json({ error: "Unable to load cycle details" }, { status: 503 })
+  if (!exportResponse.ok) {
+    return NextResponse.json({ error: "Unable to load harvest rows for the selected cycle" }, { status: 503 })
   }
 
-  const cycles = (await cyclesResponse.json()) as CycleSummaryRow[]
-  const selectedCycle = cycles.find((row) => row.harvest_cycle === cycle)
-  const csvRows = parseCsv(await exportResponse.text())
+  if (!performanceResponse.ok) {
+    return NextResponse.json({ error: "Unable to load tree performance details" }, { status: 503 })
+  }
+
+  const csvRows = parseCsv(await exportResponse.text()).filter((row) => !row.harvest_cycle || String(row.harvest_cycle) === cycle)
   const performance = (await performanceResponse.json()) as { details?: TreePerformanceDetail[] }
   const detailByTree = new Map((performance.details ?? []).map((detail) => [detail.tree_no, detail]))
   const cycleTotalSale = toNumber(selectedCycle?.total_sale_value)
@@ -135,6 +172,7 @@ export async function GET(request: NextRequest) {
     const detail = detailByTree.get(treeNo)
 
     return {
+      harvestRecordId: toNumber(row.harvest_record_id),
       treeNo,
       harvestDate: row.harvest_date ?? "",
       nutsB1: toNumber(row.bunch1_nuts),
@@ -147,11 +185,31 @@ export async function GET(request: NextRequest) {
       plot: detail?.plot ?? "",
       classification: detail?.category ?? "",
       remarks: row.remarks && row.remarks.trim() ? row.remarks : null,
+      source: row.source ?? "",
+      importedAt: row.created_at ?? null,
     }
   })
 
   return NextResponse.json({
     cycle: Number(cycle),
+    cycleSummary: {
+      cycle_no: cycle,
+      status: selectedCycle.harvest_end_date ? "Closed/Locked" : "Open",
+      start_date: selectedCycle.harvest_start_date,
+      end_date: selectedCycle.harvest_end_date,
+      trees_harvested: rows.length,
+      total_bunches: rows.reduce((sum, row) => sum + row.totalBunches, 0),
+      total_nuts: rows.reduce((sum, row) => sum + row.totalNuts, 0),
+      average_nuts: rows.length > 0 ? rows.reduce((sum, row) => sum + row.totalNuts, 0) / rows.length : 0,
+      sale_price: salePrice,
+      total_sale: cycleTotalSale,
+    },
     rows,
+    pagination: {
+      page: 1,
+      page_size: rows.length,
+      total_rows: rows.length,
+      total_pages: rows.length > 0 ? 1 : 0,
+    },
   })
 }

@@ -421,20 +421,19 @@ export default function CycleViewPage() {
     try {
       const params = new URLSearchParams({
         cycle: String(row.cycle),
-        startDate: row.startDate,
-        endDate: row.endDate,
       })
       const response = await fetch(`/api/coconut-harvest/cycle-details?${params.toString()}`)
       if (!response.ok) {
-        throw new Error("Unable to load cycle details")
+        const errorBody = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(errorBody?.error ?? "Unable to load cycle details")
       }
 
       const data = (await response.json()) as CycleDetailData
       setCycleDetailRows(data.rows)
       setCycleDetailStatus(data.rows.length > 0 ? "real" : "empty")
       requestAnimationFrame(() => detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
-    } catch {
-      setCycleDetailError("Please check the connection and try again.")
+    } catch (error) {
+      setCycleDetailError(error instanceof Error ? error.message : "Please check the connection and try again.")
       setCycleDetailStatus("error")
     } finally {
       detailRequestInFlight.current = null
@@ -783,7 +782,7 @@ export default function CycleViewPage() {
             ) : null}
 
             {cycleDetailStatus === "empty" ? (
-              <HarvestRequestState tone="empty" message="No harvest records found for this cycle." />
+              <HarvestRequestState tone="empty" message="No Harvest records are available for this cycle." />
             ) : null}
 
             {cycleDetailStatus === "error" ? (
