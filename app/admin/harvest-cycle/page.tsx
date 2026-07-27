@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowLeft, CalendarRange } from "lucide-react"
+import { ArrowLeft, CalendarRange, DatabaseZap } from "lucide-react"
 import { HarvestCycleAdminClient, type HarvestCycleSummary } from "@/components/admin/harvest-cycle-admin-client"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
@@ -89,6 +89,38 @@ export default async function HarvestCycleAdminPage() {
               </p>
             </div>
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <p className="text-sm font-semibold text-muted-foreground">
+            Automatic Preview Harvest sync is disabled. Use Manual ODK Harvest Sync to scan, review and import submissions.
+          </p>
+          <Link
+            href="/admin/harvest-sync"
+            className="group block rounded-2xl border border-primary/20 bg-card p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <DatabaseZap className="size-7" aria-hidden="true" />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-black uppercase text-foreground">Manual ODK Harvest Sync</h2>
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-amber-800">
+                      Auto Sync Disabled
+                    </span>
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm font-medium text-muted-foreground">
+                    Scan Preview ODK submissions, review duplicates or unmatched trees, and import approved Harvest records manually.
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground group-hover:bg-primary/90">
+                Open Manual Sync
+              </span>
+            </div>
+          </Link>
         </section>
 
         <HarvestCycleAdminClient cycles={cycles} latestCycle={latestCycle} openCycle={openCycle} lastClosedCycle={lastClosedCycle} />
