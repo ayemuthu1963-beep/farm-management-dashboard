@@ -1,13 +1,13 @@
 "use client"
 
-import { type KeyboardEvent, useMemo, useRef, useState } from "react"
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronUp, ChevronsUpDown, Download, Search, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
 import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
-import { formatRupees, treeClassifications } from "@/lib/coconut-harvest-data"
+import { detailedQueryClassifications, formatRupees } from "@/lib/coconut-harvest-data"
 import type { DetailedQueryRow } from "@/lib/coconut-harvest-api"
 
 const inputClass =
@@ -35,14 +35,14 @@ function RangeField({ label, id, type = "number" }: { label: string; id: string;
   )
 }
 
-function ClassificationField({ label, id, name }: { label: string; id: string; name: string }) {
+function ClassificationField({ label, id, name, options }: { label: string; id: string; name: string; options: readonly string[] }) {
   return (
     <div className="min-w-0">
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-muted-foreground">
         {label}
       </label>
       <select id={id} name={name} defaultValue="All" onKeyDown={submitParentFormFromSelect} className={inputClass}>
-        {treeClassifications.map((c) => (
+        {options.map((c) => (
           <option key={c} value={c}>
             {c}
           </option>
@@ -210,34 +210,62 @@ export default function DetailedQueryPage() {
   const [lastQuery, setLastQuery] = useState("")
   const [exportStatus, setExportStatus] = useState<"idle" | "preparing" | "success" | "error">("idle")
   const queryInFlight = useRef(false)
+  const activeRequest = useRef<AbortController | null>(null)
+  const requestSequence = useRef(0)
   const exportRequestInFlight = useRef(false)
+
+  useEffect(() => () => activeRequest.current?.abort(), [])
 
   async function runQuery(query: string) {
     if (queryInFlight.current) {
       return
     }
     queryInFlight.current = true
+    const sequence = ++requestSequence.current
+    const controller = new AbortController()
+    activeRequest.current = controller
+    const timeout = window.setTimeout(() => controller.abort("timeout"), 45_000)
     setStatus("loading")
     setErrorMessage("")
     try {
-      const response = await fetch(`/api/coconut-harvest/detailed-query?${query}`)
+      const response = await fetch(`/api/coconut-harvest/detailed-query?${query}`, { signal: controller.signal })
       if (!response.ok) {
-        const errorData = (await response.json().catch(() => null)) as { error?: string } | null
-        throw new Error(errorData?.error || "Unable to load detailed query data")
+        const errorData = (await response.json().catch(() => null)) as { referenceId?: string } | null
+        const reference = errorData?.referenceId ? ` Reference: ${errorData.referenceId}.` : ""
+        const message =
+          response.status === 400 || response.status === 422
+            ? "Some search filters are invalid."
+            : response.status === 404
+              ? "Detailed Query service is unavailable."
+              : response.status === 408 || response.status === 504
+                ? "The search took too long. Please narrow the filters and try again."
+                : response.status >= 500
+                  ? "Detailed Query could not be completed."
+                  : "Unable to connect to the Detailed Query service."
+        throw new Error(`${message}${reference}`)
       }
 
       const data = (await response.json()) as { rows: DetailedQueryRow[] }
+      if (sequence !== requestSequence.current) return
       setRows(data.rows)
       setStatus(data.rows.length > 0 ? "real" : "empty")
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error && error.message.startsWith("Tree Number")
-          ? error.message
-          : "Unable to load harvest data. Please check the connection and try again.",
-      )
+      if (sequence !== requestSequence.current) return
+      const timedOut = controller.signal.aborted && controller.signal.reason === "timeout"
+      setErrorMessage(timedOut
+        ? "The search took too long. Please narrow the filters and try again."
+        : error instanceof Error && error.name === "AbortError"
+          ? "The search was cancelled."
+          : error instanceof Error
+            ? error.message
+            : "Unable to connect to the Detailed Query service.")
       setStatus("error")
     } finally {
-      queryInFlight.current = false
+      window.clearTimeout(timeout)
+      if (sequence === requestSequence.current) {
+        queryInFlight.current = false
+        activeRequest.current = null
+      }
     }
   }
 
@@ -334,6 +362,10 @@ export default function DetailedQueryPage() {
           <form
             onSubmit={handleSubmit}
             onReset={() => {
+              requestSequence.current += 1
+              activeRequest.current?.abort("reset")
+              activeRequest.current = null
+              queryInFlight.current = false
               setRows([])
               setStatus("idle")
               setErrorMessage("")
@@ -348,8 +380,8 @@ export default function DetailedQueryPage() {
               <RangeField label="Nuts" id="nuts" />
               <RangeField label="Sale (Rs.)" id="sale" />
               <RangeField label="No. of Missed Harvests" id="missed" />
-              <ClassificationField label="Tree Classification - Plot 1" id="class-plot1" name="plot1Classification" />
-              <ClassificationField label="Tree Classification - Plot 2" id="class-plot2" name="plot2Classification" />
+              <ClassificationField label="Tree Classification - Plot 1" id="class-plot1" name="plot1Classification" options={detailedQueryClassifications.plot1} />
+              <ClassificationField label="Tree Classification - Plot 2" id="class-plot2" name="plot2Classification" options={detailedQueryClassifications.plot2} />
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">

@@ -734,7 +734,30 @@ export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Pro
     throw new Error("Harvest API credentials are not configured")
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+  const parameterNames: Record<keyof DetailedQueryFilters, string> = {
+    treeFrom: "tree_from",
+    treeTo: "tree_to",
+    cycleFrom: "cycle_from",
+    cycleTo: "cycle_to",
+    dateFrom: "date_from",
+    dateTo: "date_to",
+    nutsFrom: "nuts_from",
+    nutsTo: "nuts_to",
+    saleFrom: "sale_from",
+    saleTo: "sale_to",
+    missedFrom: "missed_from",
+    missedTo: "missed_to",
+    plot1Classification: "plot1_classification",
+    plot2Classification: "plot2_classification",
+  }
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters) as [keyof DetailedQueryFilters, string | undefined][]) {
+    if (!isBlank(value) && value !== "All") {
+      params.set(parameterNames[key], value!.trim())
+    }
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/detailed-query?${params}`, {
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
@@ -746,64 +769,38 @@ export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Pro
     throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
   }
 
-  const performance = (await response.json()) as {
-    details: ApiTreePerformanceDetail[]
+  const data = (await response.json()) as {
+    rows: Array<{
+      tree_no: string
+      harvest_cycle: string
+      harvest_date: string
+      bunch1_nuts: number
+      bunch2_nuts: number
+      bunch3_nuts: number
+      total_bunches: number
+      total_nuts: number
+      total_sale: string | number | null
+      missed_harvests: number
+      plot: string
+      category: string
+    }>
   }
-
-  const candidateDetails = performance.details.filter((detail) => {
-    return (
-      inTreeNumberRange(detail.tree_no, filters.treeFrom, filters.treeTo) &&
-      inNumberRange(detail.missed_harvests ?? 0, filters.missedFrom, filters.missedTo) &&
-      detailMatchesClassification(detail, filters)
-    )
-  })
-
-  const rows: DetailedQueryRow[] = []
-
-  for (const detail of candidateDetails) {
-    const records = await fetchRawTreeHistory(detail.tree_no, authHeader)
-
-    for (const record of records) {
-      const harvestCycle = record.harvest_cycle ?? ""
-      const cycleNumber = toCycleNumber(harvestCycle)
-      const totalNuts = record.total_nuts ?? 0
-      const totalSale = toNumber(record.total_sale)
-
-      if (
-        inNumberRange(cycleNumber, filters.cycleFrom, filters.cycleTo) &&
-        inDateRange(record.harvest_date, filters.dateFrom, filters.dateTo) &&
-        inNumberRange(totalNuts, filters.nutsFrom, filters.nutsTo) &&
-        inNumberRange(totalSale, filters.saleFrom, filters.saleTo)
-      ) {
-        rows.push({
-          treeNo: detail.tree_no,
-          harvestCycle,
-          harvestDate: record.harvest_date,
-          nutsB1: record.bunch1_nuts ?? 0,
-          nutsB2: record.bunch2_nuts ?? 0,
-          nutsB3: record.bunch3_nuts ?? 0,
-          totalBunches: record.total_bunches ?? 0,
-          totalNuts,
-          totalSale,
-          missedHarvests: detail.missed_harvests ?? 0,
-          plot: detail.plot,
-          classification: detail.category,
-        })
-      }
-    }
-  }
-
-  rows.sort((a, b) => {
-    const dateCompare = b.harvestDate.localeCompare(a.harvestDate)
-    if (dateCompare !== 0) {
-      return dateCompare
-    }
-
-    return a.treeNo.localeCompare(b.treeNo)
-  })
 
   return {
-    rows: rows.slice(0, 500),
+    rows: data.rows.map((row) => ({
+      treeNo: row.tree_no,
+      harvestCycle: row.harvest_cycle,
+      harvestDate: row.harvest_date,
+      nutsB1: row.bunch1_nuts ?? 0,
+      nutsB2: row.bunch2_nuts ?? 0,
+      nutsB3: row.bunch3_nuts ?? 0,
+      totalBunches: row.total_bunches ?? 0,
+      totalNuts: row.total_nuts ?? 0,
+      totalSale: toNumber(row.total_sale),
+      missedHarvests: row.missed_harvests ?? 0,
+      plot: row.plot,
+      classification: row.category,
+    })),
     usedMockFallback: false,
   }
 }
