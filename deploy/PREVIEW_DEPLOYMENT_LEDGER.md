@@ -45,3 +45,17 @@ Entries are append-only. Never edit or delete an older entry.
 - Frontend safety-framework head before this administrative commit: `f8b923ac5ac9b74b2a5b54c1edf43c5eb957c937`; it was not deployed.
 - Deployed and release backend commit: `7ea2456642a8fb62d5d640c379c3f1642f654bce`.
 - Public Preview deployment: unchanged.
+
+## 2026-07-27 21:58:08 IST — Authoritative backend source backup
+
+- Purpose: create the private authoritative backend repository and back up only `preview-release`.
+- Repository: `ayemuthu1963-beep/muthu-harvest-dashboard`.
+- Remote: `https://github.com/ayemuthu1963-beep/muthu-harvest-dashboard.git`.
+- Branch: `preview-release`.
+- Local and remote head: `7ea2456642a8fb62d5d640c379c3f1642f654bce`.
+- Tracking: `origin/preview-release`; ahead/behind `0/0`.
+- Archive preservation: moved unchanged to `C:\MFMS_LOCAL\backups\backend-source-baselines\dq-backend-baseline-source.tar.gz`.
+- Legacy note: `ayemuthu1963-beep/mfms-backend` remains a related but different history and is not an approved deployment source.
+- Other branches and tags pushed: none.
+- Deployed backend commit and image: unchanged.
+- Public Preview and Production: unchanged.

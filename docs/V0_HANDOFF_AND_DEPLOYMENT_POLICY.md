@@ -14,3 +14,5 @@ Approved workflow:
 8. Build immutable candidate images and smoke-test them before public replacement.
 
 Direct deployment from `v0/*`, feature, repair, detached-HEAD, or dirty worktrees is prohibited.
+
+The authoritative backend deployment source is `ayemuthu1963-beep/muthu-harvest-dashboard` on `preview-release`. The related `ayemuthu1963-beep/mfms-backend` repository has a different legacy history and must not be substituted, merged, or used as the Preview deployment baseline.

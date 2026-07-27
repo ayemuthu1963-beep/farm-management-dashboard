@@ -10,6 +10,12 @@
   "backend": {
     "deployed_application_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
     "release_branch_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+    "repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+    "repository_url": "https://github.com/ayemuthu1963-beep/muthu-harvest-dashboard.git",
+    "branch": "preview-release",
+    "remote_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
     "image": "muthu-harvest-dashboard-harvest-api:preview-detailed-query-7ea2456-20260727-140654",
     "image_id": "sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006"
   },
@@ -25,5 +31,9 @@
   ],
   "api_contract_version": "preview-2026-07-27-detailed-query-v1",
   "migration_version": "004_well_water_calculation_methods plus approved runtime schema guards",
-  "test_result": "verified running combination; route and live-data contracts recorded in checkpoint"
+  "test_result": "verified running combination; route and live-data contracts recorded in checkpoint",
+  "source_backup": {
+    "archive_path": "C:\\MFMS_LOCAL\\backups\\backend-source-baselines\\dq-backend-baseline-source.tar.gz",
+    "repository_tracking_verified_at": "2026-07-27T21:58:08+05:30"
+  }
 }

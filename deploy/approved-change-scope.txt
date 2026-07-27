@@ -7,8 +7,10 @@ frontend:deploy/PREVIEW_DEPLOYMENT_LEDGER.md
 frontend:deploy/preview-release-20260727-201952.json
 frontend:deploy/CURRENT_CONFIGURATION_AUDIT.md
 frontend:deploy/root-crontab-verification.txt
+frontend:deploy/REPOSITORY_INVENTORY.md
 frontend:docs/V0_HANDOFF_AND_DEPLOYMENT_POLICY.md
 frontend:docs/MFMS_PREVIEW_RELEASE_WORKFLOW.md
+frontend:docs/MFMS_BACKEND_RELEASE_WORKFLOW.md
 frontend:scripts/verify-preview-deployment-candidate.sh
 frontend:scripts/test-preview-release.sh
 frontend:scripts/test-preview-live-contracts.sh

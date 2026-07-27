@@ -9,6 +9,12 @@
   "backend_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
   "deployed_backend_application_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
   "backend_release_branch_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+  "backend_repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+  "backend_repository_url": "https://github.com/ayemuthu1963-beep/muthu-harvest-dashboard.git",
+  "backend_release_branch": "preview-release",
+  "backend_remote_release_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+  "backend_upstream": "origin/preview-release",
+  "backend_ahead_behind": "0/0",
   "backend_image": "muthu-harvest-dashboard-harvest-api:preview-detailed-query-7ea2456-20260727-140654",
   "backend_image_id": "sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006",
   "database": "mfms_server_uat",
@@ -28,5 +34,8 @@
     "root_preview_well_water_schedule": "absent",
     "duplicate_privileged_scheduler": "absent"
   },
-  "updated_at": "2026-07-27T20:45:46+05:30"
+  "archive_backups": {
+    "detailed_query_backend_baseline": "C:\\MFMS_LOCAL\\backups\\backend-source-baselines\\dq-backend-baseline-source.tar.gz"
+  },
+  "updated_at": "2026-07-27T21:58:08+05:30"
 }
