@@ -16,10 +16,10 @@ export function LowerPanel({
   counterB2,
 }: LowerPanelProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Total nuts harvested - prominent primary input */}
-      <div className="rounded-2xl border-4 border-red-400 bg-white p-4">
-        <label className="block text-center text-sm font-bold text-gray-700 mb-3">
+      <div className="rounded-2xl border-4 border-red-400 bg-white p-3">
+        <label className="block text-center text-sm font-bold text-gray-700 mb-2">
           Total nuts Harvested
         </label>
         <input
