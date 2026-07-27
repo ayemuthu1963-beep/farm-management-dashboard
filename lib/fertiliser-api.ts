@@ -312,6 +312,25 @@ export async function fetchFertiliserTransactions(filters: FertiliserTransaction
   return fetchJson<FertiliserTransactionApiRow[]>(`/api/fertiliser/transactions${params.toString() ? `?${params.toString()}` : ""}`)
 }
 
+function fertiliserWriteError(
+  body: unknown,
+  prefix: string,
+): Error & { fieldErrors?: unknown } {
+  const payload = body && typeof body === "object" ? body as Record<string, unknown> : null
+  const detail = payload?.detail
+  const detailMessage =
+    detail && typeof detail === "object" && "message" in detail
+      ? String((detail as { message?: unknown }).message ?? "")
+      : ""
+  const reason =
+    (payload && typeof payload.error === "string" && payload.error)
+    || detailMessage
+    || "The Preview server rejected the request."
+  const error = new Error(`${prefix}: ${reason}`) as Error & { fieldErrors?: unknown }
+  error.fieldErrors = detail
+  return error
+}
+
 export async function receiveFertiliserStock(payload: FertiliserIncomingStockPayload): Promise<FertiliserReceiveStockResponse> {
   const response = await fetch("/api/fertiliser/stock/receive", {
     method: "POST",
@@ -323,11 +342,7 @@ export async function receiveFertiliserStock(payload: FertiliserIncomingStockPay
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const fieldErrors = body && typeof body === "object" && "detail" in body ? body.detail : null
-    const message = body && typeof body === "object" && "error" in body ? String(body.error) : "Incoming stock save failed"
-    const error = new Error(message) as Error & { fieldErrors?: unknown }
-    error.fieldErrors = fieldErrors
-    throw error
+    throw fertiliserWriteError(body, "Incoming stock save failed")
   }
 
   return body as FertiliserReceiveStockResponse
@@ -344,11 +359,7 @@ export async function issueFertiliserStock(payload: FertiliserOutgoingStockPaylo
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const fieldErrors = body && typeof body === "object" && "detail" in body ? body.detail : null
-    const message = body && typeof body === "object" && "error" in body ? String(body.error) : "Outgoing stock issue failed"
-    const error = new Error(message) as Error & { fieldErrors?: unknown }
-    error.fieldErrors = fieldErrors
-    throw error
+    throw fertiliserWriteError(body, "Outgoing stock issue failed")
   }
 
   return body as FertiliserIssueStockResponse
@@ -365,11 +376,7 @@ export async function adjustFertiliserStock(payload: FertiliserStockAdjustmentPa
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const fieldErrors = body && typeof body === "object" && "detail" in body ? body.detail : null
-    const message = body && typeof body === "object" && "error" in body ? String(body.error) : "Stock adjustment failed"
-    const error = new Error(message) as Error & { fieldErrors?: unknown }
-    error.fieldErrors = fieldErrors
-    throw error
+    throw fertiliserWriteError(body, "Stock adjustment failed")
   }
 
   return body as FertiliserAdjustStockResponse
@@ -383,7 +390,12 @@ export async function fetchFertiliserRequirements(): Promise<FertiliserRequireme
   return fetchJson<FertiliserRequirementApiRow[]>("/api/fertiliser/requirements")
 }
 
-async function sendRequirementRequest<T>(path: string, method: "POST" | "PATCH", payload: unknown = {}): Promise<T> {
+async function sendRequirementRequest<T>(
+  path: string,
+  method: "POST" | "PATCH",
+  payload: unknown = {},
+  failurePrefix = "Future requirement request failed",
+): Promise<T> {
   const response = await fetch(path, {
     method,
     headers: {
@@ -394,18 +406,19 @@ async function sendRequirementRequest<T>(path: string, method: "POST" | "PATCH",
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const fieldErrors = body && typeof body === "object" && "detail" in body ? body.detail : null
-    const message = body && typeof body === "object" && "error" in body ? String(body.error) : "Future requirement request failed"
-    const error = new Error(message) as Error & { fieldErrors?: unknown }
-    error.fieldErrors = fieldErrors
-    throw error
+    throw fertiliserWriteError(body, failurePrefix)
   }
 
   return body as T
 }
 
 export function createFertiliserRequirement(payload: FertiliserRequirementPayload): Promise<FertiliserRequirementResponse> {
-  return sendRequirementRequest<FertiliserRequirementResponse>("/api/fertiliser/requirements", "POST", payload)
+  return sendRequirementRequest<FertiliserRequirementResponse>(
+    "/api/fertiliser/requirements",
+    "POST",
+    payload,
+    "Future requirement save failed",
+  )
 }
 
 export function updateFertiliserRequirement(requirementId: number, payload: FertiliserRequirementUpdatePayload): Promise<FertiliserRequirementResponse> {

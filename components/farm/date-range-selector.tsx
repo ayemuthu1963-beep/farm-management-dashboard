@@ -5,6 +5,32 @@ import { CalendarRange, RefreshCw } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
 
 const dayOptions = ["5 Days", "7 Days", "15 Days", "30 Days"]
+const FARM_TIME_ZONE = "Asia/Kolkata"
+
+function farmIsoDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: FARM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function shiftIsoDate(isoDate: string, offsetDays: number) {
+  const [year, month, day] = isoDate.split("-").map(Number)
+  const shifted = new Date(Date.UTC(year, month - 1, day + offsetDays))
+  return shifted.toISOString().slice(0, 10)
+}
+
+export function getDefaultWellDateRange(days = 5, now = new Date()) {
+  const endDate = farmIsoDate(now)
+  return {
+    startDate: shiftIsoDate(endDate, -(days - 1)),
+    endDate,
+  }
+}
 
 function submitParentFormFromSelect(event: KeyboardEvent<HTMLSelectElement>) {
   if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -20,8 +46,9 @@ interface DateRangeSelectorProps {
 }
 
 export function DateRangeSelector({ onChange }: DateRangeSelectorProps) {
-  const [startDate, setStartDate] = useState("2026-07-02")
-  const [endDate, setEndDate] = useState("2026-07-06")
+  const [initialRange] = useState(() => getDefaultWellDateRange())
+  const [startDate, setStartDate] = useState(initialRange.startDate)
+  const [endDate, setEndDate] = useState(initialRange.endDate)
   const [days, setDays] = useState("5 Days")
 
   function applyDateRange() {
@@ -72,7 +99,12 @@ export function DateRangeSelector({ onChange }: DateRangeSelectorProps) {
           <select
             id="days"
             value={days}
-            onChange={(e) => setDays(e.target.value)}
+            onChange={(e) => {
+              const nextDays = e.target.value
+              const count = Number.parseInt(nextDays, 10) || 5
+              setDays(nextDays)
+              setStartDate(shiftIsoDate(endDate, -(count - 1)))
+            }}
             onKeyDown={submitParentFormFromSelect}
             className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
           >

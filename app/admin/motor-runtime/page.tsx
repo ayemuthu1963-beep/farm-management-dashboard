@@ -3,6 +3,9 @@ import { ArrowLeft, Gauge } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 import { MotorRuntimeEntryClient } from "@/components/admin/motor-runtime-entry-client"
+import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
+
+export const dynamic = "force-dynamic"
 
 export default function AdminMotorRuntimePage() {
   return (
@@ -12,6 +15,7 @@ export default function AdminMotorRuntimePage() {
           <ArrowLeft className="size-4" />
           Back to Admin Console
         </Link>
+        <PreviewAdminNotice />
         <Panel title="Motor Runtime Entry" icon={Gauge}>
           <MotorRuntimeEntryClient />
         </Panel>

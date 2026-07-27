@@ -2,6 +2,9 @@ import Link from "next/link"
 import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, PackageCheck, ShieldCheck } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
+import { getPreviewDatabaseLabel, getPreviewEnvironmentLabel } from "@/components/admin/preview-admin-notice"
+
+export const dynamic = "force-dynamic"
 
 const adminTiles = [
   {
@@ -43,21 +46,24 @@ const adminTiles = [
 ]
 
 export default function AdminConsolePage() {
+  const environmentLabel = getPreviewEnvironmentLabel()
+  const databaseLabel = getPreviewDatabaseLabel()
+
   return (
     <DashboardShell>
       <div className="flex flex-col gap-6">
         <section className="rounded-2xl border border-primary/15 bg-card p-6 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">LOCAL TEST</p>
+              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">{environmentLabel}</p>
               <h1 className="mt-2 text-3xl font-black uppercase text-foreground">Admin Console</h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-muted-foreground">
-                Local entry hub for MFMS RC testing. Entries made here are intended for the local database only.
+                Preview administration hub. Entries made here are restricted to the UAT database and must not be used for Production data.
               </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-xl border border-chart-2/25 bg-chart-2/10 px-4 py-3 text-sm font-extrabold text-chart-2">
               <ShieldCheck className="size-5" />
-              Database: mfms_local_test
+              Database: {databaseLabel}
             </div>
           </div>
         </section>

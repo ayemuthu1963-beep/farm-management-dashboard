@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarRange } from "lucide-react"
 import { HarvestCycleAdminClient, type HarvestCycleSummary } from "@/components/admin/harvest-cycle-admin-client"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -71,10 +72,11 @@ export default async function HarvestCycleAdminPage() {
     <DashboardShell>
       <div className="flex flex-col gap-6">
         <section className="rounded-2xl border border-primary/15 bg-card p-6 shadow-sm">
-          <Link href="/admin" className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
+        <Link href="/admin" className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
             <ArrowLeft className="size-4" aria-hidden="true" />
             Back to Admin Console
-          </Link>
+        </Link>
+        <PreviewAdminNotice />
           <div className="mt-4 flex items-start gap-4">
             <span className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <CalendarRange className="size-7" aria-hidden="true" />

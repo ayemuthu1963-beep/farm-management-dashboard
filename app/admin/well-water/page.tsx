@@ -3,6 +3,9 @@ import { ArrowLeft, Droplets } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 import { WellWaterEntryClient } from "@/components/admin/well-water-entry-client"
+import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
+
+export const dynamic = "force-dynamic"
 
 export default function AdminWellWaterPage() {
   return (
@@ -12,6 +15,7 @@ export default function AdminWellWaterPage() {
           <ArrowLeft className="size-4" />
           Back to Admin Console
         </Link>
+        <PreviewAdminNotice />
         <Panel title="Well Water Entry" icon={Droplets}>
           <WellWaterEntryClient />
         </Panel>

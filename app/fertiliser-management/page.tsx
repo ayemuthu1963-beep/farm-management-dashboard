@@ -616,7 +616,11 @@ export default function FertiliserManagementPage() {
   const [expiryFilter, setExpiryFilter] = useState("all")
   const [expandedCategories, setExpandedCategories] = useState(() => new Set(fertiliserCategories))
   const [message, setMessage] = useState("")
-  const [formErrors, setFormErrors] = useState<FormErrors>({})
+  const [incomingStockErrors, setIncomingStockErrors] = useState<FormErrors>({})
+  const [outgoingStockErrors, setOutgoingStockErrors] = useState<FormErrors>({})
+  const [stockAdjustmentErrors, setStockAdjustmentErrors] = useState<FormErrors>({})
+  const [futureRequirementErrors, setFutureRequirementErrors] = useState<FormErrors>({})
+  const [masterFormErrors, setMasterFormErrors] = useState<FormErrors>({})
   const [exportingKind, setExportingKind] = useState<FertiliserExportKind | null>(null)
   const [exportMessage, setExportMessage] = useState("")
   const [activeModal, setActiveModal] = useState<ModalName>(null)
@@ -875,7 +879,7 @@ export default function FertiliserManagementPage() {
   const submitIncomingStock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setFormErrors({ form: "Incoming Stock saves require live local database data." })
+      setIncomingStockErrors({ form: "Incoming Stock saves require live Preview database data." })
       return
     }
 
@@ -889,14 +893,14 @@ export default function FertiliserManagementPage() {
     const product = liveData.products.find((item) => item.product_id === productId)
 
     if (!transactionDate) errors.transaction_date = "Date is required"
-    if (!product) errors.product_id = "Product is required"
+    if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Select a valid Product Master item"
     if (!validateDecimalQuantity(quantity)) errors.quantity = QUANTITY_PRECISION_ERROR
     if (!incomingUnit) errors.unit = "Unit is required"
     if (product?.default_unit && incomingUnit !== product.default_unit) errors.unit = `Unit must be ${product.default_unit}`
     if (product?.expiry_required && !expiryDate) errors.expiry_date = "Expiry date is required for this product"
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setIncomingStockErrors(errors)
       return
     }
 
@@ -913,7 +917,7 @@ export default function FertiliserManagementPage() {
     }
 
     setIncomingSubmitting(true)
-    setFormErrors({})
+    setIncomingStockErrors({})
     try {
       const result = await receiveFertiliserStock(payload)
       await refreshLiveData()
@@ -924,7 +928,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setIncomingStockErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setIncomingSubmitting(false)
     }
@@ -933,7 +937,7 @@ export default function FertiliserManagementPage() {
   const submitOutgoingStock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setFormErrors({ form: "Outgoing Stock saves require live local database data." })
+      setOutgoingStockErrors({ form: "Outgoing Stock saves require live Preview database data." })
       return
     }
 
@@ -951,7 +955,7 @@ export default function FertiliserManagementPage() {
     const available = product ? numberFromApi(product.eligible_available_quantity) ?? 0 : 0
 
     if (!transactionDate) errors.transaction_date = "Date is required"
-    if (!product) errors.product_id = "Product with eligible stock is required"
+    if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Product with eligible stock is required"
     if (product?.quantity === null) errors.product_id = "Blank-quantity products cannot be issued"
     if (product && available <= 0) errors.quantity = "No valid non-expired stock is available for this product"
     if (!validateDecimalQuantity(quantity)) errors.quantity = QUANTITY_PRECISION_ERROR
@@ -962,7 +966,7 @@ export default function FertiliserManagementPage() {
     if (!plotLocation) errors.plot_location = "Plot/location is required"
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setOutgoingStockErrors(errors)
       return
     }
 
@@ -978,7 +982,7 @@ export default function FertiliserManagementPage() {
     }
 
     setOutgoingSubmitting(true)
-    setFormErrors({})
+    setOutgoingStockErrors({})
     setOutgoingResult(null)
     try {
       const result = await issueFertiliserStock(payload)
@@ -991,7 +995,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setOutgoingStockErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setOutgoingSubmitting(false)
     }
@@ -1000,7 +1004,7 @@ export default function FertiliserManagementPage() {
   const submitAdjustment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setFormErrors({ form: "Stock Adjustment saves require live local database data." })
+      setStockAdjustmentErrors({ form: "Stock Adjustment saves require live Preview database data." })
       return
     }
 
@@ -1016,7 +1020,7 @@ export default function FertiliserManagementPage() {
     const available = product ? numberFromApi(product.eligible_available_quantity) ?? 0 : 0
 
     if (!transactionDate) errors.transaction_date = "Date is required"
-    if (!product) errors.product_id = "Product is required"
+    if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Select a valid Product Master item"
     if (product?.quantity === null) errors.product_id = adjustmentType === "ADJUSTMENT_OUT" ? "Blank-quantity products cannot be adjusted out" : "Select a product with a default unit"
     if (!validateDecimalQuantity(quantity)) errors.quantity = QUANTITY_PRECISION_ERROR
     if (adjustmentType === "ADJUSTMENT_OUT" && product && available <= 0) errors.quantity = "No valid non-expired stock is available for this product"
@@ -1026,7 +1030,7 @@ export default function FertiliserManagementPage() {
     if (!reason) errors.reason = "Reason is required"
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setStockAdjustmentErrors(errors)
       return
     }
 
@@ -1042,7 +1046,7 @@ export default function FertiliserManagementPage() {
     }
 
     setAdjustmentSubmitting(true)
-    setFormErrors({})
+    setStockAdjustmentErrors({})
     setAdjustmentResult(null)
     try {
       const result = await adjustFertiliserStock(payload)
@@ -1057,7 +1061,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setStockAdjustmentErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setAdjustmentSubmitting(false)
     }
@@ -1066,7 +1070,7 @@ export default function FertiliserManagementPage() {
   const submitRequirement = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setFormErrors({ form: "Future Requirement saves require live local database data." })
+      setFutureRequirementErrors({ form: "Future Requirement saves require live Preview database data." })
       return
     }
 
@@ -1085,7 +1089,7 @@ export default function FertiliserManagementPage() {
     if (!requirementDate) errors.requirement_date = "Requirement date is required"
     if (!requiredByDate) errors.required_by_date = "Required-by date is required"
     if (requirementDate && requiredByDate && requiredByDate < requirementDate) errors.required_by_date = "Required-by date must be on or after requirement date"
-    if (!product) errors.product_id = "Product is required"
+    if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Select a valid Product Master item"
     if (!validateDecimalQuantity(requiredQuantity)) errors.required_quantity = QUANTITY_PRECISION_ERROR
     if (!requirementUnit) errors.unit = "Unit is required"
     if (product?.default_unit && requirementUnit !== product.default_unit) errors.unit = `Unit must be ${product.default_unit}`
@@ -1094,7 +1098,7 @@ export default function FertiliserManagementPage() {
     if (estimatedUnitCost && Number(estimatedUnitCost) < 0) errors.estimated_unit_cost = "Estimated unit cost must be zero or positive"
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setFutureRequirementErrors(errors)
       return
     }
 
@@ -1115,7 +1119,7 @@ export default function FertiliserManagementPage() {
     }
 
     setRequirementSubmitting(true)
-    setFormErrors({})
+    setFutureRequirementErrors({})
     try {
       const result = await createFertiliserRequirement(payload)
       const data = await refreshLiveData()
@@ -1128,7 +1132,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setFutureRequirementErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setRequirementSubmitting(false)
     }
@@ -1136,7 +1140,7 @@ export default function FertiliserManagementPage() {
 
   const runRequirementAction = async (requirement: FertiliserRequirementApiRow, action: "approve" | "ordered" | "cancel") => {
     setRequirementActionId(requirement.requirement_id)
-    setFormErrors({})
+    setFutureRequirementErrors({})
     try {
       const result =
         action === "approve"
@@ -1151,7 +1155,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setFutureRequirementErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setRequirementActionId(null)
     }
@@ -1176,7 +1180,7 @@ export default function FertiliserManagementPage() {
     if (estimatedUnitCost && Number(estimatedUnitCost) < 0) errors.estimated_unit_cost = "Estimated unit cost must be zero or positive"
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setFutureRequirementErrors(errors)
       return
     }
 
@@ -1194,7 +1198,7 @@ export default function FertiliserManagementPage() {
     }
 
     setRequirementActionId(requirement.requirement_id)
-    setFormErrors({})
+    setFutureRequirementErrors({})
     try {
       const result = await updateFertiliserRequirement(requirement.requirement_id, payload)
       const data = await refreshLiveData()
@@ -1205,7 +1209,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setFutureRequirementErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setRequirementActionId(null)
     }
@@ -1224,7 +1228,7 @@ export default function FertiliserManagementPage() {
     if (Number(receivedQuantity) > Number(requirement.remaining_quantity)) errors.received_quantity = `Receipt cannot exceed remaining ${formatApiQuantity(requirement.remaining_quantity, requirement.unit)}`
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setFutureRequirementErrors(errors)
       return
     }
 
@@ -1239,7 +1243,7 @@ export default function FertiliserManagementPage() {
     }
 
     setRequirementActionId(requirement.requirement_id)
-    setFormErrors({})
+    setFutureRequirementErrors({})
     try {
       const result = await receiveFertiliserRequirement(requirement.requirement_id, payload)
       const data = await refreshLiveData()
@@ -1251,7 +1255,7 @@ export default function FertiliserManagementPage() {
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
-      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+      setFutureRequirementErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
     } finally {
       setRequirementActionId(null)
     }
@@ -1325,38 +1329,38 @@ export default function FertiliserManagementPage() {
     }
 
     if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
+      setMasterFormErrors(errors)
       return
     }
 
-    setFormErrors({})
+    setMasterFormErrors({})
     resetMessage(`${kind} form validated. Product/category writes are disabled for this Preview workflow, so no database write occurred.`)
     event.currentTarget.reset()
     if (kind === "Product" || kind === "Category") setActiveModal(null)
   }
 
   const productOptions = stockProducts.map((product) => (
-    <option key={product.id} value={product.productId ?? product.id}>{product.sNo}. {product.name} — {product.category}</option>
+    <option key={product.id} value={product.productId ?? product.id}>{product.name} — {product.category} (ID {product.productId})</option>
   ))
   const outgoingProductOptions = (liveData?.stock ?? [])
     .filter((product) => product.quantity !== null && (numberFromApi(product.eligible_available_quantity) ?? 0) > 0)
     .map((product) => (
       <option key={product.product_id} value={product.product_id}>
-        {product.source_row_number ?? product.product_id}. {product.product_name} — {product.category_name} ({formatApiQuantity(product.eligible_available_quantity, product.unit)} available)
+        {product.product_name} — {product.category_name} (ID {product.product_id}; {formatApiQuantity(product.eligible_available_quantity, product.unit)} available)
       </option>
     ))
   const adjustmentProductOptions = (liveData?.stock ?? [])
     .filter((product) => product.unit !== null)
     .map((product) => (
       <option key={product.product_id} value={product.product_id}>
-        {product.source_row_number ?? product.product_id}. {product.product_name} — {product.category_name} ({formatApiQuantity(product.eligible_available_quantity, product.unit)} eligible)
+        {product.product_name} — {product.category_name} (ID {product.product_id}; {formatApiQuantity(product.eligible_available_quantity, product.unit)} eligible)
       </option>
     ))
   const requirementProductOptions = (liveData?.products ?? [])
     .filter((product) => product.is_active)
     .map((product) => (
       <option key={product.product_id} value={product.product_id}>
-        {product.source_row_number ?? product.product_id}. {product.product_name} — {product.category_name}
+        {product.product_name} — {product.category_name} (ID {product.product_id})
       </option>
     ))
 
@@ -1372,7 +1376,7 @@ export default function FertiliserManagementPage() {
             </span>
             <div>
               <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">Fertiliser Management</h1>
-              <p className="text-sm text-muted-foreground">Read-only Fertiliser overview connected to the local development database</p>
+              <p className="text-sm text-muted-foreground">Fertiliser stock and requirements connected to the MFMS Preview database</p>
             </div>
           </div>
           <Badge className="border border-primary/25 bg-primary/10 text-primary">{dataMode === "live" ? "LIVE PREVIEW DATABASE DATA" : dataMode === "loading" ? "LOADING LIVE FERTILISER DATA" : "LIVE DATA UNAVAILABLE"}</Badge>
@@ -1422,25 +1426,25 @@ export default function FertiliserManagementPage() {
         {activeTab === "incoming" ? (
           <Panel title="Incoming Stock" icon={PackagePlus}>
             <FormIntro text="Receive stock into the MFMS Preview database only. This creates one batch/transaction after the backend confirms the save." />
-            {formErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{formErrors.form}</div> : null}
+            {incomingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{incomingStockErrors.form}</div> : null}
             <form onSubmit={submitIncomingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField label="Date" name="transactionDate" type="date" error={formErrors.transaction_date} />
+              <InputField label="Date" name="transactionDate" type="date" error={incomingStockErrors.transaction_date} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Product</span>
                 <select name="product" value={incomingProductId} onChange={(event) => handleIncomingProductChange(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
                   <option value="">Select product</option>
                   {productOptions}
                 </select>
-                <FieldError>{formErrors.product_id}</FieldError>
+                <FieldError>{incomingStockErrors.product_id}</FieldError>
               </label>
-              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={formErrors.quantity} />
+              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={incomingStockErrors.quantity} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Unit</span>
                 <input name="unit" value={incomingUnit} readOnly className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground outline-none" placeholder="Auto-filled from Product Master" />
-                <FieldError>{formErrors.unit}</FieldError>
+                <FieldError>{incomingStockErrors.unit}</FieldError>
               </label>
               <InputField label="Batch number" name="batchNumber" />
-              <InputField label={selectedIncomingProduct?.expiry_required ? "Expiry date (required)" : "Expiry date"} name="expiryDate" type="date" error={formErrors.expiry_date} />
+              <InputField label={selectedIncomingProduct?.expiry_required ? "Expiry date (required)" : "Expiry date"} name="expiryDate" type="date" error={incomingStockErrors.expiry_date} />
               <InputField label="Supplier" name="supplier" />
               <InputField label="Reference" name="reference" />
               <InputField label="Remarks" name="remarks" />
@@ -1457,16 +1461,16 @@ export default function FertiliserManagementPage() {
         {activeTab === "outgoing" ? (
           <Panel title="Outgoing Stock with FEFO Allocation" icon={Send}>
             <FormIntro text="Issue stock from the MFMS Preview database only. FEFO allocation is automatic: earliest valid expiry first, null-expiry batches last." />
-            {formErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{formErrors.form}</div> : null}
+            {outgoingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{outgoingStockErrors.form}</div> : null}
             <form onSubmit={submitOutgoingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField label="Date" name="transactionDate" type="date" error={formErrors.transaction_date} />
+              <InputField label="Date" name="transactionDate" type="date" error={outgoingStockErrors.transaction_date} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Product</span>
                 <select name="product" value={outgoingProductId} onChange={(event) => handleOutgoingProductChange(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
                   <option value="">Select product with valid stock</option>
                   {outgoingProductOptions}
                 </select>
-                <FieldError>{formErrors.product_id}</FieldError>
+                <FieldError>{outgoingStockErrors.product_id}</FieldError>
               </label>
               <div className="rounded-lg border border-border bg-muted/45 p-3 text-sm">
                 <p className="font-semibold text-foreground">Available Stock</p>
@@ -1475,15 +1479,15 @@ export default function FertiliserManagementPage() {
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">Expired, inactive, and zero-balance batches are excluded.</p>
               </div>
-              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={formErrors.quantity} />
+              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={outgoingStockErrors.quantity} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Unit</span>
                 <input name="unit" value={outgoingUnit} readOnly className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground outline-none" placeholder="Auto-filled from selected product" />
-                <FieldError>{formErrors.unit}</FieldError>
+                <FieldError>{outgoingStockErrors.unit}</FieldError>
               </label>
-              <SelectField label="Purpose" name="purpose" error={formErrors.purpose}><option value="">Select purpose</option>{fertiliserPurposes.map((purpose) => <option key={purpose} value={purpose}>{purpose}</option>)}</SelectField>
+              <SelectField label="Purpose" name="purpose" error={outgoingStockErrors.purpose}><option value="">Select purpose</option>{fertiliserPurposes.map((purpose) => <option key={purpose} value={purpose}>{purpose}</option>)}</SelectField>
               <InputField label="Crop (optional)" name="crop" />
-              <SelectField label="Plot / location" name="plotLocation" error={formErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+              <SelectField label="Plot / location" name="plotLocation" error={outgoingStockErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
               <InputField label="Remarks" name="remarks" />
               <div className="md:col-span-2">
                 <button type="submit" disabled={outgoingSubmitting || dataMode !== "live"} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
@@ -1515,9 +1519,9 @@ export default function FertiliserManagementPage() {
         {activeTab === "adjustment" ? (
           <Panel title="Stock Adjustment" icon={ClipboardList}>
             <FormIntro text="Record MFMS Preview stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation and excludes expired stock." />
-            {formErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{formErrors.form}</div> : null}
+            {stockAdjustmentErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{stockAdjustmentErrors.form}</div> : null}
             <form onSubmit={submitAdjustment} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField label="Date" name="transactionDate" type="date" error={formErrors.transaction_date} />
+              <InputField label="Date" name="transactionDate" type="date" error={stockAdjustmentErrors.transaction_date} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Adjustment Type</span>
                 <select name="adjustmentType" value={adjustmentType} onChange={(event) => { setAdjustmentType(event.target.value as "ADJUSTMENT_IN" | "ADJUSTMENT_OUT"); setAdjustmentResult(null) }} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
@@ -1531,7 +1535,7 @@ export default function FertiliserManagementPage() {
                   <option value="">Select product</option>
                   {adjustmentProductOptions}
                 </select>
-                <FieldError>{formErrors.product_id}</FieldError>
+                <FieldError>{stockAdjustmentErrors.product_id}</FieldError>
               </label>
               <div className="rounded-lg border border-border bg-muted/45 p-3 text-sm">
                 <p className="font-semibold text-foreground">Available Stock</p>
@@ -1540,13 +1544,13 @@ export default function FertiliserManagementPage() {
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">Adjustment Out uses only non-expired eligible stock.</p>
               </div>
-              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={formErrors.quantity} />
+              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={stockAdjustmentErrors.quantity} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Unit</span>
                 <input name="unit" value={adjustmentUnit} readOnly className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground outline-none" placeholder="Auto-filled from selected product" />
-                <FieldError>{formErrors.unit}</FieldError>
+                <FieldError>{stockAdjustmentErrors.unit}</FieldError>
               </label>
-              <InputField label="Reason" name="reason" error={formErrors.reason} />
+              <InputField label="Reason" name="reason" error={stockAdjustmentErrors.reason} />
               <InputField label="Remarks" name="remarks" />
               <div className="md:col-span-2">
                 <button type="submit" disabled={adjustmentSubmitting || dataMode !== "live"} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
@@ -1580,7 +1584,7 @@ export default function FertiliserManagementPage() {
         {activeTab === "requirements" ? (
           <Panel title="Future Requirements" icon={ClipboardList}>
             <FormIntro text="Create Preview planned requirements, move them through approval/order/receipt workflow, and receive stock against a linked requirement. Product and category writes remain disabled." />
-            {formErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{formErrors.form}</div> : null}
+            {futureRequirementErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{futureRequirementErrors.form}</div> : null}
             <div className="mt-5">
               <StatGrid>
                 <StatCard icon={ClipboardList} label="Total" value={requirementSummary.total} sublabel="Requirements" />
@@ -1592,29 +1596,29 @@ export default function FertiliserManagementPage() {
               </StatGrid>
             </div>
             <form onSubmit={submitRequirement} className="mt-5 grid grid-cols-1 gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-3">
-              <InputField label="Requirement date" name="requirementDate" type="date" error={formErrors.requirement_date} />
-              <InputField label="Required by date" name="requiredByDate" type="date" error={formErrors.required_by_date} />
+              <InputField label="Requirement date" name="requirementDate" type="date" error={futureRequirementErrors.requirement_date} />
+              <InputField label="Required by date" name="requiredByDate" type="date" error={futureRequirementErrors.required_by_date} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Product</span>
                 <select name="product" value={requirementProductId} onChange={(event) => handleRequirementProductChange(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
                   <option value="">Select product</option>
                   {requirementProductOptions}
                 </select>
-                <FieldError>{formErrors.product_id}</FieldError>
+                <FieldError>{futureRequirementErrors.product_id}</FieldError>
               </label>
-              <InputField label="Required quantity" name="requiredQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={formErrors.required_quantity} />
+              <InputField label="Required quantity" name="requiredQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={futureRequirementErrors.required_quantity} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Unit</span>
                 <input name="unit" value={requirementUnit} readOnly className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground outline-none" placeholder="Select product" />
-                <FieldError>{formErrors.unit}</FieldError>
+                <FieldError>{futureRequirementErrors.unit}</FieldError>
               </label>
-              <SelectField label="Priority" name="priority" error={formErrors.priority}><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></SelectField>
-              <InputField label="Purpose" name="purpose" error={formErrors.purpose} />
-              <SelectField label="Plot / Location" name="plotLocation" error={formErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+              <SelectField label="Priority" name="priority" error={futureRequirementErrors.priority}><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></SelectField>
+              <InputField label="Purpose" name="purpose" error={futureRequirementErrors.purpose} />
+              <SelectField label="Plot / Location" name="plotLocation" error={futureRequirementErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
               <InputField label="Crop" name="crop" />
               <InputField label="Planned application date" name="plannedApplicationDate" type="date" />
               <InputField label="Supplier" name="supplier" />
-              <InputField label="Estimated unit cost" name="estimatedUnitCost" type="number" step="0.01" min="0" inputMode="decimal" error={formErrors.estimated_unit_cost} />
+              <InputField label="Estimated unit cost" name="estimatedUnitCost" type="number" step="0.01" min="0" inputMode="decimal" error={futureRequirementErrors.estimated_unit_cost} />
               <InputField label="Remarks" name="remarks" />
               <div className="rounded-lg border border-border bg-muted/45 p-3 text-sm">
                 <p className="font-semibold text-foreground">Current Stock</p>
@@ -1687,15 +1691,15 @@ export default function FertiliserManagementPage() {
                         <tr className="border-b border-border bg-muted/30">
                           <td colSpan={12} className="px-3 py-3">
                             <form onSubmit={(event) => submitRequirementEdit(event, item)} className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                              <InputField label="Required by date" name="requiredByDate" type="date" defaultValue={item.required_by_date} error={formErrors.required_by_date} />
-                              <InputField label="Required quantity" name="requiredQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" defaultValue={item.required_quantity} error={formErrors.required_quantity} />
-                              <SelectField label="Priority" name="priority" defaultValue={item.priority} error={formErrors.priority}><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></SelectField>
-                              <InputField label="Purpose" name="purpose" defaultValue={item.purpose} error={formErrors.purpose} />
-                              <SelectField label="Plot / Location" name="plotLocation" defaultValue={item.plot_location} error={formErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+                              <InputField label="Required by date" name="requiredByDate" type="date" defaultValue={item.required_by_date} error={futureRequirementErrors.required_by_date} />
+                              <InputField label="Required quantity" name="requiredQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" defaultValue={item.required_quantity} error={futureRequirementErrors.required_quantity} />
+                              <SelectField label="Priority" name="priority" defaultValue={item.priority} error={futureRequirementErrors.priority}><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></SelectField>
+                              <InputField label="Purpose" name="purpose" defaultValue={item.purpose} error={futureRequirementErrors.purpose} />
+                              <SelectField label="Plot / Location" name="plotLocation" defaultValue={item.plot_location} error={futureRequirementErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
                               <InputField label="Crop" name="crop" defaultValue={item.crop ?? ""} />
                               <InputField label="Planned application date" name="plannedApplicationDate" type="date" defaultValue={item.planned_application_date ?? ""} />
                               <InputField label="Supplier" name="supplier" defaultValue={item.supplier_name ?? ""} />
-                              <InputField label="Estimated unit cost" name="estimatedUnitCost" type="number" step="0.01" min="0" inputMode="decimal" defaultValue={item.estimated_unit_cost ?? ""} error={formErrors.estimated_unit_cost} />
+                              <InputField label="Estimated unit cost" name="estimatedUnitCost" type="number" step="0.01" min="0" inputMode="decimal" defaultValue={item.estimated_unit_cost ?? ""} error={futureRequirementErrors.estimated_unit_cost} />
                               <InputField label="Remarks" name="remarks" defaultValue={item.remarks ?? ""} />
                               <div className="flex items-end gap-2 md:col-span-2">
                                 <button type="submit" disabled={requirementActionId === item.requirement_id} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">Save Planned Edit</button>
@@ -1709,10 +1713,10 @@ export default function FertiliserManagementPage() {
                         <tr className="border-b border-border bg-muted/30">
                           <td colSpan={12} className="px-3 py-3">
                             <form onSubmit={(event) => submitRequirementReceipt(event, item)} className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                              <InputField label="Receipt date" name="receiptDate" type="date" error={formErrors.receipt_date} />
-                              <InputField label="Received quantity" name="receivedQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={formErrors.received_quantity} />
+                              <InputField label="Receipt date" name="receiptDate" type="date" error={futureRequirementErrors.receipt_date} />
+                              <InputField label="Received quantity" name="receivedQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={futureRequirementErrors.received_quantity} />
                               <InputField label="Batch number" name="batchNumber" />
-                              <InputField label="Expiry date" name="expiryDate" type="date" error={formErrors.expiry_date} />
+                              <InputField label="Expiry date" name="expiryDate" type="date" error={futureRequirementErrors.expiry_date} />
                               <InputField label="Supplier" name="supplier" />
                               <InputField label="Reference" name="reference" />
                               <InputField label="Remarks" name="remarks" />
@@ -1785,12 +1789,12 @@ export default function FertiliserManagementPage() {
               <form onSubmit={(event) => validateDisabledMasterForm(event, activeModal === "product" ? "Product" : "Category")} className="space-y-4">
                 {activeModal === "product" ? (
                   <>
-                    <InputField label="Product name" name="productName" error={formErrors.productName} />
-                    <SelectField label="Category" name="category" error={formErrors.category}><option value="">Select category</option>{fertiliserCategories.map((category) => <option key={category} value={category}>{category}</option>)}</SelectField>
+                    <InputField label="Product name" name="productName" error={masterFormErrors.productName} />
+                    <SelectField label="Category" name="category" error={masterFormErrors.category}><option value="">Select category</option>{fertiliserCategories.map((category) => <option key={category} value={category}>{category}</option>)}</SelectField>
                     <SelectField label="Unit" name="unit"><option value="">Select unit</option>{fertiliserUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</SelectField>
                   </>
                 ) : (
-                  <InputField label="Category name" name="categoryName" error={formErrors.categoryName} />
+                  <InputField label="Category name" name="categoryName" error={masterFormErrors.categoryName} />
                 )}
                 <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">This modal validates only. It will not create a product/category until a later database-backed batch is approved.</div>
                 <SubmitRow />

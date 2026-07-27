@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node tests/well-water-authoritative-daily-values.mjs",
+    "test": "node tests/well-water-authoritative-daily-values.mjs && node tests/preview-targeted-repair.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },
