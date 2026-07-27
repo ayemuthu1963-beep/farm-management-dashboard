@@ -1,0 +1,13 @@
+Preview Harvest:
+DISABLED
+
+Preview Well Water:
+30 3,13 * * * /home/muthu/muthu-harvest-dashboard/scripts/run_preview_well_water_sync.sh >> /home/muthu/mfms_logs/preview_well_water_sync.log 2>&1
+
+Preview Beetle:
+30 6 * * * /home/muthu/muthu-harvest-dashboard/scripts/run_preview_beetle_sync.sh >> /home/muthu/mfms_logs/preview_beetle_sync.log 2>&1
+
+Other existing schedule (not managed by frontend deployment):
+30 0 * * * /home/muthu/muthu-harvest-dashboard/scripts/run_beetle_sync_daily.sh >> /home/muthu/mfms_logs/beetle_sync_cron.log 2>&1
+
+Cron changes require a separately declared deployment scope. Frontend deployment must never rewrite cron.

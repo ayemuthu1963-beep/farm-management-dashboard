@@ -1,0 +1,26 @@
+{
+  "environment": "preview",
+  "frontend": {
+    "commit": "77a7eac4f21869af456dac81d83536d6c4103ca4",
+    "image": "mfms-v0-preview:manual-harvest-sync-77a7eac-20260727-201952",
+    "image_id": "sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e"
+  },
+  "backend": {
+    "commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+    "image": "muthu-harvest-dashboard-harvest-api:preview-detailed-query-7ea2456-20260727-140654",
+    "image_id": "sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006"
+  },
+  "database": "mfms_server_uat",
+  "compatible_schema": "harvest schema through Well Water migration 004 plus runtime-managed Preview admin tables",
+  "required_environment_variables": [
+    "HARVEST_API_BASE_URL",
+    "HARVEST_API_USERNAME",
+    "HARVEST_API_PASSWORD",
+    "DATABASE_URL",
+    "API_ADMIN_USERNAME",
+    "API_ADMIN_PASSWORD"
+  ],
+  "api_contract_version": "preview-2026-07-27-detailed-query-v1",
+  "migration_version": "004_well_water_calculation_methods plus approved runtime schema guards",
+  "test_result": "verified running combination; route and live-data contracts recorded in checkpoint"
+}
