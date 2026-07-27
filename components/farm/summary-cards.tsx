@@ -29,8 +29,8 @@ function StatCard({ stat }: { stat: SummaryStat }) {
         <p className="text-[11px] leading-tight text-muted-foreground">{stat.label}</p>
         {stat.value === null ? (
           <>
-            <p className="mt-1 text-sm font-semibold leading-snug text-amber-700">{stat.warning}</p>
-            <p className="text-[11px] text-muted-foreground">Calculated litres hidden</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">—</p>
+            <p className="text-[11px] text-muted-foreground">{stat.warning ?? "Unavailable"}</p>
           </>
         ) : (
           <>

@@ -10,7 +10,7 @@ const columns = [
   { key: "morningWater", label: "Morning Water", unit: "(Litres)" },
   { key: "eveningWater", label: "Evening Water", unit: "(Litres)" },
   { key: "waterPumpedOut", label: "Water Pumped Out", unit: "(Litres)" },
-  { key: "rechargedSinceYesterday", label: "Recharged Since Yesterday", unit: "(Litres)" },
+  { key: "estimatedRecharge", label: "Estimated Recharge", unit: "(Litres)" },
 ] as const
 
 const remarkStyles: Record<string, string> = {
@@ -55,7 +55,7 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
               <td className="px-3 py-3 text-foreground">{record.morningWaterDisplay}</td>
               <td className="px-3 py-3 text-foreground">{record.eveningWaterDisplay}</td>
               <td className="px-3 py-3 text-foreground">{formatLitres(record.waterPumpedOut)}</td>
-              <td className="px-3 py-3 text-foreground">{formatLitres(record.rechargedSinceYesterday)}</td>
+              <td className="px-3 py-3 text-foreground">{formatLitres(record.estimatedRecharge)}</td>
               <td className="px-3 py-3">
                 <span
                   className={cn(
