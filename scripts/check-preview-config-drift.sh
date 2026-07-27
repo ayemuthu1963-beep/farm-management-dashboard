@@ -41,6 +41,14 @@ check well_wrapper executable "$(remote "test -x /home/muthu/muthu-harvest-dashb
 check beetle_wrapper executable "$(remote "test -x /home/muthu/muthu-harvest-dashboard/scripts/run_preview_beetle_sync.sh && echo executable || echo not-executable")"
 check harvest_wrapper executable "$(remote "test -x /home/muthu/muthu-harvest-dashboard/scripts/run_preview_harvest_sync.sh && echo executable || echo not-executable")"
 
-if remote "crontab -u root -l >/dev/null 2>&1"; then echo "MATCH|root_crontab|inspected"; else echo "UNVERIFIED DUE TO PRIVILEGE|root_crontab"; unverified=1; fi
+root_record="$(dirname "$manifest")/root-crontab-verification.txt"
+if [[ -f "$root_record" ]] && grep -Fqx 'VERIFIED — ROOT HAS NO CRONTAB' "$root_record"; then
+  echo "MATCH|root_crontab|VERIFIED — ROOT HAS NO CRONTAB"
+elif remote "crontab -u root -l >/dev/null 2>&1"; then
+  echo "MATCH|root_crontab|inspected"
+else
+  echo "UNVERIFIED DUE TO PRIVILEGE|root_crontab"
+  unverified=1
+fi
 echo "SUMMARY|critical_drift=$critical|unverified=$unverified"
 [[ $critical -eq 0 ]] || { echo "DEPLOYMENT BLOCKED — CRITICAL PREVIEW CONFIGURATION DRIFT" >&2; exit 1; }

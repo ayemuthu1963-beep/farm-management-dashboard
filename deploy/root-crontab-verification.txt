@@ -1,0 +1,6 @@
+VERIFIED — ROOT HAS NO CRONTAB
+Method: sudo crontab -l
+Result supplied by the user: no crontab for root
+Root Preview Harvest schedule: absent
+Root Preview Well Water schedule: absent
+Duplicate privileged scheduler: absent

@@ -30,3 +30,18 @@ Entries are append-only. Never edit or delete an older entry.
 - Configuration drift: zero critical drift; private root crontab unverified due privilege.
 - Candidate-container workflow: dry-run passed; no candidate or public container was started or replaced.
 - Final verdict: framework complete; direct v0/older/non-ancestor deployment blocked.
+
+## 2026-07-27 — Administrative finalisation
+
+- Root scheduler attestation supplied by the user: `sudo crontab -l` returned `no crontab for root`.
+- Root crontab status: `VERIFIED — ROOT HAS NO CRONTAB`.
+- Root Preview Harvest schedule: absent.
+- Root Preview Well Water schedule: absent.
+- Duplicate privileged scheduler: absent.
+- User `muthu` Preview Harvest automatic sync: disabled.
+- User `muthu` Preview Well Water schedule: `30 3,13 * * *`.
+- Beetle schedules: unchanged.
+- Deployed frontend application remains `77a7eac4f21869af456dac81d83536d6c4103ca4` at image `sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e`.
+- Frontend safety-framework head before this administrative commit: `f8b923ac5ac9b74b2a5b54c1edf43c5eb957c937`; it was not deployed.
+- Deployed and release backend commit: `7ea2456642a8fb62d5d640c379c3f1642f654bce`.
+- Public Preview deployment: unchanged.

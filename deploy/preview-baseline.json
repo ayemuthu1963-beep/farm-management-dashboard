@@ -1,9 +1,14 @@
 {
   "environment": "preview",
   "frontend_commit": "77a7eac4f21869af456dac81d83536d6c4103ca4",
+  "deployed_frontend_application_commit": "77a7eac4f21869af456dac81d83536d6c4103ca4",
+  "frontend_release_branch_head_at_framework_verification": "f8b923ac5ac9b74b2a5b54c1edf43c5eb957c937",
+  "latest_framework_commit": "f8b923ac5ac9b74b2a5b54c1edf43c5eb957c937",
   "frontend_image": "mfms-v0-preview:manual-harvest-sync-77a7eac-20260727-201952",
   "frontend_image_id": "sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e",
   "backend_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+  "deployed_backend_application_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+  "backend_release_branch_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
   "backend_image": "muthu-harvest-dashboard-harvest-api:preview-detailed-query-7ea2456-20260727-140654",
   "backend_image_id": "sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006",
   "database": "mfms_server_uat",
@@ -16,6 +21,12 @@
     "preview_harvest_auto_sync": "disabled",
     "preview_well_water": "30 3,13 * * *",
     "preview_beetle": "30 6 * * *"
+  },
+  "scheduler_verification": {
+    "root_crontab": "VERIFIED — ROOT HAS NO CRONTAB",
+    "root_preview_harvest_schedule": "absent",
+    "root_preview_well_water_schedule": "absent",
+    "duplicate_privileged_scheduler": "absent"
   },
   "updated_at": "2026-07-27T20:45:46+05:30"
 }

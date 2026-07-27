@@ -5,6 +5,8 @@ frontend:deploy/approved-change-scope.txt
 frontend:deploy/preview-schedules.txt
 frontend:deploy/PREVIEW_DEPLOYMENT_LEDGER.md
 frontend:deploy/preview-release-20260727-201952.json
+frontend:deploy/CURRENT_CONFIGURATION_AUDIT.md
+frontend:deploy/root-crontab-verification.txt
 frontend:docs/V0_HANDOFF_AND_DEPLOYMENT_POLICY.md
 frontend:docs/MFMS_PREVIEW_RELEASE_WORKFLOW.md
 frontend:scripts/verify-preview-deployment-candidate.sh
