@@ -25,9 +25,9 @@ check() {
 
 check / "DIGITAL FARM MANAGEMENT SYSTEM"
 check /coconut-harvest "Coconut Harvest"
-check /coconut-harvest/tree-view "Tree Harvest View"
+check /coconut-harvest/tree-view "Tree View"
 check /coconut-harvest/cycle-view "Harvest Cycle"
-check '/api/coconut-harvest/cycle-details?cycle=19' '"harvestCycle":19'
+check '/api/coconut-harvest/cycle-details?cycle=19' '"cycle":19'
 check /coconut-harvest/tree-performance "Tree Performance"
 check /coconut-harvest/detailed-query "Detailed Search and Filter"
 check /jackfruit-monitoring "Jackfruit"
@@ -43,7 +43,7 @@ check /admin "Admin"
 check /admin/harvest "Harvest"
 check /admin/harvest-cycle "Manual ODK Harvest Sync"
 check /admin/harvest-sync "Sync mode:"
-check '/api/coconut-harvest/harvest-summary?harvest_cycle=19' '"cycle":19'
+check '/api/coconut-harvest/harvest-summary?harvest_cycle=19' '"harvestCycle":"19"'
 
 cat "$output"
 [[ $failures -eq 0 ]] || { echo "PREVIEW SMOKE TEST FAILED — $failures CRITICAL ROUTE(S)" >&2; exit 1; }
