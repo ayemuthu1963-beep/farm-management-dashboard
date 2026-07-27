@@ -25,10 +25,11 @@ export default function CoconutCountingRedesignPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <CoconutHeader />
+    <div className="min-h-screen bg-gray-100 flex justify-center">
+      <div className="w-full max-w-sm">
+        <CoconutHeader />
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        <main className="px-3 py-4 space-y-4">
         {/* Four counting tiles - 2x2 grid */}
         <div className="grid grid-cols-2 gap-4">
           <CountTile
@@ -77,6 +78,7 @@ export default function CoconutCountingRedesignPage() {
         {/* Action buttons */}
         <ActionButtons />
       </main>
+      </div>
     </div>
   )
 }
