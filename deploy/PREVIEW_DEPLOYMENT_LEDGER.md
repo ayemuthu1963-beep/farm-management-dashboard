@@ -19,3 +19,14 @@ Entries are append-only. Never edit or delete an older entry.
 - Rollback: unchanged immutable running images above.
 - Approver: user request in this task.
 - Verdict: pending final dry-run result.
+
+### Framework verification result — 2026-07-27 21:00 IST
+
+- Governance commits: `11acf8d30f28ed1f0661f909d74b8fb4409cccfe`, `d88810fcb0a8cbd9bdd8c27da8b95f8315f988d2`, `4e3eaa2553b9c4227b3aacbab853b8267e085dc3`.
+- Positive ancestry, clean-worktree and allowlist gate: passed.
+- Older candidate `910adce1b0a84ac8263658387eccab7ff55bbb6d`: blocked because it does not contain deployed frontend `77a7eac4f21869af456dac81d83536d6c4103ca4`.
+- Mandatory route smoke test: 21/21 passed against the unchanged public Preview container.
+- Live-data contracts: passed.
+- Configuration drift: zero critical drift; private root crontab unverified due privilege.
+- Candidate-container workflow: dry-run passed; no candidate or public container was started or replaced.
+- Final verdict: framework complete; direct v0/older/non-ancestor deployment blocked.
