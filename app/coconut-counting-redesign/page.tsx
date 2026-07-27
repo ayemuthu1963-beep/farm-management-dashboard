@@ -2,6 +2,7 @@
 
 import { CoconutHeader } from '@/components/coconut-counting-redesign/header'
 import { CountTile } from '@/components/coconut-counting-redesign/count-tile'
+import { ABCounterRow } from '@/components/coconut-counting-redesign/ab-counter-row'
 import { TotalTiles } from '@/components/coconut-counting-redesign/total-tiles'
 import { LowerPanel } from '@/components/coconut-counting-redesign/lower-panel'
 import { ActionButtons } from '@/components/coconut-counting-redesign/action-buttons'
@@ -58,6 +59,12 @@ export default function CoconutCountingRedesignPage() {
           />
         </div>
 
+        {/* A counter and B counter row */}
+        <ABCounterRow
+          counterA={mockData.counterA}
+          counterB={mockData.counterB}
+        />
+
         {/* Totals row */}
         <TotalTiles
           totalA={mockData.totalA}
@@ -68,8 +75,6 @@ export default function CoconutCountingRedesignPage() {
         {/* Lower panel with input and counters */}
         <LowerPanel
           totalNutsHarvested={mockData.totalNutsHarvested}
-          counterA={mockData.counterA}
-          counterB={mockData.counterB}
           counterA1={mockData.counterA1}
           counterB1={mockData.counterB1}
           counterB2={mockData.counterB2}
