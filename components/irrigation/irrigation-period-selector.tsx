@@ -15,15 +15,39 @@ const periodOptions = [
 ]
 
 interface IrrigationPeriodSelectorProps {
+<<<<<<< HEAD
+  onDateChange?: (dateStr: string) => void
+}
+
+export function IrrigationPeriodSelector({ onDateChange }: IrrigationPeriodSelectorProps) {
+  const [activePeriod, setActivePeriod] = useState("today")
+=======
   onPeriodChange: (query: string) => void
   onRefresh: () => void
 }
 
 export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: IrrigationPeriodSelectorProps) {
   const [activePeriod, setActivePeriod] = useState("last7")
+>>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
   const [showCustom, setShowCustom] = useState(false)
-  const [startDate, setStartDate] = useState("2026-07-13")
-  const [endDate, setEndDate] = useState("2026-07-13")
+  const [startDate, setStartDate] = useState("2026-07-16")
+  const [endDate, setEndDate] = useState("2026-07-16")
+
+  const handlePeriodChange = (periodId: string) => {
+    setActivePeriod(periodId)
+    if (periodId !== "custom") {
+      setShowCustom(false)
+      // Update date based on period
+      if (periodId === "today") {
+        onDateChange?.("2026-07-16")
+      } else if (periodId === "yesterday") {
+        onDateChange?.("2026-07-15")
+      }
+      // Other periods would typically require a date range, but we focus on single dates for now
+    } else {
+      setShowCustom(true)
+    }
+  }
 
   function applyPeriod(periodId: string) {
     setActivePeriod(periodId)
@@ -65,7 +89,11 @@ export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: Irrigati
             <button
               key={period.id}
               type="button"
+<<<<<<< HEAD
+              onClick={() => handlePeriodChange(period.id)}
+=======
               onClick={() => applyPeriod(period.id)}
+>>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm font-semibold transition-colors",
                 activePeriod === period.id
@@ -107,7 +135,11 @@ export function IrrigationPeriodSelector({ onPeriodChange, onRefresh }: Irrigati
             </div>
             <button
               type="button"
+<<<<<<< HEAD
+              onClick={() => onDateChange?.(startDate)}
+=======
               onClick={applyCustomRange}
+>>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Apply
