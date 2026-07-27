@@ -30,29 +30,29 @@ export default function CoconutCountingRedesignPage() {
       <div className="w-full max-w-sm">
         <CoconutHeader />
 
-        <main className="px-3 py-4 space-y-4">
+        <main className="px-2 py-2 space-y-2">
         {/* Four counting tiles - 2x2 grid */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-2">
           <CountTile
-            title="GRADE A — 200"
+            title="GRADE A — 200 (A1)"
             grade="A"
             count={mockData.gradeA200}
             variant="fixed"
           />
           <CountTile
-            title="GRADE B — 200"
+            title="GRADE B — 200 (B1)"
             grade="B"
             count={mockData.gradeB200}
             variant="fixed"
           />
           <CountTile
-            title="GRADE A — 1 TO 99 PAIRS"
+            title="GRADE A — 1 TO 99 PAIRS (A2)"
             grade="A"
             count={mockData.gradeA99}
             variant="manual"
           />
           <CountTile
-            title="GRADE B — 1 TO 99 PAIRS"
+            title="GRADE B — 1 TO 99 PAIRS (B2)"
             grade="B"
             count={mockData.gradeB99}
             variant="manual"
