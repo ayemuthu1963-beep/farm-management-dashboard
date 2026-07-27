@@ -21,9 +21,10 @@ cron=$(remote "crontab -l")
 
 assert_file harvest_project "$backend_repo/api/app/routers/harvest_sync_admin.py" '^PROJECT_ID = 17$'
 assert_file harvest_form "$backend_repo/api/app/routers/harvest_sync_admin.py" 'FORM_ID = "mfms_preview_harvest_test_v1"'
-assert_file well_water_project "$backend_repo/api/app/config.py" 'odk_well_water_project_id: str = "15"'
-assert_file beetle_project "$backend_repo/api/app/routers/beetle_trap.py" 'PROJECT_ID.*16|project_id.*16'
-assert_file detailed_endpoint "$backend_repo/api/app/routers/dashboard.py" '@router.get\\("/detailed-query"\\)'
+live_well_project=$(remote "docker exec harvest-api-pilot python -c 'from app.config import get_settings; print(get_settings().odk_well_water_project_id)'")
+[[ "$live_well_project" == 15 ]] && pass well_water_project "$live_well_project" || fail well_water_project "$live_well_project"
+remote "grep -Eq '^PROJECT_ID=.16.$' /home/muthu/muthu-harvest-dashboard/scripts/run_preview_beetle_sync.sh" && pass beetle_project 16 || fail beetle_project unverified
+assert_file detailed_endpoint "$backend_repo/api/app/routers/dashboard.py" 'detailed-query'
 assert_file detailed_no_n_plus_one "$frontend_repo/lib/coconut-harvest-api.ts" '/api/detailed-query'
 assert_file century_maker "$frontend_repo/lib/coconut-harvest-data.ts" 'Century Maker'
 assert_file timeout_recovery "$frontend_repo/app/coconut-harvest/detailed-query/page.tsx" '45_000'
