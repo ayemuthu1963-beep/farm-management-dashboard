@@ -2,21 +2,21 @@
   "environment": "preview",
   "frontend_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
   "deployed_frontend_application_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
-  "frontend_release_branch_head_at_framework_verification": "01c79cd57bbd2ce15e297ae11269c77980baefff",
-  "latest_framework_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
+  "frontend_release_branch_head_at_framework_verification": "42cf0ba0709ce4ac6a54507f38238035e1f4f143",
+  "latest_framework_commit": "42cf0ba0709ce4ac6a54507f38238035e1f4f143",
   "frontend_image": "mfms-v0-preview:morning-difference-01c79cd-20260728-0925",
   "frontend_image_id": "sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135",
-  "backend_commit": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
-  "deployed_backend_application_commit": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
-  "backend_release_branch_head": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
+  "backend_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+  "deployed_backend_application_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+  "backend_release_branch_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
   "backend_repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
   "backend_repository_url": "https://github.com/ayemuthu1963-beep/muthu-harvest-dashboard.git",
   "backend_release_branch": "preview-release",
-  "backend_remote_release_head": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
+  "backend_remote_release_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
   "backend_upstream": "origin/preview-release",
   "backend_ahead_behind": "0/0",
-  "backend_image": "muthu-harvest-dashboard-harvest-api:preview-morning-difference-43d4bdf-20260728-0925",
-  "backend_image_id": "sha256:3e943a02a93f7e9e72bed9eda1b520637aee9af00b90554919cd74e170602eb9",
+  "backend_image": "muthu-harvest-dashboard-harvest-api:preview-south-well-reference-ca03f1d-20260728-1000",
+  "backend_image_id": "sha256:62789947311cc6af0b825c4cee76928419ed0cfb5f4144bffeb17c3420c3eb01",
   "database": "mfms_server_uat",
   "odk_projects": {
     "harvest": 17,
@@ -37,5 +37,5 @@
   "archive_backups": {
     "detailed_query_backend_baseline": "C:\\MFMS_LOCAL\\backups\\backend-source-baselines\\dq-backend-baseline-source.tar.gz"
   },
-  "updated_at": "2026-07-28T09:40:00+05:30"
+  "updated_at": "2026-07-28T10:10:00+05:30"
 }

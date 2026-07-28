@@ -79,6 +79,24 @@ Entries are append-only. Never edit or delete an older entry.
 - Approver: user request in this task.
 - Verdict: passed.
 
+## 2026-07-28 10:10 IST — South Well 74-foot reference correction
+
+- Purpose: interpret South Well ODK feet/inches as a downward tape reading from the fixed 74-foot reference and derive morning/evening water depth and volume dynamically.
+- Approved backend scope: `api/app/services/well_water_dashboard.py`, `api/app/routers/well_water.py`, `scripts/sync_well_water_odk.py`, and `tests/test_well_water_dashboard.py`.
+- Frontend: unchanged at deployed application commit `01c79cd57bbd2ce15e297ae11269c77980baefff`, image `mfms-v0-preview:morning-difference-01c79cd-20260728-0925`, ID `sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135`.
+- Previous backend: commit `43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4`, image `muthu-harvest-dashboard-harvest-api:preview-morning-difference-43d4bdf-20260728-0925`, ID `sha256:3e943a02a93f7e9e72bed9eda1b520637aee9af00b90554919cd74e170602eb9`.
+- New backend: commit `ca03f1dc7dff71a58f4e2d3badda754f979efe03`, image `muthu-harvest-dashboard-harvest-api:preview-south-well-reference-ca03f1d-20260728-1000`, ID `sha256:62789947311cc6af0b825c4cee76928419ed0cfb5f4144bffeb17c3420c3eb01`.
+- Formula: South actual depth inches = `888 - tape_reading_total_inches`; precise litres per inch = configured `632,531 / 486 = 1,301.504115226337...`; only final public values are rounded.
+- Database: `mfms_server_uat`; 18 South raw readings, zero North readings; no schema, configuration, raw ODK, or row changes.
+- Historical reconciliation: all 18 South rows recalculated dynamically; zero invalid and zero capacity-conflict readings; North API payload unchanged.
+- Tests: 28 backend tests passed, including all requested boundaries, invalid/conflict handling, morning/evening values, motor-derived pumped-out value, consecutive morning differences, and North separation. Frontend regression/export and typecheck passed.
+- Live UI: South 28 July morning `317,567 L`, 27 July evening `295,441 L`, differences `−2,603`, `+1,302`, and `0` displayed; North remains unavailable.
+- Migration and cron changes: none; Preview Harvest automatic sync remains disabled, Well Water remains `30 3,13 * * *`, and Beetle remains unchanged.
+- Checkpoint: `/home/muthu/mfms_checkpoints/preview-south-well-reference-prechange-20260728-042538/`.
+- Rollback: restore retained container `harvest-api-pilot-pre-south-well-reference-20260728-1005`, or recreate only the backend from image ID `sha256:3e943a02a93f7e9e72bed9eda1b520637aee9af00b90554919cd74e170602eb9`.
+- Approver: user request in this task.
+- Verdict: passed.
+
 ## 2026-07-28 09:40 IST — Difference in Morning Readings
 
 - Purpose: replace the misleading Estimated Recharge measure with the signed difference between valid morning water volumes on consecutive calendar dates, independently for each well.
