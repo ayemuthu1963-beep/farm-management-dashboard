@@ -79,6 +79,25 @@ Entries are append-only. Never edit or delete an older entry.
 - Approver: user request in this task.
 - Verdict: passed.
 
+## 2026-07-28 09:40 IST — Difference in Morning Readings
+
+- Purpose: replace the misleading Estimated Recharge measure with the signed difference between valid morning water volumes on consecutive calendar dates, independently for each well.
+- Approved frontend scope: `app/well-water/page.tsx`, `components/farm/summary-cards.tsx`, `components/farm/well-chart.tsx`, `components/farm/well-table.tsx`, `lib/home-data.ts`, `lib/well-data.ts`, and `tests/well-water-authoritative-daily-values.mjs`.
+- Approved backend scope: `api/app/routers/well_water.py`, `api/app/services/well_water_dashboard.py`, and `tests/test_well_water_dashboard.py`.
+- Previous frontend: commit `e71e6da0cfb3adaa06b87b2a54ac5aa3f3f8d6b6`; deployed image `mfms-v0-preview:manual-harvest-sync-77a7eac-20260727-201952`, ID `sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e`.
+- New frontend: commit `01c79cd57bbd2ce15e297ae11269c77980baefff`; image `mfms-v0-preview:morning-difference-01c79cd-20260728-0925`, ID `sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135`.
+- Previous backend: commit `b594ff60e9509ae01b5b352ae3a9879a8fc2ab1b`; image `muthu-harvest-dashboard-harvest-api:preview-well1-precision-b594ff6-20260728-0850`, ID `sha256:b898c63f0f40b1414862bdafb48b4eb5672956cd267efe966cf73a5ade9567f4`.
+- New backend: commit `43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4`; image `muthu-harvest-dashboard-harvest-api:preview-morning-difference-43d4bdf-20260728-0925`, ID `sha256:3e943a02a93f7e9e72bed9eda1b520637aee9af00b90554919cd74e170602eb9`.
+- Formula: current date valid morning water litres minus the immediately preceding calendar date valid morning water litres for the same well; unavailable comparisons return `null`.
+- Database: `mfms_server_uat`; no schema, configuration, raw submission, or row changes.
+- Migration and cron changes: none; Preview Harvest automatic sync remains disabled, Well Water remains `30 3,13 * * *`, and Beetle remains unchanged.
+- Tests: 22 backend tests passed; frontend tests, typecheck, and production build passed; candidate and live API results were South `−2,600`, `+1,300`, `0`, `−1,300`, while deleted North history remained unavailable.
+- Live UI: exact table label, signed values, chart zero line and Morning Difference legend verified; CSV export contract passed; old terminology absent.
+- Checkpoint: `/home/muthu/mfms_checkpoints/preview-well-morning-difference-prechange-20260728-091150/`.
+- Rollback: restore retained containers `mfms-pilot-web-pre-morning-difference-20260728-0938` and `harvest-api-pilot-pre-morning-difference-20260728-0938`, or rebuild only the prior immutable images listed above.
+- Approver: user request in this task.
+- Verdict: passed.
+
 ## 2026-07-28 08:58 IST — Well 1 precision correction
 
 - Purpose: remove the rounded 1,650-litre internal multiplier for Well 1 and derive the precise conversion from approved full capacity divided by the 684-inch full-water column.

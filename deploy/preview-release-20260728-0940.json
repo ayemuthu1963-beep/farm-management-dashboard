@@ -1,0 +1,33 @@
+{
+  "environment": "preview",
+  "frontend": {
+    "deployed_application_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
+    "release_branch_head": "01c79cd57bbd2ce15e297ae11269c77980baefff",
+    "repository": "ayemuthu1963-beep/farm-management-dashboard",
+    "branch": "preview-release",
+    "remote_head": "01c79cd57bbd2ce15e297ae11269c77980baefff",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
+    "image": "mfms-v0-preview:morning-difference-01c79cd-20260728-0925",
+    "image_id": "sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135",
+    "changed": true
+  },
+  "backend": {
+    "deployed_application_commit": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
+    "release_branch_head": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
+    "repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+    "branch": "preview-release",
+    "remote_head": "43d4bdf1780e4ee0d84fe2669cf34fa4148dc4f4",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
+    "image": "muthu-harvest-dashboard-harvest-api:preview-morning-difference-43d4bdf-20260728-0925",
+    "image_id": "sha256:3e943a02a93f7e9e72bed9eda1b520637aee9af00b90554919cd74e170602eb9"
+  },
+  "database": "mfms_server_uat",
+  "compatible_schema": "unchanged from the prior verified Preview release",
+  "api_contract_version": "preview-2026-07-28-morning-reading-difference-v1",
+  "migration_version": "none",
+  "configuration_changes": "none",
+  "test_result": "22 backend tests and all frontend regression/type/build tests passed; isolated candidates and live Preview API/UI verified",
+  "checkpoint": "/home/muthu/mfms_checkpoints/preview-well-morning-difference-prechange-20260728-091150/"
+}
