@@ -57,7 +57,7 @@ export const moduleCards: ModuleCardData[] = [
   {
     id: "well-water-level",
     title: "Well Water Level",
-    description: "Daily well readings, pumping & recharge",
+    description: "Daily well readings, pumping and morning differences",
     icon: "/mfms/icons/well-water-level.png",
     href: "/well-water",
     ctaLabel: "Open Dashboard",

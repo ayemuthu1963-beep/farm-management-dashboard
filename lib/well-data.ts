@@ -1,7 +1,8 @@
 // ============================================================================
 // WELL WATER DASHBOARD DATA CONTRACT
 // The backend daily rows are authoritative for water volume, motor-pumped water,
-// and estimated recharge. The frontend formats values but does not recalculate
+// and the difference between consecutive calendar-date morning readings.
+// The frontend formats values but does not recalculate
 // well-water business logic.
 // ============================================================================
 
@@ -18,7 +19,7 @@ export interface WellDailyApiRow {
   motor_runtime_minutes: number
   water_pumped_out_liters: number | null
   observed_storage_change_liters: number | null
-  estimated_recharge_liters: number | null
+  difference_in_morning_readings_litres: number | null
   remarks: string
   reading_count: number
   morning_reading_id: number | null
@@ -51,7 +52,7 @@ export interface WellDailyRecord {
   motorRuntimeMinutes: number
   waterPumpedOut: number | null
   observedStorageChange: number | null
-  estimatedRecharge: number | null
+  differenceInMorningReadings: number | null
   remarks: string
   configurationWarning?: string
 }
@@ -79,7 +80,7 @@ export interface ChartPoint {
   morningWater: number | null
   eveningWater: number | null
   pumpedOut: number | null
-  recharged: number | null
+  morningDifference: number | null
 }
 
 const WELL_NAME_BY_ID: Record<WellId, string> = {
@@ -100,11 +101,11 @@ export const emptyWellDashboardData: WellDashboardData = {
     { well: "North Well", wellId: "north", label: "Avg Morning Water", value: 0, icon: "drop" },
     { well: "North Well", wellId: "north", label: "Avg Evening Water", value: 0, icon: "drop-alt" },
     { well: "North Well", wellId: "north", label: "Total Pumped Out", value: 0, icon: "pump" },
-    { well: "North Well", wellId: "north", label: "Estimated Recharge", value: 0, icon: "recharge" },
+    { well: "North Well", wellId: "north", label: "Difference in Morning Readings", value: null, icon: "recharge" },
     { well: "South Well", wellId: "south", label: "Avg Morning Water", value: 0, icon: "drop" },
     { well: "South Well", wellId: "south", label: "Avg Evening Water", value: 0, icon: "drop-alt" },
     { well: "South Well", wellId: "south", label: "Total Pumped Out", value: 0, icon: "pump" },
-    { well: "South Well", wellId: "south", label: "Estimated Recharge", value: 0, icon: "recharge" },
+    { well: "South Well", wellId: "south", label: "Difference in Morning Readings", value: null, icon: "recharge" },
   ],
   totalReadings: 0,
   latestReadingDate: "--",
@@ -114,11 +115,18 @@ export const seriesConfig = [
   { key: "morningWater", label: "Morning Water", color: "var(--chart-1)" },
   { key: "eveningWater", label: "Evening Water", color: "var(--chart-2)" },
   { key: "pumpedOut", label: "Pumped Out", color: "var(--chart-3)" },
-  { key: "recharged", label: "Estimated Recharge", color: "var(--chart-4)" },
+  { key: "morningDifference", label: "Morning Difference", color: "var(--chart-4)" },
 ] as const
 
 export function formatNumberIN(num: number): string {
   return num.toLocaleString("en-IN")
+}
+
+export function formatSignedLitres(value: number | null, includeUnit = false): string {
+  if (value === null) return "—"
+  const rounded = Math.round(value)
+  const sign = rounded > 0 ? "+" : rounded < 0 ? "−" : ""
+  return `${sign}${formatNumberIN(Math.abs(rounded))}${includeUnit ? " L" : ""}`
 }
 
 function formatCapacity(liters: number | null | undefined): string {
@@ -179,7 +187,7 @@ function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
     motorRuntimeMinutes: row.motor_runtime_minutes,
     waterPumpedOut: row.water_pumped_out_liters,
     observedStorageChange: row.observed_storage_change_liters,
-    estimatedRecharge: row.estimated_recharge_liters,
+    differenceInMorningReadings: row.difference_in_morning_readings_litres,
     remarks: row.remarks,
     configurationWarning,
   }
@@ -219,8 +227,8 @@ function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
     {
       well,
       wellId,
-      label: "Estimated Recharge",
-      value: sumAvailable(records.map((record) => record.estimatedRecharge)),
+      label: "Difference in Morning Readings",
+      value: sumAvailable(records.map((record) => record.differenceInMorningReadings)),
       icon: "recharge",
       warning: "Unavailable",
     },
@@ -256,6 +264,38 @@ export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
       morningWater: record.morningWater,
       eveningWater: record.eveningWater,
       pumpedOut: record.waterPumpedOut,
-      recharged: record.estimatedRecharge,
+      morningDifference: record.differenceInMorningReadings,
     }))
+}
+
+function escapeCsv(value: string | number | null): string {
+  const text = value === null ? "" : String(value)
+  return `"${text.replaceAll('"', '""')}"`
+}
+
+export function buildWellWaterCsv(data: WellDashboardData): string {
+  const header = [
+    "Well",
+    "Date",
+    "Morning Water (Litres)",
+    "Evening Water (Litres)",
+    "Water Pumped Out (Litres)",
+    "Difference in Morning Readings (Litres)",
+    "Remarks",
+  ]
+  const rows = ([
+    ["North Well", data.northWellRecords],
+    ["South Well", data.southWellRecords],
+  ] as const).flatMap(([well, records]) =>
+    records.map((record) => [
+      well,
+      record.date,
+      record.morningWater,
+      record.eveningWater,
+      record.waterPumpedOut,
+      record.differenceInMorningReadings,
+      record.remarks,
+    ]),
+  )
+  return [header, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\r\n")
 }

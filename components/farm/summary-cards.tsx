@@ -1,5 +1,5 @@
 import { Droplet, Droplets, ArrowUpFromLine, RotateCw, type LucideIcon } from "lucide-react"
-import { formatNumberIN, type SummaryStat } from "@/lib/well-data"
+import { formatNumberIN, formatSignedLitres, type SummaryStat } from "@/lib/well-data"
 import { cn } from "@/lib/utils"
 
 const iconMap: Record<SummaryStat["icon"], LucideIcon> = {
@@ -34,7 +34,11 @@ function StatCard({ stat }: { stat: SummaryStat }) {
           </>
         ) : (
           <>
-            <p className="mt-1 text-2xl font-bold text-foreground">{formatNumberIN(Math.round(stat.value))}</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">
+              {stat.label === "Difference in Morning Readings"
+                ? formatSignedLitres(stat.value)
+                : formatNumberIN(Math.round(stat.value))}
+            </p>
             <p className="text-[11px] text-muted-foreground">Litres</p>
           </>
         )}

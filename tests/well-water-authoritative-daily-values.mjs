@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 
 import {
   buildWellDashboardData,
+  buildWellWaterCsv,
+  formatSignedLitres,
   toChartData,
 } from "../lib/well-data.ts"
 
@@ -17,7 +19,7 @@ const northDays = [
     motor_runtime_minutes: 74,
     water_pumped_out_liters: 61666.666666666664,
     observed_storage_change_liters: -1650,
-    estimated_recharge_liters: 60016.666666666664,
+    difference_in_morning_readings_litres: 25000,
     remarks: "Live Data",
     reading_count: 2,
     morning_reading_id: 88,
@@ -36,7 +38,7 @@ const northDays = [
     motor_runtime_minutes: 0,
     water_pumped_out_liters: 0,
     observed_storage_change_liters: null,
-    estimated_recharge_liters: null,
+    difference_in_morning_readings_litres: null,
     remarks: "Evening reading unavailable",
     reading_count: 1,
     morning_reading_id: 84,
@@ -58,7 +60,7 @@ const southDays = [
     motor_runtime_minutes: 180,
     water_pumped_out_liters: 150000,
     observed_storage_change_liters: -9100,
-    estimated_recharge_liters: 140900,
+    difference_in_morning_readings_litres: -1300,
     remarks: "Live Data",
     reading_count: 2,
     morning_reading_id: 87,
@@ -92,26 +94,43 @@ assert.equal(Math.round(southRecord.waterPumpedOut), 150000)
 assert.equal(northRecord.motorRuntimeMinutes, 74)
 assert.equal(northRecord.morningWater, 448470)
 assert.equal(northRecord.eveningWater, 446820)
-assert.equal(Math.round(northRecord.estimatedRecharge), 60017)
-assert.equal(southRecord.estimatedRecharge, 140900)
+assert.equal(northRecord.differenceInMorningReadings, 25000)
+assert.equal(southRecord.differenceInMorningReadings, -1300)
 
 assert.equal(northSingleReading.morningWaterDisplay, "4,48,470")
 assert.equal(northSingleReading.eveningWaterDisplay, "—")
-assert.equal(northSingleReading.estimatedRecharge, null)
+assert.equal(northSingleReading.differenceInMorningReadings, null)
+assert.equal(formatSignedLitres(25000, true), "+25,000 L")
+assert.equal(formatSignedLitres(-25000, true), "−25,000 L")
+assert.equal(formatSignedLitres(0, true), "0 L")
+assert.equal(formatSignedLitres(null, true), "—")
 
 const northStats = dashboard.summaryStats.filter((stat) => stat.wellId === "north")
 assert.equal(Math.round(northStats.find((stat) => stat.label === "Total Pumped Out").value), 61667)
-assert.equal(Math.round(northStats.find((stat) => stat.label === "Estimated Recharge").value), 60017)
+assert.equal(
+  northStats.find((stat) => stat.label === "Difference in Morning Readings").value,
+  25000,
+)
 
 const northChart = toChartData(dashboard.northWellRecords)
 assert.equal(northChart.at(-1).pumpedOut, northRecord.waterPumpedOut)
-assert.equal(northChart.at(-1).recharged, northRecord.estimatedRecharge)
+assert.equal(
+  northChart.at(-1).morningDifference,
+  northRecord.differenceInMorningReadings,
+)
+
+const csv = buildWellWaterCsv(dashboard)
+assert.match(csv, /Difference in Morning Readings \(Litres\)/)
+assert.match(csv, /"25000"/)
+assert.match(csv, /"-1300"/)
+assert.doesNotMatch(csv, /Estimated Recharge/i)
 
 const source = readFileSync(new URL("../lib/well-data.ts", import.meta.url), "utf8")
 assert.doesNotMatch(source, /morningWater\s*-\s*eveningWater/)
 assert.doesNotMatch(source, /eveningWater\s*-\s*morningWater/)
 assert.doesNotMatch(source, /50_?000/)
 assert.match(source, /row\.water_pumped_out_liters/)
-assert.match(source, /row\.estimated_recharge_liters/)
+assert.match(source, /row\.difference_in_morning_readings_litres/)
+assert.doesNotMatch(source, /estimated.?recharge/i)
 
 console.log("Well Water authoritative daily-value frontend regression passed")

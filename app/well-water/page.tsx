@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Droplet, Info } from "lucide-react"
+import { Download, Droplet, Info } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { DateRangeSelector } from "@/components/farm/date-range-selector"
@@ -9,6 +9,7 @@ import { WellSection } from "@/components/farm/well-section"
 import { SummaryCards } from "@/components/farm/summary-cards"
 import {
   buildWellDashboardData,
+  buildWellWaterCsv,
   emptyWellDashboardData,
   type WellDashboardData,
   type WellDashboardResponse,
@@ -19,6 +20,16 @@ export default function WellWaterPage() {
   const [data, setData] = useState<WellDashboardData>(emptyWellDashboardData)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  function exportCsv() {
+    const blob = new Blob([buildWellWaterCsv(data)], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "well-water-morning-differences.csv"
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   useEffect(() => {
     let isActive = true
@@ -63,16 +74,27 @@ export default function WellWaterPage() {
         <Header />
 
         {/* Page heading */}
-        <div className="flex items-start gap-3">
-          <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Droplet className="size-6" aria-hidden="true" />
-          </span>
-          <div>
-            <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">
-              Well Water Data
-            </h1>
-            <p className="text-sm text-muted-foreground">All figures in Litres</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Droplet className="size-6" aria-hidden="true" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">
+                Well Water Data
+              </h1>
+              <p className="text-sm text-muted-foreground">All figures in Litres</p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={isLoading || data.totalReadings === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="size-4" aria-hidden="true" />
+            Export CSV
+          </button>
         </div>
 
         {/* Date range (full width) */}
