@@ -1,11 +1,11 @@
 {
   "environment": "preview",
-  "frontend_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
-  "deployed_frontend_application_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
-  "frontend_release_branch_head_at_framework_verification": "42cf0ba0709ce4ac6a54507f38238035e1f4f143",
-  "latest_framework_commit": "42cf0ba0709ce4ac6a54507f38238035e1f4f143",
-  "frontend_image": "mfms-v0-preview:morning-difference-01c79cd-20260728-0925",
-  "frontend_image_id": "sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135",
+  "frontend_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "deployed_frontend_application_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "frontend_release_branch_head_at_framework_verification": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "latest_framework_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "frontend_image": "mfms-v0-preview:navigation-94baca4-20260728-1030",
+  "frontend_image_id": "sha256:c5c80b5e975216147bb541d26f6c6165583024bc9290b108aa1dd251ee2550e1",
   "backend_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
   "deployed_backend_application_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
   "backend_release_branch_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
@@ -37,5 +37,5 @@
   "archive_backups": {
     "detailed_query_backend_baseline": "C:\\MFMS_LOCAL\\backups\\backend-source-baselines\\dq-backend-baseline-source.tar.gz"
   },
-  "updated_at": "2026-07-28T10:10:00+05:30"
+  "updated_at": "2026-07-28T10:50:00+05:30"
 }

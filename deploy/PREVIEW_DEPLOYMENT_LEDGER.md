@@ -79,6 +79,24 @@ Entries are append-only. Never edit or delete an older entry.
 - Approver: user request in this task.
 - Verdict: passed.
 
+## 2026-07-28 10:50 IST — Homepage and sidebar navigation consistency
+
+- Purpose: make the 15 homepage tiles and module sidebar derive labels, icons, routes, order, and availability from one authoritative configuration.
+- Approved frontend scope: `lib/mfms-navigation.ts`, `lib/home-data.ts`, `components/farm/sidebar.tsx`, `components/farm/dashboard-shell.tsx`, `tests/navigation-consistency.mjs`, and the test script in `package.json`.
+- Previous frontend: deployed application commit `01c79cd57bbd2ce15e297ae11269c77980baefff`, image `mfms-v0-preview:morning-difference-01c79cd-20260728-0925`, ID `sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135`.
+- New frontend: commit `94baca49feda4b04c3bcdc76557ac30129370248`, image `mfms-v0-preview:navigation-94baca4-20260728-1030`, ID `sha256:c5c80b5e975216147bb541d26f6c6165583024bc9290b108aa1dd251ee2550e1`.
+- Backend: unchanged at commit `ca03f1dc7dff71a58f4e2d3badda754f979efe03`, image ID `sha256:62789947311cc6af0b825c4cee76928419ed0cfb5f4144bffeb17c3420c3eb01`.
+- Root cause: separate hard-coded Reports and Settings sidebar entries used `href="#"`; fragment navigation retained the current Coconut page. Farm Reports now shares its homepage Coming Soon route, and Settings is omitted because no homepage tile or route exists.
+- Homepage: exactly 15 existing tiles retained. Sidebar: Dashboard plus all 14 module tiles; no fragment links.
+- Coming Soon: existing Option C retained; Weather History, Farm Reports, and Worker Management show a Soon badge and link to `/under-construction`.
+- Tests: shared configuration, routes, labels/icons, active states, Coming Soon, desktop/mobile invariants, regression tests, TypeScript, and production build passed.
+- Live verification: all unique active and Coming Soon destinations returned HTTP 200; Coconut and Well Water active states passed; Farm Reports click opened `/under-construction`; Settings absent.
+- Database, backend, ODK, cron, and Production: unchanged.
+- Checkpoint: `/home/muthu/mfms_checkpoints/preview-navigation-consistency-prechange-20260728-102052/`.
+- Rollback: restore retained container `mfms-pilot-web-pre-navigation-20260728-1040`, or recreate only the frontend from image ID `sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135`.
+- Approver: user request in this task.
+- Verdict: passed.
+
 ## 2026-07-28 10:10 IST — South Well 74-foot reference correction
 
 - Purpose: interpret South Well ODK feet/inches as a downward tape reading from the fixed 74-foot reference and derive morning/evening water depth and volume dynamically.
