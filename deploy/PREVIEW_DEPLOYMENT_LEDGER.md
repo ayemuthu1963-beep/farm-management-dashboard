@@ -78,3 +78,20 @@ Entries are append-only. Never edit or delete an older entry.
 - Rollback: replace only `harvest-api-pilot` with retained container `harvest-api-pilot-pre-well1-20260728-0833` or prior immutable image ID `sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006`.
 - Approver: user request in this task.
 - Verdict: passed.
+
+## 2026-07-28 08:58 IST — Well 1 precision correction
+
+- Purpose: remove the rounded 1,650-litre internal multiplier for Well 1 and derive the precise conversion from approved full capacity divided by the 684-inch full-water column.
+- Approved scope: `api/app/services/well_water_dashboard.py`, `api/app/routers/well_water.py`, and `tests/test_well_water_dashboard.py`.
+- Previous frontend: unchanged at commit `77a7eac4f21869af456dac81d83536d6c4103ca4`, image ID `sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e`.
+- New frontend: unchanged; no frontend build or restart.
+- Previous backend: commit `c7a858946cfc0ff904611914c0ff63ca21746ce5`, image ID `sha256:0470047dd3cfaa92bc51a4ba3dd5537116b0e8e3ad9e36df377d7582d502e744`.
+- New backend: commit `b594ff60e9509ae01b5b352ae3a9879a8fc2ab1b`, image `muthu-harvest-dashboard-harvest-api:preview-well1-precision-b594ff6-20260728-0850`, ID `sha256:b898c63f0f40b1414862bdafb48b4eb5672956cd267efe966cf73a5ade9567f4`.
+- Database: `mfms_server_uat`; no schema, configuration, raw submission, or row changes.
+- Precise conversion: `1,128,270 / 684 = 1,649.517543859649...` litres per inch; rounding occurs only at the public API/display boundary.
+- Tests: 20 Well Water tests passed; full-water boundary and overfill validation passed; all 17 historical Well 1 rows reconciled; Well 2 API output was identical.
+- Live verification: 37 ft 9 in returns 35 ft 3 in and 697,746 litres; UI displays 6,97,746 with no console errors.
+- Checkpoint: `/home/muthu/mfms_checkpoints/preview-well1-precision-prechange-20260728-20260728-084325/`.
+- Rollback: replace only `harvest-api-pilot` with retained container `harvest-api-pilot-pre-precision-20260728-0855` or immutable image ID `sha256:0470047dd3cfaa92bc51a4ba3dd5537116b0e8e3ad9e36df377d7582d502e744`.
+- Cron and ODK: unchanged; no sync run.
+- Verdict: passed.
