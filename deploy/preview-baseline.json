@@ -6,17 +6,17 @@
   "latest_framework_commit": "f8b923ac5ac9b74b2a5b54c1edf43c5eb957c937",
   "frontend_image": "mfms-v0-preview:manual-harvest-sync-77a7eac-20260727-201952",
   "frontend_image_id": "sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e",
-  "backend_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
-  "deployed_backend_application_commit": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
-  "backend_release_branch_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+  "backend_commit": "c7a858946cfc0ff904611914c0ff63ca21746ce5",
+  "deployed_backend_application_commit": "c7a858946cfc0ff904611914c0ff63ca21746ce5",
+  "backend_release_branch_head": "c7a858946cfc0ff904611914c0ff63ca21746ce5",
   "backend_repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
   "backend_repository_url": "https://github.com/ayemuthu1963-beep/muthu-harvest-dashboard.git",
   "backend_release_branch": "preview-release",
-  "backend_remote_release_head": "7ea2456642a8fb62d5d640c379c3f1642f654bce",
+  "backend_remote_release_head": "c7a858946cfc0ff904611914c0ff63ca21746ce5",
   "backend_upstream": "origin/preview-release",
   "backend_ahead_behind": "0/0",
-  "backend_image": "muthu-harvest-dashboard-harvest-api:preview-detailed-query-7ea2456-20260727-140654",
-  "backend_image_id": "sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006",
+  "backend_image": "muthu-harvest-dashboard-harvest-api:preview-well1-reference-c7a8589-20260728-0830",
+  "backend_image_id": "sha256:0470047dd3cfaa92bc51a4ba3dd5537116b0e8e3ad9e36df377d7582d502e744",
   "database": "mfms_server_uat",
   "odk_projects": {
     "harvest": 17,
@@ -37,5 +37,5 @@
   "archive_backups": {
     "detailed_query_backend_baseline": "C:\\MFMS_LOCAL\\backups\\backend-source-baselines\\dq-backend-baseline-source.tar.gz"
   },
-  "updated_at": "2026-07-27T21:58:08+05:30"
+  "updated_at": "2026-07-28T08:40:00+05:30"
 }

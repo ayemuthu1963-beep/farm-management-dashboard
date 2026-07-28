@@ -59,3 +59,22 @@ Entries are append-only. Never edit or delete an older entry.
 - Other branches and tags pushed: none.
 - Deployed backend commit and image: unchanged.
 - Public Preview and Production: unchanged.
+
+## 2026-07-28 08:40 IST — Well 1 reference-depth calculation repair
+
+- Purpose: correct Preview Well 1 derived water depth and volume while preserving raw ODK tape readings.
+- Approved scope: `api/app/services/well_water_dashboard.py`, `api/app/routers/well_water.py`, `scripts/sync_well_water_odk.py`, and `tests/test_well_water_dashboard.py`.
+- Previous frontend: unchanged at commit `77a7eac4f21869af456dac81d83536d6c4103ca4`, image `mfms-v0-preview:manual-harvest-sync-77a7eac-20260727-201952`, ID `sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e`.
+- New frontend: unchanged; no frontend build or restart.
+- Previous backend: commit `7ea2456642a8fb62d5d640c379c3f1642f654bce`, image `muthu-harvest-dashboard-harvest-api:preview-detailed-query-7ea2456-20260727-140654`, ID `sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006`.
+- New backend: commit `c7a858946cfc0ff904611914c0ff63ca21746ce5`, image `muthu-harvest-dashboard-harvest-api:preview-well1-reference-c7a8589-20260728-0830`, ID `sha256:0470047dd3cfaa92bc51a4ba3dd5537116b0e8e3ad9e36df377d7582d502e744`.
+- Database: `mfms_server_uat`; no schema, configuration, or row changes.
+- Formula: Well 1 actual depth is `(73 * 12) - tape_reading_total_inches`; volume uses the existing `1650` litres per inch.
+- Migration changes: none.
+- Cron changes: none; Harvest automatic sync remains disabled and Well Water remains `30 3,13 * * *`.
+- Tests: 25 automated tests passed; six required boundary examples passed; candidate API passed; all 17 historical Well 1 rows reconciled; 27 Well 2 daily results remained identical.
+- Live verification: 37 ft 9 in tape reading returns 35 ft 3 in and 697,950 litres; UI shows 697,950 litres.
+- Checkpoint: `/home/muthu/mfms_checkpoints/preview-well1-water-calculation-prechange-20260728-20260728-082037/`.
+- Rollback: replace only `harvest-api-pilot` with retained container `harvest-api-pilot-pre-well1-20260728-0833` or prior immutable image ID `sha256:079ee3cfb2959700cd4eabf053beda653ec13c5d13c97b540d3e7fb6a155e006`.
+- Approver: user request in this task.
+- Verdict: passed.
