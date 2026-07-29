@@ -1,6 +1,5 @@
 import Link from "next/link"
 import { ChevronRight, ArrowLeft } from "lucide-react"
-import { ExportButton } from "@/components/farm/export-button"
 
 interface CoconutSubheaderProps {
   /** Last breadcrumb segment, e.g. "Tree View" */
@@ -11,7 +10,7 @@ interface CoconutSubheaderProps {
 
 // Shared sub-page header for Coconut Harvest detail pages:
 // breadcrumb (Home > Coconut Harvest > X), page title/subtitle,
-// a "Back to Coconut Harvest" link and a visual-only Export button.
+// and a "Back to Coconut Harvest" link.
 export function CoconutSubheader({ breadcrumb, title, subtitle }: CoconutSubheaderProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -50,7 +49,6 @@ export function CoconutSubheader({ breadcrumb, title, subtitle }: CoconutSubhead
             <ArrowLeft className="size-4" aria-hidden="true" />
             Back to Coconut Harvest
           </Link>
-          <ExportButton />
         </div>
       </div>
     </div>

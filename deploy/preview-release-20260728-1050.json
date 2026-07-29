@@ -1,0 +1,34 @@
+{
+  "environment": "preview",
+  "frontend": {
+    "deployed_application_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+    "release_branch_head": "94baca49feda4b04c3bcdc76557ac30129370248",
+    "repository": "ayemuthu1963-beep/farm-management-dashboard",
+    "branch": "preview-release",
+    "remote_head": "94baca49feda4b04c3bcdc76557ac30129370248",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
+    "image": "mfms-v0-preview:navigation-94baca4-20260728-1030",
+    "image_id": "sha256:c5c80b5e975216147bb541d26f6c6165583024bc9290b108aa1dd251ee2550e1",
+    "changed": true
+  },
+  "backend": {
+    "deployed_application_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+    "release_branch_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+    "repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+    "branch": "preview-release",
+    "remote_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
+    "image": "muthu-harvest-dashboard-harvest-api:preview-south-well-reference-ca03f1d-20260728-1000",
+    "image_id": "sha256:62789947311cc6af0b825c4cee76928419ed0cfb5f4144bffeb17c3420c3eb01",
+    "changed": false
+  },
+  "database": "mfms_server_uat",
+  "compatible_schema": "unchanged from the prior verified Preview release",
+  "api_contract_version": "unchanged",
+  "migration_version": "none",
+  "configuration_changes": "none",
+  "test_result": "navigation tests, frontend regression tests, TypeScript, production build, isolated candidate, and 15-tile/live sidebar route verification passed",
+  "checkpoint": "/home/muthu/mfms_checkpoints/preview-navigation-consistency-prechange-20260728-102052/"
+}

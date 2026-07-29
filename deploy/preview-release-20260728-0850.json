@@ -1,0 +1,27 @@
+{
+  "environment": "preview",
+  "frontend": {
+    "deployed_application_commit": "77a7eac4f21869af456dac81d83536d6c4103ca4",
+    "image": "mfms-v0-preview:manual-harvest-sync-77a7eac-20260727-201952",
+    "image_id": "sha256:5efb601b223dd9dbfebca20a5c372c16eed5e82549376d1a0fbe85a92005bb4e",
+    "changed": false
+  },
+  "backend": {
+    "deployed_application_commit": "b594ff60e9509ae01b5b352ae3a9879a8fc2ab1b",
+    "release_branch_head": "b594ff60e9509ae01b5b352ae3a9879a8fc2ab1b",
+    "repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+    "branch": "preview-release",
+    "remote_head": "b594ff60e9509ae01b5b352ae3a9879a8fc2ab1b",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
+    "image": "muthu-harvest-dashboard-harvest-api:preview-well1-precision-b594ff6-20260728-0850",
+    "image_id": "sha256:b898c63f0f40b1414862bdafb48b4eb5672956cd267efe966cf73a5ade9567f4"
+  },
+  "database": "mfms_server_uat",
+  "compatible_schema": "unchanged from the prior verified Preview release",
+  "api_contract_version": "preview-2026-07-28-well1-precise-volume-v1",
+  "migration_version": "none",
+  "configuration_changes": "none",
+  "test_result": "20 Well Water tests passed; 17 historical Well 1 rows reconciled; Well 2 API output identical",
+  "checkpoint": "/home/muthu/mfms_checkpoints/preview-well1-precision-prechange-20260728-20260728-084325/"
+}

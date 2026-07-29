@@ -1,0 +1,59 @@
+FROM node:24-alpine AS toolchain
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.34.5 --activate
+
+FROM toolchain AS dependencies
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+FROM toolchain AS builder
+
+WORKDIR /app
+
+ARG MFMS_GIT_COMMIT=unknown
+ARG MFMS_BUILD_TIMESTAMP=unknown
+ARG MFMS_BUILD_ENVIRONMENT=Preview
+
+ENV MFMS_GIT_COMMIT=$MFMS_GIT_COMMIT
+ENV MFMS_BUILD_TIMESTAMP=$MFMS_BUILD_TIMESTAMP
+ENV MFMS_BUILD_ENVIRONMENT=$MFMS_BUILD_ENVIRONMENT
+
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY . .
+
+RUN pnpm build
+
+FROM toolchain AS runner
+
+WORKDIR /app
+
+ARG MFMS_GIT_COMMIT=unknown
+ARG MFMS_BUILD_TIMESTAMP=unknown
+ARG MFMS_BUILD_ENVIRONMENT=Preview
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV MFMS_GIT_COMMIT=$MFMS_GIT_COMMIT
+ENV MFMS_BUILD_TIMESTAMP=$MFMS_BUILD_TIMESTAMP
+ENV MFMS_BUILD_ENVIRONMENT=$MFMS_BUILD_ENVIRONMENT
+
+LABEL org.opencontainers.image.revision=$MFMS_GIT_COMMIT
+LABEL org.opencontainers.image.created=$MFMS_BUILD_TIMESTAMP
+LABEL com.muthufarms.mfms.environment=$MFMS_BUILD_ENVIRONMENT
+
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+
+EXPOSE 3000
+
+CMD ["pnpm", "exec", "next", "start", "-H", "0.0.0.0", "-p", "3000"]

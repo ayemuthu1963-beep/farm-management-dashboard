@@ -4,43 +4,16 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Home,
-  Sprout,
-  Citrus,
-  Droplets,
-  Gauge,
-  Bug,
-  Wrench,
-  Leaf,
-  BarChart3,
-  Settings,
   CalendarDays,
   Clock,
-  type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  isNavigationItemActive,
+  sidebarNavigationItems,
+} from "@/lib/mfms-navigation"
 
-interface NavItem {
-  label: string
-  icon: LucideIcon
-  href: string
-}
-
-const navItems: NavItem[] = [
-  { label: "Dashboard", icon: Home, href: "/" },
-  { label: "Coconut Harvest", icon: Sprout, href: "/coconut-harvest" },
-  { label: "Jackfruit Monitoring", icon: Citrus, href: "/jackfruit-monitoring" },
-  { label: "Well Water", icon: Droplets, href: "/well-water" },
-  { label: "Motor Runtime", icon: Gauge, href: "/motor-runtime" },
-  { label: "Irrigation Management", icon: Droplets, href: "/irrigation-management" },
-  { label: "Beetle Trap", icon: Bug, href: "/beetle-trap" },
-  { label: "Pipeline Inspection", icon: Wrench, href: "/pipeline-layout" },
-  { label: "Fertiliser Management", icon: Leaf, href: "/fertiliser-management" },
-  { label: "Reports", icon: BarChart3, href: "#" },
-  { label: "Settings", icon: Settings, href: "#" },
-]
-
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const [now, setNow] = useState<Date | null>(null)
 
@@ -73,14 +46,15 @@ export function Sidebar() {
       className="flex h-full flex-col gap-1 overflow-y-auto bg-sidebar p-3"
     >
       <ul className="flex flex-col gap-1">
-        {navItems.map((item) => {
+        {sidebarNavigationItems.map((item) => {
           const Icon = item.icon
-          const active = item.href !== "#" && pathname === item.href
+          const active = isNavigationItemActive(pathname, item)
           return (
-            <li key={item.label}>
+            <li key={item.id}>
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
+                onClick={onNavigate}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   active
@@ -90,6 +64,11 @@ export function Sidebar() {
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
                 <span className="truncate">{item.label}</span>
+                {item.status === "coming-soon" ? (
+                  <span className="ml-auto rounded bg-sidebar-accent px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
+                    Soon
+                  </span>
+                ) : null}
               </Link>
             </li>
           )

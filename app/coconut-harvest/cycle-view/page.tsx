@@ -1,12 +1,25 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { BarChart3, CalendarRange, Nut, Layers, Sigma, IndianRupee, RotateCw } from "lucide-react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import {
+  BarChart3,
+  CalendarRange,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
+  Download,
+  IndianRupee,
+  Layers,
+  Nut,
+  RotateCw,
+  Sigma,
+} from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
+import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import {
   formatRupees,
   type CycleSummary,
@@ -29,6 +42,189 @@ const emptySummary: CycleSummary = {
   lifetimeSale: 0,
 }
 
+type SortDirection = "asc" | "desc"
+type CycleSortKey = keyof Pick<
+  HarvestCycleRow,
+  "cycle" | "startDate" | "endDate" | "status" | "trees" | "bunches" | "nuts" | "salePrice" | "totalSale"
+>
+
+interface CycleSortConfig {
+  key: CycleSortKey
+  direction: SortDirection
+}
+
+interface CycleDetailRow {
+  treeNo: string
+  harvestDate: string
+  nutsB1: number
+  nutsB2: number
+  nutsB3: number
+  totalBunches: number
+  totalNuts: number
+  salePrice: number
+  totalSale: number
+  plot: string
+  classification: string
+  remarks: string | null
+}
+
+interface CycleDetailData {
+  cycle: number
+  rows: CycleDetailRow[]
+}
+
+type CycleDetailStatus = "idle" | "loading" | "real" | "empty" | "error"
+type CycleDetailSortKey = keyof Omit<CycleDetailRow, "remarks">
+
+interface CycleDetailSortConfig {
+  key: CycleDetailSortKey
+  direction: SortDirection
+}
+
+const numericTextCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
+
+function waitForBrowserPaint() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+function escapeCsvCell(value: string | number | null | undefined) {
+  const text = value === null || value === undefined ? "" : String(value)
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`
+  }
+
+  return text
+}
+
+function sortIndicator(direction: SortDirection | undefined) {
+  if (direction === "asc") {
+    return <ChevronUp className="size-3.5 text-primary" aria-hidden="true" />
+  }
+
+  if (direction === "desc") {
+    return <ChevronDown className="size-3.5 text-primary" aria-hidden="true" />
+  }
+
+  return <ChevronsUpDown className="size-3.5 text-primary/45" aria-hidden="true" />
+}
+
+function CycleSortableHeader({
+  label,
+  sortKey,
+  align = "left",
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: CycleSortKey
+  align?: "left" | "right"
+  sortConfig: CycleSortConfig | null
+  onSort: (key: CycleSortKey) => void
+}) {
+  const direction = sortConfig?.key === sortKey ? sortConfig.direction : undefined
+
+  return (
+    <th className="px-3 py-2.5" scope="col" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full cursor-pointer items-center gap-1.5 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          align === "right" ? "justify-end text-right" : "justify-start text-left"
+        }`}
+      >
+        <span>{label}</span>
+        {sortIndicator(direction)}
+      </button>
+    </th>
+  )
+}
+
+function CycleDetailSortableHeader({
+  label,
+  sortKey,
+  align = "left",
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: CycleDetailSortKey
+  align?: "left" | "right"
+  sortConfig: CycleDetailSortConfig | null
+  onSort: (key: CycleDetailSortKey) => void
+}) {
+  const direction = sortConfig?.key === sortKey ? sortConfig.direction : undefined
+
+  return (
+    <th className="px-3 py-2.5" scope="col" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full cursor-pointer items-center gap-1.5 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          align === "right" ? "justify-end text-right" : "justify-start text-left"
+        }`}
+      >
+        <span>{label}</span>
+        {sortIndicator(direction)}
+      </button>
+    </th>
+  )
+}
+
+function compareCycles(a: HarvestCycleRow, b: HarvestCycleRow, key: CycleSortKey) {
+  if (key === "startDate" || key === "endDate") {
+    return a[key].localeCompare(b[key])
+  }
+
+  if (key === "status") {
+    return a.status.localeCompare(b.status)
+  }
+
+  return a[key] - b[key]
+}
+
+function sortCycles(rows: HarvestCycleRow[], sortConfig: CycleSortConfig | null) {
+  if (!sortConfig) {
+    return rows
+  }
+
+  return [...rows].sort((a, b) => {
+    const comparison = compareCycles(a, b, sortConfig.key)
+    return sortConfig.direction === "asc" ? comparison : -comparison
+  })
+}
+
+function compareCycleDetails(a: CycleDetailRow, b: CycleDetailRow, key: CycleDetailSortKey) {
+  if (key === "treeNo" || key === "plot" || key === "classification") {
+    return numericTextCollator.compare(String(a[key]), String(b[key]))
+  }
+
+  if (key === "harvestDate") {
+    return a.harvestDate.localeCompare(b.harvestDate)
+  }
+
+  return a[key] - b[key]
+}
+
+function sortCycleDetails(rows: CycleDetailRow[], sortConfig: CycleDetailSortConfig | null) {
+  if (!sortConfig) {
+    return rows
+  }
+
+  return [...rows].sort((a, b) => {
+    const comparison = compareCycleDetails(a, b, sortConfig.key)
+    return sortConfig.direction === "asc" ? comparison : -comparison
+  })
+}
+
+function submitParentFormFromSelect(event: KeyboardEvent<HTMLSelectElement>) {
+  if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return
+  }
+
+  event.preventDefault()
+  event.currentTarget.form?.requestSubmit()
+}
+
 export default function CycleViewPage() {
   const [cycleViewData, setCycleViewData] = useState<CycleViewData>({
     cycleSummary: emptySummary,
@@ -42,7 +238,28 @@ export default function CycleViewPage() {
   const [summaryLabel, setSummaryLabel] = useState("Latest harvest cycle")
   const [dataStatus, setDataStatus] = useState<"loading" | "real" | "empty" | "error">("loading")
   const [errorMessage, setErrorMessage] = useState("")
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false)
+  const [cycleSortConfig, setCycleSortConfig] = useState<CycleSortConfig | null>(null)
+  const [selectedDetailCycle, setSelectedDetailCycle] = useState<HarvestCycleRow | null>(null)
+  const [cycleDetailRows, setCycleDetailRows] = useState<CycleDetailRow[]>([])
+  const [cycleDetailStatus, setCycleDetailStatus] = useState<CycleDetailStatus>("idle")
+  const [cycleDetailError, setCycleDetailError] = useState("")
+  const [cycleDetailSortConfig, setCycleDetailSortConfig] = useState<CycleDetailSortConfig | null>(null)
+  const [cycleDetailExportStatus, setCycleDetailExportStatus] = useState<"idle" | "preparing" | "success" | "error">("idle")
+  const summaryRequestInFlight = useRef(false)
+  const detailRequestInFlight = useRef<number | null>(null)
+  const detailExportInFlight = useRef(false)
+  const allCyclesPanelRef = useRef<HTMLDivElement>(null)
+  const detailPanelRef = useRef<HTMLDivElement>(null)
   const { harvestCycleRows, harvestCycleOptions } = cycleViewData
+  const sortedHarvestCycleRows = useMemo(
+    () => sortCycles(harvestCycleRows, cycleSortConfig),
+    [harvestCycleRows, cycleSortConfig],
+  )
+  const sortedCycleDetailRows = useMemo(
+    () => sortCycleDetails(cycleDetailRows, cycleDetailSortConfig),
+    [cycleDetailRows, cycleDetailSortConfig],
+  )
   const selectedCycleRow = useMemo(
     () => harvestCycleRows.find((row) => String(row.cycle) === cycle),
     [cycle, harvestCycleRows],
@@ -62,40 +279,32 @@ export default function CycleViewPage() {
   )
   const [displaySummary, setDisplaySummary] = useState<CycleSummary>(emptySummary)
 
-  useEffect(() => {
-    let active = true
-
-    async function loadCycleData() {
-      try {
-        const response = await fetch("/api/coconut-harvest/cycles")
-        if (!response.ok) {
-          throw new Error("Unable to load harvest cycle data")
-        }
-        const data = (await response.json()) as CycleViewData
-        if (active && data.harvestCycleRows.length > 0) {
-          setCycleViewData(data)
-          setCycle(String(data.harvestCycleOptions[0]))
-          setDisplaySummary(data.cycleSummary)
-          setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
-          setDataStatus("real")
-          return
-        }
-        if (active) {
-          setDataStatus("empty")
-        }
-      } catch (error) {
-        if (active) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load harvest cycle data")
-          setDataStatus("error")
-        }
+  async function loadCycleData() {
+    setDataStatus("loading")
+    setErrorMessage("")
+    try {
+      const response = await fetch("/api/coconut-harvest/cycles")
+      if (!response.ok) {
+        throw new Error("Unable to load harvest cycle data")
       }
+      const data = (await response.json()) as CycleViewData
+      if (data.harvestCycleRows.length > 0) {
+        setCycleViewData(data)
+        setCycle(String(data.harvestCycleOptions[0]))
+        setDisplaySummary(data.cycleSummary)
+        setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
+        setDataStatus("real")
+        return
+      }
+      setDataStatus("empty")
+    } catch {
+      setErrorMessage("Please check the connection and try again.")
+      setDataStatus("error")
     }
+  }
 
+  useEffect(() => {
     loadCycleData()
-
-    return () => {
-      active = false
-    }
   }, [])
 
   useEffect(() => {
@@ -103,10 +312,13 @@ export default function CycleViewPage() {
   }, [defaultCycleSummary])
 
   async function loadCycleSummary() {
-    if (!cycle) {
+    if (!cycle || summaryRequestInFlight.current || dataStatus === "loading") {
       return
     }
 
+    summaryRequestInFlight.current = true
+    setIsSummaryLoading(true)
+    setErrorMessage("")
     try {
       const response = await fetch(`/api/coconut-harvest/harvest-summary?harvest_cycle=${encodeURIComponent(cycle)}`)
       if (!response.ok) {
@@ -122,13 +334,23 @@ export default function CycleViewPage() {
       })
       setSummaryLabel(data.label)
       setDataStatus("real")
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load selected cycle summary")
+    } catch {
+      setErrorMessage("Please check the connection and try again.")
       setDataStatus("error")
+    } finally {
+      summaryRequestInFlight.current = false
+      setIsSummaryLoading(false)
     }
   }
 
   async function loadDateRangeSummary() {
+    if (summaryRequestInFlight.current || dataStatus === "loading") {
+      return
+    }
+
+    summaryRequestInFlight.current = true
+    setIsSummaryLoading(true)
+    setErrorMessage("")
     try {
       const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
       const response = await fetch(`/api/coconut-harvest/harvest-summary?${params.toString()}`)
@@ -145,15 +367,164 @@ export default function CycleViewPage() {
       })
       setSummaryLabel(`${data.startDate} to ${data.endDate}`)
       setDataStatus("real")
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load date-range summary")
+    } catch {
+      setErrorMessage("Please check the connection and try again.")
       setDataStatus("error")
+    } finally {
+      summaryRequestInFlight.current = false
+      setIsSummaryLoading(false)
     }
   }
 
-  function exportDateRange() {
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
-    window.location.href = `/api/coconut-harvest/export?${params.toString()}`
+  function handleCycleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loadCycleSummary()
+  }
+
+  function handleDateRangeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loadDateRangeSummary()
+  }
+
+  function handleCycleSort(key: CycleSortKey) {
+    setCycleSortConfig((current) => {
+      if (current?.key === key) {
+        return { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      }
+
+      return { key, direction: "asc" }
+    })
+  }
+
+  function handleCycleDetailSort(key: CycleDetailSortKey) {
+    setCycleDetailSortConfig((current) => {
+      if (current?.key === key) {
+        return { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      }
+
+      return { key, direction: "asc" }
+    })
+  }
+
+  async function loadCycleDetails(row: HarvestCycleRow) {
+    if (detailRequestInFlight.current === row.cycle) {
+      return
+    }
+
+    detailRequestInFlight.current = row.cycle
+    setSelectedDetailCycle(row)
+    setCycleDetailStatus("loading")
+    setCycleDetailError("")
+    setCycleDetailRows([])
+    setCycleDetailExportStatus("idle")
+
+    try {
+      const params = new URLSearchParams({
+        cycle: String(row.cycle),
+      })
+      const response = await fetch(`/api/coconut-harvest/cycle-details?${params.toString()}`)
+      if (!response.ok) {
+        const errorBody = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(errorBody?.error ?? "Unable to load cycle details")
+      }
+
+      const data = (await response.json()) as CycleDetailData
+      setCycleDetailRows(data.rows)
+      setCycleDetailStatus(data.rows.length > 0 ? "real" : "empty")
+      requestAnimationFrame(() => detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
+    } catch (error) {
+      setCycleDetailError(error instanceof Error ? error.message : "Please check the connection and try again.")
+      setCycleDetailStatus("error")
+    } finally {
+      detailRequestInFlight.current = null
+    }
+  }
+
+  function handleCycleRowClick(row: HarvestCycleRow) {
+    const selectedText = window.getSelection()?.toString().trim()
+    if (selectedText) {
+      return
+    }
+
+    loadCycleDetails(row)
+  }
+
+  async function exportCycleDetailsToCsv() {
+    if (!selectedDetailCycle || detailExportInFlight.current || cycleDetailStatus !== "real" || sortedCycleDetailRows.length === 0) {
+      return
+    }
+
+    detailExportInFlight.current = true
+    setCycleDetailExportStatus("preparing")
+
+    try {
+      await waitForBrowserPaint()
+
+      const headers = [
+        "Harvest Cycle",
+        "Tree No",
+        "Harvest Date",
+        "Bunch 1 Nuts",
+        "Bunch 2 Nuts",
+        "Bunch 3 Nuts",
+        "Total Bunches",
+        "Total Nuts",
+        "Sale Price",
+        "Total Sale",
+        "Plot",
+        "Classification",
+        "Remarks",
+      ]
+      const csvRows = sortedCycleDetailRows.map((row) => [
+        selectedDetailCycle.cycle,
+        row.treeNo,
+        row.harvestDate,
+        row.nutsB1,
+        row.nutsB2,
+        row.nutsB3,
+        row.totalBunches,
+        row.totalNuts,
+        row.salePrice,
+        row.totalSale,
+        row.plot,
+        row.classification,
+        row.remarks,
+      ])
+      const csv = [headers, ...csvRows].map((row) => row.map(escapeCsvCell).join(",")).join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `harvest-cycle-${selectedDetailCycle.cycle}-results.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      await waitForBrowserPaint()
+      setCycleDetailExportStatus("success")
+    } catch {
+      setCycleDetailExportStatus("error")
+    } finally {
+      detailExportInFlight.current = false
+    }
+  }
+
+  function returnToSummaryTable() {
+    setSelectedDetailCycle(null)
+    setCycleDetailRows([])
+    setCycleDetailStatus("idle")
+    setCycleDetailError("")
+    setCycleDetailExportStatus("idle")
+    requestAnimationFrame(() => allCyclesPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
+
+  function handleCycleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: HarvestCycleRow) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return
+    }
+
+    event.preventDefault()
+    loadCycleDetails(row)
   }
 
   return (
@@ -165,70 +536,69 @@ export default function CycleViewPage() {
         {/* Controls */}
         <Panel title="Filters" icon={CalendarRange}>
           <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
-            <div className="lg:w-48">
-              <label htmlFor="cycle" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Harvest Cycle
-              </label>
-              <select
-                id="cycle"
-                value={cycle}
-                onChange={(e) => setCycle(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            <form onSubmit={handleCycleSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="lg:w-48">
+                <label htmlFor="cycle" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Harvest Cycle
+                </label>
+                <select
+                  id="cycle"
+                  value={cycle}
+                  onChange={(e) => setCycle(e.target.value)}
+                  onKeyDown={submitParentFormFromSelect}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {harvestCycleOptions.map((c) => (
+                    <option key={c} value={c}>
+                      Cycle {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={!cycle || isSummaryLoading || dataStatus === "loading"}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
-                {harvestCycleOptions.map((c) => (
-                  <option key={c} value={c}>
-                    Cycle {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={loadCycleSummary}
-              disabled={!cycle}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            >
-              Show Cycle
-            </button>
+                {isSummaryLoading ? <HarvestButtonSpinner /> : null}
+                {isSummaryLoading ? "Loading..." : "Show Cycle"}
+              </button>
+            </form>
 
-            <div className="lg:w-44">
-              <label htmlFor="start" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Start Date
-              </label>
-              <input
-                id="start"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div className="lg:w-44">
-              <label htmlFor="end" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                End Date
-              </label>
-              <input
-                id="end"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={loadDateRangeSummary}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            >
-              Show Date Range
-            </button>
-            <button
-              type="button"
-              onClick={exportDateRange}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
-            >
-              Export Date Range to Excel
-            </button>
+            <form onSubmit={handleDateRangeSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="lg:w-44">
+                <label htmlFor="start" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Start Date
+                </label>
+                <input
+                  id="start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="lg:w-44">
+                <label htmlFor="end" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  End Date
+                </label>
+                <input
+                  id="end"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSummaryLoading || dataStatus === "loading"}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+              >
+                {isSummaryLoading ? <HarvestButtonSpinner /> : null}
+                {isSummaryLoading ? "Loading..." : "Show Date Range"}
+              </button>
+            </form>
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
@@ -239,9 +609,12 @@ export default function CycleViewPage() {
           </div>
           <div className="mt-3">
             {dataStatus === "loading" ? (
-              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                Loading live PostgreSQL harvest data...
-              </p>
+              <HarvestRequestState tone="loading" message="Loading harvest data..." compact />
+            ) : null}
+            {isSummaryLoading && dataStatus !== "loading" ? (
+              <div className="mt-3">
+                <HarvestRequestState tone="loading" message="Calculating harvest summary..." compact />
+              </div>
             ) : null}
             {dataStatus === "real" ? (
               <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
@@ -249,48 +622,64 @@ export default function CycleViewPage() {
               </p>
             ) : null}
             {dataStatus === "empty" ? (
-              <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-xs font-medium text-chart-4">
-                No harvest cycle records found.
-              </p>
+              <HarvestRequestState tone="empty" message="No harvest cycle records found." compact />
             ) : null}
             {dataStatus === "error" ? (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-                {errorMessage}
-              </p>
+              <HarvestRequestState
+                tone="error"
+                message="Unable to load harvest data."
+                detail={errorMessage || "Please check the connection and try again."}
+                onRetry={harvestCycleRows.length === 0 ? loadCycleData : undefined}
+              />
             ) : null}
           </div>
         </Panel>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
-          <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
-          <StatCard icon={Nut} label="Total Nuts" value={displaySummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
-          <StatCard icon={BarChart3} label="Average Nuts" value={displaySummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
-          <StatCard icon={IndianRupee} label="Total Sale" value={displaySummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
-        </div>
+        {dataStatus === "loading" ? (
+          <Panel title="Harvest Summary" icon={Sigma}>
+            <HarvestRequestState tone="loading" message="Loading harvest data..." />
+          </Panel>
+        ) : dataStatus === "real" || harvestCycleRows.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
+            <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
+            <StatCard icon={Nut} label="Total Nuts" value={displaySummary.totalNuts.toLocaleString("en-IN")} accent="bg-chart-1/15 text-chart-1" />
+            <StatCard icon={BarChart3} label="Average Nuts" value={displaySummary.averageNuts.toFixed(1)} accent="bg-chart-3/15 text-chart-3" />
+            <StatCard icon={IndianRupee} label="Total Sale" value={displaySummary.lifetimeSale.toLocaleString("en-IN")} accent="bg-chart-4/15 text-chart-4" />
+          </div>
+        ) : null}
 
         {/* All harvest cycles table */}
-        {showAll ? (
+        {showAll && harvestCycleRows.length > 0 && !selectedDetailCycle ? (
+          <div ref={allCyclesPanelRef}>
           <Panel title="All Harvest Cycles" icon={RotateCw}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[860px] border-collapse text-sm">
                 <thead>
                   <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-                    <th className="px-3 py-2.5">Cycle</th>
-                    <th className="px-3 py-2.5">Start Date</th>
-                    <th className="px-3 py-2.5">End Date</th>
-                    <th className="px-3 py-2.5">Status</th>
-                    <th className="px-3 py-2.5 text-right">Trees</th>
-                    <th className="px-3 py-2.5 text-right">Bunches</th>
-                    <th className="px-3 py-2.5 text-right">Nuts</th>
-                    <th className="px-3 py-2.5 text-right">Sale Price</th>
-                    <th className="px-3 py-2.5 text-right">Total Sale</th>
+                    <CycleSortableHeader label="Cycle" sortKey="cycle" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Start Date" sortKey="startDate" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="End Date" sortKey="endDate" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Status" sortKey="status" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Trees" sortKey="trees" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Bunches" sortKey="bunches" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Nuts" sortKey="nuts" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Sale Price" sortKey="salePrice" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Total Sale" sortKey="totalSale" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {harvestCycleRows.map((r) => (
-                    <tr key={r.cycle} className="border-b border-border last:border-0 hover:bg-muted/50">
+                  {sortedHarvestCycleRows.map((r) => (
+                    <tr
+                      key={r.cycle}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open Harvest Cycle ${r.cycle} details`}
+                      onClick={() => handleCycleRowClick(r)}
+                      onKeyDown={(event) => handleCycleRowKeyDown(event, r)}
+                      className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    >
                       <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{r.cycle}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.startDate}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.endDate}</td>
@@ -316,7 +705,137 @@ export default function CycleViewPage() {
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Click a harvest cycle row, or focus it and press Enter or Space, to view the full records for that cycle.
+            </p>
           </Panel>
+          </div>
+        ) : null}
+
+        {selectedDetailCycle ? (
+          <div ref={detailPanelRef}>
+          <Panel title={`Harvest Cycle ${selectedDetailCycle.cycle} Details`} icon={Layers}>
+            <div className="mb-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-8">
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Harvest Cycle</p>
+                <p className="font-semibold text-foreground">{selectedDetailCycle.cycle}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Start Date</p>
+                <p className="font-semibold text-foreground">{selectedDetailCycle.startDate}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">End Date</p>
+                <p className="font-semibold text-foreground">{selectedDetailCycle.endDate}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Trees Harvested</p>
+                <p className="font-semibold text-foreground">{selectedDetailCycle.trees.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Total Bunches</p>
+                <p className="font-semibold text-foreground">{selectedDetailCycle.bunches.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Total Nuts</p>
+                <p className="font-semibold text-foreground">{selectedDetailCycle.nuts.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Sale Price</p>
+                <p className="font-semibold text-foreground">{formatRupees(selectedDetailCycle.salePrice, 2)}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Total Sale</p>
+                <p className="font-semibold text-foreground">{formatRupees(selectedDetailCycle.totalSale)}</p>
+              </div>
+            </div>
+
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={returnToSummaryTable}
+                className="inline-flex items-center justify-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Back to Harvest and Date Range Summary
+              </button>
+              {cycleDetailStatus === "real" ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={cycleDetailExportStatus === "preparing"}
+                    onClick={exportCycleDetailsToCsv}
+                    className="inline-flex min-w-[190px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {cycleDetailExportStatus === "preparing" ? <HarvestButtonSpinner /> : <Download className="size-4" aria-hidden="true" />}
+                    {cycleDetailExportStatus === "preparing" ? "Preparing export…" : "Export Results to CSV"}
+                  </button>
+                  <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+                    {cycleDetailExportStatus === "success" ? "CSV download started." : null}
+                    {cycleDetailExportStatus === "error" ? "Unable to prepare the CSV file. Please try again." : null}
+                  </p>
+                </>
+              ) : null}
+            </div>
+
+            {cycleDetailStatus === "loading" ? (
+              <HarvestRequestState tone="loading" message="Loading cycle details..." />
+            ) : null}
+
+            {cycleDetailStatus === "empty" ? (
+              <HarvestRequestState tone="empty" message="No Harvest records are available for this cycle." />
+            ) : null}
+
+            {cycleDetailStatus === "error" ? (
+              <HarvestRequestState
+                tone="error"
+                message="Unable to load cycle details."
+                detail={cycleDetailError || "Please check the connection and try again."}
+                onRetry={() => loadCycleDetails(selectedDetailCycle)}
+              />
+            ) : null}
+
+            {cycleDetailStatus === "real" ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1280px] border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
+                      <CycleDetailSortableHeader label="Tree No" sortKey="treeNo" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Harvest Date" sortKey="harvestDate" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Bunch 1 Nuts" sortKey="nutsB1" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Bunch 2 Nuts" sortKey="nutsB2" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Bunch 3 Nuts" sortKey="nutsB3" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Total Bunches" sortKey="totalBunches" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Total Nuts" sortKey="totalNuts" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Sale Price" sortKey="salePrice" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Total Sale" sortKey="totalSale" align="right" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Plot" sortKey="plot" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <CycleDetailSortableHeader label="Classification" sortKey="classification" sortConfig={cycleDetailSortConfig} onSort={handleCycleDetailSort} />
+                      <th className="px-3 py-2.5" scope="col">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedCycleDetailRows.map((row, index) => (
+                      <tr key={`${row.treeNo}-${row.harvestDate}-${index}`} className="border-b border-border last:border-0 hover:bg-muted/50">
+                        <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{row.treeNo}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.harvestDate}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{row.nutsB1}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{row.nutsB2}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{row.nutsB3}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{row.totalBunches}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-foreground">{row.totalNuts}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRupees(row.salePrice, 2)}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{formatRupees(row.totalSale)}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.plot || "Not available"}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-foreground">{row.classification || "Not available"}</td>
+                        <td className="min-w-48 px-3 py-2.5 text-muted-foreground">{row.remarks || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </Panel>
+          </div>
         ) : null}
       </div>
     </DashboardShell>

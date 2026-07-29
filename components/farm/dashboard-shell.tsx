@@ -54,7 +54,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   <X className="size-5" aria-hidden="true" />
                 </button>
               </div>
-              <Sidebar />
+              <Sidebar onNavigate={() => setOpen(false)} />
             </div>
           </div>
         ) : null}

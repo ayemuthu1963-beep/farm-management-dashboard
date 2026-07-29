@@ -1,10 +1,11 @@
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHarvestRow } from "@/lib/coconut-harvest-data"
+import { compareTreeNumbers } from "@/lib/tree-number-options"
 
 interface ApiCycleRow {
   harvest_cycle: string
   harvest_start_date: string
-  harvest_end_date: string
+  harvest_end_date: string | null
   harvest_status: string
   total_sale_value: string | number | null
   total_trees_harvested: number | null
@@ -91,6 +92,18 @@ export interface TreeViewData {
   treeHarvestHistory: TreeHarvestRow[]
 }
 
+export interface FarmMapTreeHarvestSummary {
+  treeNo: string
+  status: string | null
+  classification: string | null
+  lastHarvestDate: string | null
+  latestBunches: number | null
+  latestNuts: number | null
+  currentYearTotalNuts: number | null
+  missedHarvestCycles: number | null
+  hasHarvestData: boolean
+}
+
 export interface TreePerformanceData {
   performanceCyclesUsed: number[]
   plot1Performance: PerformanceRow[]
@@ -165,7 +178,7 @@ function mapCycleRow(row: ApiCycleRow): HarvestCycleRow {
   return {
     cycle: toCycleNumber(row.harvest_cycle),
     startDate: row.harvest_start_date,
-    endDate: row.harvest_end_date,
+    endDate: row.harvest_end_date ?? "",
     status: toStatus(row.harvest_status),
     trees: row.total_trees_harvested ?? 0,
     bunches: row.total_bunches ?? 0,
@@ -424,13 +437,7 @@ export async function fetchHarvestSummaryData(params: {
   }
 }
 
-export async function fetchTreeNumbers(query = "", limit = 25): Promise<string[]> {
-  const authHeader = getBasicAuthHeader()
-
-  if (!authHeader) {
-    throw new Error("Harvest API credentials are not configured")
-  }
-
+async function fetchTreeNumberPage(query: string, limit: number, authHeader: string) {
   const params = new URLSearchParams({
     q: query,
     limit: String(limit),
@@ -450,6 +457,64 @@ export async function fetchTreeNumbers(query = "", limit = 25): Promise<string[]
 
   const rows = (await response.json()) as ApiTreeOption[]
   return rows.map((row) => row.tree_no)
+}
+
+export async function fetchTreeNumbers(query = "", limit = 25): Promise<string[]> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  return fetchTreeNumberPage(query, limit, authHeader)
+}
+
+const TREE_MASTER_PAGE_SIZE = 100
+const NUMERIC_PREFIX_SUFFIXES = [..."0123456789."]
+const GENERAL_PREFIX_SUFFIXES = [..."0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.-_"]
+const ROOT_PREFIXES = [..."0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+
+export async function fetchAllTreeNumbers(): Promise<string[]> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const treeNumbers = new Set(
+    await fetchTreeNumberPage("", TREE_MASTER_PAGE_SIZE, authHeader),
+  )
+  const pendingPrefixes = [...ROOT_PREFIXES]
+  const visitedPrefixes = new Set<string>()
+
+  while (pendingPrefixes.length > 0) {
+    const batch = pendingPrefixes.splice(0, 10).filter((prefix) => {
+      if (visitedPrefixes.has(prefix)) return false
+      visitedPrefixes.add(prefix)
+      return true
+    })
+    if (batch.length === 0) continue
+
+    const pages = await Promise.all(
+      batch.map(async (prefix) => ({
+        prefix,
+        rows: await fetchTreeNumberPage(prefix, TREE_MASTER_PAGE_SIZE, authHeader),
+      })),
+    )
+
+    for (const { prefix, rows } of pages) {
+      for (const treeNo of rows) treeNumbers.add(treeNo)
+
+      if (rows.length === TREE_MASTER_PAGE_SIZE && prefix.length < 50) {
+        const suffixes = /^[0-9.]+$/.test(prefix)
+          ? NUMERIC_PREFIX_SUFFIXES
+          : GENERAL_PREFIX_SUFFIXES
+        pendingPrefixes.push(...suffixes.map((suffix) => `${prefix}${suffix}`))
+      }
+    }
+  }
+
+  return [...treeNumbers].sort(compareTreeNumbers)
 }
 
 export async function fetchTreeViewData(treeNo: string): Promise<TreeViewData> {
@@ -476,6 +541,83 @@ export async function fetchTreeViewData(treeNo: string): Promise<TreeViewData> {
   return {
     treeNo: data.tree?.tree_no ?? treeNo,
     treeHarvestHistory: data.records.map(mapTreeHistoryRecord),
+  }
+}
+
+export async function fetchFarmMapTreeHarvestSummary(treeNo: string): Promise<FarmMapTreeHarvestSummary> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const encodedTreeNo = encodeURIComponent(treeNo)
+  const detailParams = new URLSearchParams({
+    tree_from: treeNo,
+    tree_to: treeNo,
+  })
+  const [treeResponse, performanceResponse] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/trees/${encodedTreeNo}`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+    fetch(`${getApiBaseUrl()}/api/detailed-query?${detailParams.toString()}`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+  ])
+
+  if (!treeResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${treeResponse.status}`, treeResponse.status)
+  }
+  if (!performanceResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${performanceResponse.status}`, performanceResponse.status)
+  }
+
+  const treeData = (await treeResponse.json()) as {
+    tree?: { tree_no?: string; status?: string | null }
+    summary?: { last_harvest_date?: string | null }
+    records?: Array<{
+      harvest_date: string
+      total_bunches: number | null
+      total_nuts: number | null
+    }>
+    totals?: Array<{
+      label: string
+      total_nuts: number | null
+    }>
+  }
+  const performanceData = (await performanceResponse.json()) as {
+    rows?: Array<{
+      tree_no: string
+      category: string | null
+      missed_harvests: number | null
+    }>
+  }
+
+  const records = treeData.records ?? []
+  const latest = records[0]
+  const performance = performanceData.rows?.find((row) => row.tree_no === treeNo)
+  const currentYear = String(new Date().getFullYear())
+  const currentYearHasRecords = records.some((record) => record.harvest_date.startsWith(`${currentYear}-`))
+  const currentYearTotals = treeData.totals?.find((row) => row.label === `Total ${currentYear}`)
+
+  return {
+    treeNo: treeData.tree?.tree_no ?? treeNo,
+    status: treeData.tree?.status ?? null,
+    classification: performance?.category ?? null,
+    lastHarvestDate: treeData.summary?.last_harvest_date ?? null,
+    latestBunches: latest?.total_bunches ?? null,
+    latestNuts: latest?.total_nuts ?? null,
+    currentYearTotalNuts: currentYearHasRecords ? (currentYearTotals?.total_nuts ?? null) : null,
+    missedHarvestCycles: performance?.missed_harvests ?? null,
+    hasHarvestData: records.length > 0,
   }
 }
 
@@ -577,12 +719,78 @@ function isAll(value: string | undefined): boolean {
   return isBlank(value) || value === "All"
 }
 
-function inTextRange(value: string, from: string | undefined, to: string | undefined): boolean {
-  if (!isBlank(from) && value.localeCompare(from!.trim()) < 0) {
+const numericTreeIdentifierPattern = /^\d+(?:\.\d+)?$/
+
+function normalizeNumericTreeIdentifier(value: string): string {
+  const [wholePart, fractionalPart = ""] = value.split(".")
+  const normalizedWhole = wholePart.replace(/^0+(?=\d)/, "")
+  const normalizedFraction = fractionalPart.replace(/0+$/, "")
+  return normalizedFraction ? `${normalizedWhole}.${normalizedFraction}` : normalizedWhole
+}
+
+function compareNumericTreeIdentifiers(left: string, right: string): number {
+  const [leftWhole, leftFraction = ""] = normalizeNumericTreeIdentifier(left).split(".")
+  const [rightWhole, rightFraction = ""] = normalizeNumericTreeIdentifier(right).split(".")
+
+  if (leftWhole.length !== rightWhole.length) {
+    return leftWhole.length - rightWhole.length
+  }
+
+  const wholeCompare = leftWhole.localeCompare(rightWhole)
+  if (wholeCompare !== 0) {
+    return wholeCompare
+  }
+
+  const fractionalLength = Math.max(leftFraction.length, rightFraction.length)
+  const normalizedLeftFraction = leftFraction.padEnd(fractionalLength, "0")
+  const normalizedRightFraction = rightFraction.padEnd(fractionalLength, "0")
+  return normalizedLeftFraction.localeCompare(normalizedRightFraction)
+}
+
+function parseTreeRangeBoundary(value: string | undefined): string | null {
+  if (isBlank(value)) {
+    return null
+  }
+
+  const trimmed = value!.trim()
+  if (!numericTreeIdentifierPattern.test(trimmed)) {
+    throw new Error("Tree Number range requires complete numeric tree identifiers.")
+  }
+
+  return normalizeNumericTreeIdentifier(trimmed)
+}
+
+function parseNumericTreeIdentifier(value: string): string | null {
+  const trimmed = value.trim()
+  if (!numericTreeIdentifierPattern.test(trimmed)) {
+    return null
+  }
+
+  return normalizeNumericTreeIdentifier(trimmed)
+}
+
+function inTreeNumberRange(value: string, from: string | undefined, to: string | undefined): boolean {
+  if (isBlank(from) && isBlank(to)) {
+    return true
+  }
+
+  const min = parseTreeRangeBoundary(from)
+  const max = parseTreeRangeBoundary(to)
+
+  if (min !== null && max !== null && compareNumericTreeIdentifiers(min, max) > 0) {
+    throw new Error("Tree Number From cannot be greater than Tree Number To.")
+  }
+
+  const numericTreeNo = parseNumericTreeIdentifier(value)
+  if (numericTreeNo === null) {
     return false
   }
 
-  if (!isBlank(to) && value.localeCompare(to!.trim()) > 0) {
+  if (min !== null && compareNumericTreeIdentifiers(numericTreeNo, min) < 0) {
+    return false
+  }
+
+  if (max !== null && compareNumericTreeIdentifiers(numericTreeNo, max) > 0) {
     return false
   }
 
@@ -668,7 +876,30 @@ export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Pro
     throw new Error("Harvest API credentials are not configured")
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+  const parameterNames: Record<keyof DetailedQueryFilters, string> = {
+    treeFrom: "tree_from",
+    treeTo: "tree_to",
+    cycleFrom: "cycle_from",
+    cycleTo: "cycle_to",
+    dateFrom: "date_from",
+    dateTo: "date_to",
+    nutsFrom: "nuts_from",
+    nutsTo: "nuts_to",
+    saleFrom: "sale_from",
+    saleTo: "sale_to",
+    missedFrom: "missed_from",
+    missedTo: "missed_to",
+    plot1Classification: "plot1_classification",
+    plot2Classification: "plot2_classification",
+  }
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters) as [keyof DetailedQueryFilters, string | undefined][]) {
+    if (!isBlank(value) && value !== "All") {
+      params.set(parameterNames[key], value!.trim())
+    }
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/detailed-query?${params}`, {
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
@@ -680,64 +911,38 @@ export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Pro
     throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
   }
 
-  const performance = (await response.json()) as {
-    details: ApiTreePerformanceDetail[]
+  const data = (await response.json()) as {
+    rows: Array<{
+      tree_no: string
+      harvest_cycle: string
+      harvest_date: string
+      bunch1_nuts: number
+      bunch2_nuts: number
+      bunch3_nuts: number
+      total_bunches: number
+      total_nuts: number
+      total_sale: string | number | null
+      missed_harvests: number
+      plot: string
+      category: string
+    }>
   }
-
-  const candidateDetails = performance.details.filter((detail) => {
-    return (
-      inTextRange(detail.tree_no, filters.treeFrom, filters.treeTo) &&
-      inNumberRange(detail.missed_harvests ?? 0, filters.missedFrom, filters.missedTo) &&
-      detailMatchesClassification(detail, filters)
-    )
-  })
-
-  const rows: DetailedQueryRow[] = []
-
-  for (const detail of candidateDetails) {
-    const records = await fetchRawTreeHistory(detail.tree_no, authHeader)
-
-    for (const record of records) {
-      const harvestCycle = record.harvest_cycle ?? ""
-      const cycleNumber = toCycleNumber(harvestCycle)
-      const totalNuts = record.total_nuts ?? 0
-      const totalSale = toNumber(record.total_sale)
-
-      if (
-        inNumberRange(cycleNumber, filters.cycleFrom, filters.cycleTo) &&
-        inDateRange(record.harvest_date, filters.dateFrom, filters.dateTo) &&
-        inNumberRange(totalNuts, filters.nutsFrom, filters.nutsTo) &&
-        inNumberRange(totalSale, filters.saleFrom, filters.saleTo)
-      ) {
-        rows.push({
-          treeNo: detail.tree_no,
-          harvestCycle,
-          harvestDate: record.harvest_date,
-          nutsB1: record.bunch1_nuts ?? 0,
-          nutsB2: record.bunch2_nuts ?? 0,
-          nutsB3: record.bunch3_nuts ?? 0,
-          totalBunches: record.total_bunches ?? 0,
-          totalNuts,
-          totalSale,
-          missedHarvests: detail.missed_harvests ?? 0,
-          plot: detail.plot,
-          classification: detail.category,
-        })
-      }
-    }
-  }
-
-  rows.sort((a, b) => {
-    const dateCompare = b.harvestDate.localeCompare(a.harvestDate)
-    if (dateCompare !== 0) {
-      return dateCompare
-    }
-
-    return a.treeNo.localeCompare(b.treeNo)
-  })
 
   return {
-    rows: rows.slice(0, 500),
+    rows: data.rows.map((row) => ({
+      treeNo: row.tree_no,
+      harvestCycle: row.harvest_cycle,
+      harvestDate: row.harvest_date,
+      nutsB1: row.bunch1_nuts ?? 0,
+      nutsB2: row.bunch2_nuts ?? 0,
+      nutsB3: row.bunch3_nuts ?? 0,
+      totalBunches: row.total_bunches ?? 0,
+      totalNuts: row.total_nuts ?? 0,
+      totalSale: toNumber(row.total_sale),
+      missedHarvests: row.missed_harvests ?? 0,
+      plot: row.plot,
+      classification: row.category,
+    })),
     usedMockFallback: false,
   }
 }

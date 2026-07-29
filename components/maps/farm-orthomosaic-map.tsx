@@ -10,6 +10,10 @@ import { farmCombinedLayer, plotBounds, type Coordinate } from "@/lib/farm-map-d
 export type LeafletMap = {
   fitBounds: (bounds: Coordinate[], options?: Record<string, unknown>) => void
   setView: (center: Coordinate, zoom: number, options?: Record<string, unknown>) => void
+  getZoom: () => number
+  hasLayer: (layer: LeafletLayerGroup) => boolean
+  on: (eventName: string, handler: () => void) => LeafletMap
+  off: (eventName: string, handler: () => void) => LeafletMap
   remove: () => void
 }
 
@@ -20,7 +24,10 @@ export type LeafletTileLayer = {
 
 export type LeafletCircleMarker = {
   addTo: (target: LeafletMap | LeafletLayerGroup) => LeafletCircleMarker
+  bindPopup: (content: string, options?: Record<string, unknown>) => LeafletCircleMarker
   bindTooltip: (content: string, options?: Record<string, unknown>) => LeafletCircleMarker
+  openPopup: () => LeafletCircleMarker
+  setStyle: (options: Record<string, unknown>) => LeafletCircleMarker
   on: (eventName: string, handler: () => void) => LeafletCircleMarker
   getElement?: () => SVGElement | undefined
 }
@@ -31,12 +38,14 @@ export type LeafletMarker = {
   addTo: (target: LeafletMap | LeafletLayerGroup) => LeafletMarker
   bindPopup: (content: string, options?: Record<string, unknown>) => LeafletMarker
   bindTooltip: (content: string, options?: Record<string, unknown>) => LeafletMarker
+  openPopup: () => LeafletMarker
   on: (eventName: string, handler: () => void) => LeafletMarker
   getElement?: () => HTMLElement | undefined
 }
 
 export type LeafletLayerGroup = {
   addTo: (map: LeafletMap) => LeafletLayerGroup
+  addLayer: (layer: LeafletCircleMarker | LeafletMarker) => LeafletLayerGroup
   clearLayers: () => void
   remove: () => void
 }

@@ -2,10 +2,13 @@
   "name": "my-project",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node tests/well-water-authoritative-daily-values.mjs && node tests/preview-targeted-repair.mjs && node tests/navigation-consistency.mjs && node tests/farm-map-coconut-trees.mjs && node tests/tree-number-autocomplete.mjs && node tests/version-visibility.mjs",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },
   "dependencies": {

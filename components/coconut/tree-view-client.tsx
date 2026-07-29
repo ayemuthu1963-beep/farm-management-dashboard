@@ -1,11 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { Trees, History, Eraser, BarChart3 } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
+import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
+import { treeNumberSuggestionsUrl } from "@/lib/tree-number-options"
 import {
   formatRupees,
   type TreeHarvestRow,
@@ -20,7 +22,7 @@ interface TreeViewClientProps {
   initialTreeNo: string
   initialTreeOptions: string[]
   initialTreeHistory: TreeHarvestRow[]
-  initialDataStatus: "idle" | "real" | "empty" | "error"
+  initialDataStatus: "idle" | "loading" | "real" | "empty" | "error"
 }
 
 export function TreeViewClient({
@@ -35,6 +37,7 @@ export function TreeViewClient({
   const [dataStatus, setDataStatus] = useState(initialDataStatus)
   const [errorMessage, setErrorMessage] = useState("")
   const [showPerformance, setShowPerformance] = useState(false)
+  const treeRequestInFlight = useRef(false)
 
   const last10Harvests = useMemo(() => treeHistory.slice(0, 10), [treeHistory])
   const sinceJan2025Harvests = useMemo(
@@ -54,7 +57,7 @@ export function TreeViewClient({
 
   async function loadTreeOptions(query: string) {
     try {
-      const response = await fetch(`/api/coconut-harvest/trees?q=${encodeURIComponent(query)}&limit=25`)
+      const response = await fetch(treeNumberSuggestionsUrl(query, 25))
       if (!response.ok) {
         return
       }
@@ -68,12 +71,18 @@ export function TreeViewClient({
   }
 
   async function loadTreeHistory(selectedTreeNo = treeNo) {
+    if (treeRequestInFlight.current) {
+      return
+    }
     const trimmedTreeNo = selectedTreeNo.trim()
 
     if (!trimmedTreeNo) {
       return
     }
 
+    treeRequestInFlight.current = true
+    setDataStatus("loading")
+    setErrorMessage("")
     try {
       const response = await fetch(`/api/coconut-harvest/trees/${encodeURIComponent(trimmedTreeNo)}`)
       if (response.status === 404) {
@@ -89,16 +98,22 @@ export function TreeViewClient({
       setTreeNo(data.treeNo)
       setTreeHistory(data.treeHarvestHistory)
       setDataStatus(data.treeHarvestHistory.length > 0 ? "real" : "empty")
-    } catch (error) {
-      setTreeHistory([])
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load tree harvest history")
+    } catch {
+      setErrorMessage("Unable to load harvest data. Please check the connection and try again.")
       setDataStatus("error")
+    } finally {
+      treeRequestInFlight.current = false
     }
   }
 
   useEffect(() => {
     loadTreeOptions(treeNo)
   }, [treeNo])
+
+  function handleTreeSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loadTreeHistory()
+  }
 
   return (
     <DashboardShell>
@@ -109,7 +124,7 @@ export function TreeViewClient({
         {/* Controls */}
         <Panel title="Tree Selection" icon={Trees}>
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <form onSubmit={handleTreeSearchSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
               <div className="flex-1">
                 <label htmlFor="tree-no" className="mb-1.5 block text-xs font-medium text-muted-foreground">
                   Tree Number
@@ -133,12 +148,12 @@ export function TreeViewClient({
                 </datalist>
               </div>
               <button
-                type="button"
-                onClick={() => loadTreeHistory()}
+                type="submit"
+                disabled={dataStatus === "loading"}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
               >
-                <History className="size-4" aria-hidden="true" />
-                Show Tree History
+                {dataStatus === "loading" ? <HarvestButtonSpinner /> : <History className="size-4" aria-hidden="true" />}
+                {dataStatus === "loading" ? "Searching..." : "Show Tree History"}
               </button>
               <button
                 type="button"
@@ -153,7 +168,7 @@ export function TreeViewClient({
                 <Eraser className="size-4" aria-hidden="true" />
                 Clear
               </button>
-            </div>
+            </form>
 
             <div>
               <button
@@ -220,15 +235,24 @@ export function TreeViewClient({
                 Real data loaded for Tree {treeNo}.
               </p>
             ) : null}
+            {dataStatus === "loading" ? (
+              <HarvestRequestState
+                tone="loading"
+                message="Searching harvest records..."
+                detail={treeHistory.length > 0 ? "Previous tree history remains visible until the search completes." : undefined}
+                compact
+              />
+            ) : null}
             {dataStatus === "empty" ? (
-              <p className="rounded-lg border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-xs font-medium text-chart-4">
-                No records found for Tree {treeNo}.
-              </p>
+              <HarvestRequestState tone="empty" message={`No harvest records found for Tree ${treeNo}.`} compact />
             ) : null}
             {dataStatus === "error" ? (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-                {errorMessage || "Unable to load live PostgreSQL harvest data."}
-              </p>
+              <HarvestRequestState
+                tone="error"
+                message="Unable to load harvest data."
+                detail={errorMessage || "Please check the connection and try again."}
+                onRetry={() => loadTreeHistory()}
+              />
             ) : null}
           </div>
         </Panel>
@@ -265,6 +289,8 @@ export function TreeViewClient({
                     ))}
                   </tbody>
                 </table>
+              ) : dataStatus === "loading" ? (
+                <HarvestRequestState tone="loading" message="Searching harvest records..." />
               ) : (
                 <p className="px-3 py-8 text-center text-sm text-muted-foreground">
                   No harvest records found for tree {treeNo}.

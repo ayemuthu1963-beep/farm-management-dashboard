@@ -8,10 +8,11 @@ import {
   YAxis,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts"
 import type { ChartPoint } from "@/lib/well-data"
-import { seriesConfig } from "@/lib/well-data"
+import { formatNumberIN, formatSignedLitres, seriesConfig } from "@/lib/well-data"
 
 interface WellChartProps {
   data: ChartPoint[]
@@ -42,6 +43,12 @@ export function WellChart({ data }: WellChartProps) {
             }}
           />
           <Tooltip
+            formatter={(value, name) => [
+              name === "Morning Difference"
+                ? formatSignedLitres(Number(value), true)
+                : `${formatNumberIN(Math.round(Number(value)))} L`,
+              name,
+            ]}
             contentStyle={{
               borderRadius: 8,
               border: "1px solid var(--border)",
@@ -50,6 +57,7 @@ export function WellChart({ data }: WellChartProps) {
               fontSize: 12,
             }}
           />
+          <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
           <Legend
             verticalAlign="top"
             height={32}

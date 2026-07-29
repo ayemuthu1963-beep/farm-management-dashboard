@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { fetchDetailedQueryData, type DetailedQueryFilters } from "@/lib/coconut-harvest-api"
+import { fetchDetailedQueryData, HarvestApiError, type DetailedQueryFilters } from "@/lib/coconut-harvest-api"
 
 function readFilters(request: Request): DetailedQueryFilters {
   const { searchParams } = new URL(request.url)
@@ -23,15 +23,23 @@ function readFilters(request: Request): DetailedQueryFilters {
 }
 
 export async function GET(request: Request) {
+  const referenceId = crypto.randomUUID().slice(0, 8)
   try {
     const data = await fetchDetailedQueryData(readFilters(request))
-    return NextResponse.json(data)
+    return NextResponse.json(data, { headers: { "X-Request-ID": referenceId } })
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Tree Number")) {
+      return NextResponse.json({ error: error.message, referenceId }, { status: 400 })
+    }
+
+    const status = error instanceof HarvestApiError ? error.status : 500
+    console.error(`[detailed-query:${referenceId}]`, error)
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Unable to fetch detailed query data",
+        error: "Detailed Query could not be completed",
+        referenceId,
       },
-      { status: 503 },
+      { status, headers: { "X-Request-ID": referenceId } },
     )
   }
 }

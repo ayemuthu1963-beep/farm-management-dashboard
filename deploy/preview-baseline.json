@@ -1,0 +1,41 @@
+{
+  "environment": "preview",
+  "frontend_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "deployed_frontend_application_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "frontend_release_branch_head_at_framework_verification": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "latest_framework_commit": "94baca49feda4b04c3bcdc76557ac30129370248",
+  "frontend_image": "mfms-v0-preview:navigation-94baca4-20260728-1030",
+  "frontend_image_id": "sha256:c5c80b5e975216147bb541d26f6c6165583024bc9290b108aa1dd251ee2550e1",
+  "backend_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+  "deployed_backend_application_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+  "backend_release_branch_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+  "backend_repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+  "backend_repository_url": "https://github.com/ayemuthu1963-beep/muthu-harvest-dashboard.git",
+  "backend_release_branch": "preview-release",
+  "backend_remote_release_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+  "backend_upstream": "origin/preview-release",
+  "backend_ahead_behind": "0/0",
+  "backend_image": "muthu-harvest-dashboard-harvest-api:preview-south-well-reference-ca03f1d-20260728-1000",
+  "backend_image_id": "sha256:62789947311cc6af0b825c4cee76928419ed0cfb5f4144bffeb17c3420c3eb01",
+  "database": "mfms_server_uat",
+  "odk_projects": {
+    "harvest": 17,
+    "well_water": 15,
+    "beetle": 16
+  },
+  "schedules": {
+    "preview_harvest_auto_sync": "disabled",
+    "preview_well_water": "30 3,13 * * *",
+    "preview_beetle": "30 6 * * *"
+  },
+  "scheduler_verification": {
+    "root_crontab": "VERIFIED — ROOT HAS NO CRONTAB",
+    "root_preview_harvest_schedule": "absent",
+    "root_preview_well_water_schedule": "absent",
+    "duplicate_privileged_scheduler": "absent"
+  },
+  "archive_backups": {
+    "detailed_query_backend_baseline": "C:\\MFMS_LOCAL\\backups\\backend-source-baselines\\dq-backend-baseline-source.tar.gz"
+  },
+  "updated_at": "2026-07-28T10:50:00+05:30"
+}

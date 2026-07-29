@@ -1,0 +1,28 @@
+{
+  "environment": "preview",
+  "frontend": {
+    "deployed_application_commit": "01c79cd57bbd2ce15e297ae11269c77980baefff",
+    "release_branch_head": "42cf0ba0709ce4ac6a54507f38238035e1f4f143",
+    "image": "mfms-v0-preview:morning-difference-01c79cd-20260728-0925",
+    "image_id": "sha256:78889ee1a157939f327780cd10703c6a9806c1c6091e6658684b753d78b02135",
+    "changed": false
+  },
+  "backend": {
+    "deployed_application_commit": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+    "release_branch_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+    "repository": "ayemuthu1963-beep/muthu-harvest-dashboard",
+    "branch": "preview-release",
+    "remote_head": "ca03f1dc7dff71a58f4e2d3badda754f979efe03",
+    "upstream": "origin/preview-release",
+    "ahead_behind": "0/0",
+    "image": "muthu-harvest-dashboard-harvest-api:preview-south-well-reference-ca03f1d-20260728-1000",
+    "image_id": "sha256:62789947311cc6af0b825c4cee76928419ed0cfb5f4144bffeb17c3420c3eb01"
+  },
+  "database": "mfms_server_uat",
+  "compatible_schema": "unchanged from the prior verified Preview release",
+  "api_contract_version": "preview-2026-07-28-south-well-reference-depth-v1",
+  "migration_version": "none",
+  "configuration_changes": "none",
+  "test_result": "28 backend tests passed; 18 South readings reconciled dynamically; North payload identical; candidate and live Preview API/UI passed",
+  "checkpoint": "/home/muthu/mfms_checkpoints/preview-south-well-reference-prechange-20260728-042538/"
+}

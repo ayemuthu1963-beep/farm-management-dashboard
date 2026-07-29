@@ -7,9 +7,27 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 
 # Environment variables
+.env
+.env.*
+!.env.example
 .env*.local
+candidate.env
 
 # Common ignores
 node_modules
 .next/
+.cache/
+tsconfig.tsbuildinfo
 .DS_Store
+source.tar
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.apk
+
+# Local RC database snapshots and disposable data
+*.sql
+*.dump
+local-backups/
+local-data/

@@ -37,6 +37,11 @@ export const treeClassifications: string[] = [
   "Bench Player",
 ]
 
+export const detailedQueryClassifications = {
+  plot1: treeClassifications,
+  plot2: ["All", "Match Winner", "Reliable Batter", "Tail Ender", "Bench Player"],
+} as const
+
 // ===========================================================================
 // 1) Tree View — per-tree harvest history
 // ===========================================================================
