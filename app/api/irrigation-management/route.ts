@@ -260,11 +260,38 @@ function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: 
     return { ...config, motor: motors.length > 0 ? motors.join(", ") : config.configuredMotorValves.join(", "), valveOpenTime: zoneMinutes > 0 ? formatRuntimeMinutes(zoneMinutes) : "--", totalRuntimeMinutes: zoneMinutes, totalRuntimeHours: Number((zoneMinutes / 60).toFixed(2)), totalWaterSupplied: totalWater, waterPerTree: cropWater.litresPerTree, waterPerTreeDisplay: zoneMinutes > 0 ? `${cropWater.crop}: ${cropWater.litresPerTree.toLocaleString("en-IN")} L/tree/hour equivalent` : "No runtime recorded", cropWater: [cropWater], lastIrrigatedDate: formatDate(lastEntryDate), daysSinceIrrigation: null, recordsCount: zoneEntries.length, status, statusLabel: statusColors[status].label, fiveDayHistory: fiveDayHistory[zoneId] ?? [] }
   })
 
+  const perTreeTrendKey: Record<ZoneId, "P1EPerTree" | "P1WPerTree" | "P2EPerTree" | "P2WPerTree" | "JFPerTree" | "NMPerTree"> = {
+    P1E: "P1EPerTree",
+    P1W: "P1WPerTree",
+    P2E: "P2EPerTree",
+    P2W: "P2WPerTree",
+    JF: "JFPerTree",
+    NM: "NMPerTree",
+  }
+
   const trend: TrendPoint[] = Array.from(minutesByDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([date, dateMinutes]) => {
-    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: 0, P1W: 0, P2E: 0, P2W: 0, JF: 0, NM: 0 }
+    const point: TrendPoint = {
+      date,
+      displayDate: formatShortDate(date),
+      totalWaterLitres: 0,
+      totalRuntimeHours: 0,
+      P1E: 0,
+      P1W: 0,
+      P2E: 0,
+      P2W: 0,
+      JF: 0,
+      NM: 0,
+      P1EPerTree: 0,
+      P1WPerTree: 0,
+      P2EPerTree: 0,
+      P2WPerTree: 0,
+      JFPerTree: 0,
+      NMPerTree: 0,
+    }
     for (const zoneId of zoneOrder) {
       const minutes = dateMinutes.get(zoneId) ?? 0
       point[zoneId] = runtimeWater(minutes)
+      point[perTreeTrendKey[zoneId]] = cropWaterFigure(zoneId, minutes).litresPerTree
       point.totalWaterLitres += point[zoneId]
       point.totalRuntimeHours += minutes / 60
     }

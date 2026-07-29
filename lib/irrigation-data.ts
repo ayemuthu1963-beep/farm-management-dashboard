@@ -109,6 +109,12 @@ export interface TrendPoint {
   P2W: number
   JF: number
   NM: number
+  P1EPerTree: number
+  P1WPerTree: number
+  P2EPerTree: number
+  P2WPerTree: number
+  JFPerTree: number
+  NMPerTree: number
 }
 
 export interface IrrigationSummary {
