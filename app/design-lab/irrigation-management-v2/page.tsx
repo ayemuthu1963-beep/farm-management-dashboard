@@ -32,6 +32,94 @@ const totalWaterPumpedTrend = [
   { date: "13 Jul", total: 13900 },
 ]
 
+// Tree icon component for zone tiles
+function TreeIcon({ zoneId }: { zoneId: string }) {
+  switch (zoneId) {
+    case 'P1W': // Big Coconut Tree with Sunset
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Sunset */}
+          <circle cx="45" cy="20" r="8" fill="currentColor" opacity="0.4" />
+          {/* Tree trunk */}
+          <rect x="26" y="32" width="8" height="16" fill="currentColor" opacity="0.6" />
+          {/* Large canopy */}
+          <circle cx="30" cy="28" r="14" fill="currentColor" opacity="0.7" />
+          <circle cx="18" cy="32" r="11" fill="currentColor" opacity="0.6" />
+          <circle cx="42" cy="32" r="11" fill="currentColor" opacity="0.6" />
+        </svg>
+      )
+    case 'P1E': // Big Coconut Tree with Sunrise
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Sunrise */}
+          <circle cx="15" cy="20" r="8" fill="currentColor" opacity="0.4" />
+          {/* Tree trunk */}
+          <rect x="26" y="32" width="8" height="16" fill="currentColor" opacity="0.6" />
+          {/* Large canopy */}
+          <circle cx="30" cy="28" r="14" fill="currentColor" opacity="0.7" />
+          <circle cx="18" cy="32" r="11" fill="currentColor" opacity="0.6" />
+          <circle cx="42" cy="32" r="11" fill="currentColor" opacity="0.6" />
+        </svg>
+      )
+    case 'P2W': // Small Coconut Tree with Sunset
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Sunset */}
+          <circle cx="45" cy="25" r="6" fill="currentColor" opacity="0.4" />
+          {/* Tree trunk */}
+          <rect x="27" y="36" width="6" height="12" fill="currentColor" opacity="0.6" />
+          {/* Medium canopy */}
+          <circle cx="30" cy="32" r="10" fill="currentColor" opacity="0.7" />
+          <circle cx="20" cy="35" r="8" fill="currentColor" opacity="0.6" />
+          <circle cx="40" cy="35" r="8" fill="currentColor" opacity="0.6" />
+        </svg>
+      )
+    case 'P2E': // Small Coconut Tree with Sunrise
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Sunrise */}
+          <circle cx="15" cy="25" r="6" fill="currentColor" opacity="0.4" />
+          {/* Tree trunk */}
+          <rect x="27" y="36" width="6" height="12" fill="currentColor" opacity="0.6" />
+          {/* Medium canopy */}
+          <circle cx="30" cy="32" r="10" fill="currentColor" opacity="0.7" />
+          <circle cx="20" cy="35" r="8" fill="currentColor" opacity="0.6" />
+          <circle cx="40" cy="35" r="8" fill="currentColor" opacity="0.6" />
+        </svg>
+      )
+    case 'JF': // Jackfruit tree
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Tree trunk */}
+          <rect x="26" y="34" width="8" height="14" fill="currentColor" opacity="0.6" />
+          {/* Main canopy */}
+          <circle cx="30" cy="26" r="12" fill="currentColor" opacity="0.7" />
+          {/* Fruits (bumpy texture) */}
+          <circle cx="28" cy="20" r="3" fill="currentColor" opacity="0.5" />
+          <circle cx="35" cy="21" r="3" fill="currentColor" opacity="0.5" />
+          <circle cx="32" cy="28" r="2.5" fill="currentColor" opacity="0.5" />
+        </svg>
+      )
+    case 'NM': // Nutmeg tree
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Tree trunk */}
+          <rect x="27" y="32" width="6" height="16" fill="currentColor" opacity="0.6" />
+          {/* Compact canopy */}
+          <circle cx="30" cy="24" r="11" fill="currentColor" opacity="0.7" />
+          <circle cx="22" cy="28" r="9" fill="currentColor" opacity="0.6" />
+          <circle cx="38" cy="28" r="9" fill="currentColor" opacity="0.6" />
+          {/* Nutmeg details */}
+          <circle cx="30" cy="22" r="1.5" fill="currentColor" opacity="0.4" />
+          <circle cx="26" cy="26" r="1.5" fill="currentColor" opacity="0.4" />
+          <circle cx="34" cy="26" r="1.5" fill="currentColor" opacity="0.4" />
+        </svg>
+      )
+    default:
+      return null
+  }
+}
+
 export default function IrrigationManagementV2() {
   const [activePeriod, setActivePeriod] = useState('today')
   const isLoading = false
@@ -60,7 +148,7 @@ export default function IrrigationManagementV2() {
             { id: 'today', label: 'Today' },
             { id: 'yesterday', label: 'Yesterday' },
             { id: 'last7', label: 'Last 7 Days' },
-            { id: 'cycle', label: 'Current Cycle' },
+            { id: 'custom', label: 'Custom Date Range' },
           ].map((option) => (
             <button
               key={option.id}
@@ -107,10 +195,15 @@ export default function IrrigationManagementV2() {
             {/* First row - 4 zones */}
             <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
               {mockZones.slice(0, 4).map((zone) => (
-                <div key={zone.id} className="rounded-lg border border-border bg-card p-4 text-center">
-                  <div className="text-sm font-semibold uppercase text-foreground mb-2">{zone.name}</div>
-                  <div className="text-2xl font-bold text-chart-2 mb-2">{zone.totalWaterSupplied.toLocaleString("en-IN")}</div>
-                  <div className="text-xs text-muted-foreground">{zone.statusLabel}</div>
+                <div key={zone.id} className="rounded-lg border border-border bg-card p-4 text-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-15 flex items-center justify-center">
+                    <TreeIcon zoneId={zone.id} />
+                  </div>
+                  <div className="relative z-10">
+                    <div className="text-sm font-semibold uppercase text-foreground mb-2">{zone.name}</div>
+                    <div className="text-2xl font-bold text-chart-2 mb-2">{zone.totalWaterSupplied.toLocaleString("en-IN")}</div>
+                    <div className="text-xs text-muted-foreground">{zone.statusLabel}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -118,10 +211,15 @@ export default function IrrigationManagementV2() {
             {/* Second row - 2 zones (Jackfruit, Nutmeg) centered and evenly distributed */}
             <div className="grid gap-3 grid-cols-2 lg:grid-cols-2 lg:max-w-2xl lg:mx-auto">
               {mockZones.slice(4, 6).map((zone) => (
-                <div key={zone.id} className="rounded-lg border border-border bg-card p-4 text-center">
-                  <div className="text-sm font-semibold uppercase text-foreground mb-2">{zone.name}</div>
-                  <div className="text-2xl font-bold text-chart-2 mb-2">{zone.totalWaterSupplied.toLocaleString("en-IN")}</div>
-                  <div className="text-xs text-muted-foreground">{zone.statusLabel}</div>
+                <div key={zone.id} className="rounded-lg border border-border bg-card p-4 text-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-15 flex items-center justify-center">
+                    <TreeIcon zoneId={zone.id} />
+                  </div>
+                  <div className="relative z-10">
+                    <div className="text-sm font-semibold uppercase text-foreground mb-2">{zone.name}</div>
+                    <div className="text-2xl font-bold text-chart-2 mb-2">{zone.totalWaterSupplied.toLocaleString("en-IN")}</div>
+                    <div className="text-xs text-muted-foreground">{zone.statusLabel}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -133,13 +231,13 @@ export default function IrrigationManagementV2() {
           {/* Total Water Pumped — Date Wise */}
           <Panel title="Total Water Pumped — Date Wise" icon={TrendingUp}>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={totalWaterPumpedTrend}>
+              <LineChart data={totalWaterPumpedTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="var(--color-muted-foreground)" />
                 <YAxis tick={{ fontSize: 12 }} stroke="var(--color-muted-foreground)" />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)' }} />
-                <Bar dataKey="total" fill="rgb(34, 197, 94)" radius={[8, 8, 0, 0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="total" stroke="rgb(34, 197, 94)" strokeWidth={2} dot={false} />
+              </LineChart>
             </ResponsiveContainer>
           </Panel>
 
