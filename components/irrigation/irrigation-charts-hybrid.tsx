@@ -1,8 +1,6 @@
 "use client"
 
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Legend,
   Line,
@@ -12,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Droplets, TrendingUp } from "lucide-react"
+import { TrendingUp } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
 import { irrigationZoneVisuals } from "@/components/irrigation/irrigation-zone-visuals"
 import { formatNumberIN, type TrendPoint, type ZoneId } from "@/lib/irrigation-data"
@@ -62,7 +60,7 @@ export function IrrigationOverviewCharts({
     return (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartState label="Loading total water pumped..." />
-        <ChartState label="Loading daily irrigation trend..." />
+        <ChartState title="Water Per Tree Trend" label="Loading water per tree trend..." />
       </div>
     )
   }
@@ -105,80 +103,40 @@ export function IrrigationOverviewCharts({
         </div>
       </Panel>
 
-      <Panel title="Daily Irrigation Trend" icon={Droplets}>
-        <div className="h-[300px] w-full">
+      <Panel title="Water Per Tree Trend" icon={TrendingUp}>
+        <div className="h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trend} margin={{ top: 8, right: 12, bottom: 4, left: 8 }}>
+            <LineChart data={trend} margin={{ top: 8, right: 12, bottom: 4, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="displayDate" tick={axisTick} />
               <YAxis
-                width={84}
+                width={76}
                 tick={axisTick}
                 tickFormatter={(value: number) => formatNumberIN(value)}
-                label={{ value: "Water pumped (L)", angle: -90, position: "insideLeft" }}
+                label={{ value: "Litres per tree", angle: -90, position: "insideLeft" }}
               />
               <Tooltip formatter={(value, name) => litresTooltip(value, name)} labelFormatter={(label) => `Date: ${label}`} />
               <Legend />
               {zoneSeries.map((series) => (
-                <Bar
+                <Line
                   key={series.id}
-                  dataKey={series.id}
+                  type="monotone"
+                  dataKey={series.perTreeKey}
                   name={series.label}
-                  fill={irrigationZoneVisuals[series.id].chart}
+                  stroke={irrigationZoneVisuals[series.id].chart}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 4 }}
                   isAnimationActive={false}
                 />
               ))}
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Live crop rates: Coconut 100 L/tree/hour, Nutmeg 80 L/tree/hour, Jackfruit 60 L/tree/hour.
+        </p>
       </Panel>
     </div>
-  )
-}
-
-export function WaterPerTreeTrendChart({
-  trend,
-  isLoading = false,
-  errorMessage = null,
-}: Props) {
-  if (isLoading) return <ChartState title="Water Per Tree Trend" label="Loading water per tree trend..." />
-  if (errorMessage) return <ChartState title="Water Per Tree Trend" label={`${errorMessage}. Use Refresh to retry.`} />
-  if (trend.length === 0) return <ChartState title="Water Per Tree Trend" label="No live irrigation records for the selected period." />
-
-  return (
-    <Panel title="Water Per Tree Trend" icon={TrendingUp}>
-      <div className="h-[320px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={trend} margin={{ top: 8, right: 12, bottom: 4, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="displayDate" tick={axisTick} />
-            <YAxis
-              width={76}
-              tick={axisTick}
-              tickFormatter={(value: number) => formatNumberIN(value)}
-              label={{ value: "Litres per tree", angle: -90, position: "insideLeft" }}
-            />
-            <Tooltip formatter={(value, name) => litresTooltip(value, name)} labelFormatter={(label) => `Date: ${label}`} />
-            <Legend />
-            {zoneSeries.map((series) => (
-              <Line
-                key={series.id}
-                type="monotone"
-                dataKey={series.perTreeKey}
-                name={series.label}
-                stroke={irrigationZoneVisuals[series.id].chart}
-                strokeWidth={2}
-                dot={{ r: 2 }}
-                activeDot={{ r: 4 }}
-                isAnimationActive={false}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">
-        Live crop rates: Coconut 100 L/tree/hour, Nutmeg 80 L/tree/hour, Jackfruit 60 L/tree/hour.
-      </p>
-    </Panel>
   )
 }

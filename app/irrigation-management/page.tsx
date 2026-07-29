@@ -9,10 +9,7 @@ import { IrrigationPeriodSelector } from "@/components/irrigation/irrigation-per
 import { IrrigationSummaryCards } from "@/components/irrigation/irrigation-summary-cards"
 import { ZoneStatusCards } from "@/components/irrigation/zone-status-cards"
 import { IrrigationMapV2 } from "@/components/irrigation/irrigation-map-v2"
-import {
-  IrrigationOverviewCharts,
-  WaterPerTreeTrendChart,
-} from "@/components/irrigation/irrigation-charts-hybrid"
+import { IrrigationOverviewCharts } from "@/components/irrigation/irrigation-charts-hybrid"
 import { IrrigationZoneTable } from "@/components/irrigation/irrigation-zone-table"
 import {
   emptyIrrigationData,
@@ -182,12 +179,6 @@ export default function IrrigationManagementPage() {
             </div>
           )}
         </Panel>
-
-        <WaterPerTreeTrendChart
-          trend={data.trend}
-          isLoading={isLoading}
-          errorMessage={errorMessage}
-        />
 
         <IrrigationZoneTable
           zones={data.zones}

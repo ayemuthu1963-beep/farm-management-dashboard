@@ -35,11 +35,12 @@ assert.match(status, /irrigationZoneVisuals/)
 
 for (const title of [
   "Total Water Pumped — Date Wise",
-  "Daily Irrigation Trend",
   "Water Per Tree Trend",
 ]) {
   assert.match(charts, new RegExp(title))
 }
+assert.doesNotMatch(charts, /Daily Irrigation Trend/)
+assert.doesNotMatch(page, /WaterPerTreeTrendChart/)
 assert.match(charts, /<LineChart data=\{trend\}/)
 for (const key of ["P1EPerTree", "P1WPerTree", "P2EPerTree", "P2WPerTree", "JFPerTree", "NMPerTree"]) {
   assert.match(charts, new RegExp(key))
