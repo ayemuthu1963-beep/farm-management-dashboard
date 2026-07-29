@@ -29,6 +29,7 @@ const definitions = [
 ]
 
 const allTreeNumbers = new Set()
+const decimalTreeNumbersByPlot = new Map()
 
 for (const definition of definitions) {
   const collection = JSON.parse(await readFile(definition.path, "utf8"))
@@ -59,6 +60,10 @@ for (const definition of definitions) {
     treeNumbers.filter((treeNo) => treeNo.includes(".") && !/\.0+$/.test(treeNo)).length,
     definition.expectedDecimals,
   )
+  decimalTreeNumbersByPlot.set(
+    definition.plot,
+    treeNumbers.find((treeNo) => treeNo.includes(".") && !/\.0+$/.test(treeNo)),
+  )
 
   for (const treeNo of treeNumbers) {
     assert.ok(!allTreeNumbers.has(treeNo), `TreeNo ${treeNo} appears in both plots`)
@@ -66,11 +71,22 @@ for (const definition of definitions) {
   }
 }
 
+assert.equal(allTreeNumbers.size, 2117)
+assert.ok(allTreeNumbers.has(decimalTreeNumbersByPlot.get("Plot 1")))
+assert.ok(allTreeNumbers.has(decimalTreeNumbersByPlot.get("Plot 2")))
+
 const mapClient = await readFile("components/maps/farm-map-client.tsx", "utf8")
 assert.match(mapClient, /const MARKER_ZOOM = 18/)
 assert.match(mapClient, /const LABEL_ZOOM = 20/)
 assert.match(mapClient, /Tree Numbers/)
-assert.match(mapClient, /All Plots/)
+assert.match(mapClient, /Plot 1 &amp; Plot 2/)
+assert.doesNotMatch(mapClient, /All Plots/)
+assert.match(mapClient, /useState<PlotFilter>\("Plot 1 & Plot 2"\)/)
+assert.match(mapClient, /useRef<PlotFilter>\("Plot 1 & Plot 2"\)/)
+assert.match(
+  mapClient,
+  /Tree found in \$\{treePlot\}\. Select \$\{treePlot\} or Plot 1 & Plot 2\./,
+)
 assert.match(mapClient, /Plot 1/)
 assert.match(mapClient, /Plot 2/)
 assert.match(mapClient, /encodeURIComponent\(treeNo\)/)

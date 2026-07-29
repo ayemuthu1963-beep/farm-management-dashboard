@@ -13,7 +13,7 @@ import {
 } from "@/components/maps/farm-orthomosaic-map"
 
 type PlotName = "Plot 1" | "Plot 2"
-type PlotFilter = "All Plots" | PlotName
+type PlotFilter = "Plot 1 & Plot 2" | PlotName
 
 interface CoconutTreeFeature {
   type: "Feature"
@@ -132,10 +132,10 @@ export function FarmMapClient() {
   const trees = useRef(new Map<string, TreeMapEntry>())
   const cache = useRef(new Map<string, { expiresAt: number; summary: TreeHarvestSummary }>())
   const treeNumbersEnabledRef = useRef(true)
-  const plotFilterRef = useRef<PlotFilter>("All Plots")
+  const plotFilterRef = useRef<PlotFilter>("Plot 1 & Plot 2")
 
   const [treeNumbersEnabled, setTreeNumbersEnabled] = useState(true)
-  const [plotFilter, setPlotFilter] = useState<PlotFilter>("All Plots")
+  const [plotFilter, setPlotFilter] = useState<PlotFilter>("Plot 1 & Plot 2")
   const [searchTreeNo, setSearchTreeNo] = useState("")
   const [status, setStatus] = useState("Loading coconut tree geometry…")
   const [counts, setCounts] = useState<Record<PlotName, number>>({ "Plot 1": 0, "Plot 2": 0 })
@@ -146,7 +146,8 @@ export function FarmMapClient() {
 
     const zoom = map.getZoom()
     for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
-      const plotAllowed = plotFilterRef.current === "All Plots" || plotFilterRef.current === plot
+      const plotAllowed =
+        plotFilterRef.current === "Plot 1 & Plot 2" || plotFilterRef.current === plot
       const showPoints = treeNumbersEnabledRef.current && plotAllowed && zoom >= MARKER_ZOOM
       const showLabels = treeNumbersEnabledRef.current && plotAllowed && zoom >= LABEL_ZOOM
       const points = pointLayers.current[plot]
@@ -291,8 +292,9 @@ export function FarmMapClient() {
       setStatus(`Tree ${treeNo} was not found.`)
       return
     }
-    if (plotFilter !== "All Plots" && entry.feature.properties.Plot !== plotFilter) {
-      setStatus(`Tree ${treeNo} is outside the selected ${plotFilter} layer.`)
+    if (plotFilter !== "Plot 1 & Plot 2" && entry.feature.properties.Plot !== plotFilter) {
+      const treePlot = entry.feature.properties.Plot
+      setStatus(`Tree found in ${treePlot}. Select ${treePlot} or Plot 1 & Plot 2.`)
       return
     }
 
@@ -329,9 +331,9 @@ export function FarmMapClient() {
               onChange={(event) => setPlotFilter(event.target.value as PlotFilter)}
               className="h-10 rounded-md border border-border bg-background px-3 text-sm"
             >
-              <option>All Plots</option>
               <option>Plot 1</option>
               <option>Plot 2</option>
+              <option>Plot 1 &amp; Plot 2</option>
             </select>
           </label>
 
