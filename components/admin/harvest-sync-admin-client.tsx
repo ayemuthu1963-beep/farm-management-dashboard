@@ -298,19 +298,25 @@ export function HarvestSyncAdminClient() {
     () => new Set(selectedItems.map((item) => item.group_key ?? `${d(item.harvest_date)}|${item.original_tree_no}`)).size,
     [selectedItems],
   )
-  const singleRows = selectedItems.filter((item) => item.classification === "READY_NEW")
-  const allConflictRows = selectedItems.filter((item) => item.classification === "DUPLICATE_REVIEW_REQUIRED")
-  const allConflictGroups = useMemo(() => {
+  const selectedGroups = useMemo(() => {
     const grouped = new Map<string, any[]>()
-    for (const item of allConflictRows) {
+    for (const item of selectedItems) {
       const key = item.group_key ?? `${d(item.harvest_date)}|${item.original_tree_no}`
       grouped.set(key, [...(grouped.get(key) ?? []), item])
     }
-    return [...grouped.entries()].sort((left, right) => {
+    return [...grouped.entries()]
+  }, [selectedItems])
+  const singleRows = selectedGroups.filter(([, rows]) => rows.length === 1).map(([, rows]) => rows[0])
+  const allConflictGroups = useMemo(() => {
+    return selectedGroups
+      .filter(([, rows]) => rows.length > 1 && rows.some((item) => item.classification === "DUPLICATE_REVIEW_REQUIRED"))
+      .sort((left, right) => {
       const compared = naturalTreeCompare(left[1][0]?.original_tree_no, right[1][0]?.original_tree_no)
       return sortDirection === "asc" ? compared : -compared
     })
-  }, [allConflictRows, sortDirection])
+  }, [selectedGroups, sortDirection])
+  const allConflictRows = allConflictGroups.flatMap(([, rows]) => rows)
+  const cycleReviewRows = singleRows.filter((item) => item.classification === "DUPLICATE_REVIEW_REQUIRED")
   const conflictingGroupCount = allConflictGroups.length
   const conflictPageCount = Math.max(1, Math.ceil(allConflictGroups.length / CONFLICT_GROUP_PAGE_SIZE))
   const visibleConflictGroups = allConflictGroups.slice(
@@ -478,12 +484,13 @@ export function HarvestSyncAdminClient() {
       </Panel>
 
       <Panel title={`Selected Date Review — ${dateFilter || "All Dates"}`} icon={Search}>
-        <div className="grid gap-3 md:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-6">
           <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Source Submissions</p><p className="text-2xl font-black">{n(selectedItems.length)}</p></div>
           <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Tree Groups</p><p className="text-2xl font-black">{n(selectedTreeGroupCount)}</p></div>
           <div className="rounded-xl border border-sky-200 bg-sky-50 p-3"><p className="text-xs font-bold uppercase text-sky-800">Single Submissions</p><p className="text-2xl font-black text-sky-900">{n(singleRows.length)}</p></div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs font-bold uppercase text-emerald-800">Exact-Duplicate Groups</p><p className="text-2xl font-black text-emerald-900">{n(exactDuplicateGroups.length)}</p></div>
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-3"><p className="text-xs font-bold uppercase text-rose-800">Conflicting Groups</p><p className="text-2xl font-black text-rose-900">{n(conflictingGroupCount)}</p></div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-bold uppercase text-amber-800">Cycle Safety Reviews</p><p className="text-2xl font-black text-amber-900">{n(cycleReviewRows.length)}</p></div>
         </div>
       </Panel>
 
@@ -591,12 +598,24 @@ export function HarvestSyncAdminClient() {
         ) : null}
       </Panel>
 
-      <Panel title="Single-Submission Records — Included in Final Review Set" icon={CheckCircle2}>
-        <p className="mb-3 text-sm font-semibold text-muted-foreground">Each valid single submission remains individually visible before final batch confirmation.</p>
+      {cycleReviewRows.length > 0 ? (
+        <Panel title="Cross-Date Cycle Safety Review" icon={AlertTriangle}>
+          <p className="mb-3 text-sm font-semibold text-amber-900">These are single submissions for the selected date, but the same Tree Number already appears on another date in the open Harvest cycle. They remain blocked from import pending supervisor review.</p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-xs">
+              <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">Submitted</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th><th className="p-2">Safety reason</th></tr></thead>
+              <tbody>{cycleReviewRows.map((row: any) => <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b"><td className="p-2">{d(row.harvest_date)}</td><td className="p-2 font-bold">{row.original_tree_no}</td><td className="p-2 font-mono">{row.odk_instance_id}</td><td className="p-2">{row.submitter_name || "—"} / {row.device_id || "—"}</td><td className="p-2">{row.odk_submission_timestamp ?? "—"}</td><td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td><td className="p-2">{row.note}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </Panel>
+      ) : null}
+
+      <Panel title="Single-Submission Records — Visible in Review Set" icon={CheckCircle2}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">Every selected-date tree group with one source submission is visible. A cycle safety warning remains blocked rather than being silently treated as import-ready.</p>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">Submitted</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th></tr></thead>
-            <tbody>{singleRows.map((row: any) => <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b"><td className="p-2">{d(row.harvest_date)}</td><td className="p-2 font-bold">{row.original_tree_no}</td><td className="p-2 font-mono">{row.odk_instance_id}</td><td className="p-2">{row.submitter_name || "—"} / {row.device_id || "—"}</td><td className="p-2">{row.odk_submission_timestamp ?? "—"}</td><td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td><td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td></tr>)}</tbody>
+            <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">Submitted</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th><th className="p-2">Review status</th></tr></thead>
+            <tbody>{singleRows.map((row: any) => <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b"><td className="p-2">{d(row.harvest_date)}</td><td className="p-2 font-bold">{row.original_tree_no}</td><td className="p-2 font-mono">{row.odk_instance_id}</td><td className="p-2">{row.submitter_name || "—"} / {row.device_id || "—"}</td><td className="p-2">{row.odk_submission_timestamp ?? "—"}</td><td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td><td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td><td className="p-2"><span className={`rounded-full border px-2 py-1 ${classBadge(row.classification)}`}>{row.classification}</span></td></tr>)}</tbody>
           </table>
         </div>
         {singleRows.length === 0 ? <p className="rounded-xl border p-3 text-sm text-muted-foreground">No single-submission records match the selected date and Tree Number filter.</p> : null}
