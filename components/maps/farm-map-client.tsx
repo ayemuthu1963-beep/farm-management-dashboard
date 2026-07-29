@@ -1,9 +1,10 @@
 "use client"
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react"
-import { Layers, Search, Trees } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Trees } from "lucide-react"
 
 import { Panel } from "@/components/farm/panel"
+import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
 import {
   FarmOrthomosaicMap,
   type LeafletApi,
@@ -11,6 +12,10 @@ import {
   type LeafletLayerGroup,
   type LeafletMap,
 } from "@/components/maps/farm-orthomosaic-map"
+import {
+  treeNumberOptionKey,
+  type TreeNumberOption,
+} from "@/lib/tree-number-options"
 
 type PlotName = "Plot 1" | "Plot 2"
 type PlotFilter = "Plot 1 & Plot 2" | PlotName
@@ -129,7 +134,8 @@ export function FarmMapClient() {
     "Plot 1": null,
     "Plot 2": null,
   })
-  const trees = useRef(new Map<string, TreeMapEntry>())
+  const treesByKey = useRef(new Map<string, TreeMapEntry>())
+  const treesByNumber = useRef(new Map<string, TreeMapEntry[]>())
   const cache = useRef(new Map<string, { expiresAt: number; summary: TreeHarvestSummary }>())
   const treeNumbersEnabledRef = useRef(true)
   const plotFilterRef = useRef<PlotFilter>("Plot 1 & Plot 2")
@@ -139,6 +145,23 @@ export function FarmMapClient() {
   const [searchTreeNo, setSearchTreeNo] = useState("")
   const [status, setStatus] = useState("Loading coconut tree geometry…")
   const [counts, setCounts] = useState<Record<PlotName, number>>({ "Plot 1": 0, "Plot 2": 0 })
+  const [geometryOptions, setGeometryOptions] = useState<TreeNumberOption[]>([])
+  const [treeMasterNumbers, setTreeMasterNumbers] = useState<Set<string>>(new Set())
+  const [treeMasterState, setTreeMasterState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  )
+
+  const validMappedOptions = useMemo(
+    () => geometryOptions.filter((option) => treeMasterNumbers.has(option.treeNo)),
+    [geometryOptions, treeMasterNumbers],
+  )
+  const availableOptions = useMemo(
+    () =>
+      plotFilter === "Plot 1 & Plot 2"
+        ? validMappedOptions
+        : validMappedOptions.filter((option) => option.plot === plotFilter),
+    [plotFilter, validMappedOptions],
+  )
 
   const applyVisibility = useCallback(() => {
     const map = mapRef.current
@@ -166,9 +189,10 @@ export function FarmMapClient() {
 
   const selectTree = useCallback(async (entry: TreeMapEntry) => {
     const treeNo = entry.feature.properties.TreeNo
+    const cacheKey = treeNumberOptionKey(treeNo, entry.feature.properties.Plot)
     entry.marker.bindPopup(popupHtml(entry.feature), { maxWidth: 360 }).openPopup()
 
-    const cached = cache.current.get(treeNo)
+    const cached = cache.current.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) {
       entry.marker.bindPopup(popupHtml(entry.feature, cached.summary), { maxWidth: 360 }).openPopup()
       return
@@ -185,7 +209,7 @@ export function FarmMapClient() {
       }
       if (!response.ok) throw new Error("Unable to load Harvest data")
       const summary = (await response.json()) as TreeHarvestSummary
-      cache.current.set(treeNo, { expiresAt: Date.now() + SUMMARY_CACHE_MS, summary })
+      cache.current.set(cacheKey, { expiresAt: Date.now() + SUMMARY_CACHE_MS, summary })
       entry.marker.bindPopup(popupHtml(entry.feature, summary), { maxWidth: 360 }).openPopup()
     } catch {
       entry.marker
@@ -195,6 +219,34 @@ export function FarmMapClient() {
         .openPopup()
     }
   }, [])
+
+  const loadTreeMaster = useCallback(async () => {
+    setTreeMasterState("loading")
+    try {
+      const response = await fetch("/api/coconut-harvest/tree-master", {
+        cache: "force-cache",
+      })
+      if (!response.ok) throw new Error("Unable to load TREE MASTER")
+
+      const data = (await response.json()) as { treeNumbers?: unknown }
+      if (
+        !Array.isArray(data.treeNumbers) ||
+        !data.treeNumbers.every((treeNo) => typeof treeNo === "string")
+      ) {
+        throw new Error("Invalid TREE MASTER response")
+      }
+
+      setTreeMasterNumbers(new Set(data.treeNumbers))
+      setTreeMasterState("ready")
+    } catch {
+      setTreeMasterNumbers(new Set())
+      setTreeMasterState("error")
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadTreeMaster()
+  }, [loadTreeMaster])
 
   const handleMapReady = useCallback(
     (map: LeafletMap, leaflet: LeafletApi) => {
@@ -217,6 +269,7 @@ export function FarmMapClient() {
           if (cancelled) return
 
           const nextCounts: Record<PlotName, number> = { "Plot 1": 0, "Plot 2": 0 }
+          const nextGeometryOptions: TreeNumberOption[] = []
           for (const { plot, collection } of sources) {
             const pointLayer = leaflet.layerGroup()
             const labelLayer = leaflet.layerGroup()
@@ -247,11 +300,22 @@ export function FarmMapClient() {
                 }),
               })
               labelLayer.addLayer(label)
-              trees.current.set(feature.properties.TreeNo, entry)
+              const treeNo = feature.properties.TreeNo
+              const option = {
+                key: treeNumberOptionKey(treeNo, plot),
+                treeNo,
+                plot,
+              }
+              treesByKey.current.set(option.key, entry)
+              const matchingEntries = treesByNumber.current.get(treeNo) ?? []
+              matchingEntries.push(entry)
+              treesByNumber.current.set(treeNo, matchingEntries)
+              nextGeometryOptions.push(option)
               nextCounts[plot] += 1
             }
           }
           setCounts(nextCounts)
+          setGeometryOptions(nextGeometryOptions)
           setStatus(`${nextCounts["Plot 1"] + nextCounts["Plot 2"]} coconut trees loaded.`)
           applyVisibility()
         })
@@ -266,7 +330,9 @@ export function FarmMapClient() {
           pointLayers.current[plot] = null
           labelLayers.current[plot] = null
         }
-        trees.current.clear()
+        treesByKey.current.clear()
+        treesByNumber.current.clear()
+        setGeometryOptions([])
         mapRef.current = null
         leafletRef.current = null
       }
@@ -280,34 +346,37 @@ export function FarmMapClient() {
     applyVisibility()
   }, [applyVisibility, plotFilter, treeNumbersEnabled])
 
-  function runSearch() {
-    const treeNo = searchTreeNo.trim()
-    if (!treeNo) {
-      setStatus("Enter an exact Tree Number.")
+  function selectMappedTree(option: TreeNumberOption) {
+    const entry = treesByKey.current.get(option.key)
+    if (!entry || !treeMasterNumbers.has(option.treeNo)) {
+      setStatus("Select a valid Tree Number from the available list.")
       return
     }
-
-    const entry = trees.current.get(treeNo)
-    if (!entry) {
-      setStatus(`Tree ${treeNo} was not found.`)
-      return
-    }
-    if (plotFilter !== "Plot 1 & Plot 2" && entry.feature.properties.Plot !== plotFilter) {
-      const treePlot = entry.feature.properties.Plot
-      setStatus(`Tree found in ${treePlot}. Select ${treePlot} or Plot 1 & Plot 2.`)
-      return
-    }
-
     if (!treeNumbersEnabled) setTreeNumbersEnabled(true)
     const [longitude, latitude] = entry.feature.geometry.coordinates
     mapRef.current?.setView([latitude, longitude], 21)
-    setStatus(`Tree ${treeNo} selected in ${entry.feature.properties.Plot}.`)
+    setSearchTreeNo(option.treeNo)
+    setStatus(`Tree ${option.treeNo} selected in ${entry.feature.properties.Plot}.`)
     void selectTree(entry)
   }
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    runSearch()
+  function handleInvalidTreeNumber(value: string) {
+    const treeNo = value.trim()
+    const mappedEntries = treesByNumber.current.get(treeNo) ?? []
+    const treeIsValid = treeMasterNumbers.has(treeNo)
+
+    if (treeIsValid && plotFilter !== "Plot 1 & Plot 2") {
+      const otherPlotEntry = mappedEntries.find(
+        (entry) => entry.feature.properties.Plot !== plotFilter,
+      )
+      if (otherPlotEntry) {
+        const treePlot = otherPlotEntry.feature.properties.Plot
+        setStatus(`Tree found in ${treePlot}. Select ${treePlot} or Plot 1 & Plot 2.`)
+        return
+      }
+    }
+
+    setStatus("Select a valid Tree Number from the available list.")
   }
 
   const treeControls = (
@@ -337,33 +406,24 @@ export function FarmMapClient() {
             </select>
           </label>
 
-          <form onSubmit={handleSearch} className="grid gap-1.5">
+          <div className="grid gap-1.5">
             <label htmlFor="farm-map-tree-search" className="text-sm font-medium text-foreground">
               Tree Number
             </label>
-            <div className="flex gap-2">
-              <input
-                id="farm-map-tree-search"
-                value={searchTreeNo}
-                onChange={(event) => setSearchTreeNo(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault()
-                    runSearch()
-                  }
-                }}
-                placeholder="Example: 845.1"
-                className="h-10 min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-sm"
-              />
-              <button
-                type="submit"
-                className="inline-flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground"
-                aria-label="Search Tree Number"
-              >
-                <Search className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-          </form>
+            <TreeNumberAutocomplete
+              id="farm-map-tree-search"
+              value={searchTreeNo}
+              options={availableOptions}
+              loading={treeMasterState === "loading"}
+              loadError={treeMasterState === "error"}
+              placeholder="Type or select a Tree Number"
+              showPlot={plotFilter === "Plot 1 & Plot 2"}
+              onValueChange={setSearchTreeNo}
+              onSelect={selectMappedTree}
+              onInvalidCommit={handleInvalidTreeNumber}
+              onRetry={() => void loadTreeMaster()}
+            />
+          </div>
 
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {status}

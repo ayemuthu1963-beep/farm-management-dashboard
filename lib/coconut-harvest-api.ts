@@ -1,5 +1,6 @@
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHarvestRow } from "@/lib/coconut-harvest-data"
+import { compareTreeNumbers } from "@/lib/tree-number-options"
 
 interface ApiCycleRow {
   harvest_cycle: string
@@ -436,13 +437,7 @@ export async function fetchHarvestSummaryData(params: {
   }
 }
 
-export async function fetchTreeNumbers(query = "", limit = 25): Promise<string[]> {
-  const authHeader = getBasicAuthHeader()
-
-  if (!authHeader) {
-    throw new Error("Harvest API credentials are not configured")
-  }
-
+async function fetchTreeNumberPage(query: string, limit: number, authHeader: string) {
   const params = new URLSearchParams({
     q: query,
     limit: String(limit),
@@ -462,6 +457,64 @@ export async function fetchTreeNumbers(query = "", limit = 25): Promise<string[]
 
   const rows = (await response.json()) as ApiTreeOption[]
   return rows.map((row) => row.tree_no)
+}
+
+export async function fetchTreeNumbers(query = "", limit = 25): Promise<string[]> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  return fetchTreeNumberPage(query, limit, authHeader)
+}
+
+const TREE_MASTER_PAGE_SIZE = 100
+const NUMERIC_PREFIX_SUFFIXES = [..."0123456789."]
+const GENERAL_PREFIX_SUFFIXES = [..."0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.-_"]
+const ROOT_PREFIXES = [..."0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+
+export async function fetchAllTreeNumbers(): Promise<string[]> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const treeNumbers = new Set(
+    await fetchTreeNumberPage("", TREE_MASTER_PAGE_SIZE, authHeader),
+  )
+  const pendingPrefixes = [...ROOT_PREFIXES]
+  const visitedPrefixes = new Set<string>()
+
+  while (pendingPrefixes.length > 0) {
+    const batch = pendingPrefixes.splice(0, 10).filter((prefix) => {
+      if (visitedPrefixes.has(prefix)) return false
+      visitedPrefixes.add(prefix)
+      return true
+    })
+    if (batch.length === 0) continue
+
+    const pages = await Promise.all(
+      batch.map(async (prefix) => ({
+        prefix,
+        rows: await fetchTreeNumberPage(prefix, TREE_MASTER_PAGE_SIZE, authHeader),
+      })),
+    )
+
+    for (const { prefix, rows } of pages) {
+      for (const treeNo of rows) treeNumbers.add(treeNo)
+
+      if (rows.length === TREE_MASTER_PAGE_SIZE && prefix.length < 50) {
+        const suffixes = /^[0-9.]+$/.test(prefix)
+          ? NUMERIC_PREFIX_SUFFIXES
+          : GENERAL_PREFIX_SUFFIXES
+        pendingPrefixes.push(...suffixes.map((suffix) => `${prefix}${suffix}`))
+      }
+    }
+  }
+
+  return [...treeNumbers].sort(compareTreeNumbers)
 }
 
 export async function fetchTreeViewData(treeNo: string): Promise<TreeViewData> {

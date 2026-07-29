@@ -7,6 +7,7 @@ import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
 import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
+import { treeNumberSuggestionsUrl } from "@/lib/tree-number-options"
 import {
   formatRupees,
   type TreeHarvestRow,
@@ -56,7 +57,7 @@ export function TreeViewClient({
 
   async function loadTreeOptions(query: string) {
     try {
-      const response = await fetch(`/api/coconut-harvest/trees?q=${encodeURIComponent(query)}&limit=25`)
+      const response = await fetch(treeNumberSuggestionsUrl(query, 25))
       if (!response.ok) {
         return
       }
