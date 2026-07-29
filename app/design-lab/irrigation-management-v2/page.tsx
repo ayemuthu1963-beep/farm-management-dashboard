@@ -32,92 +32,17 @@ const totalWaterPumpedTrend = [
   { date: "13 Jul", total: 13900 },
 ]
 
-// Tree icon component for zone tiles
-function TreeIcon({ zoneId }: { zoneId: string }) {
-  switch (zoneId) {
-    case 'P1W': // Big Coconut Tree with Sunset
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Sunset */}
-          <circle cx="45" cy="20" r="8" fill="currentColor" opacity="0.4" />
-          {/* Tree trunk */}
-          <rect x="26" y="32" width="8" height="16" fill="currentColor" opacity="0.6" />
-          {/* Large canopy */}
-          <circle cx="30" cy="28" r="14" fill="currentColor" opacity="0.7" />
-          <circle cx="18" cy="32" r="11" fill="currentColor" opacity="0.6" />
-          <circle cx="42" cy="32" r="11" fill="currentColor" opacity="0.6" />
-        </svg>
-      )
-    case 'P1E': // Big Coconut Tree with Sunrise
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Sunrise */}
-          <circle cx="15" cy="20" r="8" fill="currentColor" opacity="0.4" />
-          {/* Tree trunk */}
-          <rect x="26" y="32" width="8" height="16" fill="currentColor" opacity="0.6" />
-          {/* Large canopy */}
-          <circle cx="30" cy="28" r="14" fill="currentColor" opacity="0.7" />
-          <circle cx="18" cy="32" r="11" fill="currentColor" opacity="0.6" />
-          <circle cx="42" cy="32" r="11" fill="currentColor" opacity="0.6" />
-        </svg>
-      )
-    case 'P2W': // Small Coconut Tree with Sunset
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Sunset */}
-          <circle cx="45" cy="25" r="6" fill="currentColor" opacity="0.4" />
-          {/* Tree trunk */}
-          <rect x="27" y="36" width="6" height="12" fill="currentColor" opacity="0.6" />
-          {/* Medium canopy */}
-          <circle cx="30" cy="32" r="10" fill="currentColor" opacity="0.7" />
-          <circle cx="20" cy="35" r="8" fill="currentColor" opacity="0.6" />
-          <circle cx="40" cy="35" r="8" fill="currentColor" opacity="0.6" />
-        </svg>
-      )
-    case 'P2E': // Small Coconut Tree with Sunrise
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Sunrise */}
-          <circle cx="15" cy="25" r="6" fill="currentColor" opacity="0.4" />
-          {/* Tree trunk */}
-          <rect x="27" y="36" width="6" height="12" fill="currentColor" opacity="0.6" />
-          {/* Medium canopy */}
-          <circle cx="30" cy="32" r="10" fill="currentColor" opacity="0.7" />
-          <circle cx="20" cy="35" r="8" fill="currentColor" opacity="0.6" />
-          <circle cx="40" cy="35" r="8" fill="currentColor" opacity="0.6" />
-        </svg>
-      )
-    case 'JF': // Jackfruit tree
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Tree trunk */}
-          <rect x="26" y="34" width="8" height="14" fill="currentColor" opacity="0.6" />
-          {/* Main canopy */}
-          <circle cx="30" cy="26" r="12" fill="currentColor" opacity="0.7" />
-          {/* Fruits (bumpy texture) */}
-          <circle cx="28" cy="20" r="3" fill="currentColor" opacity="0.5" />
-          <circle cx="35" cy="21" r="3" fill="currentColor" opacity="0.5" />
-          <circle cx="32" cy="28" r="2.5" fill="currentColor" opacity="0.5" />
-        </svg>
-      )
-    case 'NM': // Nutmeg tree
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Tree trunk */}
-          <rect x="27" y="32" width="6" height="16" fill="currentColor" opacity="0.6" />
-          {/* Compact canopy */}
-          <circle cx="30" cy="24" r="11" fill="currentColor" opacity="0.7" />
-          <circle cx="22" cy="28" r="9" fill="currentColor" opacity="0.6" />
-          <circle cx="38" cy="28" r="9" fill="currentColor" opacity="0.6" />
-          {/* Nutmeg details */}
-          <circle cx="30" cy="22" r="1.5" fill="currentColor" opacity="0.4" />
-          <circle cx="26" cy="26" r="1.5" fill="currentColor" opacity="0.4" />
-          <circle cx="34" cy="26" r="1.5" fill="currentColor" opacity="0.4" />
-        </svg>
-      )
-    default:
-      return null
+// Helper function to get zone color styling
+function getZoneColorClasses(zoneId: string): { bg: string; border: string } {
+  const colors: Record<string, { bg: string; border: string }> = {
+    P1E: { bg: 'bg-green-50', border: 'border-green-200' },
+    P1W: { bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    P2E: { bg: 'bg-blue-50', border: 'border-blue-200' },
+    P2W: { bg: 'bg-purple-100', border: 'border-purple-200' },
+    JF: { bg: 'bg-amber-50', border: 'border-amber-200' },
+    NM: { bg: 'bg-rose-50', border: 'border-rose-200' },
   }
+  return colors[zoneId] || { bg: 'bg-card', border: 'border-border' }
 }
 
 export default function IrrigationManagementV2() {
@@ -169,23 +94,26 @@ export default function IrrigationManagementV2() {
         <div>
           <h2 className="mb-4 text-lg font-semibold text-foreground">Zone Status</h2>
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-            {mockZones.map((zone) => (
-              <div key={zone.id} className="rounded-lg border border-border bg-card p-3 text-center">
-                <div className="text-xs font-semibold uppercase text-muted-foreground mb-2">{zone.name}</div>
-                <div
-                  className={cn(
-                    "inline-block rounded-full px-2 py-1 text-xs font-semibold",
-                    statusColors[zone.status as keyof typeof statusColors]?.bg || "bg-muted/15",
-                    statusColors[zone.status as keyof typeof statusColors]?.text || "text-muted-foreground",
-                  )}
-                >
-                  {zone.statusLabel}
+            {mockZones.map((zone) => {
+              const { bg, border } = getZoneColorClasses(zone.id)
+              return (
+                <div key={zone.id} className={cn("rounded-lg border p-3 text-center", bg, border)}>
+                  <div className="text-xs font-semibold uppercase text-foreground mb-2">{zone.name}</div>
+                  <div
+                    className={cn(
+                      "inline-block rounded-full px-2 py-1 text-xs font-semibold",
+                      statusColors[zone.status as keyof typeof statusColors]?.bg || "bg-muted/15",
+                      statusColors[zone.status as keyof typeof statusColors]?.text || "text-muted-foreground",
+                    )}
+                  >
+                    {zone.statusLabel}
+                  </div>
+                  <div className="mt-2 text-sm font-medium text-foreground">
+                    {isLoading ? "--" : `${zone.totalWaterSupplied.toLocaleString("en-IN")} L`}
+                  </div>
                 </div>
-                <div className="mt-2 text-sm font-medium text-foreground">
-                  {isLoading ? "--" : `${zone.totalWaterSupplied.toLocaleString("en-IN")} L`}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -194,34 +122,30 @@ export default function IrrigationManagementV2() {
           <div className="space-y-4">
             {/* First row - 4 zones */}
             <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-              {mockZones.slice(0, 4).map((zone) => (
-                <div key={zone.id} className="rounded-lg border border-border bg-card p-4 text-center relative overflow-hidden">
-                  <div className="absolute inset-0 opacity-15 flex items-center justify-center">
-                    <TreeIcon zoneId={zone.id} />
-                  </div>
-                  <div className="relative z-10">
+              {mockZones.slice(0, 4).map((zone) => {
+                const { bg, border } = getZoneColorClasses(zone.id)
+                return (
+                  <div key={zone.id} className={cn("rounded-lg border p-4 text-center", bg, border)}>
                     <div className="text-sm font-semibold uppercase text-foreground mb-2">{zone.name}</div>
                     <div className="text-2xl font-bold text-chart-2 mb-2">{zone.totalWaterSupplied.toLocaleString("en-IN")}</div>
                     <div className="text-xs text-muted-foreground">{zone.statusLabel}</div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Second row - 2 zones (Jackfruit, Nutmeg) centered and evenly distributed */}
             <div className="grid gap-3 grid-cols-2 lg:grid-cols-2 lg:max-w-2xl lg:mx-auto">
-              {mockZones.slice(4, 6).map((zone) => (
-                <div key={zone.id} className="rounded-lg border border-border bg-card p-4 text-center relative overflow-hidden">
-                  <div className="absolute inset-0 opacity-15 flex items-center justify-center">
-                    <TreeIcon zoneId={zone.id} />
-                  </div>
-                  <div className="relative z-10">
+              {mockZones.slice(4, 6).map((zone) => {
+                const { bg, border } = getZoneColorClasses(zone.id)
+                return (
+                  <div key={zone.id} className={cn("rounded-lg border p-4 text-center", bg, border)}>
                     <div className="text-sm font-semibold uppercase text-foreground mb-2">{zone.name}</div>
                     <div className="text-2xl font-bold text-chart-2 mb-2">{zone.totalWaterSupplied.toLocaleString("en-IN")}</div>
                     <div className="text-xs text-muted-foreground">{zone.statusLabel}</div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </Panel>
