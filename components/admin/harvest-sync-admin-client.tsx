@@ -7,6 +7,7 @@ import { Panel } from "@/components/farm/panel"
 interface SyncStatus {
   projectId: number
   formId: string
+  importEnabled: boolean
   openCycle: { harvest_cycle: string; harvest_start_date: string; harvest_end_date: string | null; harvest_status: string } | null
   latestScan: any | null
   latestImport: any | null
@@ -40,6 +41,16 @@ function d(value: string | null | undefined): string {
   return value.slice(0, 10)
 }
 
+function naturalTreeCompare(left: unknown, right: unknown): number {
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  })
+}
+
+const CONFLICT_GROUP_PAGE_SIZE = 10
+const EXACT_GROUP_PAGE_SIZE = 25
+
 function classBadge(classification: string) {
   if (classification === "READY_NEW") return "bg-emerald-50 text-emerald-700 border-emerald-200"
   if (classification === "READY_EXACT_DUPLICATE") return "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -56,15 +67,49 @@ export function HarvestSyncAdminClient() {
   const [importPlan, setImportPlan] = useState<ImportPlan | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [scanIdInput, setScanIdInput] = useState("")
+  const [dateFilter, setDateFilter] = useState("2026-07-29")
+  const [treeFilter, setTreeFilter] = useState("")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const [conflictPage, setConflictPage] = useState(1)
+  const [exactPage, setExactPage] = useState(1)
+  const [selectedInstanceByGroup, setSelectedInstanceByGroup] = useState<Record<string, string>>({})
+  const [decisionReasonByGroup, setDecisionReasonByGroup] = useState<Record<string, string>>({})
 
-  async function loadStatus() {
+  async function loadStatus(): Promise<SyncStatus | null> {
     const response = await fetch("/api/admin/harvest-sync/status", { cache: "no-store" })
-    if (response.ok) setStatus(await response.json())
+    if (!response.ok) return null
+    const data = (await response.json()) as SyncStatus
+    setStatus(data)
+    return data
   }
 
-  async function loadIssues() {
-    const response = await fetch("/api/admin/harvest-sync/issues", { cache: "no-store" })
+  async function loadIssues(scanId?: number) {
+    const query = scanId ? `?scan_id=${scanId}` : ""
+    const response = await fetch(`/api/admin/harvest-sync/issues${query}`, { cache: "no-store" })
     if (response.ok) setIssues(await response.json())
+  }
+
+  async function loadScan(scanId: number) {
+    setBusy("load-scan")
+    setMessage(null)
+    try {
+      const response = await fetch(`/api/admin/harvest-sync/scans/${scanId}`, { cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.detail ?? data.error ?? "Unable to load scan")
+      setScan(data)
+      setScanIdInput(String(scanId))
+      setImportPlan(null)
+      setConflictPage(1)
+      setExactPage(1)
+      await loadIssues(scanId)
+      return data as ScanData
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to load scan" })
+      return null
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function loadHistory() {
@@ -73,9 +118,14 @@ export function HarvestSyncAdminClient() {
   }
 
   useEffect(() => {
-    void loadStatus()
-    void loadIssues()
-    void loadHistory()
+    async function bootstrap() {
+      const current = await loadStatus()
+      await Promise.all([
+        current?.latestScan?.id ? loadScan(Number(current.latestScan.id)) : loadIssues(),
+        loadHistory(),
+      ])
+    }
+    void bootstrap()
   }, [])
 
   const latestScan = scan?.scan ?? status?.latestScan ?? null
@@ -103,9 +153,12 @@ export function HarvestSyncAdminClient() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail ?? data.error ?? "Scan failed")
       setScan(data)
+      setScanIdInput(String(data.scan.id))
       setImportPlan(null)
+      setConflictPage(1)
+      setExactPage(1)
       setMessage({ ok: true, text: `Scan ${data.scan.id} complete. Review issues before importing.` })
-      await Promise.all([loadStatus(), loadIssues(), loadHistory()])
+      await Promise.all([loadStatus(), loadIssues(Number(data.scan.id)), loadHistory()])
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "Scan failed" })
     } finally {
@@ -142,6 +195,10 @@ export function HarvestSyncAdminClient() {
     const scanId = latestScan?.id
     if (!scanId || !importPlan) {
       setMessage({ ok: false, text: "Review the final import set before confirming." })
+      return
+    }
+    if (!status?.importEnabled) {
+      setMessage({ ok: false, text: "PREVIEW REVIEW MODE — HARVEST IMPORT DISABLED" })
       return
     }
     setBusy("import")
@@ -190,12 +247,105 @@ export function HarvestSyncAdminClient() {
     }
   }
 
-  const duplicateRows = (issues?.groups?.duplicateTreeEntries ?? scan?.items?.filter((item) => item.classification === "DUPLICATE_REVIEW_REQUIRED") ?? []).slice(0, 80)
-  const exactDuplicateGroups = issues?.groups?.exactDuplicateGroups ?? []
-  const unmatchedRows = (issues?.groups?.treesNotInMaster ?? scan?.items?.filter((item) => item.classification === "UNMATCHED_TREE") ?? []).slice(0, 40)
+  async function saveConflictSelection(groupKey: string, rows: any[]) {
+    const selectedInstance = selectedInstanceByGroup[groupKey]
+    const reason = decisionReasonByGroup[groupKey]?.trim()
+    if (!selectedInstance || !reason) {
+      setMessage({ ok: false, text: "Select the correct ODK submission and record a supervisor reason." })
+      return
+    }
+    const anchorRow = rows.find((row) => row.odk_instance_id === selectedInstance) ?? rows[0]
+    setBusy(`decision-${groupKey}`)
+    setMessage(null)
+    try {
+      const response = await fetch("/api/admin/harvest-sync/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scan_id: latestScan?.id,
+          odk_instance_id: anchorRow.odk_instance_id,
+          issue_type: "CONFLICTING_DUPLICATE",
+          decision: "SELECT_SUBMISSION",
+          selected_effective_instance_id: selectedInstance,
+          reason,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.detail ?? data.error ?? "Unable to save supervisor selection")
+      setMessage({ ok: true, text: `Supervisor selection saved for Tree ${anchorRow.original_tree_no}. No Harvest record was imported.` })
+      setImportPlan(null)
+      await Promise.all([loadScan(Number(latestScan?.id)), loadHistory()])
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to save supervisor selection" })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const selectedItems = useMemo(() => {
+    const query = treeFilter.trim().toLocaleLowerCase()
+    return (scan?.items ?? [])
+      .filter((item) => !dateFilter || d(item.harvest_date) === dateFilter)
+      .filter((item) => !query || String(item.original_tree_no ?? "").toLocaleLowerCase().includes(query))
+      .sort((left, right) => {
+        const compared = naturalTreeCompare(left.original_tree_no, right.original_tree_no)
+        if (compared !== 0) return sortDirection === "asc" ? compared : -compared
+        return String(left.odk_submission_timestamp ?? "").localeCompare(String(right.odk_submission_timestamp ?? ""))
+      })
+  }, [scan, dateFilter, treeFilter, sortDirection])
+
+  const selectedTreeGroupCount = useMemo(
+    () => new Set(selectedItems.map((item) => item.group_key ?? `${d(item.harvest_date)}|${item.original_tree_no}`)).size,
+    [selectedItems],
+  )
+  const singleRows = selectedItems.filter((item) => item.classification === "READY_NEW")
+  const allConflictRows = selectedItems.filter((item) => item.classification === "DUPLICATE_REVIEW_REQUIRED")
+  const allConflictGroups = useMemo(() => {
+    const grouped = new Map<string, any[]>()
+    for (const item of allConflictRows) {
+      const key = item.group_key ?? `${d(item.harvest_date)}|${item.original_tree_no}`
+      grouped.set(key, [...(grouped.get(key) ?? []), item])
+    }
+    return [...grouped.entries()].sort((left, right) => {
+      const compared = naturalTreeCompare(left[1][0]?.original_tree_no, right[1][0]?.original_tree_no)
+      return sortDirection === "asc" ? compared : -compared
+    })
+  }, [allConflictRows, sortDirection])
+  const conflictingGroupCount = allConflictGroups.length
+  const conflictPageCount = Math.max(1, Math.ceil(allConflictGroups.length / CONFLICT_GROUP_PAGE_SIZE))
+  const visibleConflictGroups = allConflictGroups.slice(
+    (conflictPage - 1) * CONFLICT_GROUP_PAGE_SIZE,
+    conflictPage * CONFLICT_GROUP_PAGE_SIZE,
+  )
+  const exactDuplicateGroups = useMemo(() => {
+    const query = treeFilter.trim().toLocaleLowerCase()
+    return [...(issues?.groups?.exactDuplicateGroups ?? [])]
+      .filter((group: any) => !dateFilter || d(group.harvestDate) === dateFilter)
+      .filter((group: any) => !query || String(group.treeNo ?? "").toLocaleLowerCase().includes(query))
+      .sort((left: any, right: any) => {
+        const compared = naturalTreeCompare(left.treeNo, right.treeNo)
+        return sortDirection === "asc" ? compared : -compared
+      })
+  }, [issues, dateFilter, treeFilter, sortDirection])
+  const exactPageCount = Math.max(1, Math.ceil(exactDuplicateGroups.length / EXACT_GROUP_PAGE_SIZE))
+  const visibleExactDuplicateGroups = exactDuplicateGroups.slice(
+    (exactPage - 1) * EXACT_GROUP_PAGE_SIZE,
+    exactPage * EXACT_GROUP_PAGE_SIZE,
+  )
+  const unmatchedRows = selectedItems.filter((item) => item.classification === "UNMATCHED_TREE")
+
+  useEffect(() => {
+    setConflictPage(1)
+    setExactPage(1)
+  }, [dateFilter, treeFilter, sortDirection])
 
   return (
     <div className="space-y-5">
+      {status?.importEnabled !== true ? (
+        <section className="rounded-2xl border-2 border-rose-500 bg-rose-50 p-4 text-center text-sm font-black text-rose-950">
+          PREVIEW REVIEW MODE — HARVEST IMPORT DISABLED
+        </section>
+      ) : null}
       <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950">
         <div className="flex gap-3">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" />
@@ -216,13 +366,67 @@ export function HarvestSyncAdminClient() {
       </Panel>
 
       <Panel title="Manual Sync Actions" icon={Search}>
+        <div className="mb-4 grid gap-3 rounded-xl border bg-muted/30 p-3 md:grid-cols-[10rem_1fr_13rem_auto]">
+          <label className="text-xs font-bold uppercase text-muted-foreground">
+            Scan ID
+            <input
+              value={scanIdInput}
+              onChange={(event) => setScanIdInput(event.target.value.replace(/\D/g, ""))}
+              inputMode="numeric"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+              aria-label="Scan ID"
+            />
+          </label>
+          <label className="text-xs font-bold uppercase text-muted-foreground">
+            Harvest Date
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+            />
+          </label>
+          <label className="text-xs font-bold uppercase text-muted-foreground">
+            Tree Number Search
+            <input
+              value={treeFilter}
+              onChange={(event) => setTreeFilter(event.target.value)}
+              placeholder="For example, 845.1"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+            />
+          </label>
+          <label className="text-xs font-bold uppercase text-muted-foreground">
+            Tree Sort
+            <select
+              value={sortDirection}
+              onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              <option value="asc">Natural ascending</option>
+              <option value="desc">Natural descending</option>
+            </select>
+          </label>
+        </div>
         <div className="flex flex-wrap gap-3">
           <button onClick={() => void scanOdk()} disabled={busy !== null} className="rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground disabled:opacity-60">{busy === "scan" ? "Scanning..." : "Scan ODK"}</button>
-          <button onClick={() => void loadIssues()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-extrabold">Review Issues</button>
+          <button
+            onClick={() => {
+              const requested = Number(scanIdInput)
+              if (requested > 0) void loadScan(requested)
+            }}
+            disabled={busy !== null || Number(scanIdInput) <= 0}
+            className="rounded-lg border px-4 py-2 text-sm font-extrabold disabled:opacity-60"
+          >
+            {busy === "load-scan" ? "Loading..." : "Open Scan"}
+          </button>
+          <button onClick={() => void loadIssues(Number(latestScan?.id) || undefined)} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-extrabold">Review Issues</button>
           <button onClick={() => void prepareImport()} disabled={busy !== null || !latestScan} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{busy === "preview-import" ? "Preparing..." : "Review Final Import Set"}</button>
           <button onClick={() => void downloadAuditCsv()} disabled={busy !== null || !latestScan} className="rounded-lg border px-4 py-2 text-sm font-extrabold">{busy === "audit-csv" ? "Preparing CSV..." : "Download Pre-Import Audit CSV"}</button>
           <button onClick={() => void loadHistory()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-extrabold">View Import History</button>
         </div>
+        <p className="mt-3 text-xs font-semibold text-muted-foreground">
+          Showing {n(selectedItems.length)} submissions in {n(selectedTreeGroupCount)} tree/date groups for {dateFilter || "all dates"}.
+        </p>
         {message ? (
           <div className={`mt-4 rounded-xl border p-3 text-sm font-bold ${message.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
             {message.ok ? <CheckCircle2 className="mr-2 inline size-4" /> : <AlertTriangle className="mr-2 inline size-4" />}
@@ -248,7 +452,13 @@ export function HarvestSyncAdminClient() {
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
             Confirming inserts exactly the effective records listed above. A changed ODK fingerprint or review decision invalidates this confirmation.
           </div>
-          <button onClick={() => void importApproved()} disabled={busy !== null} className="mt-4 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{busy === "import" ? "Importing..." : "Confirm Final Batch Import"}</button>
+          <button
+            onClick={() => void importApproved()}
+            disabled={busy !== null || status?.importEnabled !== true}
+            className="mt-4 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {status?.importEnabled !== true ? "Harvest Import Disabled" : busy === "import" ? "Importing..." : "Confirm Final Batch Import"}
+          </button>
         </Panel>
       ) : null}
 
@@ -267,6 +477,16 @@ export function HarvestSyncAdminClient() {
         </div>
       </Panel>
 
+      <Panel title={`Selected Date Review — ${dateFilter || "All Dates"}`} icon={Search}>
+        <div className="grid gap-3 md:grid-cols-5">
+          <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Source Submissions</p><p className="text-2xl font-black">{n(selectedItems.length)}</p></div>
+          <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Tree Groups</p><p className="text-2xl font-black">{n(selectedTreeGroupCount)}</p></div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3"><p className="text-xs font-bold uppercase text-sky-800">Single Submissions</p><p className="text-2xl font-black text-sky-900">{n(singleRows.length)}</p></div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs font-bold uppercase text-emerald-800">Exact-Duplicate Groups</p><p className="text-2xl font-black text-emerald-900">{n(exactDuplicateGroups.length)}</p></div>
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3"><p className="text-xs font-bold uppercase text-rose-800">Conflicting Groups</p><p className="text-2xl font-black text-rose-900">{n(conflictingGroupCount)}</p></div>
+        </div>
+      </Panel>
+
       <Panel title="Exact Duplicates — Automatically Resolved" icon={ShieldCheck}>
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs font-bold uppercase text-emerald-800">Exact-Duplicate Tree Groups</p><p className="text-2xl font-black text-emerald-900">{n(issueCounts.exactDuplicateGroups)}</p></div>
@@ -275,7 +495,7 @@ export function HarvestSyncAdminClient() {
         </div>
         <p className="mt-3 text-xs font-semibold text-muted-foreground">The earliest valid ODK submission is retained; equal timestamps use the lexicographically lowest ODK instance ID. No Harvest record is inserted during scanning.</p>
         <div className="mt-3 space-y-2">
-          {exactDuplicateGroups.map((group: any) => (
+          {visibleExactDuplicateGroups.map((group: any) => (
             <details key={group.groupKey} className="rounded-xl border bg-background">
               <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
                 Tree {group.treeNo} · {d(group.harvestDate)} · {n(group.superseded?.length)} superseded
@@ -296,15 +516,90 @@ export function HarvestSyncAdminClient() {
           ))}
           {exactDuplicateGroups.length === 0 ? <p className="rounded-xl border p-3 text-sm text-muted-foreground">No exact-duplicate groups in the latest scan.</p> : null}
         </div>
+        {exactDuplicateGroups.length > EXACT_GROUP_PAGE_SIZE ? (
+          <div className="mt-3 flex items-center justify-between text-xs font-bold">
+            <button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={exactPage <= 1} onClick={() => setExactPage((page) => Math.max(1, page - 1))}>Previous</button>
+            <span>Page {exactPage} of {exactPageCount} · {n(exactDuplicateGroups.length)} groups</span>
+            <button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={exactPage >= exactPageCount} onClick={() => setExactPage((page) => Math.min(exactPageCount, page + 1))}>Next</button>
+          </div>
+        ) : null}
       </Panel>
 
       <Panel title="Conflicting Duplicate Tree Entries — Supervisor Review Required" icon={AlertTriangle}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">{n(conflictingGroupCount)} conflicting groups · {n(allConflictRows.length)} source submissions. No conflicting group is automatically resolved.</p>
+        <div className="space-y-3">
+          {visibleConflictGroups.map(([groupKey, rows]) => {
+            const first = rows[0]
+            return (
+              <details key={groupKey} className="rounded-xl border bg-background">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
+                  Tree {first.original_tree_no} · {d(first.harvest_date)} · {n(rows.length)} conflicting submissions
+                </summary>
+                <div className="border-t p-4">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-xs">
+                      <thead><tr className="border-b"><th className="p-2">Select</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">ODK Time</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th></tr></thead>
+                      <tbody>
+                        {rows.map((row: any) => (
+                          <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b">
+                            <td className="p-2">
+                              <input
+                                type="radio"
+                                name={`conflict-${groupKey}`}
+                                checked={selectedInstanceByGroup[groupKey] === row.odk_instance_id}
+                                onChange={() => setSelectedInstanceByGroup((current) => ({ ...current, [groupKey]: row.odk_instance_id }))}
+                                aria-label={`Select ODK instance ${row.odk_instance_id}`}
+                              />
+                            </td>
+                            <td className="p-2 font-mono">{row.odk_instance_id}</td>
+                            <td className="p-2">{row.submitter_name || "—"} / {row.device_id || "—"}</td>
+                            <td className="p-2">{row.odk_submission_timestamp ?? "—"}</td>
+                            <td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td>
+                            <td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2 md:flex-row">
+                    <input
+                      value={decisionReasonByGroup[groupKey] ?? ""}
+                      onChange={(event) => setDecisionReasonByGroup((current) => ({ ...current, [groupKey]: event.target.value }))}
+                      placeholder="Supervisor reason (required)"
+                      className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+                    />
+                    <button
+                      onClick={() => void saveConflictSelection(groupKey, rows)}
+                      disabled={busy !== null || !selectedInstanceByGroup[groupKey] || !decisionReasonByGroup[groupKey]?.trim()}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground disabled:opacity-50"
+                    >
+                      {busy === `decision-${groupKey}` ? "Saving..." : "Save Supervisor Selection"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-muted-foreground">This stores a review decision only. It does not write to harvest_records.</p>
+                </div>
+              </details>
+            )
+          })}
+        </div>
+        {allConflictGroups.length > CONFLICT_GROUP_PAGE_SIZE ? (
+          <div className="mt-3 flex items-center justify-between text-xs font-bold">
+            <button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={conflictPage <= 1} onClick={() => setConflictPage((page) => Math.max(1, page - 1))}>Previous</button>
+            <span>Page {conflictPage} of {conflictPageCount} · {n(allConflictGroups.length)} groups</span>
+            <button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={conflictPage >= conflictPageCount} onClick={() => setConflictPage((page) => Math.min(conflictPageCount, page + 1))}>Next</button>
+          </div>
+        ) : null}
+      </Panel>
+
+      <Panel title="Single-Submission Records — Included in Final Review Set" icon={CheckCircle2}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">Each valid single submission remains individually visible before final batch confirmation.</p>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Time</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Nuts</th><th className="p-2">Status</th><th className="p-2">Default Latest</th></tr></thead>
-            <tbody>{duplicateRows.map((row: any) => <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b"><td className="p-2">{d(row.harvest_date)}</td><td className="p-2 font-bold">{row.original_tree_no}</td><td className="p-2">{row.odk_submission_timestamp ?? "—"}</td><td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td><td className="p-2">{row.total_nuts}</td><td className="p-2"><span className={`rounded-full border px-2 py-1 ${classBadge(row.classification)}`}>{row.classification}</span></td><td className="p-2">{row.is_default_effective ? "Yes" : "No"}</td></tr>)}</tbody>
+            <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">Submitted</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th></tr></thead>
+            <tbody>{singleRows.map((row: any) => <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b"><td className="p-2">{d(row.harvest_date)}</td><td className="p-2 font-bold">{row.original_tree_no}</td><td className="p-2 font-mono">{row.odk_instance_id}</td><td className="p-2">{row.submitter_name || "—"} / {row.device_id || "—"}</td><td className="p-2">{row.odk_submission_timestamp ?? "—"}</td><td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td><td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td></tr>)}</tbody>
           </table>
         </div>
+        {singleRows.length === 0 ? <p className="rounded-xl border p-3 text-sm text-muted-foreground">No single-submission records match the selected date and Tree Number filter.</p> : null}
       </Panel>
 
       <Panel title="Trees Not in Tree Master" icon={AlertTriangle}>
