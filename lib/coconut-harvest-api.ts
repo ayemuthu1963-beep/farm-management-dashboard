@@ -91,6 +91,18 @@ export interface TreeViewData {
   treeHarvestHistory: TreeHarvestRow[]
 }
 
+export interface FarmMapTreeHarvestSummary {
+  treeNo: string
+  status: string | null
+  classification: string | null
+  lastHarvestDate: string | null
+  latestBunches: number | null
+  latestNuts: number | null
+  currentYearTotalNuts: number | null
+  missedHarvestCycles: number | null
+  hasHarvestData: boolean
+}
+
 export interface TreePerformanceData {
   performanceCyclesUsed: number[]
   plot1Performance: PerformanceRow[]
@@ -476,6 +488,83 @@ export async function fetchTreeViewData(treeNo: string): Promise<TreeViewData> {
   return {
     treeNo: data.tree?.tree_no ?? treeNo,
     treeHarvestHistory: data.records.map(mapTreeHistoryRecord),
+  }
+}
+
+export async function fetchFarmMapTreeHarvestSummary(treeNo: string): Promise<FarmMapTreeHarvestSummary> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const encodedTreeNo = encodeURIComponent(treeNo)
+  const detailParams = new URLSearchParams({
+    tree_from: treeNo,
+    tree_to: treeNo,
+  })
+  const [treeResponse, performanceResponse] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/trees/${encodedTreeNo}`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+    fetch(`${getApiBaseUrl()}/api/detailed-query?${detailParams.toString()}`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+  ])
+
+  if (!treeResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${treeResponse.status}`, treeResponse.status)
+  }
+  if (!performanceResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${performanceResponse.status}`, performanceResponse.status)
+  }
+
+  const treeData = (await treeResponse.json()) as {
+    tree?: { tree_no?: string; status?: string | null }
+    summary?: { last_harvest_date?: string | null }
+    records?: Array<{
+      harvest_date: string
+      total_bunches: number | null
+      total_nuts: number | null
+    }>
+    totals?: Array<{
+      label: string
+      total_nuts: number | null
+    }>
+  }
+  const performanceData = (await performanceResponse.json()) as {
+    rows?: Array<{
+      tree_no: string
+      category: string | null
+      missed_harvests: number | null
+    }>
+  }
+
+  const records = treeData.records ?? []
+  const latest = records[0]
+  const performance = performanceData.rows?.find((row) => row.tree_no === treeNo)
+  const currentYear = String(new Date().getFullYear())
+  const currentYearHasRecords = records.some((record) => record.harvest_date.startsWith(`${currentYear}-`))
+  const currentYearTotals = treeData.totals?.find((row) => row.label === `Total ${currentYear}`)
+
+  return {
+    treeNo: treeData.tree?.tree_no ?? treeNo,
+    status: treeData.tree?.status ?? null,
+    classification: performance?.category ?? null,
+    lastHarvestDate: treeData.summary?.last_harvest_date ?? null,
+    latestBunches: latest?.total_bunches ?? null,
+    latestNuts: latest?.total_nuts ?? null,
+    currentYearTotalNuts: currentYearHasRecords ? (currentYearTotals?.total_nuts ?? null) : null,
+    missedHarvestCycles: performance?.missed_harvests ?? null,
+    hasHarvestData: records.length > 0,
   }
 }
 

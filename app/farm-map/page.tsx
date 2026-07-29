@@ -2,7 +2,7 @@ import { MapPinned } from "lucide-react"
 
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
-import { FarmOrthomosaicMap } from "@/components/maps/farm-orthomosaic-map"
+import { FarmMapClient } from "@/components/maps/farm-map-client"
 
 export default function FarmMapPage() {
   return (
@@ -20,13 +20,13 @@ export default function FarmMapPage() {
                 Farm Map – Drone Orthomosaic
               </h1>
               <p className="text-sm text-muted-foreground">
-                Combined drone orthomosaic layer for farm navigation and future GIS overlays
+                Combined drone orthomosaic with selectable coconut tree information
               </p>
             </div>
           </div>
         </div>
 
-        <FarmOrthomosaicMap />
+        <FarmMapClient />
       </div>
     </DashboardShell>
   )
