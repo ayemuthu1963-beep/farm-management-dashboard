@@ -3,7 +3,6 @@
 // Uses Motor Runtime records as the source of truth. No irrigation-entry table.
 // ============================================================================
 
-<<<<<<< HEAD
 // Zone IDs — includes Nutmeg (NM) which overlaps P1E and P2W
 export type ZoneId = "P1E" | "P1W" | "P2E" | "P2W" | "JF" | "NM"
 
@@ -16,9 +15,6 @@ export const zoneOverlaps: Record<ZoneId, ZoneId[]> = {
   JF: [],
   NM: ["P1E", "P2W"], // Nutmeg overlaps portions of Plot 1 East and Plot 2 West
 }
-=======
-export type ZoneId = "P1E" | "P1W" | "P2E" | "P2W" | "JF"
->>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
 
 export type IrrigationStatus = "target" | "no-data"
 
@@ -44,7 +40,6 @@ export interface Zone {
   statusLabel: string
 }
 
-<<<<<<< HEAD
 // Zone data — the single source of truth
 export const zones: Zone[] = [
   {
@@ -54,10 +49,12 @@ export const zones: Zone[] = [
     motor: "Database Value",
     valveOpenTime: "--",
     totalWaterSupplied: 0,
-    numberOfTrees: 0,
     waterPerTree: 0,
+    waterPerTreeDisplay: "0 L",
+    cropWater: [],
     lastIrrigatedDate: "--",
-    daysSinceIrrigation: 0,
+    daysSinceIrrigation: null,
+    recordsCount: 0,
     status: "target",
     statusLabel: "Target Achieved",
   },
@@ -68,10 +65,12 @@ export const zones: Zone[] = [
     motor: "Database Value",
     valveOpenTime: "--",
     totalWaterSupplied: 0,
-    numberOfTrees: 0,
     waterPerTree: 0,
+    waterPerTreeDisplay: "0 L",
+    cropWater: [],
     lastIrrigatedDate: "--",
-    daysSinceIrrigation: 0,
+    daysSinceIrrigation: null,
+    recordsCount: 0,
     status: "target",
     statusLabel: "Target Achieved",
   },
@@ -82,12 +81,14 @@ export const zones: Zone[] = [
     motor: "Database Value",
     valveOpenTime: "--",
     totalWaterSupplied: 0,
-    numberOfTrees: 0,
     waterPerTree: 0,
+    waterPerTreeDisplay: "0 L",
+    cropWater: [],
     lastIrrigatedDate: "--",
-    daysSinceIrrigation: 0,
-    status: "low",
-    statusLabel: "Slightly Low",
+    daysSinceIrrigation: null,
+    recordsCount: 0,
+    status: "no-data",
+    statusLabel: "No Data",
   },
   {
     id: "P2W",
@@ -96,12 +97,14 @@ export const zones: Zone[] = [
     motor: "Database Value",
     valveOpenTime: "--",
     totalWaterSupplied: 0,
-    numberOfTrees: 0,
     waterPerTree: 0,
+    waterPerTreeDisplay: "0 L",
+    cropWater: [],
     lastIrrigatedDate: "--",
-    daysSinceIrrigation: 0,
-    status: "very-low",
-    statusLabel: "Low",
+    daysSinceIrrigation: null,
+    recordsCount: 0,
+    status: "no-data",
+    statusLabel: "No Data",
   },
   {
     id: "JF",
@@ -110,12 +113,14 @@ export const zones: Zone[] = [
     motor: "Database Value",
     valveOpenTime: "--",
     totalWaterSupplied: 0,
-    numberOfTrees: 0,
     waterPerTree: 0,
+    waterPerTreeDisplay: "0 L",
+    cropWater: [],
     lastIrrigatedDate: "--",
-    daysSinceIrrigation: 0,
-    status: "critical",
-    statusLabel: "Critical",
+    daysSinceIrrigation: null,
+    recordsCount: 0,
+    status: "target",
+    statusLabel: "Target Achieved",
   },
   {
     id: "NM",
@@ -124,37 +129,17 @@ export const zones: Zone[] = [
     motor: "Database Value",
     valveOpenTime: "--",
     totalWaterSupplied: 0,
-    numberOfTrees: 0,
     waterPerTree: 0,
+    waterPerTreeDisplay: "0 L",
+    cropWater: [],
     lastIrrigatedDate: "--",
-    daysSinceIrrigation: 0,
+    daysSinceIrrigation: null,
+    recordsCount: 0,
     status: "target",
     statusLabel: "Target Achieved",
   },
 ]
 
-// Summary totals
-export function getTotalWaterSupplied(): number {
-  return zones.reduce((sum, z) => sum + z.totalWaterSupplied, 0)
-}
-
-export function getTotalMotorRuntime(): string {
-  // Mock: sum of valve times (converted to hours/minutes)
-  const totalMinutes = zones.reduce((sum, z) => {
-    const parts = z.valveOpenTime.split(" ")
-    const hours = parseInt(parts[0]) || 0
-    const mins = parseInt(parts[2]) || 0
-    return sum + hours * 60 + mins
-  }, 0)
-  const h = Math.floor(totalMinutes / 60)
-  const m = totalMinutes % 60
-  return `${h} h ${m} m`
-}
-
-// Recent trend data for "Water per Tree Trend" chart — last 10 inspection dates
-// Nutmeg uses fixed rate: 80 litres per tree per hour (independent of P1E and P2W)
-=======
->>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
 export interface TrendPoint {
   date: string
   P1E: number
@@ -165,7 +150,6 @@ export interface TrendPoint {
   NM: number
 }
 
-<<<<<<< HEAD
 export const waterPerTreeTrend: TrendPoint[] = [
   { date: "04 Jul", P1E: 642, P1W: 580, P2E: 451, P2W: 410, JF: 265, NM: 80 },
   { date: "05 Jul", P1E: 655, P1W: 592, P2E: 463, P2W: 425, JF: 270, NM: 80 },
@@ -181,36 +165,19 @@ export const waterPerTreeTrend: TrendPoint[] = [
 
 // Status color map (tailwind + inline rgb for SVG)
 export const statusColors = {
-  "above-target": { label: "Above Target", bg: "bg-chart-2/15", text: "text-chart-2", svg: "rgb(34, 197, 94)" }, // green
-  target: { label: "Target", bg: "bg-chart-2/10", text: "text-chart-2", svg: "rgb(34, 197, 94)" }, // dark green
-  low: { label: "Slightly Low", bg: "bg-warning/15", text: "text-warning", svg: "rgb(234, 179, 8)" }, // yellow
-  critical: { label: "Critical", bg: "bg-destructive/15", text: "text-destructive", svg: "rgb(239, 68, 68)" }, // red
-  "very-low": { label: "Low", bg: "bg-orange-500/15", text: "text-orange-500", svg: "rgb(249, 115, 22)" }, // orange
-  "no-data": { label: "No Data", bg: "bg-muted/15", text: "text-muted-foreground", svg: "rgb(107, 114, 128)" }, // grey
-=======
-export interface IrrigationSummary {
-  totalWaterSupplied: number
-  totalMotorRuntime: string
-  zonesIrrigated: number
-  latestIrrigation: string
+  "above-target": { label: "Above Target", bg: "bg-chart-2/15", text: "text-chart-2", svg: "rgb(34, 197, 94)" },
+  target: { label: "Target", bg: "bg-chart-2/10", text: "text-chart-2", svg: "rgb(34, 197, 94)" },
+  low: { label: "Slightly Low", bg: "bg-warning/15", text: "text-warning", svg: "rgb(234, 179, 8)" },
+  critical: { label: "Critical", bg: "bg-destructive/15", text: "text-destructive", svg: "rgb(239, 68, 68)" },
+  "very-low": { label: "Low", bg: "bg-orange-500/15", text: "text-orange-500", svg: "rgb(249, 115, 22)" },
+  "no-data": { label: "No Data", bg: "bg-muted/15", text: "text-muted-foreground", svg: "rgb(107, 114, 128)" },
 }
 
 export interface IrrigationData {
-  summary: IrrigationSummary
+  summary: { totalWaterSupplied: number; totalMotorRuntime: string; zonesIrrigated: number; latestIrrigation: string }
   zones: Zone[]
   waterPerTreeTrend: TrendPoint[]
   selectedPeriodLabel: string
-  sourceRecord?: {
-    entryDate: string
-    plot: string
-    motorNo: number
-    valveNo: number
-    hours: number
-    minutes: number
-    totalMinutes: number
-    totalWaterLitres: number
-    waterPerTree: CropWaterFigure[]
-  }
 }
 
 export const zoneNames: Record<ZoneId, string> = {
@@ -219,12 +186,8 @@ export const zoneNames: Record<ZoneId, string> = {
   P2E: "Plot 2 East",
   P2W: "Plot 2 West",
   JF: "Jackfruit",
+  NM: "Nutmeg",
 }
-
-export const statusColors = {
-  target: { label: "Irrigated", bg: "bg-chart-2/10", text: "text-chart-2", svg: "rgb(34, 197, 94)" },
-  "no-data": { label: "No Irrigation", bg: "bg-muted/15", text: "text-muted-foreground", svg: "rgb(107, 114, 128)" },
-} satisfies Record<IrrigationStatus, { label: string; bg: string; text: string; svg: string }>
 
 export const emptyIrrigationData: IrrigationData = {
   selectedPeriodLabel: "Selected period",
@@ -251,7 +214,6 @@ export const emptyIrrigationData: IrrigationData = {
     statusLabel: statusColors["no-data"].label,
   })),
   waterPerTreeTrend: [],
->>>>>>> 5fe26d4b753e22330e399bdf9ea738ac92de81ec
 }
 
 export function formatNumberIN(num: number): string {
