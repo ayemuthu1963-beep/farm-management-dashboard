@@ -30,12 +30,24 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
     method,
     headers: {
       Authorization: authHeader,
-      Accept: "application/json",
+      Accept: request.headers.get("accept") ?? "application/json",
       ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
     },
     cache: "no-store",
     body: method === "POST" ? JSON.stringify(await request.json().catch(() => ({}))) : undefined,
   })
+  const contentType = response.headers.get("content-type") ?? ""
+  if (!contentType.includes("application/json")) {
+    return new NextResponse(await response.arrayBuffer(), {
+      status: response.status,
+      headers: {
+        "Content-Type": contentType || "application/octet-stream",
+        ...(response.headers.get("content-disposition")
+          ? { "Content-Disposition": response.headers.get("content-disposition")! }
+          : {}),
+      },
+    })
+  }
   const body = await response.json().catch(() => ({ ok: false, error: `Harvest API returned ${response.status}` }))
   return NextResponse.json(body, { status: response.status })
 }

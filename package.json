@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node tests/well-water-authoritative-daily-values.mjs && node tests/preview-targeted-repair.mjs && node tests/navigation-consistency.mjs && node tests/farm-map-coconut-trees.mjs && node tests/tree-number-autocomplete.mjs && node tests/version-visibility.mjs",
+    "test": "node tests/well-water-authoritative-daily-values.mjs && node tests/preview-targeted-repair.mjs && node tests/navigation-consistency.mjs && node tests/farm-map-coconut-trees.mjs && node tests/tree-number-autocomplete.mjs && node tests/version-visibility.mjs && node tests/harvest-sync-exact-duplicates.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },

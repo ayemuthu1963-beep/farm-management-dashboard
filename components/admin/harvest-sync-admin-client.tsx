@@ -18,6 +18,18 @@ interface ScanData {
   items: any[]
 }
 
+interface ImportPlan {
+  confirmationToken: string
+  candidateCount: number
+  candidateBunches: number
+  candidateNuts: number
+  exactDuplicateRetained: number
+  exactDuplicateSuperseded: number
+  unresolvedCount: number
+  effectiveRecordCountsByDate: Record<string, number>
+  candidates: any[]
+}
+
 function n(value: unknown): string {
   const num = Number(value ?? 0)
   return Number.isFinite(num) ? num.toLocaleString("en-IN") : "0"
@@ -30,8 +42,9 @@ function d(value: string | null | undefined): string {
 
 function classBadge(classification: string) {
   if (classification === "READY_NEW") return "bg-emerald-50 text-emerald-700 border-emerald-200"
+  if (classification === "READY_EXACT_DUPLICATE") return "bg-emerald-50 text-emerald-700 border-emerald-200"
   if (classification === "ALREADY_IMPORTED") return "bg-slate-50 text-slate-700 border-slate-200"
-  if (classification === "SUPERSEDED") return "bg-amber-50 text-amber-700 border-amber-200"
+  if (classification === "SUPERSEDED_EXACT_DUPLICATE") return "bg-amber-50 text-amber-700 border-amber-200"
   return "bg-rose-50 text-rose-700 border-rose-200"
 }
 
@@ -40,6 +53,7 @@ export function HarvestSyncAdminClient() {
   const [scan, setScan] = useState<ScanData | null>(null)
   const [issues, setIssues] = useState<any | null>(null)
   const [history, setHistory] = useState<any[]>([])
+  const [importPlan, setImportPlan] = useState<ImportPlan | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -71,6 +85,9 @@ export function HarvestSyncAdminClient() {
       ready: Number(source?.ready_new_count ?? 0),
       duplicates: Number(source?.duplicate_group_count ?? 0),
       duplicateReview: Number(source?.duplicate_review_count ?? 0),
+      exactDuplicateGroups: Number(source?.exact_duplicate_group_count ?? 0),
+      exactDuplicateSuperseded: Number(source?.exact_duplicate_superseded_count ?? 0),
+      exactDuplicateRetained: Number(source?.exact_duplicate_retained_count ?? 0),
       unmatched: Number(source?.unmatched_tree_count ?? 0),
       invalid: Number(source?.invalid_data_count ?? 0),
       deletedRejected: Number(source?.rejected_count ?? 0) + Number(source?.has_issues_count ?? 0),
@@ -86,6 +103,7 @@ export function HarvestSyncAdminClient() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail ?? data.error ?? "Scan failed")
       setScan(data)
+      setImportPlan(null)
       setMessage({ ok: true, text: `Scan ${data.scan.id} complete. Review issues before importing.` })
       await Promise.all([loadStatus(), loadIssues(), loadHistory()])
     } catch (error) {
@@ -95,10 +113,35 @@ export function HarvestSyncAdminClient() {
     }
   }
 
-  async function importApproved() {
+  async function prepareImport() {
     const scanId = latestScan?.id
     if (!scanId) {
       setMessage({ ok: false, text: "Run Scan ODK before importing." })
+      return
+    }
+    setBusy("preview-import")
+    setMessage(null)
+    try {
+      const response = await fetch("/api/admin/harvest-sync/import-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scan_id: scanId }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.detail ?? data.error ?? "Unable to prepare final import summary")
+      setImportPlan(data.plan)
+      setMessage({ ok: true, text: "Final import set prepared. Review the complete summary before confirming." })
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to prepare final import summary" })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function importApproved() {
+    const scanId = latestScan?.id
+    if (!scanId || !importPlan) {
+      setMessage({ ok: false, text: "Review the final import set before confirming." })
       return
     }
     setBusy("import")
@@ -107,11 +150,16 @@ export function HarvestSyncAdminClient() {
       const response = await fetch("/api/admin/harvest-sync/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scan_id: scanId, mode: "approved" }),
+        body: JSON.stringify({
+          scan_id: scanId,
+          mode: "approved",
+          confirmation_token: importPlan.confirmationToken,
+        }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail ?? data.error ?? "Import failed")
       setMessage({ ok: true, text: `Import finished: ${data.result.result}. Imported ${data.result.imported} rows; ${data.result.excluded} unresolved rows remain.` })
+      setImportPlan(null)
       await Promise.all([loadStatus(), loadIssues(), loadHistory()])
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "Import failed" })
@@ -120,7 +168,30 @@ export function HarvestSyncAdminClient() {
     }
   }
 
-  const duplicateRows = (issues?.groups?.duplicateTreeEntries ?? scan?.items?.filter((item) => ["DUPLICATE_REVIEW_REQUIRED", "SUPERSEDED"].includes(item.classification)) ?? []).slice(0, 80)
+  async function downloadAuditCsv() {
+    const scanId = latestScan?.id
+    if (!scanId) return
+    setBusy("audit-csv")
+    setMessage(null)
+    try {
+      const response = await fetch(`/api/admin/harvest-sync/scans/${scanId}/audit.csv`, { cache: "no-store" })
+      if (!response.ok) throw new Error("Unable to create pre-import audit CSV")
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `harvest-sync-scan-${scanId}-audit.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to create pre-import audit CSV" })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const duplicateRows = (issues?.groups?.duplicateTreeEntries ?? scan?.items?.filter((item) => item.classification === "DUPLICATE_REVIEW_REQUIRED") ?? []).slice(0, 80)
+  const exactDuplicateGroups = issues?.groups?.exactDuplicateGroups ?? []
   const unmatchedRows = (issues?.groups?.treesNotInMaster ?? scan?.items?.filter((item) => item.classification === "UNMATCHED_TREE") ?? []).slice(0, 40)
 
   return (
@@ -148,7 +219,8 @@ export function HarvestSyncAdminClient() {
         <div className="flex flex-wrap gap-3">
           <button onClick={() => void scanOdk()} disabled={busy !== null} className="rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground disabled:opacity-60">{busy === "scan" ? "Scanning..." : "Scan ODK"}</button>
           <button onClick={() => void loadIssues()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-extrabold">Review Issues</button>
-          <button onClick={() => void importApproved()} disabled={busy !== null || !latestScan} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{busy === "import" ? "Importing..." : "Import Approved"}</button>
+          <button onClick={() => void prepareImport()} disabled={busy !== null || !latestScan} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{busy === "preview-import" ? "Preparing..." : "Review Final Import Set"}</button>
+          <button onClick={() => void downloadAuditCsv()} disabled={busy !== null || !latestScan} className="rounded-lg border px-4 py-2 text-sm font-extrabold">{busy === "audit-csv" ? "Preparing CSV..." : "Download Pre-Import Audit CSV"}</button>
           <button onClick={() => void loadHistory()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-extrabold">View Import History</button>
         </div>
         {message ? (
@@ -158,6 +230,27 @@ export function HarvestSyncAdminClient() {
           </div>
         ) : null}
       </Panel>
+
+      {importPlan ? (
+        <Panel title="Final Reviewed Import Summary" icon={CheckCircle2}>
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Effective Records</p><p className="text-2xl font-black">{n(importPlan.candidateCount)}</p></div>
+            <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Bunches / Nuts</p><p className="font-black">{n(importPlan.candidateBunches)} / {n(importPlan.candidateNuts)}</p></div>
+            <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Exact Duplicates</p><p className="font-black">{n(importPlan.exactDuplicateRetained)} retained</p><p className="text-xs">{n(importPlan.exactDuplicateSuperseded)} source submissions excluded</p></div>
+            <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Unresolved</p><p className="text-2xl font-black text-rose-700">{n(importPlan.unresolvedCount)}</p></div>
+          </div>
+          <div className="mt-4 max-h-72 overflow-auto rounded-xl border">
+            <table className="min-w-full text-left text-xs">
+              <thead className="sticky top-0 bg-background"><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Instance</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th><th className="p-2">Source</th></tr></thead>
+              <tbody>{importPlan.candidates.map((row: any) => <tr key={row.odk_instance_id} className="border-b"><td className="p-2">{d(row.harvest_date)}</td><td className="p-2 font-bold">{row.import_tree_no}</td><td className="p-2 font-mono">{row.odk_instance_id}</td><td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td><td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td><td className="p-2">{row.classification}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            Confirming inserts exactly the effective records listed above. A changed ODK fingerprint or review decision invalidates this confirmation.
+          </div>
+          <button onClick={() => void importApproved()} disabled={busy !== null} className="mt-4 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{busy === "import" ? "Importing..." : "Confirm Final Batch Import"}</button>
+        </Panel>
+      ) : null}
 
       <Panel title="Scan Summary / Next Action Required" icon={RefreshCw}>
         <div className="grid gap-3 md:grid-cols-4">
@@ -174,7 +267,38 @@ export function HarvestSyncAdminClient() {
         </div>
       </Panel>
 
-      <Panel title="Duplicate Tree Entries" icon={AlertTriangle}>
+      <Panel title="Exact Duplicates — Automatically Resolved" icon={ShieldCheck}>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs font-bold uppercase text-emerald-800">Exact-Duplicate Tree Groups</p><p className="text-2xl font-black text-emerald-900">{n(issueCounts.exactDuplicateGroups)}</p></div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-bold uppercase text-amber-800">Source Submissions Excluded</p><p className="text-2xl font-black text-amber-900">{n(issueCounts.exactDuplicateSuperseded)}</p></div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3"><p className="text-xs font-bold uppercase text-sky-800">Effective Records Retained</p><p className="text-2xl font-black text-sky-900">{n(issueCounts.exactDuplicateRetained)}</p></div>
+        </div>
+        <p className="mt-3 text-xs font-semibold text-muted-foreground">The earliest valid ODK submission is retained; equal timestamps use the lexicographically lowest ODK instance ID. No Harvest record is inserted during scanning.</p>
+        <div className="mt-3 space-y-2">
+          {exactDuplicateGroups.map((group: any) => (
+            <details key={group.groupKey} className="rounded-xl border bg-background">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
+                Tree {group.treeNo} · {d(group.harvestDate)} · {n(group.superseded?.length)} superseded
+              </summary>
+              <div className="border-t p-4 text-xs">
+                <p><span className="font-bold">Retained ODK instance:</span> <span className="font-mono">{group.retained?.odk_instance_id ?? "—"}</span></p>
+                <p className="mt-1"><span className="font-bold">Automatic-resolution reason:</span> {group.reason}</p>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full text-left">
+                    <thead><tr className="border-b"><th className="p-2">Disposition</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">Submitted</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th></tr></thead>
+                    <tbody>
+                      {[group.retained, ...(group.superseded ?? [])].filter(Boolean).map((row: any) => <tr key={row.odk_instance_id} className="border-b"><td className="p-2 font-bold">{row.classification === "READY_EXACT_DUPLICATE" ? "Retained" : "Superseded"}</td><td className="p-2 font-mono">{row.odk_instance_id}</td><td className="p-2">{row.submitter_name || "—"} / {row.device_id || "—"}</td><td className="p-2">{row.odk_submission_timestamp ?? "—"}</td><td className="p-2">{row.b1}</td><td className="p-2">{row.b2}</td><td className="p-2">{row.b3}</td><td className="p-2">{row.total_bunches}</td><td className="p-2">{row.total_nuts}</td></tr>)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+          ))}
+          {exactDuplicateGroups.length === 0 ? <p className="rounded-xl border p-3 text-sm text-muted-foreground">No exact-duplicate groups in the latest scan.</p> : null}
+        </div>
+      </Panel>
+
+      <Panel title="Conflicting Duplicate Tree Entries — Supervisor Review Required" icon={AlertTriangle}>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-xs">
             <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Tree</th><th className="p-2">ODK Time</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Nuts</th><th className="p-2">Status</th><th className="p-2">Default Latest</th></tr></thead>
