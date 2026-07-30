@@ -20,6 +20,9 @@ interface ApiCycleRow {
   sale_price_per_nut: string | number | null
 }
 
+const HARVEST_CYCLE_FETCH_ATTEMPTS = 2
+const HARVEST_CYCLE_RETRY_DELAY_MS = 250
+
 function toNumber(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === "") return null
   const parsed = typeof value === "number" ? value : Number(value)
@@ -46,20 +49,41 @@ async function fetchCycles(): Promise<HarvestCycleSummary[]> {
     throw new Error("Harvest API credentials are not configured.")
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/cycles`, {
-    headers: {
-      Authorization: authHeader,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  })
+  let lastError: Error | null = null
+  for (let attempt = 1; attempt <= HARVEST_CYCLE_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/cycles`, {
+        headers: {
+          Authorization: authHeader,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      })
 
-  if (!response.ok) {
-    throw new Error(`Harvest API returned HTTP ${response.status}.`)
+      if (!response.ok) {
+        const error = new Error(`Harvest API returned HTTP ${response.status}.`)
+        if (response.status < 500 || attempt === HARVEST_CYCLE_FETCH_ATTEMPTS) {
+          throw error
+        }
+        lastError = error
+      } else {
+        const rows = (await response.json()) as ApiCycleRow[]
+        return rows.map(mapCycle)
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Harvest Cycle data request failed.")
+      if (
+        attempt === HARVEST_CYCLE_FETCH_ATTEMPTS ||
+        /^Harvest API returned HTTP 4\d\d\.$/.test(lastError.message)
+      ) {
+        throw lastError
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, HARVEST_CYCLE_RETRY_DELAY_MS))
   }
 
-  const rows = (await response.json()) as ApiCycleRow[]
-  return rows.map(mapCycle)
+  throw lastError ?? new Error("Harvest Cycle data request failed.")
 }
 
 export default async function HarvestCycleAdminPage() {

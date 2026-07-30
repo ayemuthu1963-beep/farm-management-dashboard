@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path"
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const component = readFileSync(resolve(root, "components/admin/harvest-sync-admin-client.tsx"), "utf8")
 const proxy = readFileSync(resolve(root, "app/api/admin/harvest-sync/[[...path]]/route.ts"), "utf8")
+const harvestCyclePage = readFileSync(resolve(root, "app/admin/harvest-cycle/page.tsx"), "utf8")
 
 assert.match(component, /Exact Duplicates — Automatically Resolved/)
 assert.match(component, /exact_duplicate_group_count/)
@@ -40,5 +41,8 @@ assert.match(component, /Cycle Safety Reviews/)
 assert.match(component, /Save Supervisor Selection/)
 assert.match(component, /decision: "SELECT_SUBMISSION"/)
 assert.match(proxy, /response\.arrayBuffer\(\)/, "CSV proxying must preserve non-JSON responses")
+assert.match(harvestCyclePage, /HARVEST_CYCLE_FETCH_ATTEMPTS = 2/)
+assert.match(harvestCyclePage, /HARVEST_CYCLE_RETRY_DELAY_MS = 250/)
+assert.match(harvestCyclePage, /response\.status < 500/)
 
 console.log("Harvest Sync exact-duplicate UI contract checks passed.")
