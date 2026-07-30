@@ -80,8 +80,17 @@ assert.match(harvestCycleDuplicates, /KEEP_EXISTING_CYCLE_RECORD/)
 assert.match(harvestCycleDuplicates, /USE_PENDING_SUBMISSION/)
 assert.match(harvestCycleDuplicates, /DEFER_DECISION/)
 assert.match(harvestCycleDuplicates, /CORRECTION ACTION REQUIRED/)
-assert.match(harvestCycleDuplicates, /Source fingerprint unchanged/)
+assert.match(harvestCycleDuplicates, /Group fingerprint unchanged/)
 assert.match(harvestCycleDuplicates, /fingerprint-status/)
+assert.match(
+  harvestCycleDuplicates,
+  /New ODK source changes exist after Scan/,
+)
+assert.match(
+  harvestCycleDuplicates,
+  /This Tree Number’s source data changed after the decision was saved/,
+)
+assert.match(harvestCycleDuplicates, /New scan required/)
 assert.match(harvestCycleDuplicates, /Existing Harvest Record ID/)
 assert.doesNotMatch(harvestCycleDuplicates, /Allow both/)
 for (const heading of [

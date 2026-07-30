@@ -101,6 +101,19 @@ interface FingerprintStatus {
   scanId: number
   matches: boolean
   checkedAt: string
+  scanTimestamp?: string | null
+  treeNo?: string
+  groupMatches?: boolean
+  groupFingerprintVersion?: string
+  storedGroupFingerprint?: string
+  baselineGroupFingerprint?: string
+  currentGroupFingerprint?: string
+  immutableScanMatchesSavedDecision?: boolean
+  storedScanFingerprint?: string
+  currentLiveFingerprint?: string
+  fullSourceMatches?: boolean
+  liveSourceChanged?: boolean
+  finalImportRequiresNewScan?: boolean
 }
 
 const SUPERVISOR_REASONS = [
@@ -232,6 +245,9 @@ export function HarvestCycleDuplicateTreeEntries() {
   const [errorPage, setErrorPage] = useState(1)
   const [exactPage, setExactPage] = useState(1)
   const [fingerprintStatus, setFingerprintStatus] = useState<FingerprintStatus | null>(null)
+  const [groupFingerprintStatuses, setGroupFingerprintStatuses] = useState<
+    Record<string, FingerprintStatus>
+  >({})
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DecisionDraft>>({})
   const [decisionSaving, setDecisionSaving] = useState<string | null>(null)
   const [decisionMessage, setDecisionMessage] = useState<Record<string, string>>({})
@@ -240,6 +256,7 @@ export function HarvestCycleDuplicateTreeEntries() {
     setLoading(true)
     setError(null)
     setFingerprintStatus(null)
+    setGroupFingerprintStatuses({})
     try {
       const response = await fetch(`/api/admin/harvest-sync/scans/${scanId}`, { cache: "no-store" })
       const data = (await response.json()) as ScanResponse & { detail?: string; error?: string }
@@ -248,22 +265,55 @@ export function HarvestCycleDuplicateTreeEntries() {
       }
       setScanData(data)
       setSelectedScanId(scanId)
-      const fingerprintResponse = await fetch(
-        `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status`,
-        { cache: "no-store" },
+      const collisionTrees = [
+        ...new Set(
+          data.items
+            .filter(isCycleCollision)
+            .map((item) => String(item.original_tree_no ?? "").trim())
+            .filter(Boolean),
+        ),
+      ]
+      const groupStatuses = await Promise.all(
+        collisionTrees.map(async (treeNo) => {
+          const groupResponse = await fetch(
+            `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status?tree_no=${encodeURIComponent(treeNo)}`,
+            { cache: "no-store" },
+          )
+          const groupStatus = (await groupResponse.json()) as FingerprintStatus & {
+            detail?: string
+            error?: string
+          }
+          if (!groupResponse.ok) {
+            throw new Error(
+              groupStatus.detail ??
+                groupStatus.error ??
+                `Tree ${treeNo} fingerprint check returned HTTP ${groupResponse.status}.`,
+            )
+          }
+          return [treeNo, groupStatus] as const
+        }),
       )
-      const fingerprint = (await fingerprintResponse.json()) as FingerprintStatus & {
-        detail?: string
-        error?: string
-      }
-      if (!fingerprintResponse.ok) {
-        throw new Error(
-          fingerprint.detail ??
-            fingerprint.error ??
-            `Source fingerprint check returned HTTP ${fingerprintResponse.status}.`,
+      setGroupFingerprintStatuses(Object.fromEntries(groupStatuses))
+      if (groupStatuses[0]) {
+        setFingerprintStatus(groupStatuses[0][1])
+      } else {
+        const fingerprintResponse = await fetch(
+          `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status`,
+          { cache: "no-store" },
         )
+        const fingerprint = (await fingerprintResponse.json()) as FingerprintStatus & {
+          detail?: string
+          error?: string
+        }
+        if (!fingerprintResponse.ok) {
+          throw new Error(
+            fingerprint.detail ??
+              fingerprint.error ??
+              `Source fingerprint check returned HTTP ${fingerprintResponse.status}.`,
+          )
+        }
+        setFingerprintStatus(fingerprint)
       }
-      setFingerprintStatus(fingerprint)
       const dates = [...new Set(data.items.map((item) => displayDate(item.harvest_date)).filter((value) => value !== "—"))]
         .sort()
       setDateFilter((current) => (current && dates.includes(current) ? current : (dates.at(-1) ?? "")))
@@ -287,7 +337,8 @@ export function HarvestCycleDuplicateTreeEntries() {
   async function saveCycleDecision(pending: ScanItem) {
     const draft = decisionDrafts[pending.odk_instance_id] ?? EMPTY_DECISION_DRAFT
     const reason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
-    if (!draft.action || !reason || fingerprintStatus?.matches !== true || !selectedScanId) return
+    const groupStatus = groupFingerprintStatuses[String(pending.original_tree_no ?? "").trim()]
+    if (!draft.action || !reason || groupStatus?.groupMatches !== true || !selectedScanId) return
     setDecisionSaving(pending.odk_instance_id)
     setDecisionMessage((current) => ({ ...current, [pending.odk_instance_id]: "" }))
     try {
@@ -513,7 +564,13 @@ export function HarvestCycleDuplicateTreeEntries() {
           </p>
         </div>
         {loading ? <p className="mt-3 text-sm font-semibold text-muted-foreground">Loading persisted scan…</p> : null}
-        {error ? <p className="mt-3 text-sm font-semibold text-destructive">{error}</p> : null}
+          {error ? <p className="mt-3 text-sm font-semibold text-destructive">{error}</p> : null}
+        {fingerprintStatus?.liveSourceChanged ? (
+          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
+            New ODK source changes exist after Scan {selectedScanId}. Decisions for unchanged groups may still be
+            amended. A new scan is required before final import.
+          </p>
+        ) : null}
       </Panel>
 
       <Panel title="CONFLICTING DUPLICATE TREE ENTRIES — REVIEW REQUIRED" icon={AlertTriangle}>
@@ -617,6 +674,8 @@ export function HarvestCycleDuplicateTreeEntries() {
         </p>
         <div className="mb-4 space-y-4">
           {cycleCollisionGroups.map(({ pending, records }) => {
+            const groupStatus =
+              groupFingerprintStatuses[String(pending.original_tree_no ?? "").trim()] ?? null
             const savedAction = CYCLE_COLLISION_DECISIONS.has(
               pending.supervisor_decision as CycleDecisionAction,
             )
@@ -635,7 +694,7 @@ export function HarvestCycleDuplicateTreeEntries() {
             const canSave =
               Boolean(draft.action) &&
               Boolean(finalReason) &&
-              fingerprintStatus?.matches === true &&
+              groupStatus?.groupMatches === true &&
               decisionSaving !== pending.odk_instance_id
             const replacementRequested =
               draft.action === "USE_PENDING_SUBMISSION" ||
@@ -814,22 +873,40 @@ export function HarvestCycleDuplicateTreeEntries() {
                   </button>
                   <span
                     className={`text-xs font-bold ${
-                      fingerprintStatus?.matches === true
+                      groupStatus?.groupMatches === true
                         ? "text-emerald-700"
-                        : fingerprintStatus?.matches === false
+                        : groupStatus?.groupMatches === false
                           ? "text-destructive"
                           : "text-muted-foreground"
                     }`}
                   >
-                    {fingerprintStatus?.matches === true
-                      ? "Source fingerprint unchanged"
-                      : fingerprintStatus?.matches === false
-                        ? "Source fingerprint changed — decision saving is blocked"
-                        : "Checking source fingerprint…"}
+                    {groupStatus?.groupMatches === true
+                      ? "Group fingerprint unchanged — decision amendment is available"
+                      : groupStatus?.groupMatches === false
+                        ? "This Tree Number’s source data changed after the decision was saved. Rescan and review again."
+                        : "Checking this Tree Number’s source fingerprint…"}
                   </span>
                   {decisionMessage[pending.odk_instance_id] ? (
                     <span className="text-xs font-bold">{decisionMessage[pending.odk_instance_id]}</span>
                   ) : null}
+                </div>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                  <p className="rounded-lg border bg-background p-2">
+                    <span className="block font-bold uppercase text-muted-foreground">Group fingerprint</span>
+                    {groupStatus?.groupMatches === true
+                      ? "Unchanged"
+                      : groupStatus?.groupMatches === false
+                        ? "Changed"
+                        : "Checking…"}
+                  </p>
+                  <p className="rounded-lg border bg-background p-2">
+                    <span className="block font-bold uppercase text-muted-foreground">Live-source status</span>
+                    {groupStatus?.liveSourceChanged ? "New source changes after this scan" : "Matches selected scan"}
+                  </p>
+                  <p className="rounded-lg border bg-background p-2">
+                    <span className="block font-bold uppercase text-muted-foreground">Final import</span>
+                    {groupStatus?.finalImportRequiresNewScan ? "New scan required" : "Batch fingerprint current"}
+                  </p>
                 </div>
                 {pending.supervisor_decision ? (
                   <p className="mt-3 text-xs font-semibold text-muted-foreground">
