@@ -72,6 +72,8 @@ interface ScanItem {
   supervisor_decision_updated_at?: string | null
   supervisor_existing_harvest_record_id?: number | null
   existing_record_source?: string | null
+  is_invalid_zero_submission?: boolean
+  effective_classification?: string | null
 }
 
 interface ScanResponse {
@@ -100,9 +102,16 @@ interface DecisionDraft {
 
 interface ConflictDecisionDraft {
   selectedInstanceId: string
+  action: ConflictDecisionAction
   reason: string
   otherReason: string
 }
+
+type ConflictDecisionAction =
+  | "SELECT_SUBMISSION"
+  | "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
+  | "DEFER_DECISION"
+  | ""
 
 interface FingerprintStatus {
   scanId: number
@@ -138,13 +147,29 @@ const CONFLICT_SUPERVISOR_REASONS = [
   "Other",
 ] as const
 
+const INVALID_ZERO_SUPERVISOR_REASONS = [
+  "Accidental empty submission",
+  "Valid labour entry confirmed",
+  "Zero-value duplicate excluded after supervisor verification",
+  "Field verification required",
+  "Other",
+] as const
+
 const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
   "KEEP_EXISTING_CYCLE_RECORD",
   "USE_PENDING_SUBMISSION",
   "DEFER_DECISION",
 ])
 
-const RESOLVED_CONFLICT_DECISIONS = new Set(["SELECT_SUBMISSION", "KEEP_LATEST"])
+const RESOLVED_CONFLICT_DECISIONS = new Set([
+  "SELECT_SUBMISSION",
+  "KEEP_LATEST",
+  "RETAIN_VALID_EXCLUDE_INVALID_ZERO",
+])
+const SAVED_CONFLICT_DECISIONS = new Set([
+  ...RESOLVED_CONFLICT_DECISIONS,
+  "DEFER_DECISION",
+])
 
 const EMPTY_DECISION_DRAFT: DecisionDraft = {
   action: "",
@@ -221,14 +246,61 @@ function selectedConflictInstance(item: ScanItem | undefined): string | null {
 
 function isActiveValidConflictCandidate(item: ScanItem): boolean {
   const reviewState = String(item.review_state ?? "").toLowerCase().replace(/\s+/g, "")
+  const bunchValues = [item.b1, item.b2, item.b3]
+  const integerBunchValues = bunchValues.every(
+    (value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
+  )
+  const expectedBunches = bunchValues.filter(
+    (value) => typeof value === "number" && value > 0,
+  ).length
+  const expectedNuts = bunchValues.reduce<number>(
+    (total, value) => total + (typeof value === "number" ? value : 0),
+    0,
+  )
   return Boolean(
     item.odk_instance_id &&
       item.classification === "DUPLICATE_REVIEW_REQUIRED" &&
       !["deleted", "rejected", "hasissues"].includes(reviewState) &&
-      [item.b1, item.b2, item.b3, item.total_bunches, item.total_nuts].every(
-        (value) => value !== null && value !== undefined,
-      ),
+      integerBunchValues &&
+      typeof item.total_bunches === "number" &&
+      Number.isInteger(item.total_bunches) &&
+      item.total_bunches >= 1 &&
+      item.total_bunches === expectedBunches &&
+      typeof item.total_nuts === "number" &&
+      Number.isInteger(item.total_nuts) &&
+      item.total_nuts > 0 &&
+      item.total_nuts === expectedNuts,
   )
+}
+
+function isAllZeroInvalidSubmission(item: ScanItem): boolean {
+  const quantities = [item.b1, item.b2, item.b3, item.total_bunches, item.total_nuts]
+  const allZero = quantities.every(
+    (value) => typeof value === "number" && Number.isInteger(value) && value === 0,
+  )
+  if (!allZero) return false
+  if (item.is_invalid_zero_submission === true) return true
+  if (item.effective_classification === "INVALID_DATA") return true
+  if (item.classification === "INVALID_DATA") return true
+  // Persisted scans created before the dedicated marker classified both candidates as
+  // duplicate-review rows. The strict all-zero fallback is applied only by
+  // mixedValidInvalidZeroGroup after it proves that exactly one non-zero valid sibling exists.
+  return item.classification === "DUPLICATE_REVIEW_REQUIRED"
+}
+
+function mixedValidInvalidZeroGroup(rows: ScanItem[]): {
+  valid: ScanItem
+  invalid: ScanItem[]
+} | null {
+  if (rows.length < 2) return null
+  const invalid = rows.filter(isAllZeroInvalidSubmission)
+  const valid = rows.filter(
+    (row) => isActiveValidConflictCandidate(row) && !isAllZeroInvalidSubmission(row),
+  )
+  if (valid.length !== 1 || invalid.length < 1 || valid.length + invalid.length !== rows.length) {
+    return null
+  }
+  return { valid: valid[0], invalid }
 }
 
 function conflictGroupResolved(rows: ScanItem[]): boolean {
@@ -245,13 +317,29 @@ function conflictGroupResolved(rows: ScanItem[]): boolean {
 }
 
 function storedConflictDecisionDraft(rows: ScanItem[]): ConflictDecisionDraft {
-  const decisionRow = rows.find((row) => selectedConflictInstance(row))
+  const mixedGroup = mixedValidInvalidZeroGroup(rows)
+  const decisionRow =
+    rows.find((row) => SAVED_CONFLICT_DECISIONS.has(String(row.supervisor_decision ?? ""))) ??
+    rows.find((row) => selectedConflictInstance(row))
   const savedReason = decisionRow?.supervisor_reason ?? ""
-  const savedReasonIsChoice = CONFLICT_SUPERVISOR_REASONS.some(
+  const allowedReasons = mixedGroup
+    ? INVALID_ZERO_SUPERVISOR_REASONS
+    : CONFLICT_SUPERVISOR_REASONS
+  const savedReasonIsChoice = allowedReasons.some(
     (reason) => reason === savedReason,
   )
+  const savedAction = String(decisionRow?.supervisor_decision ?? "") as ConflictDecisionAction
   return {
-    selectedInstanceId: selectedConflictInstance(decisionRow) ?? "",
+    selectedInstanceId:
+      selectedConflictInstance(decisionRow) ??
+      (mixedGroup && savedAction !== "DEFER_DECISION" ? mixedGroup.valid.odk_instance_id : ""),
+    action:
+      savedAction === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" ||
+      savedAction === "DEFER_DECISION"
+        ? savedAction
+        : mixedGroup
+          ? ""
+          : "SELECT_SUBMISSION",
     reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
     otherReason: savedReasonIsChoice ? "" : savedReason,
   }
@@ -440,17 +528,26 @@ export function HarvestCycleDuplicateTreeEntries() {
     openNextUnresolved: boolean,
   ) {
     const draft = conflictDecisionDrafts[key] ?? storedConflictDecisionDraft(rows)
+    const mixedGroup = mixedValidInvalidZeroGroup(rows)
     const reason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
     const selectedRow = rows.find(
       (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
     )
+    const decision: ConflictDecisionAction = mixedGroup
+      ? draft.action
+      : "SELECT_SUBMISSION"
+    const validMixedSelection =
+      decision === "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
+        ? selectedRow?.odk_instance_id === mixedGroup?.valid.odk_instance_id
+        : decision === "DEFER_DECISION"
     const treeNo = String(rows[0]?.original_tree_no ?? "").trim()
     const groupStatus =
       groupFingerprintStatuses[fingerprintStatusKey(treeNo, rows[0]?.harvest_date)]
     if (
       !selectedScanId ||
-      !selectedRow ||
-      !isActiveValidConflictCandidate(selectedRow) ||
+      (mixedGroup
+        ? !validMixedSelection
+        : !selectedRow || !isActiveValidConflictCandidate(selectedRow)) ||
       !reason ||
       groupStatus?.groupMatches !== true
     ) {
@@ -471,17 +568,28 @@ export function HarvestCycleDuplicateTreeEntries() {
     setDecisionSaving(key)
     setConflictDecisionMessage((current) => ({ ...current, [key]: "" }))
     try {
+      const decisionPayload = mixedGroup
+        ? {
+            scan_id: selectedScanId,
+            odk_instance_id: mixedGroup.valid.odk_instance_id,
+            issue_type: "VALID_RECORD_WITH_INVALID_ZERO_SUBMISSION",
+            decision,
+            selected_effective_instance_id:
+              decision === "DEFER_DECISION" ? null : mixedGroup.valid.odk_instance_id,
+            reason,
+          }
+        : {
+            scan_id: selectedScanId,
+            odk_instance_id: selectedRow?.odk_instance_id,
+            issue_type: "CONFLICTING_DUPLICATE",
+            decision: "SELECT_SUBMISSION",
+            selected_effective_instance_id: selectedRow?.odk_instance_id,
+            reason,
+          }
       const response = await fetch("/api/admin/harvest-sync/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scan_id: selectedScanId,
-          odk_instance_id: selectedRow.odk_instance_id,
-          issue_type: "CONFLICTING_DUPLICATE",
-          decision: "SELECT_SUBMISSION",
-          selected_effective_instance_id: selectedRow.odk_instance_id,
-          reason,
-        }),
+        body: JSON.stringify(decisionPayload),
       })
       const result = (await response.json()) as { detail?: string; error?: string }
       if (!response.ok) {
@@ -782,7 +890,10 @@ export function HarvestCycleDuplicateTreeEntries() {
           {visibleConflicts.map(([key, rows]) => {
             const first = rows[0]
             const treeNo = String(first.original_tree_no ?? "").trim()
-            const decisionRow = rows.find((row) => selectedConflictInstance(row))
+            const mixedGroup = mixedValidInvalidZeroGroup(rows)
+            const decisionRow = rows.find((row) =>
+              SAVED_CONFLICT_DECISIONS.has(String(row.supervisor_decision ?? "")),
+            )
             const storedDraft = storedConflictDecisionDraft(rows)
             const draft = conflictDecisionDrafts[key] ?? storedDraft
             const conflictFingerprintKey = fingerprintStatusKey(treeNo, first.harvest_date)
@@ -793,7 +904,11 @@ export function HarvestCycleDuplicateTreeEntries() {
               (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
             )
             const canSave =
-              Boolean(selectedCandidate && isActiveValidConflictCandidate(selectedCandidate)) &&
+              (mixedGroup
+                ? (draft.action === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" &&
+                    selectedCandidate?.odk_instance_id === mixedGroup.valid.odk_instance_id) ||
+                  draft.action === "DEFER_DECISION"
+                : Boolean(selectedCandidate && isActiveValidConflictCandidate(selectedCandidate))) &&
               Boolean(finalReason) &&
               groupStatus?.groupMatches === true &&
               decisionSaving !== key
@@ -831,9 +946,12 @@ export function HarvestCycleDuplicateTreeEntries() {
                 data-testid={`conflict-group-${key}`}
               >
                 <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
+                  {mixedGroup
+                    ? "VALID RECORD WITH INVALID ZERO SUBMISSION — SUPERVISOR REVIEW REQUIRED · "
+                    : ""}
                   Tree {displayValue(first.original_tree_no)} · {displayDate(first.harvest_date)} · {rows.length} candidate
                   submissions
-                  {selectedConflictInstance(decisionRow) ? " · Supervisor decision saved" : ""}
+                  {decisionRow?.supervisor_decision ? " · Supervisor decision saved" : ""}
                 </summary>
                 <div className="border-t p-4">
                   {decisionRow?.supervisor_decision ? (
@@ -872,32 +990,47 @@ export function HarvestCycleDuplicateTreeEntries() {
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.map((row) => (
+                        {rows.map((row) => {
+                          const invalidZero = Boolean(
+                            mixedGroup?.invalid.some(
+                              (candidate) => candidate.odk_instance_id === row.odk_instance_id,
+                            ),
+                          )
+                          const effectiveClassification = invalidZero
+                            ? "INVALID_DATA"
+                            : row.effective_classification ?? row.classification
+                          return (
                           <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b">
                             <td className="p-2">
-                              <label className="inline-flex items-center gap-2 font-bold">
-                                <input
-                                  type="radio"
-                                  name={`conflict-${key}`}
-                                  value={row.odk_instance_id}
-                                  checked={
-                                    String(draft.selectedInstanceId) ===
-                                    String(row.odk_instance_id)
-                                  }
-                                  onChange={() =>
-                                    updateConflictDecisionDraft(key, rows, {
-                                      selectedInstanceId: row.odk_instance_id,
-                                    })
-                                  }
-                                  disabled={
-                                    decisionSaving !== null ||
-                                    !isActiveValidConflictCandidate(row) ||
-                                    groupStatus?.groupMatches !== true
-                                  }
-                                  aria-label={`Retain ODK instance ${row.odk_instance_id} for Tree ${displayValue(row.original_tree_no)}`}
-                                />
-                                Retain
-                              </label>
+                              {invalidZero ? (
+                                <span className="font-bold text-muted-foreground">
+                                  Not selectable
+                                </span>
+                              ) : (
+                                <label className="inline-flex items-center gap-2 font-bold">
+                                  <input
+                                    type="radio"
+                                    name={`conflict-${key}`}
+                                    value={row.odk_instance_id}
+                                    checked={
+                                      String(draft.selectedInstanceId) ===
+                                      String(row.odk_instance_id)
+                                    }
+                                    onChange={() =>
+                                      updateConflictDecisionDraft(key, rows, {
+                                        selectedInstanceId: row.odk_instance_id,
+                                      })
+                                    }
+                                    disabled={
+                                      decisionSaving !== null ||
+                                      !isActiveValidConflictCandidate(row) ||
+                                      groupStatus?.groupMatches !== true
+                                    }
+                                    aria-label={`Retain ODK instance ${row.odk_instance_id} for Tree ${displayValue(row.original_tree_no)}`}
+                                  />
+                                  Retain
+                                </label>
+                              )}
                             </td>
                             <td className="p-2 font-bold">{displayValue(row.original_tree_no)}</td>
                             <td className="p-2">{displayDate(row.harvest_date)}</td>
@@ -912,21 +1045,47 @@ export function HarvestCycleDuplicateTreeEntries() {
                             <td className="p-2">{displayValue(row.total_bunches)}</td>
                             <td className="p-2">{displayValue(row.total_nuts)}</td>
                             <td className="p-2">
-                              <span className={`rounded-full border px-2 py-1 ${statusBadge(row.classification)}`}>
-                                {row.classification}
+                              <span className={`rounded-full border px-2 py-1 ${statusBadge(effectiveClassification)}`}>
+                                {invalidZero ? "INVALID DATA" : effectiveClassification}
                               </span>
                             </td>
                             <td className="p-2">
                               {row.odk_instance_id === selectedConflictInstance(decisionRow)
                                 ? `Selected${decisionRow?.supervisor_reason ? ` — ${decisionRow.supervisor_reason}` : ""}`
+                                : invalidZero &&
+                                    decisionRow?.supervisor_decision ===
+                                      "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
+                                  ? "EXCLUDED_INVALID_ZERO_SUBMISSION"
                                 : "—"}
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className={`mt-4 grid gap-3 ${mixedGroup ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+                    {mixedGroup ? (
+                      <label className="text-xs font-bold uppercase text-muted-foreground">
+                        Supervisor Action
+                        <select
+                          aria-label={`Supervisor Action for invalid-zero Tree ${displayValue(first.original_tree_no)}`}
+                          value={draft.action}
+                          onChange={(event) =>
+                            updateConflictDecisionDraft(key, rows, {
+                              action: event.target.value as ConflictDecisionAction,
+                            })
+                          }
+                          className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                        >
+                          <option value="">Select Supervisor Action</option>
+                          <option value="RETAIN_VALID_EXCLUDE_INVALID_ZERO">
+                            Retain valid submission and exclude invalid zero submission
+                          </option>
+                          <option value="DEFER_DECISION">Defer for field verification</option>
+                        </select>
+                      </label>
+                    ) : null}
                     <label className="text-xs font-bold uppercase text-muted-foreground">
                       Supervisor Reason
                       <select
@@ -942,7 +1101,10 @@ export function HarvestCycleDuplicateTreeEntries() {
                         className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
                       >
                         <option value="">Select Supervisor Reason</option>
-                        {CONFLICT_SUPERVISOR_REASONS.map((reason) => (
+                        {(mixedGroup
+                          ? INVALID_ZERO_SUPERVISOR_REASONS
+                          : CONFLICT_SUPERVISOR_REASONS
+                        ).map((reason) => (
                           <option key={reason} value={reason}>
                             {reason}
                           </option>
@@ -951,7 +1113,9 @@ export function HarvestCycleDuplicateTreeEntries() {
                     </label>
                     <div className="rounded-lg border bg-muted/20 p-3 text-xs font-semibold">
                       {groupStatus?.groupMatches === true
-                        ? "Group fingerprint unchanged — supervisor selection may be saved."
+                        ? mixedGroup
+                          ? "Group fingerprint unchanged — supervisor decision may be saved."
+                          : "Group fingerprint unchanged — supervisor selection may be saved."
                         : groupStatus?.groupMatches === false
                           ? "This conflict group changed after the scan. Rescan and review again."
                           : "Checking this conflict group’s fingerprint…"}
@@ -973,6 +1137,21 @@ export function HarvestCycleDuplicateTreeEntries() {
                       />
                     </label>
                   ) : null}
+                  {mixedGroup && draft.action === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" ? (
+                    <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+                      The selected valid ODK submission stays in the proposed import batch.{" "}
+                      {mixedGroup.invalid.length.toLocaleString("en-IN")} all-zero INVALID DATA{" "}
+                      {mixedGroup.invalid.length === 1 ? "submission is" : "submissions are"} retained
+                      unchanged in the audit history and excluded as
+                      EXCLUDED_INVALID_ZERO_SUBMISSION.
+                    </p>
+                  ) : null}
+                  {mixedGroup && draft.action === "DEFER_DECISION" ? (
+                    <p className="mt-3 rounded-lg border bg-background p-3 text-xs font-semibold">
+                      This group remains unresolved. Both the valid and invalid-zero submissions stay
+                      outside the proposed import batch pending field verification.
+                    </p>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <button
                       type="button"
@@ -980,7 +1159,11 @@ export function HarvestCycleDuplicateTreeEntries() {
                       disabled={!canSave}
                       className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {decisionSaving === key ? "Saving…" : "Save Supervisor Selection"}
+                      {decisionSaving === key
+                        ? "Saving…"
+                        : mixedGroup
+                          ? "Save Supervisor Decision"
+                          : "Save Supervisor Selection"}
                     </button>
                     <button
                       type="button"

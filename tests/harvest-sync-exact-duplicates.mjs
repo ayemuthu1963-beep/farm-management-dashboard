@@ -135,7 +135,7 @@ assert.match(harvestCycleConflictSection, /Save Supervisor Selection/)
 assert.match(harvestCycleConflictSection, /Save and Open Next Unresolved/)
 assert.match(harvestCycleDuplicates, /issue_type: "CONFLICTING_DUPLICATE"/)
 assert.match(harvestCycleDuplicates, /decision: "SELECT_SUBMISSION"/)
-assert.match(harvestCycleDuplicates, /selected_effective_instance_id: selectedRow\.odk_instance_id/)
+assert.match(harvestCycleDuplicates, /selected_effective_instance_id: selectedRow\?\.odk_instance_id/)
 assert.match(harvestCycleConflictSection, /groupStatus\?\.groupMatches === true/)
 assert.match(harvestCycleConflictSection, /Supervisor decision saved/)
 assert.match(harvestCycleConflictSection, /supervisor_admin_user/)
@@ -179,6 +179,33 @@ assert.match(
 assert.match(harvestCycleDuplicates, /New scan required/)
 assert.match(harvestCycleDuplicates, /Existing Harvest Record ID/)
 assert.doesNotMatch(harvestCycleDuplicates, /Allow both/)
+assert.match(
+  harvestCycleConflictSection,
+  /VALID RECORD WITH INVALID ZERO SUBMISSION — SUPERVISOR REVIEW REQUIRED/,
+)
+assert.match(harvestCycleDuplicates, /is_invalid_zero_submission/)
+assert.match(harvestCycleDuplicates, /effective_classification/)
+assert.match(harvestCycleDuplicates, /mixedValidInvalidZeroGroup/)
+assert.match(harvestCycleDuplicates, /Number\.isInteger/)
+assert.doesNotMatch(harvestCycleDuplicates, /Number\(value\) === 0/)
+assert.match(harvestCycleConflictSection, /INVALID DATA/)
+assert.match(harvestCycleConflictSection, /Not selectable/)
+assert.match(
+  harvestCycleConflictSection,
+  /Retain valid submission and exclude invalid zero submission/,
+)
+assert.match(harvestCycleConflictSection, /Defer for field verification/)
+assert.match(harvestCycleDuplicates, /RETAIN_VALID_EXCLUDE_INVALID_ZERO/)
+assert.match(harvestCycleDuplicates, /VALID_RECORD_WITH_INVALID_ZERO_SUBMISSION/)
+assert.match(harvestCycleDuplicates, /Accidental empty submission/)
+assert.match(harvestCycleDuplicates, /Valid labour entry confirmed/)
+assert.match(
+  harvestCycleDuplicates,
+  /Zero-value duplicate excluded after supervisor verification/,
+)
+assert.match(harvestCycleDuplicates, /Field verification required/)
+assert.match(harvestCycleConflictSection, /Save Supervisor Decision/)
+assert.match(harvestCycleConflictSection, /EXCLUDED_INVALID_ZERO_SUBMISSION/)
 for (const heading of [
   "Tree Number",
   "Harvest Date",
