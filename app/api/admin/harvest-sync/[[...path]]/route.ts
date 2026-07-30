@@ -45,6 +45,9 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
         ...(response.headers.get("content-disposition")
           ? { "Content-Disposition": response.headers.get("content-disposition")! }
           : {}),
+        ...(response.headers.get("x-content-sha256")
+          ? { "X-Content-SHA256": response.headers.get("x-content-sha256")! }
+          : {}),
       },
     })
   }
