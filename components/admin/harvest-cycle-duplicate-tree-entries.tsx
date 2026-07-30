@@ -60,6 +60,7 @@ interface ScanItem {
   group_key: string | null
   note: string | null
   existing_harvest_record_id?: number | null
+  review_state?: string | null
   submitter_name: string | null
   device_id: string | null
   tree_exists_in_master?: boolean
@@ -97,6 +98,12 @@ interface DecisionDraft {
   otherReason: string
 }
 
+interface ConflictDecisionDraft {
+  selectedInstanceId: string
+  reason: string
+  otherReason: string
+}
+
 interface FingerprintStatus {
   scanId: number
   matches: boolean
@@ -124,11 +131,20 @@ const SUPERVISOR_REASONS = [
   "Other",
 ] as const
 
+const CONFLICT_SUPERVISOR_REASONS = [
+  "Supervisor confirmed correct labour entry",
+  "Duplicate recording of the same harvest",
+  "Quantity confirmed after field verification",
+  "Other",
+] as const
+
 const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
   "KEEP_EXISTING_CYCLE_RECORD",
   "USE_PENDING_SUBMISSION",
   "DEFER_DECISION",
 ])
+
+const RESOLVED_CONFLICT_DECISIONS = new Set(["SELECT_SUBMISSION", "KEEP_LATEST"])
 
 const EMPTY_DECISION_DRAFT: DecisionDraft = {
   action: "",
@@ -153,6 +169,10 @@ function naturalTreeCompare(left: unknown, right: unknown): number {
 
 function groupKey(item: ScanItem): string {
   return item.group_key ?? `${displayDate(item.harvest_date)}|${item.original_tree_no ?? ""}`
+}
+
+function fingerprintStatusKey(treeNo: string, harvestDate?: string | null): string {
+  return harvestDate ? `${treeNo}|${displayDate(harvestDate)}` : treeNo
 }
 
 function businessSignature(item: ScanItem, cycleNo: string | null): string {
@@ -189,6 +209,52 @@ function isCycleCollision(item: ScanItem): boolean {
     item.classification === "DUPLICATE_REVIEW_REQUIRED" &&
     (item.note ?? "").includes("more than one date in the same Harvest cycle")
   )
+}
+
+function selectedConflictInstance(item: ScanItem | undefined): string | null {
+  if (!item || !RESOLVED_CONFLICT_DECISIONS.has(String(item.supervisor_decision ?? ""))) {
+    return null
+  }
+  const selected = item.selected_effective_instance_id ?? item.odk_instance_id
+  return selected ? String(selected) : null
+}
+
+function isActiveValidConflictCandidate(item: ScanItem): boolean {
+  const reviewState = String(item.review_state ?? "").toLowerCase().replace(/\s+/g, "")
+  return Boolean(
+    item.odk_instance_id &&
+      item.classification === "DUPLICATE_REVIEW_REQUIRED" &&
+      !["deleted", "rejected", "hasissues"].includes(reviewState) &&
+      [item.b1, item.b2, item.b3, item.total_bunches, item.total_nuts].every(
+        (value) => value !== null && value !== undefined,
+      ),
+  )
+}
+
+function conflictGroupResolved(rows: ScanItem[]): boolean {
+  return rows.some((decisionRow) => {
+    const selected = selectedConflictInstance(decisionRow)
+    return Boolean(
+      selected &&
+        rows.some(
+          (row) =>
+            String(row.odk_instance_id) === selected && isActiveValidConflictCandidate(row),
+        ),
+    )
+  })
+}
+
+function storedConflictDecisionDraft(rows: ScanItem[]): ConflictDecisionDraft {
+  const decisionRow = rows.find((row) => selectedConflictInstance(row))
+  const savedReason = decisionRow?.supervisor_reason ?? ""
+  const savedReasonIsChoice = CONFLICT_SUPERVISOR_REASONS.some(
+    (reason) => reason === savedReason,
+  )
+  return {
+    selectedInstanceId: selectedConflictInstance(decisionRow) ?? "",
+    reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
+    otherReason: savedReasonIsChoice ? "" : savedReason,
+  }
 }
 
 function decisionState(action: string | null | undefined): string {
@@ -248,15 +314,49 @@ export function HarvestCycleDuplicateTreeEntries() {
   const [groupFingerprintStatuses, setGroupFingerprintStatuses] = useState<
     Record<string, FingerprintStatus>
   >({})
+  const [openConflictGroupKey, setOpenConflictGroupKey] = useState<string | null>(null)
+  const [conflictDecisionDrafts, setConflictDecisionDrafts] = useState<
+    Record<string, ConflictDecisionDraft>
+  >({})
+  const [conflictDecisionMessage, setConflictDecisionMessage] = useState<
+    Record<string, string>
+  >({})
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DecisionDraft>>({})
   const [decisionSaving, setDecisionSaving] = useState<string | null>(null)
   const [decisionMessage, setDecisionMessage] = useState<Record<string, string>>({})
+
+  async function loadGroupFingerprintStatus(
+    scanId: number,
+    treeNo: string,
+    harvestDate?: string | null,
+  ) {
+    const dateQuery = harvestDate ? `&harvest_date=${encodeURIComponent(displayDate(harvestDate))}` : ""
+    const statusKey = fingerprintStatusKey(treeNo, harvestDate)
+    const groupResponse = await fetch(
+      `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status?tree_no=${encodeURIComponent(treeNo)}${dateQuery}`,
+      { cache: "no-store" },
+    )
+    const groupStatus = (await groupResponse.json()) as FingerprintStatus & {
+      detail?: string
+      error?: string
+    }
+    if (!groupResponse.ok) {
+      throw new Error(
+        groupStatus.detail ??
+          groupStatus.error ??
+          `Tree ${treeNo} fingerprint check returned HTTP ${groupResponse.status}.`,
+      )
+    }
+    setGroupFingerprintStatuses((current) => ({ ...current, [statusKey]: groupStatus }))
+    return groupStatus
+  }
 
   async function loadScan(scanId: number) {
     setLoading(true)
     setError(null)
     setFingerprintStatus(null)
     setGroupFingerprintStatuses({})
+    setConflictDecisionDrafts({})
     try {
       const response = await fetch(`/api/admin/harvest-sync/scans/${scanId}`, { cache: "no-store" })
       const data = (await response.json()) as ScanResponse & { detail?: string; error?: string }
@@ -275,21 +375,7 @@ export function HarvestCycleDuplicateTreeEntries() {
       ]
       const groupStatuses = await Promise.all(
         collisionTrees.map(async (treeNo) => {
-          const groupResponse = await fetch(
-            `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status?tree_no=${encodeURIComponent(treeNo)}`,
-            { cache: "no-store" },
-          )
-          const groupStatus = (await groupResponse.json()) as FingerprintStatus & {
-            detail?: string
-            error?: string
-          }
-          if (!groupResponse.ok) {
-            throw new Error(
-              groupStatus.detail ??
-                groupStatus.error ??
-                `Tree ${treeNo} fingerprint check returned HTTP ${groupResponse.status}.`,
-            )
-          }
+          const groupStatus = await loadGroupFingerprintStatus(scanId, treeNo)
           return [treeNo, groupStatus] as const
         }),
       )
@@ -332,6 +418,100 @@ export function HarvestCycleDuplicateTreeEntries() {
         ...update,
       },
     }))
+  }
+
+  function updateConflictDecisionDraft(
+    key: string,
+    rows: ScanItem[],
+    update: Partial<ConflictDecisionDraft>,
+  ) {
+    setConflictDecisionDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] ?? storedConflictDecisionDraft(rows)),
+        ...update,
+      },
+    }))
+  }
+
+  async function saveConflictDecision(
+    key: string,
+    rows: ScanItem[],
+    openNextUnresolved: boolean,
+  ) {
+    const draft = conflictDecisionDrafts[key] ?? storedConflictDecisionDraft(rows)
+    const reason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+    const selectedRow = rows.find(
+      (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
+    )
+    const treeNo = String(rows[0]?.original_tree_no ?? "").trim()
+    const groupStatus =
+      groupFingerprintStatuses[fingerprintStatusKey(treeNo, rows[0]?.harvest_date)]
+    if (
+      !selectedScanId ||
+      !selectedRow ||
+      !isActiveValidConflictCandidate(selectedRow) ||
+      !reason ||
+      groupStatus?.groupMatches !== true
+    ) {
+      return
+    }
+
+    const currentGroupIndex = conflictingGroups.findIndex(([group]) => group === key)
+    const orderedFollowingGroups = [
+      ...conflictingGroups.slice(currentGroupIndex + 1),
+      ...conflictingGroups.slice(0, Math.max(0, currentGroupIndex)),
+    ]
+    const nextUnresolved = orderedFollowingGroups.find(
+      ([, candidateRows]) => !conflictGroupResolved(candidateRows),
+    )
+    const nextTreeNo = String(nextUnresolved?.[1]?.[0]?.original_tree_no ?? "").trim()
+    const nextHarvestDate = nextUnresolved?.[1]?.[0]?.harvest_date ?? null
+
+    setDecisionSaving(key)
+    setConflictDecisionMessage((current) => ({ ...current, [key]: "" }))
+    try {
+      const response = await fetch("/api/admin/harvest-sync/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scan_id: selectedScanId,
+          odk_instance_id: selectedRow.odk_instance_id,
+          issue_type: "CONFLICTING_DUPLICATE",
+          decision: "SELECT_SUBMISSION",
+          selected_effective_instance_id: selectedRow.odk_instance_id,
+          reason,
+        }),
+      })
+      const result = (await response.json()) as { detail?: string; error?: string }
+      if (!response.ok) {
+        throw new Error(result.detail ?? result.error ?? `Decision API returned HTTP ${response.status}.`)
+      }
+
+      await loadScan(selectedScanId)
+      if (openNextUnresolved && nextUnresolved && nextTreeNo) {
+        const nextIndex = conflictingGroups.findIndex(([group]) => group === nextUnresolved[0])
+        setConflictPage(Math.floor(nextIndex / GROUP_PAGE_SIZE) + 1)
+        setOpenConflictGroupKey(nextUnresolved[0])
+        await loadGroupFingerprintStatus(selectedScanId, nextTreeNo, nextHarvestDate)
+      } else {
+        setOpenConflictGroupKey(null)
+      }
+      setConflictDecisionMessage((current) => ({
+        ...current,
+        [key]: openNextUnresolved && nextUnresolved
+          ? "Supervisor selection saved. The next unresolved group is open."
+          : "Supervisor selection saved.",
+      }))
+    } catch (saveError) {
+      setConflictDecisionMessage((current) => ({
+        ...current,
+        [key]:
+          saveError instanceof Error ? saveError.message : "Unable to save the supervisor selection.",
+      }))
+    } finally {
+      setDecisionSaving(null)
+    }
   }
 
   async function saveCycleDecision(pending: ScanItem) {
@@ -407,6 +587,7 @@ export function HarvestCycleDuplicateTreeEntries() {
     setConflictPage(1)
     setErrorPage(1)
     setExactPage(1)
+    setOpenConflictGroupKey(null)
   }, [selectedScanId, dateFilter])
 
   const selectedItems = useMemo(
@@ -444,6 +625,10 @@ export function HarvestCycleDuplicateTreeEntries() {
     () => new Set(conflictingGroups.map(([key]) => key)),
     [conflictingGroups],
   )
+  const resolvedConflictCount = conflictingGroups.filter(([, rows]) =>
+    conflictGroupResolved(rows),
+  ).length
+  const remainingConflictCount = conflictingGroups.length - resolvedConflictCount
 
   const exactAuditGroups = useMemo<ExactAuditGroup[]>(
     () =>
@@ -579,31 +764,99 @@ export function HarvestCycleDuplicateTreeEntries() {
           {conflictingGroups.flatMap(([, rows]) => rows).length.toLocaleString("en-IN")} candidate submissions.
           Every material Harvest value is compared within the selected Tree Number/date/cycle group.
         </p>
+        <div className="mb-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border p-2 text-xs">
+            <span className="font-black">{conflictingGroups.length.toLocaleString("en-IN")}</span>{" "}
+            total conflicts
+          </div>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs">
+            <span className="font-black">{resolvedConflictCount.toLocaleString("en-IN")}</span>{" "}
+            resolved
+          </div>
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs">
+            <span className="font-black">{remainingConflictCount.toLocaleString("en-IN")}</span>{" "}
+            remaining
+          </div>
+        </div>
         <div className="space-y-3">
           {visibleConflicts.map(([key, rows]) => {
             const first = rows[0]
-            const decisionRow = rows.find((row) => row.supervisor_decision)
+            const treeNo = String(first.original_tree_no ?? "").trim()
+            const decisionRow = rows.find((row) => selectedConflictInstance(row))
+            const storedDraft = storedConflictDecisionDraft(rows)
+            const draft = conflictDecisionDrafts[key] ?? storedDraft
+            const conflictFingerprintKey = fingerprintStatusKey(treeNo, first.harvest_date)
+            const groupStatus = groupFingerprintStatuses[conflictFingerprintKey]
+            const finalReason =
+              draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+            const selectedCandidate = rows.find(
+              (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
+            )
+            const canSave =
+              Boolean(selectedCandidate && isActiveValidConflictCandidate(selectedCandidate)) &&
+              Boolean(finalReason) &&
+              groupStatus?.groupMatches === true &&
+              decisionSaving !== key
             return (
-              <details key={key} className="rounded-xl border bg-background">
+              <details
+                key={key}
+                open={openConflictGroupKey === key}
+                onToggle={(event) => {
+                  if (event.currentTarget.open) {
+                    setOpenConflictGroupKey(key)
+                    if (
+                      selectedScanId &&
+                      treeNo &&
+                      !groupFingerprintStatuses[conflictFingerprintKey]
+                    ) {
+                      void loadGroupFingerprintStatus(
+                        selectedScanId,
+                        treeNo,
+                        first.harvest_date,
+                      ).catch((fingerprintError) => {
+                        setConflictDecisionMessage((current) => ({
+                          ...current,
+                          [key]:
+                            fingerprintError instanceof Error
+                              ? fingerprintError.message
+                              : "Unable to validate the group fingerprint.",
+                        }))
+                      })
+                    }
+                  } else if (openConflictGroupKey === key) {
+                    setOpenConflictGroupKey(null)
+                  }
+                }}
+                className="rounded-xl border bg-background"
+                data-testid={`conflict-group-${key}`}
+              >
                 <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
                   Tree {displayValue(first.original_tree_no)} · {displayDate(first.harvest_date)} · {rows.length} candidate
                   submissions
-                  {decisionRow?.selected_effective_instance_id ? " · Supervisor decision saved" : ""}
+                  {selectedConflictInstance(decisionRow) ? " · Supervisor decision saved" : ""}
                 </summary>
                 <div className="border-t p-4">
                   {decisionRow?.supervisor_decision ? (
                     <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
                       <p className="font-black">Saved supervisor decision: {decisionRow.supervisor_decision}</p>
                       <p className="mt-1">
-                        Selected: <span className="font-mono">{decisionRow.selected_effective_instance_id ?? "—"}</span>
+                        Selected: <span className="font-mono">{selectedConflictInstance(decisionRow) ?? "—"}</span>
                       </p>
                       <p className="mt-1">Reason: {decisionRow.supervisor_reason ?? "—"}</p>
+                      <p className="mt-1">
+                        Supervisor: {displayValue(decisionRow.supervisor_admin_user)} ·{" "}
+                        {displayValue(
+                          decisionRow.supervisor_decision_updated_at ??
+                            decisionRow.supervisor_decision_at,
+                        )}
+                      </p>
                     </div>
                   ) : null}
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-xs">
                       <thead>
                         <tr className="border-b">
+                          <th className="p-2">Record to Retain</th>
                           <th className="p-2">Tree Number</th>
                           <th className="p-2">Harvest Date</th>
                           <th className="p-2">ODK Time</th>
@@ -621,6 +874,31 @@ export function HarvestCycleDuplicateTreeEntries() {
                       <tbody>
                         {rows.map((row) => (
                           <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b">
+                            <td className="p-2">
+                              <label className="inline-flex items-center gap-2 font-bold">
+                                <input
+                                  type="radio"
+                                  name={`conflict-${key}`}
+                                  value={row.odk_instance_id}
+                                  checked={
+                                    String(draft.selectedInstanceId) ===
+                                    String(row.odk_instance_id)
+                                  }
+                                  onChange={() =>
+                                    updateConflictDecisionDraft(key, rows, {
+                                      selectedInstanceId: row.odk_instance_id,
+                                    })
+                                  }
+                                  disabled={
+                                    decisionSaving !== null ||
+                                    !isActiveValidConflictCandidate(row) ||
+                                    groupStatus?.groupMatches !== true
+                                  }
+                                  aria-label={`Retain ODK instance ${row.odk_instance_id} for Tree ${displayValue(row.original_tree_no)}`}
+                                />
+                                Retain
+                              </label>
+                            </td>
                             <td className="p-2 font-bold">{displayValue(row.original_tree_no)}</td>
                             <td className="p-2">{displayDate(row.harvest_date)}</td>
                             <td className="p-2">{displayValue(row.odk_submission_timestamp)}</td>
@@ -639,8 +917,8 @@ export function HarvestCycleDuplicateTreeEntries() {
                               </span>
                             </td>
                             <td className="p-2">
-                              {row.odk_instance_id === decisionRow?.selected_effective_instance_id
-                                ? `Selected${decisionRow.supervisor_reason ? ` — ${decisionRow.supervisor_reason}` : ""}`
+                              {row.odk_instance_id === selectedConflictInstance(decisionRow)
+                                ? `Selected${decisionRow?.supervisor_reason ? ` — ${decisionRow.supervisor_reason}` : ""}`
                                 : "—"}
                             </td>
                           </tr>
@@ -648,6 +926,77 @@ export function HarvestCycleDuplicateTreeEntries() {
                       </tbody>
                     </table>
                   </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">
+                      Supervisor Reason
+                      <select
+                        aria-label={`Supervisor Reason for conflicting Tree ${displayValue(first.original_tree_no)}`}
+                        value={draft.reason}
+                        onChange={(event) =>
+                          updateConflictDecisionDraft(key, rows, {
+                            reason: event.target.value,
+                            otherReason:
+                              event.target.value === "Other" ? draft.otherReason : "",
+                          })
+                        }
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                      >
+                        <option value="">Select Supervisor Reason</option>
+                        {CONFLICT_SUPERVISOR_REASONS.map((reason) => (
+                          <option key={reason} value={reason}>
+                            {reason}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="rounded-lg border bg-muted/20 p-3 text-xs font-semibold">
+                      {groupStatus?.groupMatches === true
+                        ? "Group fingerprint unchanged — supervisor selection may be saved."
+                        : groupStatus?.groupMatches === false
+                          ? "This conflict group changed after the scan. Rescan and review again."
+                          : "Checking this conflict group’s fingerprint…"}
+                    </div>
+                  </div>
+                  {draft.reason === "Other" ? (
+                    <label className="mt-3 block text-xs font-bold uppercase text-muted-foreground">
+                      Other reason details
+                      <textarea
+                        aria-label={`Other Supervisor Reason for conflicting Tree ${displayValue(first.original_tree_no)}`}
+                        value={draft.otherReason}
+                        onChange={(event) =>
+                          updateConflictDecisionDraft(key, rows, {
+                            otherReason: event.target.value,
+                          })
+                        }
+                        className="mt-1 min-h-20 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                        required
+                      />
+                    </label>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void saveConflictDecision(key, rows, false)}
+                      disabled={!canSave}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {decisionSaving === key ? "Saving…" : "Save Supervisor Selection"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void saveConflictDecision(key, rows, true)}
+                      disabled={!canSave}
+                      className="rounded-lg border border-primary px-4 py-2 text-sm font-black text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {decisionSaving === key ? "Saving…" : "Save and Open Next Unresolved"}
+                    </button>
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      This saves only the reconciliation decision. No Harvest record is imported.
+                    </span>
+                  </div>
+                  {conflictDecisionMessage[key] ? (
+                    <p className="mt-3 text-xs font-bold">{conflictDecisionMessage[key]}</p>
+                  ) : null}
                 </div>
               </details>
             )
