@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowLeft, CalendarRange, DatabaseZap } from "lucide-react"
 import { HarvestCycleAdminClient, type HarvestCycleSummary } from "@/components/admin/harvest-cycle-admin-client"
+import { HarvestCycleDuplicateTreeEntries } from "@/components/admin/harvest-cycle-duplicate-tree-entries"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
@@ -148,6 +149,7 @@ export default async function HarvestCycleAdminPage() {
         </section>
 
         <HarvestCycleAdminClient cycles={cycles} latestCycle={latestCycle} openCycle={openCycle} lastClosedCycle={lastClosedCycle} />
+        <HarvestCycleDuplicateTreeEntries />
       </div>
     </DashboardShell>
   )
