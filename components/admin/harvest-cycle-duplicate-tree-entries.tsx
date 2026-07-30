@@ -51,6 +51,7 @@ interface ScanItem {
   classification: string
   issue_type: string | null
   odk_submission_timestamp: string | null
+  harvest_time?: string | null
   b1: number | null
   b2: number | null
   b3: number | null
@@ -58,6 +59,7 @@ interface ScanItem {
   total_nuts: number | null
   group_key: string | null
   note: string | null
+  existing_harvest_record_id?: number | null
   submitter_name: string | null
   device_id: string | null
   tree_exists_in_master?: boolean
@@ -66,6 +68,9 @@ interface ScanItem {
   selected_effective_instance_id?: string | null
   supervisor_admin_user?: string | null
   supervisor_decision_at?: string | null
+  supervisor_decision_updated_at?: string | null
+  supervisor_existing_harvest_record_id?: number | null
+  existing_record_source?: string | null
 }
 
 interface ScanResponse {
@@ -78,6 +83,44 @@ interface ExactAuditGroup {
   rows: ScanItem[]
   retained: ScanItem
   superseded: ScanItem[]
+}
+
+type CycleDecisionAction =
+  | "KEEP_EXISTING_CYCLE_RECORD"
+  | "USE_PENDING_SUBMISSION"
+  | "DEFER_DECISION"
+  | ""
+
+interface DecisionDraft {
+  action: CycleDecisionAction
+  reason: string
+  otherReason: string
+}
+
+interface FingerprintStatus {
+  scanId: number
+  matches: boolean
+  checkedAt: string
+}
+
+const SUPERVISOR_REASONS = [
+  "Existing Cycle record is correct",
+  "Pending labour submission is correct",
+  "Duplicate recording of the same harvest",
+  "Field verification required",
+  "Other",
+] as const
+
+const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
+  "KEEP_EXISTING_CYCLE_RECORD",
+  "USE_PENDING_SUBMISSION",
+  "DEFER_DECISION",
+])
+
+const EMPTY_DECISION_DRAFT: DecisionDraft = {
+  action: "",
+  reason: "",
+  otherReason: "",
 }
 
 function displayDate(value: string | null | undefined): string {
@@ -128,6 +171,19 @@ function statusBadge(classification: string): string {
   return "border-amber-200 bg-amber-50 text-amber-800"
 }
 
+function isCycleCollision(item: ScanItem): boolean {
+  return (
+    item.classification === "DUPLICATE_REVIEW_REQUIRED" &&
+    (item.note ?? "").includes("more than one date in the same Harvest cycle")
+  )
+}
+
+function decisionState(action: string | null | undefined): string {
+  if (action === "KEEP_EXISTING_CYCLE_RECORD") return "Resolved"
+  if (action === "USE_PENDING_SUBMISSION") return "CORRECTION ACTION REQUIRED"
+  return "Unresolved"
+}
+
 function Pagination({
   page,
   pageCount,
@@ -175,10 +231,15 @@ export function HarvestCycleDuplicateTreeEntries() {
   const [conflictPage, setConflictPage] = useState(1)
   const [errorPage, setErrorPage] = useState(1)
   const [exactPage, setExactPage] = useState(1)
+  const [fingerprintStatus, setFingerprintStatus] = useState<FingerprintStatus | null>(null)
+  const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DecisionDraft>>({})
+  const [decisionSaving, setDecisionSaving] = useState<string | null>(null)
+  const [decisionMessage, setDecisionMessage] = useState<Record<string, string>>({})
 
   async function loadScan(scanId: number) {
     setLoading(true)
     setError(null)
+    setFingerprintStatus(null)
     try {
       const response = await fetch(`/api/admin/harvest-sync/scans/${scanId}`, { cache: "no-store" })
       const data = (await response.json()) as ScanResponse & { detail?: string; error?: string }
@@ -187,6 +248,22 @@ export function HarvestCycleDuplicateTreeEntries() {
       }
       setScanData(data)
       setSelectedScanId(scanId)
+      const fingerprintResponse = await fetch(
+        `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status`,
+        { cache: "no-store" },
+      )
+      const fingerprint = (await fingerprintResponse.json()) as FingerprintStatus & {
+        detail?: string
+        error?: string
+      }
+      if (!fingerprintResponse.ok) {
+        throw new Error(
+          fingerprint.detail ??
+            fingerprint.error ??
+            `Source fingerprint check returned HTTP ${fingerprintResponse.status}.`,
+        )
+      }
+      setFingerprintStatus(fingerprint)
       const dates = [...new Set(data.items.map((item) => displayDate(item.harvest_date)).filter((value) => value !== "—"))]
         .sort()
       setDateFilter((current) => (current && dates.includes(current) ? current : (dates.at(-1) ?? "")))
@@ -194,6 +271,56 @@ export function HarvestCycleDuplicateTreeEntries() {
       setError(loadError instanceof Error ? loadError.message : "Unable to load Harvest Cycle review issues.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  function updateDecisionDraft(instanceId: string, update: Partial<DecisionDraft>) {
+    setDecisionDrafts((current) => ({
+      ...current,
+      [instanceId]: {
+        ...(current[instanceId] ?? EMPTY_DECISION_DRAFT),
+        ...update,
+      },
+    }))
+  }
+
+  async function saveCycleDecision(pending: ScanItem) {
+    const draft = decisionDrafts[pending.odk_instance_id] ?? EMPTY_DECISION_DRAFT
+    const reason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+    if (!draft.action || !reason || fingerprintStatus?.matches !== true || !selectedScanId) return
+    setDecisionSaving(pending.odk_instance_id)
+    setDecisionMessage((current) => ({ ...current, [pending.odk_instance_id]: "" }))
+    try {
+      const response = await fetch("/api/admin/harvest-sync/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scan_id: selectedScanId,
+          odk_instance_id: pending.odk_instance_id,
+          issue_type: "CYCLE_COLLISION",
+          decision: draft.action,
+          selected_effective_instance_id:
+            draft.action === "USE_PENDING_SUBMISSION" ? pending.odk_instance_id : null,
+          reason,
+        }),
+      })
+      const result = (await response.json()) as { detail?: string; error?: string }
+      if (!response.ok) {
+        throw new Error(result.detail ?? result.error ?? `Decision API returned HTTP ${response.status}.`)
+      }
+      setDecisionMessage((current) => ({
+        ...current,
+        [pending.odk_instance_id]: "Supervisor decision saved.",
+      }))
+      await loadScan(selectedScanId)
+    } catch (saveError) {
+      setDecisionMessage((current) => ({
+        ...current,
+        [pending.odk_instance_id]:
+          saveError instanceof Error ? saveError.message : "Unable to save the supervisor decision.",
+      }))
+    } finally {
+      setDecisionSaving(null)
     }
   }
 
@@ -286,6 +413,7 @@ export function HarvestCycleDuplicateTreeEntries() {
   const errorRows = useMemo(
     () =>
       selectedItems.filter((item) => {
+        if (isCycleCollision(item)) return false
         if (conflictingGroupKeys.has(groupKey(item))) return false
         if (exactAuditGroups.some((group) => group.key === groupKey(item))) return false
         if (EXPLICIT_ERROR_CLASSIFICATIONS.has(item.classification)) return true
@@ -294,6 +422,24 @@ export function HarvestCycleDuplicateTreeEntries() {
       }),
     [conflictingGroupKeys, exactAuditGroups, selectedItems],
   )
+
+  const cycleCollisionGroups = useMemo(() => {
+    const allItems = scanData?.items ?? []
+    return selectedItems
+      .filter(isCycleCollision)
+      .map((pending) => ({
+        pending,
+        records: allItems
+          .filter(
+            (item) =>
+              item.original_tree_no === pending.original_tree_no &&
+              (item.classification === "ALREADY_IMPORTED" || isCycleCollision(item)),
+          )
+          .sort((left, right) =>
+            displayDate(left.harvest_date).localeCompare(displayDate(right.harvest_date)),
+          ),
+      }))
+  }, [scanData, selectedItems])
 
   const visibleConflicts = conflictingGroups.slice(
     (conflictPage - 1) * GROUP_PAGE_SIZE,
@@ -466,9 +612,236 @@ export function HarvestCycleDuplicateTreeEntries() {
 
       <Panel title="TREE NUMBER / DATA ERRORS — CORRECTION REQUIRED" icon={AlertTriangle}>
         <p className="mb-3 text-sm font-semibold text-muted-foreground">
-          {errorRows.length.toLocaleString("en-IN")} unresolved records for the selected scan and Harvest date.
+          {(errorRows.length + cycleCollisionGroups.length).toLocaleString("en-IN")} unresolved records for the selected scan and Harvest date.
           Tree Numbers are never changed automatically.
         </p>
+        <div className="mb-4 space-y-4">
+          {cycleCollisionGroups.map(({ pending, records }) => {
+            const savedAction = CYCLE_COLLISION_DECISIONS.has(
+              pending.supervisor_decision as CycleDecisionAction,
+            )
+              ? (pending.supervisor_decision as CycleDecisionAction)
+              : ""
+            const savedReason = pending.supervisor_reason ?? ""
+            const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
+            const draft =
+              decisionDrafts[pending.odk_instance_id] ??
+              ({
+                action: savedAction,
+                reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
+                otherReason: savedReasonIsChoice ? "" : savedReason,
+              } satisfies DecisionDraft)
+            const finalReason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+            const canSave =
+              Boolean(draft.action) &&
+              Boolean(finalReason) &&
+              fingerprintStatus?.matches === true &&
+              decisionSaving !== pending.odk_instance_id
+            const replacementRequested =
+              draft.action === "USE_PENDING_SUBMISSION" ||
+              pending.supervisor_decision === "USE_PENDING_SUBMISSION"
+            return (
+              <div key={pending.odk_instance_id} className="rounded-xl border border-amber-300 bg-amber-50/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-black">
+                      Tree {displayValue(pending.original_tree_no)} · Cycle {displayValue(scanData?.scan.cycle_no)}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                      {displayValue(pending.note)}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-black text-amber-950">
+                    {decisionState(pending.supervisor_decision)}
+                  </span>
+                </div>
+
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-[1320px] text-left text-xs">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="p-2">Tree Number</th>
+                        <th className="p-2">Harvest Date</th>
+                        <th className="p-2">Cycle</th>
+                        <th className="p-2">Record Status</th>
+                        <th className="p-2">ODK Instance ID</th>
+                        <th className="p-2">Submitter / Device</th>
+                        <th className="p-2">Submission Time</th>
+                        <th className="p-2">Bunch Count</th>
+                        <th className="p-2">B1</th>
+                        <th className="p-2">B2</th>
+                        <th className="p-2">B3</th>
+                        <th className="p-2">Total Nuts</th>
+                        <th className="p-2">Source</th>
+                        <th className="p-2">Existing Harvest Record ID</th>
+                        <th className="p-2">Supervisor Decision</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {records.map((record) => {
+                        const imported = record.classification === "ALREADY_IMPORTED"
+                        const rowHasDecision = record.odk_instance_id === pending.odk_instance_id
+                        return (
+                          <tr key={record.odk_instance_id} className="border-b bg-background/80">
+                            <td className="p-2 font-bold">{displayValue(record.original_tree_no)}</td>
+                            <td className="p-2">{displayDate(record.harvest_date)}</td>
+                            <td className="p-2">{displayValue(scanData?.scan.cycle_no)}</td>
+                            <td className="p-2 font-bold">{imported ? "Imported" : "Pending"}</td>
+                            <td className="p-2 font-mono">{record.odk_instance_id}</td>
+                            <td className="p-2">
+                              {displayValue(record.submitter_name)} / {displayValue(record.device_id)}
+                            </td>
+                            <td className="p-2">{displayValue(record.odk_submission_timestamp)}</td>
+                            <td className="p-2">{displayValue(record.total_bunches)}</td>
+                            <td className="p-2">{displayValue(record.b1)}</td>
+                            <td className="p-2">{displayValue(record.b2)}</td>
+                            <td className="p-2">{displayValue(record.b3)}</td>
+                            <td className="p-2">{displayValue(record.total_nuts)}</td>
+                            <td className="p-2">{imported ? displayValue(record.existing_record_source) : "ODK"}</td>
+                            <td className="p-2">
+                              {imported ? displayValue(record.existing_harvest_record_id) : "—"}
+                            </td>
+                            <td className="p-2">
+                              {rowHasDecision && pending.supervisor_decision ? (
+                                <div>
+                                  <p className="font-black">{pending.supervisor_decision}</p>
+                                  <p className="mt-1">{displayValue(pending.supervisor_reason)}</p>
+                                  <p className="mt-1">
+                                    {displayValue(pending.supervisor_admin_user)} ·{" "}
+                                    {displayValue(pending.supervisor_decision_at)}
+                                  </p>
+                                </div>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">
+                    Supervisor Action
+                    <select
+                      aria-label={`Supervisor Action for Tree ${pending.original_tree_no}`}
+                      value={draft.action}
+                      onChange={(event) => {
+                        const action = event.target.value as CycleDecisionAction
+                        updateDecisionDraft(pending.odk_instance_id, {
+                          action,
+                          reason: "",
+                          otherReason: "",
+                        })
+                      }}
+                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                    >
+                      <option value="">Select Supervisor Action</option>
+                      <option value="KEEP_EXISTING_CYCLE_RECORD">Keep existing Cycle record</option>
+                      <option value="USE_PENDING_SUBMISSION">Use pending submission instead</option>
+                      <option value="DEFER_DECISION">Defer decision</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-bold uppercase text-muted-foreground">
+                    Supervisor Reason
+                    <select
+                      aria-label={`Supervisor Reason for Tree ${pending.original_tree_no}`}
+                      value={draft.reason}
+                      onChange={(event) =>
+                        updateDecisionDraft(pending.odk_instance_id, {
+                          reason: event.target.value,
+                          otherReason: event.target.value === "Other" ? draft.otherReason : "",
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                    >
+                      <option value="">Select Supervisor Reason</option>
+                      {SUPERVISOR_REASONS.map((reason) => (
+                        <option key={reason} value={reason}>
+                          {reason}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {draft.reason === "Other" ? (
+                  <label className="mt-3 block text-xs font-bold uppercase text-muted-foreground">
+                    Other reason details
+                    <textarea
+                      aria-label={`Other Supervisor Reason for Tree ${pending.original_tree_no}`}
+                      value={draft.otherReason}
+                      onChange={(event) =>
+                        updateDecisionDraft(pending.odk_instance_id, { otherReason: event.target.value })
+                      }
+                      className="mt-1 min-h-20 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                      required
+                    />
+                  </label>
+                ) : null}
+
+                {draft.action === "KEEP_EXISTING_CYCLE_RECORD" ? (
+                  <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+                    The pending submission will be excluded from the proposed import. Audit reason: Duplicate harvest
+                    entry already recorded in this cycle. The ODK submission remains unchanged.
+                  </p>
+                ) : null}
+                {replacementRequested ? (
+                  <p className="mt-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-950">
+                    CORRECTION ACTION REQUIRED — Existing imported record requires controlled replacement before this
+                    decision can be applied. The pending submission remains outside the normal import batch.
+                  </p>
+                ) : null}
+                {draft.action === "DEFER_DECISION" ? (
+                  <p className="mt-3 rounded-lg border bg-background p-3 text-xs font-semibold">
+                    This issue remains unresolved and blocked from import.
+                  </p>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void saveCycleDecision(pending)}
+                    disabled={!canSave}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {decisionSaving === pending.odk_instance_id
+                      ? "Saving…"
+                      : pending.supervisor_decision
+                        ? "Amend Supervisor Decision"
+                        : "Save Supervisor Decision"}
+                  </button>
+                  <span
+                    className={`text-xs font-bold ${
+                      fingerprintStatus?.matches === true
+                        ? "text-emerald-700"
+                        : fingerprintStatus?.matches === false
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {fingerprintStatus?.matches === true
+                      ? "Source fingerprint unchanged"
+                      : fingerprintStatus?.matches === false
+                        ? "Source fingerprint changed — decision saving is blocked"
+                        : "Checking source fingerprint…"}
+                  </span>
+                  {decisionMessage[pending.odk_instance_id] ? (
+                    <span className="text-xs font-bold">{decisionMessage[pending.odk_instance_id]}</span>
+                  ) : null}
+                </div>
+                {pending.supervisor_decision ? (
+                  <p className="mt-3 text-xs font-semibold text-muted-foreground">
+                    Saved by {displayValue(pending.supervisor_admin_user)} at{" "}
+                    {displayValue(pending.supervisor_decision_at)}. This decision may be amended while Harvest import
+                    remains locked.
+                  </p>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-xs">
             <thead>
@@ -511,7 +884,7 @@ export function HarvestCycleDuplicateTreeEntries() {
             </tbody>
           </table>
         </div>
-        {!loading && errorRows.length === 0 ? (
+        {!loading && errorRows.length === 0 && cycleCollisionGroups.length === 0 ? (
           <p className="mt-3 rounded-xl border p-3 text-sm text-muted-foreground">
             No Tree Number or data errors match the selected scan and Harvest date.
           </p>

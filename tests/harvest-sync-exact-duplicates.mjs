@@ -72,6 +72,18 @@ assert.match(harvestCycleDuplicates, /IMPORT_ERROR/)
 assert.match(harvestCycleDuplicates, /supervisor_decision/)
 assert.match(harvestCycleDuplicates, /tree_exists_in_master/)
 assert.match(harvestCycleDuplicates, /Pagination/)
+assert.match(harvestCycleDuplicates, /Supervisor Action/)
+assert.match(harvestCycleDuplicates, /Supervisor Reason/)
+assert.match(harvestCycleDuplicates, /Save Supervisor Decision/)
+assert.match(harvestCycleDuplicates, /Amend Supervisor Decision/)
+assert.match(harvestCycleDuplicates, /KEEP_EXISTING_CYCLE_RECORD/)
+assert.match(harvestCycleDuplicates, /USE_PENDING_SUBMISSION/)
+assert.match(harvestCycleDuplicates, /DEFER_DECISION/)
+assert.match(harvestCycleDuplicates, /CORRECTION ACTION REQUIRED/)
+assert.match(harvestCycleDuplicates, /Source fingerprint unchanged/)
+assert.match(harvestCycleDuplicates, /fingerprint-status/)
+assert.match(harvestCycleDuplicates, /Existing Harvest Record ID/)
+assert.doesNotMatch(harvestCycleDuplicates, /Allow both/)
 for (const heading of [
   "Tree Number",
   "Harvest Date",
