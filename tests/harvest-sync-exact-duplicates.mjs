@@ -49,12 +49,43 @@ assert.match(harvestCyclePage, /HARVEST_CYCLE_FETCH_ATTEMPTS = 2/)
 assert.match(harvestCyclePage, /HARVEST_CYCLE_RETRY_DELAY_MS = 250/)
 assert.match(harvestCyclePage, /response\.status < 500/)
 assert.match(harvestCyclePage, /HarvestCycleDuplicateTreeEntries/)
-assert.match(harvestCycleDuplicates, /APPROVED_DUPLICATE_SCAN_ID = 5/)
-assert.match(harvestCycleDuplicates, /DISPLAY_ROW_LIMIT = 80/)
+assert.doesNotMatch(harvestCycleDuplicates, /APPROVED_DUPLICATE_SCAN_ID/)
+assert.doesNotMatch(harvestCycleDuplicates, /DISPLAY_ROW_LIMIT/)
+assert.match(harvestCycleDuplicates, /\/api\/admin\/harvest-sync\/scans"/)
+assert.match(harvestCycleDuplicates, /completedScans\[0\]/)
+assert.match(harvestCycleDuplicates, /aria-label="Harvest Sync Scan"/)
+assert.match(harvestCycleDuplicates, /aria-label="Harvest Date"/)
+assert.match(harvestCycleDuplicates, /CONFLICTING DUPLICATE TREE ENTRIES — REVIEW REQUIRED/)
+assert.match(harvestCycleDuplicates, /TREE NUMBER \/ DATA ERRORS — CORRECTION REQUIRED/)
+assert.match(harvestCycleDuplicates, /EXACT DUPLICATES — AUTOMATICALLY RESOLVED/)
+assert.match(harvestCycleDuplicates, /businessSignature/)
+assert.match(harvestCycleDuplicates, /item\.total_bunches/)
+assert.match(harvestCycleDuplicates, /item\.total_nuts/)
 assert.match(harvestCycleDuplicates, /DUPLICATE_REVIEW_REQUIRED/)
-assert.match(harvestCycleDuplicates, /SUPERSEDED/)
-assert.match(harvestCycleDuplicates, /title="Duplicate Tree Entries"/)
-for (const heading of ["Date", "Tree", "ODK Time", "B1", "B2", "B3", "Nuts", "Status", "Default Latest"]) {
+assert.match(harvestCycleDuplicates, /SUPERSEDED_EXACT_DUPLICATE/)
+assert.match(harvestCycleDuplicates, /EXPLICIT_ERROR_CLASSIFICATIONS/)
+assert.match(harvestCycleDuplicates, /UNMATCHED_TREE/)
+assert.match(harvestCycleDuplicates, /INVALID_DATA/)
+assert.match(harvestCycleDuplicates, /ODK_HAS_ISSUES/)
+assert.match(harvestCycleDuplicates, /LATE_SUBMISSION/)
+assert.match(harvestCycleDuplicates, /IMPORT_ERROR/)
+assert.match(harvestCycleDuplicates, /supervisor_decision/)
+assert.match(harvestCycleDuplicates, /tree_exists_in_master/)
+assert.match(harvestCycleDuplicates, /Pagination/)
+for (const heading of [
+  "Tree Number",
+  "Harvest Date",
+  "ODK Time",
+  "ODK Instance ID",
+  "Submitter / Device",
+  "B1",
+  "B2",
+  "B3",
+  "Bunch Count",
+  "Total Nuts",
+  "Status",
+  "Supervisor Decision",
+]) {
   assert.match(harvestCycleDuplicates, new RegExp(`>${heading}<`))
 }
 
