@@ -24,6 +24,7 @@ import {
   displayHarvestDate,
   invalidZeroGroupResolved,
   isAllZeroInvalidSubmission,
+  reviewUnresolvedCounts,
   type HarvestScanResponse,
   type HarvestScanSummary,
 } from "@/lib/harvest-review-model"
@@ -63,9 +64,14 @@ interface ImportPlan {
   cleanSinglesAutoReady: number
   conflictsResolved: number
   conflictsRemaining: number
+  conflictingDuplicateGroupsRemaining?: number
   invalidZeroGroupsResolved?: number
+  invalidZeroGroupsRemaining?: number
   cycleBlockersResolved: number
   cycleBlockersRemaining?: number
+  cycleSafetyGroupsRemaining?: number
+  treeDataErrorGroupsRemaining?: number
+  totalUnresolvedGroupsRemaining?: number
   unresolvedCount?: number
   unresolvedGroupCount: number
   staleDecisionCount: number
@@ -1063,32 +1069,52 @@ export function HarvestManualReviewWorkspace() {
 
   const statusPlan = selectedBatchStatus?.plan
   const conflictsResolved =
-    statusPlan?.conflictsResolved ??
     reviewBuckets.conflicts.filter((group) => conflictGroupResolved(group.rows)).length
-  const conflictsUnresolved =
-    statusPlan?.conflictsRemaining ??
-    reviewBuckets.conflicts.filter((group) => !conflictGroupResolved(group.rows)).length
   const invalidZeroResolved =
-    statusPlan?.invalidZeroGroupsResolved ??
     reviewBuckets.invalidZeroGroups.filter((group) => invalidZeroGroupResolved(group.rows)).length
   const cycleResolved =
-    statusPlan?.cycleBlockersResolved ??
-    reviewBuckets.cycleCollisions.filter(({ pending }) => cycleCollisionResolved(pending)).length
-  const cycleRemaining =
-    statusPlan?.cycleBlockersRemaining ??
-    reviewBuckets.cycleCollisions.filter(({ pending }) => !cycleCollisionResolved(pending)).length
-  const correctionRequired =
-    statusPlan?.correctionRequiredCount ?? reviewBuckets.errors.length
-  const readiness = Boolean(statusPlan?.readyForImport)
+    reviewBuckets.cycleCollisions.filter(({ pending, pendingCandidates }) =>
+      cycleCollisionResolved(pending, pendingCandidates),
+    ).length
+  const unresolvedCounts = reviewUnresolvedCounts(reviewBuckets)
+  const conflictsUnresolved = Number(
+    statusPlan?.conflictingDuplicateGroupsRemaining ??
+      unresolvedCounts.conflictingDuplicateGroupsRemaining,
+  )
+  const invalidZeroRemaining = Number(
+    statusPlan?.invalidZeroGroupsRemaining ?? unresolvedCounts.invalidZeroGroupsRemaining,
+  )
+  const dataErrorsRemaining = Number(
+    statusPlan?.treeDataErrorGroupsRemaining ?? unresolvedCounts.dataErrorGroupsRemaining,
+  )
+  const cycleRemaining = Number(
+    statusPlan?.cycleSafetyGroupsRemaining ?? unresolvedCounts.cycleSafetyGroupsRemaining,
+  )
+  const unresolvedGroupCount = Number(
+    statusPlan?.totalUnresolvedGroupsRemaining ??
+      unresolvedCounts.totalUnresolvedGroupsRemaining,
+  )
   const staleDecisionCount = Number(
     statusPlan?.staleDecisionCount ?? importPlan?.staleDecisionCount ?? 0,
   )
   const hiddenCandidateCount = Number(
     statusPlan?.hiddenEligibleCount ?? importPlan?.hiddenEligibleCount ?? 0,
   )
-  const unresolvedGroupCount = Number(
-    statusPlan?.unresolvedGroupCount ?? importPlan?.unresolvedGroupCount ?? 0,
+  const readiness = Boolean(
+    statusPlan?.readyForImport &&
+      unresolvedGroupCount === 0 &&
+      staleDecisionCount === 0 &&
+      hiddenCandidateCount === 0,
   )
+  const unresolvedBlockers = [
+    `${conflictsUnresolved} conflicting duplicate ${conflictsUnresolved === 1 ? "group" : "groups"}`,
+    `${dataErrorsRemaining} Tree Number/data ${dataErrorsRemaining === 1 ? "error" : "errors"}`,
+    `${cycleRemaining} Cycle-safety ${cycleRemaining === 1 ? "group" : "groups"}`,
+    ...(invalidZeroRemaining > 0
+      ? [`${invalidZeroRemaining} invalid-zero ${invalidZeroRemaining === 1 ? "group" : "groups"}`]
+      : []),
+    `${unresolvedGroupCount} total unresolved ${unresolvedGroupCount === 1 ? "group" : "groups"}`,
+  ]
   const finalImportBlockers: string[] = []
   if (!manualImportEnabled) {
     finalImportBlockers.push("The server manual-only commit gate is not available.")
@@ -1109,7 +1135,9 @@ export function HarvestManualReviewWorkspace() {
     finalImportBlockers.push("The date-scoped fingerprint must be current.")
   }
   if (conflictsUnresolved > 0) {
-    finalImportBlockers.push(`Conflicts remaining: ${conflictsUnresolved}.`)
+    finalImportBlockers.push(
+      `Conflicting duplicate groups remaining: ${conflictsUnresolved}.`,
+    )
   }
   if (staleDecisionCount > 0) {
     finalImportBlockers.push(`Stale decisions: ${staleDecisionCount}.`)
@@ -1117,13 +1145,14 @@ export function HarvestManualReviewWorkspace() {
   if (hiddenCandidateCount > 0) {
     finalImportBlockers.push(`Hidden candidates: ${hiddenCandidateCount}.`)
   }
-  if (correctionRequired > 0) {
-    finalImportBlockers.push(
-      `Tree/data or correction-required records remaining: ${correctionRequired}.`,
-    )
+  if (dataErrorsRemaining > 0) {
+    finalImportBlockers.push(`Tree Number/data errors remaining: ${dataErrorsRemaining}.`)
   }
   if (cycleRemaining > 0) {
-    finalImportBlockers.push(`Cycle blockers remaining: ${cycleRemaining}.`)
+    finalImportBlockers.push(`Cycle-safety groups remaining: ${cycleRemaining}.`)
+  }
+  if (invalidZeroRemaining > 0) {
+    finalImportBlockers.push(`Invalid-zero groups remaining: ${invalidZeroRemaining}.`)
   }
   if (unresolvedGroupCount > 0) {
     finalImportBlockers.push(`Total unresolved groups remaining: ${unresolvedGroupCount}.`)
@@ -1344,21 +1373,23 @@ export function HarvestManualReviewWorkspace() {
           >
             <p className="text-xs font-bold uppercase text-muted-foreground">Batch Readiness</p>
             <p className="font-black">{readiness ? "READY" : "REVIEW REQUIRED"}</p>
-            <p className="text-xs">{numberText(statusPlan?.unresolvedGroupCount)} unresolved groups</p>
+            <p className="text-xs">{numberText(unresolvedGroupCount)} unresolved groups</p>
           </div>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(statusPlan?.exactDuplicateGroupsReady ?? reviewBuckets.exactGroups.length)}</span> exact groups resolved</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(statusPlan?.cleanSinglesAutoReady ?? reviewBuckets.cleanSingles.length)}</span> clean singles ready</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(conflictsResolved)}</span> conflicts resolved</div>
-          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(conflictsUnresolved)}</span> conflicts unresolved</div>
+          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(conflictsUnresolved)}</span> conflicting duplicate groups remaining</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(invalidZeroResolved)}</span> invalid-zero resolved</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(invalidZeroSubmissionCount)}</span> invalid-zero source submissions</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(alreadyImportedCount)}</span> already-imported source submissions</div>
-          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(cycleResolved)} / {numberText(cycleRemaining)}</span> cycle resolved / remaining</div>
+          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(cycleResolved)}</span> Cycle-safety groups resolved</div>
+          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(cycleRemaining)}</span> Cycle-safety groups remaining</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(statusPlan?.staleDecisionCount)}</span> stale decisions</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(statusPlan?.hiddenEligibleCount)}</span> hidden candidates</div>
-          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(correctionRequired)}</span> correction required</div>
+          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(dataErrorsRemaining)}</span> Tree Number/data errors remaining</div>
+          <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black text-rose-700">{numberText(unresolvedGroupCount)}</span> total unresolved groups remaining</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(statusPlan?.candidateCount)}</span> effective records</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{numberText(excludedCount(statusPlan))}</span> excluded submissions</div>
           <div className="rounded-lg border p-2 text-xs"><span className="block text-xl font-black">{selectedScanIsLatest ? "YES" : "NO"}</span> latest scan selected</div>
@@ -1395,7 +1426,8 @@ export function HarvestManualReviewWorkspace() {
             disabled={
               busy !== null ||
               !selectedBatchStatus?.dateScopedFingerprintMatches ||
-              !selectedScanIsLatest
+              !selectedScanIsLatest ||
+              unresolvedGroupCount > 0
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground disabled:opacity-50"
           >
@@ -1405,6 +1437,11 @@ export function HarvestManualReviewWorkspace() {
             The final set is generated by the backend from the persisted scan, saved decisions, Cycle, and fingerprint.
           </span>
         </div>
+        {unresolvedGroupCount > 0 ? (
+          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+            Blocked: {unresolvedBlockers.join("; ")}.
+          </p>
+        ) : null}
         {importPlan && importPlanMatchesSelection ? (
           <div className="mt-4 space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1498,6 +1535,7 @@ export function HarvestManualReviewWorkspace() {
           onClick={() => void runAuthoritativeDryRun()}
           disabled={
             busy !== null ||
+            unresolvedGroupCount > 0 ||
             !importPlan ||
             !importPlanMatchesSelection ||
             !importPlan.readyForImport ||
@@ -1508,6 +1546,11 @@ export function HarvestManualReviewWorkspace() {
         >
           {busy === "dry-run" ? "Running and Rolling Back…" : "Run Import Dry Run"}
         </button>
+        {unresolvedGroupCount > 0 ? (
+          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+            Blocked: {unresolvedBlockers.join("; ")}.
+          </p>
+        ) : null}
         {importPlan ? (
           <div className="mt-4 rounded-xl border bg-muted/20 p-3">
             <p className="text-xs font-bold uppercase text-muted-foreground">Required Confirmation Phrase</p>

@@ -53,6 +53,7 @@ export interface HarvestScanItem {
   original_tree_no: string | null
   classification: string
   issue_type?: string | null
+  effective_issue_type?: string | null
   odk_submission_timestamp: string | null
   harvest_time?: string | null
   b1: number | null
@@ -123,6 +124,14 @@ export interface ReviewBuckets {
   cycleCollisions: CycleCollisionGroup[]
 }
 
+export interface ReviewUnresolvedCounts {
+  conflictingDuplicateGroupsRemaining: number
+  invalidZeroGroupsRemaining: number
+  dataErrorGroupsRemaining: number
+  cycleSafetyGroupsRemaining: number
+  totalUnresolvedGroupsRemaining: number
+}
+
 export const RESOLVED_CONFLICT_DECISIONS = new Set([
   "SELECT_SUBMISSION",
   "KEEP_LATEST",
@@ -181,13 +190,14 @@ export function earliestSubmission(rows: HarvestScanItem[]): HarvestScanItem {
 }
 
 export function isCycleCollision(item: HarvestScanItem): boolean {
-  const issueType = String(item.issue_type ?? "").toUpperCase()
+  const issueType = String(item.effective_issue_type ?? item.issue_type ?? "").toUpperCase()
   const note = String(item.note ?? "").toLowerCase()
   return (
     item.classification === "DUPLICATE_REVIEW_REQUIRED" &&
     (
       issueType === "CYCLE_COLLISION" ||
       issueType === "CROSS_DATE_CYCLE_COLLISION" ||
+      issueType === "PENDING_CROSS_DATE_CYCLE_COLLISION" ||
       note.includes("more than one date in the same harvest cycle") ||
       note.includes("same tree number in this harvest cycle") ||
       note.includes("same tree number and harvest date or cycle")
@@ -276,8 +286,63 @@ export function invalidZeroGroupResolved(rows: HarvestScanItem[]): boolean {
   )
 }
 
-export function cycleCollisionResolved(item: HarvestScanItem): boolean {
-  return item.supervisor_decision === "KEEP_EXISTING_CYCLE_RECORD"
+export function cycleCollisionResolved(
+  item: HarvestScanItem,
+  pendingCandidates?: HarvestScanItem[],
+): boolean {
+  if (item.supervisor_decision === "KEEP_EXISTING_CYCLE_RECORD") return true
+  if (item.supervisor_decision !== "RETAIN_PENDING_CYCLE_SUBMISSION") return false
+  const selectedInstanceId = String(item.selected_effective_instance_id ?? "").trim()
+  return Boolean(
+    selectedInstanceId &&
+      (!pendingCandidates ||
+        pendingCandidates.some(
+          (candidate) => candidate.odk_instance_id === selectedInstanceId,
+        )),
+  )
+}
+
+export function dataErrorGroupResolved(item: HarvestScanItem): boolean {
+  return Boolean(
+    item.classification === "UNMATCHED_TREE" &&
+      item.supervisor_decision === "MAP_TO_EXISTING_TREE" &&
+      String(item.supervisor_resolved_tree_no ?? "").trim(),
+  )
+}
+
+export function reviewUnresolvedCounts(buckets: ReviewBuckets): ReviewUnresolvedCounts {
+  const conflictKeys = buckets.conflicts
+    .filter((group) => !conflictGroupResolved(group.rows))
+    .map((group) => group.key)
+  const invalidZeroKeys = buckets.invalidZeroGroups
+    .filter((group) => !invalidZeroGroupResolved(group.rows))
+    .map((group) => group.key)
+  const dataErrorKeys = buckets.errors
+    .filter((item) => !dataErrorGroupResolved(item))
+    .map(reviewGroupKey)
+  const cycleSafetyKeys = buckets.cycleCollisions
+    .filter(
+      ({ pending, pendingCandidates }) =>
+        !cycleCollisionResolved(pending, pendingCandidates),
+    )
+    .map((group) => group.key)
+
+  // buildReviewBuckets assigns each actionable source group to exactly one category.
+  // The Set is nevertheless authoritative so duplicate scan rows never inflate readiness.
+  const distinctUnresolvedGroups = new Set([
+    ...conflictKeys,
+    ...invalidZeroKeys,
+    ...dataErrorKeys,
+    ...cycleSafetyKeys,
+  ])
+
+  return {
+    conflictingDuplicateGroupsRemaining: new Set(conflictKeys).size,
+    invalidZeroGroupsRemaining: new Set(invalidZeroKeys).size,
+    dataErrorGroupsRemaining: new Set(dataErrorKeys).size,
+    cycleSafetyGroupsRemaining: new Set(cycleSafetyKeys).size,
+    totalUnresolvedGroupsRemaining: distinctUnresolvedGroups.size,
+  }
 }
 
 export function buildReviewBuckets(
@@ -330,7 +395,12 @@ export function buildReviewBuckets(
   for (const item of submissions.filter(isCycleCollision)) {
     const treeNo = String(item.original_tree_no ?? "").trim()
     const key = `${treeNo}|${cycleNo ?? ""}`
-    cyclePendingByTree.set(key, [...(cyclePendingByTree.get(key) ?? []), item])
+    const allPendingCandidates = allItems.filter(
+      (candidate) =>
+        isCycleCollision(candidate) &&
+        String(candidate.original_tree_no ?? "").trim() === treeNo,
+    )
+    cyclePendingByTree.set(key, allPendingCandidates)
   }
   const cycleCollisions: CycleCollisionGroup[] = [...cyclePendingByTree.entries()].map(
     ([key, pendingCandidates]) => {

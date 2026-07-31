@@ -3,6 +3,11 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { formatIstDateTime } from "../lib/format-ist-date-time.ts"
+import {
+  buildReviewBuckets,
+  cycleCollisionResolved,
+  reviewUnresolvedCounts,
+} from "../lib/harvest-review-model.ts"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(resolve(root, path), "utf8")
@@ -40,7 +45,7 @@ assert.match(workspace, /selectedBatchStatus\?\.scanTimestamp/)
 assert.match(workspace, /formatIstDateTime\(/)
 assert.equal(
   (review.match(/formatIstDateTime\((?:row|record)\.odk_submission_timestamp\)/g) ?? []).length,
-  4,
+  5,
   "every visible ODK Time cell must use the shared IST formatter",
 )
 assert.doesNotMatch(
@@ -49,6 +54,148 @@ assert.doesNotMatch(
 )
 assert.match(model, /String\(left\.odk_submission_timestamp \?\? ""\)\.localeCompare/)
 assert.doesNotMatch(model, /formatIstDateTime/)
+
+// Scan 10-style categories stay distinct and the unresolved total is their union.
+const scanItem = (overrides) => ({
+  id: 1,
+  scan_id: 10,
+  odk_instance_id: "uuid:base",
+  harvest_date: "2026-07-30",
+  original_tree_no: "1",
+  classification: "SINGLE_VALID_AUTO_READY",
+  issue_type: null,
+  odk_submission_timestamp: "2026-07-30T02:33:07Z",
+  b1: 1,
+  b2: 0,
+  b3: 0,
+  total_bunches: 1,
+  total_nuts: 1,
+  group_key: null,
+  note: null,
+  submitter_name: "Training labourer",
+  device_id: "training-device",
+  ...overrides,
+})
+const scan10Items = []
+for (let index = 1; index <= 696; index += 1) {
+  scan10Items.push(
+    scanItem({
+      id: index,
+      odk_instance_id: `uuid:single-${index}`,
+      original_tree_no: String(index),
+      group_key: `2026-07-30|${index}`,
+    }),
+  )
+}
+for (let index = 0; index < 5; index += 1) {
+  const treeNo = String(700 + index)
+  for (let candidate = 1; candidate <= 2; candidate += 1) {
+    scan10Items.push(
+      scanItem({
+        id: 700 + index * 2 + candidate,
+        odk_instance_id: `uuid:conflict-${treeNo}-${candidate}`,
+        original_tree_no: treeNo,
+        classification: "DUPLICATE_REVIEW_REQUIRED",
+        group_key: `2026-07-30|${treeNo}`,
+        b1: candidate,
+        total_nuts: candidate,
+      }),
+    )
+  }
+}
+scan10Items.push(
+  scanItem({
+    id: 800,
+    odk_instance_id: "uuid:unmatched-1663",
+    original_tree_no: "1663",
+    classification: "UNMATCHED_TREE",
+    group_key: "2026-07-30|1663",
+    tree_exists_in_master: false,
+    note: "Tree Number does not exist in TREE MASTER",
+  }),
+)
+for (const treeNo of ["1119", "1634"]) {
+  scan10Items.push(
+    scanItem({
+      id: 900 + Number(treeNo),
+      odk_instance_id: `uuid:cycle-${treeNo}`,
+      original_tree_no: treeNo,
+      classification: "DUPLICATE_REVIEW_REQUIRED",
+      issue_type: "CROSS_DATE_CYCLE_COLLISION",
+      group_key: `2026-07-30|${treeNo}`,
+      note: "more than one date in the same harvest cycle",
+    }),
+  )
+}
+const scan10Buckets = buildReviewBuckets(scan10Items, "2026-07-30", "19")
+const scan10Unresolved = reviewUnresolvedCounts(scan10Buckets)
+assert.equal(scan10Buckets.submissions.length, 709)
+assert.equal(scan10Buckets.treeGroupCount, 704)
+assert.equal(scan10Buckets.cleanSingles.length, 696)
+assert.equal(scan10Buckets.conflicts.length, 5)
+assert.equal(scan10Buckets.errors.length, 1)
+assert.equal(scan10Buckets.cycleCollisions.length, 2)
+assert.equal(
+  scan10Buckets.cleanSingles.length +
+    scan10Buckets.conflicts.length +
+    scan10Buckets.errors.length +
+    scan10Buckets.cycleCollisions.length,
+  704,
+)
+assert.deepEqual(scan10Unresolved, {
+  conflictingDuplicateGroupsRemaining: 5,
+  invalidZeroGroupsRemaining: 0,
+  dataErrorGroupsRemaining: 1,
+  cycleSafetyGroupsRemaining: 2,
+  totalUnresolvedGroupsRemaining: 8,
+})
+const newPendingCycleIssue = [
+  scanItem({
+    odk_instance_id: "uuid:new-cycle-30",
+    original_tree_no: "1119",
+    classification: "DUPLICATE_REVIEW_REQUIRED",
+    issue_type: null,
+    effective_issue_type: "PENDING_CROSS_DATE_CYCLE_COLLISION",
+    group_key: "2026-07-30|1119",
+    note: null,
+  }),
+  scanItem({
+    odk_instance_id: "uuid:new-cycle-31",
+    harvest_date: "2026-07-31",
+    original_tree_no: "1119",
+    classification: "DUPLICATE_REVIEW_REQUIRED",
+    issue_type: "PENDING_CROSS_DATE_CYCLE_COLLISION",
+    group_key: "2026-07-31|1119",
+    note: null,
+  }),
+]
+assert.equal(
+  buildReviewBuckets(newPendingCycleIssue, "2026-07-30", "19").cycleCollisions.length,
+  1,
+  "the explicit pending cross-date issue type must not depend on note wording",
+)
+const pendingCandidates = [
+  scanItem({ odk_instance_id: "uuid:pending-30" }),
+  scanItem({ odk_instance_id: "uuid:pending-31", harvest_date: "2026-07-31" }),
+]
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({ supervisor_decision: "RETAIN_PENDING_CYCLE_SUBMISSION" }),
+    pendingCandidates,
+  ),
+  false,
+  "a retain-pending action without a selected source record must remain unresolved",
+)
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({
+      supervisor_decision: "RETAIN_PENDING_CYCLE_SUBMISSION",
+      selected_effective_instance_id: "uuid:pending-30",
+    }),
+    pendingCandidates,
+  ),
+  true,
+)
 
 // Preserve unrelated Admin tools and update only the two separate Harvest destinations.
 for (const title of [
@@ -213,14 +360,38 @@ assert.match(review, /KEEP_EXISTING_CYCLE_RECORD/)
 assert.match(review, /USE_PENDING_SUBMISSION/)
 assert.match(review, /CORRECTION ACTION REQUIRED/)
 assert.match(review, /MAP_TO_EXISTING_TREE/)
-assert.match(review, /Validate Exact Tree Number/)
-assert.match(review, /\/api\/coconut-harvest\/trees\?/)
-assert.match(review, /data\.treeNumbers \?\? \[\]\)\.some\(\(treeNo\) => treeNo === target\)/)
+assert.match(review, /TreeNumberAutocomplete/)
+assert.match(review, /Searchable exact Tree Master selector/)
+assert.match(review, /\/api\/coconut-harvest\/tree-master/)
+assert.match(review, /validatedTreeNo: option\.treeNo/)
+assert.match(review, /Select an exact Tree Number from the Tree Master list/)
 assert.match(review, /resolved_tree_no: mapIsValid \? target : null/)
-assert.match(review, /Original submitted value/)
+assert.match(review, /Original submitted Tree Number/)
+assert.match(review, /formatIstDateTime\(row\.odk_submission_timestamp\)/)
+for (const field of [
+  "Harvest Date",
+  "ODK Time",
+  "ODK Instance",
+  "Submitter / Device",
+  "Bunch Count",
+  "B1",
+  "B2",
+  "B3",
+  "Total Nuts",
+  "Exact error",
+  "Exists in Tree Master",
+  "Proposed Tree Master number",
+]) {
+  assert.match(review, new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+}
 assert.match(review, /Other error classes can only be deferred and remain blocked/)
 assert.match(review, /DEFER_DECISION/)
 assert.match(review, /fingerprint-status/)
+assert.match(review, /Multiple pending submissions for the same Tree Number occur on different dates in the same open Harvest Cycle/)
+assert.match(review, /RETAIN_PENDING_CYCLE_SUBMISSION/)
+assert.match(review, /Retain \{displayHarvestDateLong\(candidate\.harvest_date\)\} submission and exclude/)
+assert.match(review, /Use pending submission as a correction proposal/)
+assert.match(review, /PENDING_CROSS_DATE_CYCLE_COLLISION/)
 
 // Final plan, verified exports, authoritative dry run, opaque token, and fail-closed manual commit.
 assert.match(workspace, /Review Final Import Set/)
@@ -256,11 +427,12 @@ for (const condition of [
   "Select a completed Scan ID.",
   "Select an Open Harvest Cycle.",
   "The date-scoped fingerprint must be current.",
-  "Conflicts remaining:",
+  "Conflicting duplicate groups remaining:",
   "Stale decisions:",
   "Hidden candidates:",
-  "Tree/data or correction-required records remaining:",
-  "Cycle blockers remaining:",
+  "Tree Number/data errors remaining:",
+  "Cycle-safety groups remaining:",
+  "Total unresolved groups remaining:",
   "Generate the matching Final Import Set.",
   "The authoritative rollback-only dry run must pass.",
   "A valid, unexpired dry-run token is required.",
@@ -272,6 +444,26 @@ for (const condition of [
   assert.match(workspace, new RegExp(condition.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 }
 assert.match(workspace, /disabled=\{busy !== null \|\| finalImportBlockers\.length > 0\}/)
+assert.ok(
+  (workspace.match(/unresolvedGroupCount > 0/g) ?? []).length >= 3,
+  "Final-set, dry-run and manual-import controls must fail closed while groups remain unresolved",
+)
+for (const label of [
+  "conflicting duplicate groups remaining",
+  "Tree Number/data errors remaining",
+  "Cycle-safety groups remaining",
+  "total unresolved groups remaining",
+]) {
+  assert.match(workspace, new RegExp(label))
+}
+for (const authoritativeCountField of [
+  "conflictingDuplicateGroupsRemaining",
+  "treeDataErrorGroupsRemaining",
+  "cycleSafetyGroupsRemaining",
+  "totalUnresolvedGroupsRemaining",
+]) {
+  assert.match(workspace, new RegExp(`statusPlan\\?\\.${authoritativeCountField}`))
+}
 assert.doesNotMatch(workspace, /candidateCount > 197|197-record safety cap/)
 
 // Structured post-import verification and durable history/download controls.

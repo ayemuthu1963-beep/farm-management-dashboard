@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, CheckCircle2, Search, ShieldCheck } from "lucide-react"
+import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
+import {
+  treeNumberOptionKey,
+  type TreeNumberOption,
+} from "@/lib/tree-number-options"
 import {
   REVIEW_GROUP_PAGE_SIZE,
   REVIEW_ROW_PAGE_SIZE,
@@ -27,6 +32,7 @@ import {
 type CycleDecisionAction =
   | "KEEP_EXISTING_CYCLE_RECORD"
   | "USE_PENDING_SUBMISSION"
+  | "RETAIN_PENDING_CYCLE_SUBMISSION"
   | "DEFER_DECISION"
   | ""
 
@@ -110,6 +116,7 @@ const INVALID_ZERO_SUPERVISOR_REASONS = [
 const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
   "KEEP_EXISTING_CYCLE_RECORD",
   "USE_PENDING_SUBMISSION",
+  "RETAIN_PENDING_CYCLE_SUBMISSION",
   "DEFER_DECISION",
 ])
 
@@ -127,8 +134,22 @@ function statusBadge(classification: string): string {
   return "border-amber-200 bg-amber-50 text-amber-800"
 }
 
+function displayHarvestDateLong(value: string | null | undefined): string {
+  const date = displayHarvestDate(value)
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!match) return date
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ]
+  return `${Number(match[3])} ${months[Number(match[2]) - 1]} ${match[1]}`
+}
+
 function decisionState(action: string | null | undefined): string {
-  if (action === "KEEP_EXISTING_CYCLE_RECORD") return "Resolved"
+  if (
+    action === "KEEP_EXISTING_CYCLE_RECORD" ||
+    action === "RETAIN_PENDING_CYCLE_SUBMISSION"
+  ) return "Resolved"
   if (action === "USE_PENDING_SUBMISSION") return "Correction required"
   return "Unresolved"
 }
@@ -268,7 +289,9 @@ export function HarvestReviewSections({
   const [errorDecisionDrafts, setErrorDecisionDrafts] = useState<
     Record<string, ErrorDecisionDraft>
   >({})
-  const [treeValidationBusy, setTreeValidationBusy] = useState<string | null>(null)
+  const [treeMasterOptions, setTreeMasterOptions] = useState<TreeNumberOption[]>([])
+  const [treeMasterLoading, setTreeMasterLoading] = useState(false)
+  const [treeMasterLoadError, setTreeMasterLoadError] = useState(false)
   const [groupFingerprintStatuses, setGroupFingerprintStatuses] = useState<
     Record<string, FingerprintStatus>
   >({})
@@ -291,6 +314,52 @@ export function HarvestReviewSections({
     () => [...buckets.conflicts, ...buckets.invalidZeroGroups],
     [buckets.conflicts, buckets.invalidZeroGroups],
   )
+
+  const loadTreeMasterOptions = useCallback(async () => {
+    setTreeMasterLoading(true)
+    setTreeMasterLoadError(false)
+    try {
+      const response = await fetch("/api/coconut-harvest/tree-master", {
+        cache: "no-store",
+      })
+      const data = (await response.json()) as { treeNumbers?: unknown; error?: string }
+      if (
+        !response.ok ||
+        !Array.isArray(data.treeNumbers) ||
+        !data.treeNumbers.every((treeNo) => typeof treeNo === "string")
+      ) {
+        throw new Error(data.error ?? "Unable to load Tree Numbers from Tree Master.")
+      }
+      setTreeMasterOptions(
+        data.treeNumbers.map((treeNo) => ({
+          key: treeNumberOptionKey(treeNo),
+          treeNo,
+        })),
+      )
+    } catch {
+      setTreeMasterOptions([])
+      setTreeMasterLoadError(true)
+    } finally {
+      setTreeMasterLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (
+      buckets.errors.some((item) => item.classification === "UNMATCHED_TREE") &&
+      treeMasterOptions.length === 0 &&
+      !treeMasterLoading &&
+      !treeMasterLoadError
+    ) {
+      void loadTreeMasterOptions()
+    }
+  }, [
+    buckets.errors,
+    loadTreeMasterOptions,
+    treeMasterLoadError,
+    treeMasterLoading,
+    treeMasterOptions.length,
+  ])
 
   const loadGroupFingerprintStatus = useCallback(
     async (scanId: number, treeNo: string, harvestDate?: string | null) => {
@@ -475,6 +544,7 @@ export function HarvestReviewSections({
   async function saveCycleDecision(
     pending: HarvestScanItem,
     pendingCandidates: HarvestScanItem[],
+    hasImportedRecord: boolean,
   ) {
     const savedReason = pending.supervisor_reason ?? ""
     const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
@@ -498,7 +568,8 @@ export function HarvestReviewSections({
     if (
       disabled ||
       !draft.action ||
-      (draft.action === "USE_PENDING_SUBMISSION" &&
+      ((draft.action === "USE_PENDING_SUBMISSION" ||
+        draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION") &&
         (!selectedPending || !isActiveValidConflictCandidate(selectedPending))) ||
       !reason ||
       groupStatus?.groupMatches !== true ||
@@ -515,13 +586,17 @@ export function HarvestReviewSections({
         body: JSON.stringify({
           scan_id: selectedScanId,
           odk_instance_id:
-            draft.action === "USE_PENDING_SUBMISSION"
+            draft.action === "USE_PENDING_SUBMISSION" ||
+            draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION"
               ? selectedPending?.odk_instance_id
               : pending.odk_instance_id,
-          issue_type: "CYCLE_COLLISION",
+          issue_type: hasImportedRecord
+            ? "CYCLE_COLLISION"
+            : "PENDING_CROSS_DATE_CYCLE_COLLISION",
           decision: draft.action,
           selected_effective_instance_id:
-            draft.action === "USE_PENDING_SUBMISSION"
+            draft.action === "USE_PENDING_SUBMISSION" ||
+            draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION"
               ? selectedPending?.odk_instance_id
               : null,
           reason,
@@ -575,41 +650,6 @@ export function HarvestReviewSections({
         ...update,
       },
     }))
-  }
-
-  async function validateResolvedTree(row: HarvestScanItem) {
-    const draft = errorDecisionDrafts[row.odk_instance_id] ?? errorDecisionDraft(row)
-    const target = draft.resolvedTreeNo.trim()
-    if (!target) return
-    setTreeValidationBusy(row.odk_instance_id)
-    setDecisionMessages((current) => ({ ...current, [row.odk_instance_id]: "" }))
-    try {
-      const query = new URLSearchParams({ q: target, limit: "25" })
-      const response = await fetch(`/api/coconut-harvest/trees?${query.toString()}`, {
-        cache: "no-store",
-      })
-      const data = (await response.json()) as { treeNumbers?: string[]; error?: string }
-      if (!response.ok) {
-        throw new Error(data.error ?? "Unable to validate the Tree Number against Tree Master.")
-      }
-      if (!(data.treeNumbers ?? []).some((treeNo) => treeNo === target)) {
-        throw new Error("Enter an exact existing Tree Number from Tree Master.")
-      }
-      updateErrorDecisionDraft(row, { validatedTreeNo: target })
-      setDecisionMessages((current) => ({
-        ...current,
-        [row.odk_instance_id]: `Tree ${target} was verified in Tree Master.`,
-      }))
-    } catch (error) {
-      updateErrorDecisionDraft(row, { validatedTreeNo: "" })
-      setDecisionMessages((current) => ({
-        ...current,
-        [row.odk_instance_id]:
-          error instanceof Error ? error.message : "Unable to validate the Tree Number.",
-      }))
-    } finally {
-      setTreeValidationBusy(null)
-    }
   }
 
   async function saveDataErrorDecision(row: HarvestScanItem) {
@@ -1162,9 +1202,17 @@ export function HarvestReviewSections({
                   <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                     <p className="rounded-lg border p-2">
                       <span className="block font-bold uppercase text-muted-foreground">
-                        Original submitted value
+                        Original submitted Tree Number
                       </span>
                       <span className="font-black">{displayHarvestValue(row.original_tree_no)}</span>
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">Harvest Date</span>
+                      {displayHarvestDate(row.harvest_date)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">ODK Time</span>
+                      {formatIstDateTime(row.odk_submission_timestamp)}
                     </p>
                     <p className="rounded-lg border p-2">
                       <span className="block font-bold uppercase text-muted-foreground">ODK Instance</span>
@@ -1175,8 +1223,36 @@ export function HarvestReviewSections({
                       {displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}
                     </p>
                     <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">Bunch Count</span>
+                      {displayHarvestValue(row.total_bunches)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">B1</span>
+                      {displayHarvestValue(row.b1)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">B2</span>
+                      {displayHarvestValue(row.b2)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">B3</span>
+                      {displayHarvestValue(row.b3)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">Total Nuts</span>
+                      {displayHarvestValue(row.total_nuts)}
+                    </p>
+                    <p className="rounded-lg border p-2">
                       <span className="block font-bold uppercase text-muted-foreground">Exact error</span>
                       {displayHarvestValue(row.note)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">Exists in Tree Master</span>
+                      {row.tree_exists_in_master === true
+                        ? "Yes"
+                        : row.tree_exists_in_master === false
+                          ? "No"
+                          : "—"}
                     </p>
                   </div>
                   {row.supervisor_decision ? (
@@ -1224,44 +1300,70 @@ export function HarvestReviewSections({
                   </div>
                   {draft.action === "MAP_TO_EXISTING_TREE" ? (
                     <div className="mt-3 rounded-xl border p-3">
-                      <label className="text-xs font-bold uppercase text-muted-foreground">
-                        Exact Tree Master Target
-                        <input
+                      <label
+                        htmlFor={`tree-master-correction-${row.id}`}
+                        className="text-xs font-bold uppercase text-muted-foreground"
+                      >
+                        Searchable exact Tree Master selector
+                      </label>
+                      <div className="mt-1">
+                        <TreeNumberAutocomplete
+                          id={`tree-master-correction-${row.id}`}
                           value={draft.resolvedTreeNo}
-                          onChange={(event) =>
+                          options={treeMasterOptions}
+                          loading={treeMasterLoading}
+                          loadError={treeMasterLoadError}
+                          disabled={disabled}
+                          placeholder="Search an exact Tree Master number"
+                          onValueChange={(value) =>
                             updateErrorDecisionDraft(row, {
-                              resolvedTreeNo: event.target.value,
+                              resolvedTreeNo: value,
                               validatedTreeNo: "",
                             })
                           }
-                          disabled={disabled}
-                          placeholder="Type the exact existing Tree Number"
-                          className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                          onSelect={(option) => {
+                            updateErrorDecisionDraft(row, {
+                              resolvedTreeNo: option.treeNo,
+                              validatedTreeNo: option.treeNo,
+                            })
+                            setDecisionMessages((current) => ({
+                              ...current,
+                              [row.odk_instance_id]: `Tree ${option.treeNo} was selected exactly from Tree Master.`,
+                            }))
+                          }}
+                          onInvalidCommit={(value) => {
+                            updateErrorDecisionDraft(row, {
+                              resolvedTreeNo: value,
+                              validatedTreeNo: "",
+                            })
+                            setDecisionMessages((current) => ({
+                              ...current,
+                              [row.odk_instance_id]:
+                                "Select an exact Tree Number from the Tree Master list.",
+                            }))
+                          }}
+                          onRetry={() => void loadTreeMasterOptions()}
                         />
-                      </label>
-                      <div className="mt-2 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => void validateResolvedTree(row)}
-                          disabled={disabled || !target || treeValidationBusy !== null}
-                          className="rounded-lg border border-primary px-3 py-2 text-xs font-black text-primary disabled:opacity-40"
-                        >
-                          {treeValidationBusy === row.odk_instance_id
-                            ? "Validating…"
-                            : "Validate Exact Tree Number"}
-                        </button>
-                        <span
-                          className={`text-xs font-bold ${
-                            draft.validatedTreeNo === target && target
-                              ? "text-emerald-700"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          {draft.validatedTreeNo === target && target
-                            ? `Tree ${target} verified in Tree Master.`
-                            : "Save remains disabled until the exact value is verified."}
-                        </span>
                       </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Tree Number correction confirmation">
+                        <p className="rounded-lg border bg-muted/20 p-3 text-xs">
+                          <span className="block font-bold uppercase text-muted-foreground">Original submitted Tree Number</span>
+                          <span className="mt-1 block text-base font-black">{displayHarvestValue(row.original_tree_no)}</span>
+                        </p>
+                        <p className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
+                          <span className="block font-bold uppercase text-muted-foreground">Proposed Tree Master number</span>
+                          <span className="mt-1 block text-base font-black">{mapIsValid ? target : "—"}</span>
+                        </p>
+                      </div>
+                      <p
+                        className={`mt-2 text-xs font-bold ${
+                          mapIsValid ? "text-emerald-700" : "text-muted-foreground"
+                        }`}
+                      >
+                        {mapIsValid
+                          ? `Tree ${target} selected exactly from Tree Master.`
+                          : "Save remains disabled until an exact Tree Master choice is selected."}
+                      </p>
                       <p className="mt-2 text-xs font-semibold text-muted-foreground">
                         Mapping changes only the proposed effective Tree Number. Original ODK value{" "}
                         {displayHarvestValue(row.original_tree_no)} remains unchanged and auditable.
@@ -1315,7 +1417,7 @@ export function HarvestReviewSections({
 
       <ReviewSection id="review-cycle-safety" title="Cycle safety decisions" icon={ShieldCheck} count={buckets.cycleCollisions.length}>
         <p className="mb-3 text-sm font-semibold text-muted-foreground">
-          These pending submissions collide with an existing record for the same Tree Number in the open Harvest Cycle.
+          Each group identifies either multiple pending dates or an existing imported record and a pending submission for the same Tree Number in the open Harvest Cycle.
         </p>
         <div className="space-y-4">
           {visibleCycle.map(({ key, pending, pendingCandidates, records }) => {
@@ -1350,8 +1452,15 @@ export function HarvestReviewSections({
             const canSave =
               !disabled &&
               Boolean(draft.action) &&
-              (draft.action !== "USE_PENDING_SUBMISSION" ||
-                Boolean(selectedPending && isActiveValidConflictCandidate(selectedPending))) &&
+              ((hasImportedRecord &&
+                (draft.action === "KEEP_EXISTING_CYCLE_RECORD" ||
+                  draft.action === "DEFER_DECISION" ||
+                  (draft.action === "USE_PENDING_SUBMISSION" &&
+                    Boolean(selectedPending && isActiveValidConflictCandidate(selectedPending))))) ||
+                (!hasImportedRecord &&
+                  (draft.action === "DEFER_DECISION" ||
+                    (draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" &&
+                      Boolean(selectedPending && isActiveValidConflictCandidate(selectedPending)))))) &&
               Boolean(finalReason) &&
               groupStatus?.groupMatches === true &&
               decisionSaving !== pending.odk_instance_id
@@ -1360,7 +1469,11 @@ export function HarvestReviewSections({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-black">Tree {displayHarvestValue(pending.original_tree_no)} · Cycle {displayHarvestValue(scanData.scan.cycle_no)}</p>
-                    <p className="mt-1 text-xs font-semibold text-muted-foreground">{displayHarvestValue(pending.note)}</p>
+                    <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                      {hasImportedRecord
+                        ? "An existing imported Cycle record and a pending submission share the same Tree Number in this open Harvest Cycle."
+                        : "Multiple pending submissions for the same Tree Number occur on different dates in the same open Harvest Cycle."}
+                    </p>
                   </div>
                   <span className="rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-black text-amber-950">
                     {decisionState(pending.supervisor_decision)}
@@ -1417,30 +1530,81 @@ export function HarvestReviewSections({
                   </table>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="text-xs font-bold uppercase text-muted-foreground">
-                    Supervisor Action
-                    <select
-                      value={draft.action}
-                      onChange={(event) =>
-                        updateDecisionDraft(pending.odk_instance_id, {
-                          action: event.target.value as CycleDecisionAction,
-                          reason: "",
-                          otherReason: "",
-                        })
-                      }
-                      disabled={disabled}
-                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
-                    >
-                      <option value="">Select Supervisor Action</option>
-                      {hasImportedRecord ? (
-                        <>
-                          <option value="KEEP_EXISTING_CYCLE_RECORD">Keep existing Cycle record</option>
-                          <option value="USE_PENDING_SUBMISSION">Use pending submission instead</option>
-                        </>
-                      ) : null}
-                      <option value="DEFER_DECISION">Defer decision</option>
-                    </select>
-                  </label>
+                  {hasImportedRecord ? (
+                    <label className="text-xs font-bold uppercase text-muted-foreground">
+                      Supervisor Action
+                      <select
+                        value={draft.action}
+                        onChange={(event) =>
+                          updateDecisionDraft(pending.odk_instance_id, {
+                            action: event.target.value as CycleDecisionAction,
+                            reason: "",
+                            otherReason: "",
+                          })
+                        }
+                        disabled={disabled}
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                      >
+                        <option value="">Select Supervisor Action</option>
+                        <option value="KEEP_EXISTING_CYCLE_RECORD">Keep existing Cycle record</option>
+                        <option value="USE_PENDING_SUBMISSION">Use pending submission as a correction proposal</option>
+                        <option value="DEFER_DECISION">Defer decision</option>
+                      </select>
+                    </label>
+                  ) : (
+                    <fieldset className="rounded-xl border bg-background p-3">
+                      <legend className="px-1 text-xs font-bold uppercase text-muted-foreground">
+                        Supervisor Action
+                      </legend>
+                      <div className="space-y-2 text-sm font-semibold">
+                        {pendingCandidates.map((candidate) => {
+                          const excludedDates = pendingCandidates
+                            .filter((other) => other.odk_instance_id !== candidate.odk_instance_id)
+                            .map((other) => displayHarvestDateLong(other.harvest_date))
+                            .join(", ")
+                          return (
+                            <label key={candidate.odk_instance_id} className="flex items-start gap-2 rounded-lg border p-2">
+                              <input
+                                type="radio"
+                                name={`pending-cycle-action-${key}`}
+                                checked={
+                                  draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" &&
+                                  draft.selectedInstanceId === candidate.odk_instance_id
+                                }
+                                onChange={() =>
+                                  updateDecisionDraft(pending.odk_instance_id, {
+                                    action: "RETAIN_PENDING_CYCLE_SUBMISSION",
+                                    selectedInstanceId: candidate.odk_instance_id,
+                                  })
+                                }
+                                disabled={disabled}
+                                className="mt-0.5"
+                              />
+                              <span>
+                                Retain {displayHarvestDateLong(candidate.harvest_date)} submission and exclude {excludedDates || "the other pending"} submission
+                              </span>
+                            </label>
+                          )
+                        })}
+                        <label className="flex items-start gap-2 rounded-lg border p-2">
+                          <input
+                            type="radio"
+                            name={`pending-cycle-action-${key}`}
+                            checked={draft.action === "DEFER_DECISION"}
+                            onChange={() =>
+                              updateDecisionDraft(pending.odk_instance_id, {
+                                action: "DEFER_DECISION",
+                                selectedInstanceId: "",
+                              })
+                            }
+                            disabled={disabled}
+                            className="mt-0.5"
+                          />
+                          <span>Defer for field verification</span>
+                        </label>
+                      </div>
+                    </fieldset>
+                  )}
                   <label className="text-xs font-bold uppercase text-muted-foreground">
                     Supervisor Reason
                     <select
@@ -1478,10 +1642,15 @@ export function HarvestReviewSections({
                     CORRECTION ACTION REQUIRED — controlled replacement of the existing record is required before this pending submission can be used.
                   </p>
                 ) : null}
+                {draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" && selectedPending ? (
+                  <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+                    Retain the {displayHarvestDateLong(selectedPending.harvest_date)} pending submission and exclude the other pending submission(s). Both original ODK submissions remain unchanged and auditable.
+                  </p>
+                ) : null}
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => void saveCycleDecision(pending, pendingCandidates)}
+                    onClick={() => void saveCycleDecision(pending, pendingCandidates, hasImportedRecord)}
                     disabled={!canSave}
                     className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                   >
