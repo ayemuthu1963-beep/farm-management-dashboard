@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { formatIstDateTime } from "../lib/format-ist-date-time.ts"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(resolve(root, path), "utf8")
@@ -15,6 +16,39 @@ const review = read("components/admin/harvest-review-sections.tsx")
 const model = read("lib/harvest-review-model.ts")
 const proxy = read("app/api/admin/harvest-sync/[[...path]]/route.ts")
 const envExample = read(".env.example")
+
+// Scan and ODK timestamps use one genuine Asia/Kolkata formatter for display only.
+assert.equal(
+  formatIstDateTime("2026-07-30T02:33:07.632000Z"),
+  "30 Jul 2026 | 08:03 IST",
+)
+assert.equal(
+  formatIstDateTime("2026-07-31T10:34:12.904496Z"),
+  "31 Jul 2026 | 16:04 IST",
+)
+for (const invalid of [null, undefined, "", "not-a-timestamp"]) {
+  assert.equal(formatIstDateTime(invalid), "—")
+}
+const formattedIstTimestamp = formatIstDateTime("2026-07-31T10:34:12.904496Z")
+assert.doesNotMatch(formattedIstTimestamp, /\d{2}:\d{2}:\d{2}/, "seconds must not be displayed")
+assert.doesNotMatch(formattedIstTimestamp, /\.\d+/, "milliseconds must not be displayed")
+assert.doesNotMatch(formattedIstTimestamp, /\dT\d/, "the raw ISO T separator must not be displayed")
+assert.doesNotMatch(formattedIstTimestamp, /Z(?:\s|$)/, "the raw UTC Z suffix must not be displayed")
+assert.match(workspace, /formatIstDateTime\(scan\.scan_ended_at \?\? scan\.scan_started_at\)/)
+assert.match(workspace, /Scan \{scan\.id\} — \{formatIstDateTime/)
+assert.match(workspace, /selectedBatchStatus\?\.scanTimestamp/)
+assert.match(workspace, /formatIstDateTime\(/)
+assert.equal(
+  (review.match(/formatIstDateTime\((?:row|record)\.odk_submission_timestamp\)/g) ?? []).length,
+  4,
+  "every visible ODK Time cell must use the shared IST formatter",
+)
+assert.doesNotMatch(
+  review,
+  /displayHarvestValue\((?:row|record)\.odk_submission_timestamp\)/,
+)
+assert.match(model, /String\(left\.odk_submission_timestamp \?\? ""\)\.localeCompare/)
+assert.doesNotMatch(model, /formatIstDateTime/)
 
 // Preserve unrelated Admin tools and update only the two separate Harvest destinations.
 for (const title of [

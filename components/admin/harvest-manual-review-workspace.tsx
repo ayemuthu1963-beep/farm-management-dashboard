@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { HarvestReviewSections } from "@/components/admin/harvest-review-sections"
 import { Panel } from "@/components/farm/panel"
+import { formatIstDateTime } from "@/lib/format-ist-date-time"
 import {
   buildReviewBuckets,
   conflictGroupResolved,
@@ -1214,7 +1215,7 @@ export function HarvestManualReviewWorkspace() {
               <option value="">Select a completed scan</option>
               {scans.map((scan) => (
                 <option key={scan.id} value={scan.id}>
-                  Scan {scan.id} · {scan.scan_ended_at ?? scan.scan_started_at ?? "timestamp unavailable"} · Cycle{" "}
+                  Scan {scan.id} — {formatIstDateTime(scan.scan_ended_at ?? scan.scan_started_at)} — Cycle{" "}
                   {scan.cycle_no ?? "—"}
                 </option>
               ))}
@@ -1306,7 +1307,13 @@ export function HarvestManualReviewWorkspace() {
           <div className="rounded-xl border p-3">
             <p className="text-xs font-bold uppercase text-muted-foreground">Scan / Timestamp</p>
             <p className="font-black">{selectedScanId ? `Scan ${selectedScanId}` : "—"}</p>
-            <p className="text-xs">{selectedBatchStatus?.scanTimestamp ?? scanData?.scan.scan_ended_at ?? "—"}</p>
+            <p className="text-xs">
+              {formatIstDateTime(
+                selectedBatchStatus?.scanTimestamp ??
+                  scanData?.scan.scan_ended_at ??
+                  scanData?.scan.scan_started_at,
+              )}
+            </p>
           </div>
           <div
             className={`rounded-xl border p-3 ${

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, CheckCircle2, Search, ShieldCheck } from "lucide-react"
+import { formatIstDateTime } from "@/lib/format-ist-date-time"
 import {
   REVIEW_GROUP_PAGE_SIZE,
   REVIEW_ROW_PAGE_SIZE,
@@ -806,7 +807,7 @@ export function HarvestReviewSections({
                       </td>
                       <td className="p-2 font-bold">{displayHarvestValue(row.original_tree_no)}</td>
                       <td className="p-2">{displayHarvestDate(row.harvest_date)}</td>
-                      <td className="p-2">{displayHarvestValue(row.odk_submission_timestamp)}</td>
+                      <td className="p-2">{formatIstDateTime(row.odk_submission_timestamp)}</td>
                       <td className="p-2 font-mono">{row.odk_instance_id}</td>
                       <td className="p-2">
                         {displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}
@@ -1026,7 +1027,7 @@ export function HarvestReviewSections({
                   <td className="p-2">{displayHarvestDate(row.harvest_date)}</td>
                   <td className="p-2 font-mono">{row.odk_instance_id}</td>
                   <td className="p-2">{displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}</td>
-                  <td className="p-2">{displayHarvestValue(row.odk_submission_timestamp)}</td>
+                  <td className="p-2">{formatIstDateTime(row.odk_submission_timestamp)}</td>
                   <td className="p-2">{displayHarvestValue(row.b1)}</td>
                   <td className="p-2">{displayHarvestValue(row.b2)}</td>
                   <td className="p-2">{displayHarvestValue(row.b3)}</td>
@@ -1061,7 +1062,7 @@ export function HarvestReviewSections({
                         <td className="p-2 font-bold">{row === group.retained ? "Retained" : "Excluded"}</td>
                         <td className="p-2 font-mono">{row.odk_instance_id}</td>
                         <td className="p-2">{displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}</td>
-                        <td className="p-2">{displayHarvestValue(row.odk_submission_timestamp)}</td>
+                        <td className="p-2">{formatIstDateTime(row.odk_submission_timestamp)}</td>
                         <td className="p-2">{displayHarvestValue(row.b1)}</td>
                         <td className="p-2">{displayHarvestValue(row.b2)}</td>
                         <td className="p-2">{displayHarvestValue(row.b3)}</td>
@@ -1401,7 +1402,7 @@ export function HarvestReviewSections({
                             <td className="p-2 font-bold">{imported ? "Imported" : "Pending"}</td>
                             <td className="p-2 font-mono">{record.odk_instance_id}</td>
                             <td className="p-2">{displayHarvestValue(record.submitter_name)} / {displayHarvestValue(record.device_id)}</td>
-                            <td className="p-2">{displayHarvestValue(record.odk_submission_timestamp)}</td>
+                            <td className="p-2">{formatIstDateTime(record.odk_submission_timestamp)}</td>
                             <td className="p-2">{displayHarvestValue(record.total_bunches)}</td>
                             <td className="p-2">{displayHarvestValue(record.b1)}</td>
                             <td className="p-2">{displayHarvestValue(record.b2)}</td>
