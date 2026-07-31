@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { ArrowLeft, ArrowRight, CalendarRange, History } from "lucide-react"
+import { ArrowLeft, CalendarRange } from "lucide-react"
 import { HarvestCycleAdminClient, type HarvestCycleSummary } from "@/components/admin/harvest-cycle-admin-client"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
-import { Panel } from "@/components/farm/panel"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
 
@@ -19,16 +18,6 @@ interface ApiCycleRow {
   total_bunches: number | null
   total_nuts: number | null
   sale_price_per_nut: string | number | null
-}
-
-interface ManualImportRun {
-  id: number
-  result: string | null
-  cycle_no: string | null
-  imported: number | null
-  superseded: number | null
-  excluded: number | null
-  run_ended_at: string | null
 }
 
 const HARVEST_CYCLE_FETCH_ATTEMPTS = 2
@@ -97,28 +86,8 @@ async function fetchCycles(): Promise<HarvestCycleSummary[]> {
   throw lastError ?? new Error("Harvest Cycle data request failed.")
 }
 
-async function fetchLatestManualImport(): Promise<ManualImportRun | null> {
-  const authHeader = getBasicAuthHeader()
-  if (!authHeader) return null
-
-  try {
-    const response = await fetch(`${getApiBaseUrl()}/api/admin/harvest-sync/history`, {
-      headers: {
-        Authorization: authHeader,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
-    if (!response.ok) return null
-    const data = (await response.json()) as { runs?: ManualImportRun[] }
-    return data.runs?.[0] ?? null
-  } catch {
-    return null
-  }
-}
-
 export default async function HarvestCycleAdminPage() {
-  const [cycles, latestManualImport] = await Promise.all([fetchCycles(), fetchLatestManualImport()])
+  const cycles = await fetchCycles()
   const latestCycle = cycles[0] ?? null
   const openCycle = cycles.find((cycle) => cycle.harvestStatus === "Open") ?? null
   const lastClosedCycle = cycles.find((cycle) => cycle.harvestStatus !== "Open") ?? null
@@ -147,46 +116,6 @@ export default async function HarvestCycleAdminPage() {
         </section>
 
         <HarvestCycleAdminClient cycles={cycles} latestCycle={latestCycle} openCycle={openCycle} lastClosedCycle={lastClosedCycle} />
-
-        <Panel title="Latest Manual Harvest Import" icon={History}>
-          {latestManualImport ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="rounded-xl border p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Run</p>
-                <p className="text-xl font-black">#{latestManualImport.id}</p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Result</p>
-                <p className="font-black">{latestManualImport.result ?? "—"}</p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Cycle</p>
-                <p className="font-black">{latestManualImport.cycle_no ?? "—"}</p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Imported / Excluded</p>
-                <p className="font-black">
-                  {latestManualImport.imported ?? 0} / {latestManualImport.excluded ?? 0}
-                </p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Completed</p>
-                <p className="font-semibold">{latestManualImport.run_ended_at ?? "—"}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="rounded-xl border p-3 text-sm font-semibold text-muted-foreground">
-              No completed manual Harvest import is recorded.
-            </p>
-          )}
-          <Link
-            href="/admin/harvest-sync"
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground"
-          >
-            Open Harvest Manual Review &amp; Import
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </Panel>
       </div>
     </DashboardShell>
   )

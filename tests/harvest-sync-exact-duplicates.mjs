@@ -40,9 +40,10 @@ assert.match(adminPage, /href: "\/admin\/harvest-sync"/)
 
 // Cycle administration is operationally separate from review/import.
 assert.match(cyclePage, /Harvest Cycle Admin/)
-assert.match(cyclePage, /Latest Manual Harvest Import/)
-assert.match(cyclePage, /Open Harvest Manual Review &amp; Import/)
-assert.match(cyclePage, /href="\/admin\/harvest-sync"/)
+assert.doesNotMatch(cyclePage, /Latest Manual Harvest Import/)
+assert.doesNotMatch(cyclePage, /Open Harvest Manual Review &amp; Import/)
+assert.doesNotMatch(cyclePage, /href="\/admin\/harvest-sync"/)
+assert.doesNotMatch(cyclePage, /\/api\/admin\/harvest-sync\/history/)
 assert.doesNotMatch(cyclePage, /HarvestCycleDuplicateTreeEntries/)
 assert.doesNotMatch(cyclePage, /Scan ODK/)
 assert.doesNotMatch(cyclePage, /Auto Sync|Automatic Preview Harvest/)
@@ -70,6 +71,15 @@ assert.match(syncPage, /ODK Project:<\/span> 17/)
 assert.match(syncPage, /Form:<\/span> mfms_preview_harvest_test_v1/)
 assert.match(syncPage, /HarvestManualReviewWorkspace/)
 assert.doesNotMatch(syncPage, /Automatic schedule|Harvest ODK Sync/)
+assert.match(workspace, /MANUAL REVIEW & IMPORT AVAILABLE/)
+assert.match(
+  workspace,
+  /A committed import is available only after the selected date has zero unresolved issues, the final import set is reviewed, and the authoritative dry run passes\./,
+)
+assert.doesNotMatch(
+  workspace,
+  /MANUAL IMPORT REMAINS LOCKED|MANUAL IMPORT IS DISABLED|Manual Import Disabled|Manual import remains locked|Manual import is disabled/,
+)
 assert.equal(
   existsSync(resolve(root, "components/admin/harvest-cycle-duplicate-tree-entries.tsx")),
   false,
@@ -106,6 +116,12 @@ assert.match(workspace, /Cycle \{openCycle\} — Open/)
 assert.match(workspace, /\/batch-status\?/)
 assert.match(workspace, /targetHarvestDate !== targetDate/)
 assert.match(workspace, /selectedScanIsLatest/)
+assert.match(workspace, /const hasSelectedHarvestDate = \/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\//)
+assert.match(
+  workspace,
+  /Select a Harvest Date to calculate the date-scoped batch\./,
+)
+assert.match(workspace, /hasSelectedHarvestDate \? \(scanData\?\.items \?\? \[\]\) : \[\]/)
 
 // All six review categories share one scan/date owner, live search, natural sort, and pagination.
 const categoryHeadings = [
@@ -195,6 +211,33 @@ assert.doesNotMatch(workspace, /fetch\("\/api\/admin\/harvest-sync\/import"/)
 assert.match(workspace, /Confirm Manual Import/)
 assert.match(workspace, /status\?\.manualImportEnabled === true/)
 assert.match(workspace, /dry_run_token/)
+assert.match(workspace, /finalTotalsReviewed/)
+assert.match(
+  workspace,
+  /I reviewed the complete Final Import Set and confirm its effective record,/,
+)
+assert.match(workspace, /const finalImportBlockers: string\[\] = \[\]/)
+for (const condition of [
+  "Select a Harvest Date.",
+  "Select a completed Scan ID.",
+  "Select an Open Harvest Cycle.",
+  "The date-scoped fingerprint must be current.",
+  "Conflicts remaining:",
+  "Stale decisions:",
+  "Hidden candidates:",
+  "Tree/data or correction-required records remaining:",
+  "Cycle blockers remaining:",
+  "Generate the matching Final Import Set.",
+  "The authoritative rollback-only dry run must pass.",
+  "A valid, unexpired dry-run token is required.",
+  "The dry-run record count no longer matches.",
+  "The dry-run bunch total no longer matches.",
+  "The dry-run nut total no longer matches.",
+  "Enter the exact dynamic confirmation phrase.",
+]) {
+  assert.match(workspace, new RegExp(condition.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+}
+assert.match(workspace, /disabled=\{busy !== null \|\| finalImportBlockers\.length > 0\}/)
 assert.doesNotMatch(workspace, /candidateCount > 197|197-record safety cap/)
 
 // Structured post-import verification and durable history/download controls.

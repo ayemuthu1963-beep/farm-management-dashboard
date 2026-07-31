@@ -309,7 +309,9 @@ export function HarvestManualReviewWorkspace() {
   const [csvReceipts, setCsvReceipts] = useState<
     Partial<Record<"pre-import" | "date-audit", CsvReceipt>>
   >({})
+  const [finalTotalsReviewed, setFinalTotalsReviewed] = useState(false)
   const [confirmationPhraseInput, setConfirmationPhraseInput] = useState("")
+  const [tokenClockNow, setTokenClockNow] = useState(() => Date.now())
   const [postImportResult, setPostImportResult] = useState<CompletedImportResult | null>(null)
   const [historyVerification, setHistoryVerification] = useState<
     Record<string, Record<string, unknown>>
@@ -325,6 +327,7 @@ export function HarvestManualReviewWorkspace() {
 
   const selectedScanId = scanData?.scan.id ?? null
   const openCycle = status?.openCycle?.harvest_cycle ?? null
+  const hasSelectedHarvestDate = /^\d{4}-\d{2}-\d{2}$/.test(targetDate)
   const selectedDateOptions = useMemo(
     () =>
       [
@@ -341,11 +344,11 @@ export function HarvestManualReviewWorkspace() {
   const reviewBuckets = useMemo(
     () =>
       buildReviewBuckets(
-        scanData?.items ?? [],
-        targetDate,
-        scanData?.scan.cycle_no ?? null,
+        hasSelectedHarvestDate ? (scanData?.items ?? []) : [],
+        hasSelectedHarvestDate ? targetDate : "",
+        hasSelectedHarvestDate ? (scanData?.scan.cycle_no ?? null) : null,
       ),
-    [scanData, targetDate],
+    [hasSelectedHarvestDate, scanData, targetDate],
   )
   const alreadyImportedCount = useMemo(
     () =>
@@ -389,6 +392,27 @@ export function HarvestManualReviewWorkspace() {
       Number(dryRunResult.candidateBunches) === Number(importPlan?.candidateBunches) &&
       Number(dryRunResult.candidateNuts) === Number(importPlan?.candidateNuts),
   )
+  const dryRunRecordCountMatches = Boolean(
+    dryRunResult &&
+      importPlan &&
+      Number(dryRunResult.candidateCount) === Number(importPlan.candidateCount),
+  )
+  const dryRunBunchesMatch = Boolean(
+    dryRunResult &&
+      importPlan &&
+      Number(dryRunResult.candidateBunches) === Number(importPlan.candidateBunches),
+  )
+  const dryRunNutsMatch = Boolean(
+    dryRunResult &&
+      importPlan &&
+      Number(dryRunResult.candidateNuts) === Number(importPlan.candidateNuts),
+  )
+  const dryRunTokenExpiresAt = Date.parse(dryRunResult?.dryRunTokenExpiresAt ?? "")
+  const dryRunTokenIsCurrent = Boolean(
+    dryRunResult?.dryRunToken &&
+      Number.isFinite(dryRunTokenExpiresAt) &&
+      dryRunTokenExpiresAt > tokenClockNow,
+  )
   const manualImportEnabled = status?.manualImportEnabled === true
   const latestCompletedScanId = scans[0]?.id ?? null
   const selectedScanIsLatest = Boolean(
@@ -405,6 +429,7 @@ export function HarvestManualReviewWorkspace() {
     setImportPlan(null)
     setDryRunResult(null)
     setCsvReceipts({})
+    setFinalTotalsReviewed(false)
     setConfirmationPhraseInput("")
     setPostImportResult(null)
   }
@@ -525,7 +550,7 @@ export function HarvestManualReviewWorkspace() {
         ok: false,
         text: `${
           error instanceof Error ? error.message : "Unable to initialise the review workspace"
-        }. Manual import remains locked.`,
+        }. Review and import controls remain fail-closed.`,
       })
     } finally {
       setBusy(null)
@@ -535,6 +560,13 @@ export function HarvestManualReviewWorkspace() {
   useEffect(() => {
     void bootstrap()
   }, [])
+
+  useEffect(() => {
+    if (!dryRunResult?.dryRunTokenExpiresAt) return
+    setTokenClockNow(Date.now())
+    const timer = window.setInterval(() => setTokenClockNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [dryRunResult?.dryRunTokenExpiresAt])
 
   useEffect(() => {
     const requestId = ++batchRequestId.current
@@ -646,6 +678,7 @@ export function HarvestManualReviewWorkspace() {
     setBusy("prepare-plan")
     setMessage(null)
     setDryRunResult(null)
+    setFinalTotalsReviewed(false)
     setCsvReceipts({})
     try {
       const response = await fetch("/api/admin/harvest-sync/import-preview", {
@@ -678,6 +711,7 @@ export function HarvestManualReviewWorkspace() {
         )
       }
       setImportPlan(data.plan)
+      setFinalTotalsReviewed(false)
       setConfirmationPhraseInput("")
       setMessage({
         ok: data.plan.readyForImport,
@@ -783,11 +817,12 @@ export function HarvestManualReviewWorkspace() {
       !importPlan ||
       !importPlanMatchesSelection ||
       !importPlan.readyForImport ||
+      !finalTotalsReviewed ||
       !selectedScanIsLatest
     ) {
       setMessage({
         ok: false,
-        text: "A ready final set from the latest completed scan is required.",
+        text: "A ready final set from the latest completed scan must be reviewed before dry run.",
       })
       return
     }
@@ -823,6 +858,7 @@ export function HarvestManualReviewWorkspace() {
         bindingKey,
         completedAt: new Date().toISOString(),
       })
+      setTokenClockNow(Date.now())
       setMessage({
         ok: true,
         text: "Authoritative import code completed and rolled back. No Harvest record was committed.",
@@ -840,17 +876,10 @@ export function HarvestManualReviewWorkspace() {
 
   async function importReviewedBatch() {
     const dryRunToken = dryRunResult?.dryRunToken
-    if (
-      !manualImportEnabled ||
-      !importPlan ||
-      !importPlanMatchesSelection ||
-      !dryRunMatchesPlan ||
-      !dryRunToken ||
-      confirmationPhraseInput.trim() !== importPlan.confirmationPhrase
-    ) {
+    if (finalImportBlockers.length > 0 || !importPlan || !dryRunToken) {
       setMessage({
         ok: false,
-        text: "Manual import is locked or the matching dry run and confirmation are incomplete.",
+        text: `Manual import requirements are incomplete: ${finalImportBlockers.join(" ")}`,
       })
       return
     }
@@ -1050,6 +1079,82 @@ export function HarvestManualReviewWorkspace() {
   const correctionRequired =
     statusPlan?.correctionRequiredCount ?? reviewBuckets.errors.length
   const readiness = Boolean(statusPlan?.readyForImport)
+  const staleDecisionCount = Number(
+    statusPlan?.staleDecisionCount ?? importPlan?.staleDecisionCount ?? 0,
+  )
+  const hiddenCandidateCount = Number(
+    statusPlan?.hiddenEligibleCount ?? importPlan?.hiddenEligibleCount ?? 0,
+  )
+  const unresolvedGroupCount = Number(
+    statusPlan?.unresolvedGroupCount ?? importPlan?.unresolvedGroupCount ?? 0,
+  )
+  const finalImportBlockers: string[] = []
+  if (!manualImportEnabled) {
+    finalImportBlockers.push("The server manual-only commit gate is not available.")
+  }
+  if (!hasSelectedHarvestDate) {
+    finalImportBlockers.push("Select a Harvest Date.")
+  }
+  if (!selectedScanId) {
+    finalImportBlockers.push("Select a completed Scan ID.")
+  }
+  if (!openCycle) {
+    finalImportBlockers.push("Select an Open Harvest Cycle.")
+  }
+  if (selectedScanId && !selectedScanIsLatest) {
+    finalImportBlockers.push("Select the latest completed scan.")
+  }
+  if (!selectedBatchStatus?.dateScopedFingerprintMatches) {
+    finalImportBlockers.push("The date-scoped fingerprint must be current.")
+  }
+  if (conflictsUnresolved > 0) {
+    finalImportBlockers.push(`Conflicts remaining: ${conflictsUnresolved}.`)
+  }
+  if (staleDecisionCount > 0) {
+    finalImportBlockers.push(`Stale decisions: ${staleDecisionCount}.`)
+  }
+  if (hiddenCandidateCount > 0) {
+    finalImportBlockers.push(`Hidden candidates: ${hiddenCandidateCount}.`)
+  }
+  if (correctionRequired > 0) {
+    finalImportBlockers.push(
+      `Tree/data or correction-required records remaining: ${correctionRequired}.`,
+    )
+  }
+  if (cycleRemaining > 0) {
+    finalImportBlockers.push(`Cycle blockers remaining: ${cycleRemaining}.`)
+  }
+  if (unresolvedGroupCount > 0) {
+    finalImportBlockers.push(`Total unresolved groups remaining: ${unresolvedGroupCount}.`)
+  }
+  if (!importPlan || !importPlanMatchesSelection) {
+    finalImportBlockers.push("Generate the matching Final Import Set.")
+  } else {
+    if (!importPlan.readyForImport) {
+      finalImportBlockers.push("The Final Import Set is not ready.")
+    }
+    if (!finalTotalsReviewed) {
+      finalImportBlockers.push("Confirm that the final record, bunch and nut totals were reviewed.")
+    }
+    if (!dryRunMatchesPlan) {
+      finalImportBlockers.push("The authoritative rollback-only dry run must pass.")
+    }
+    if (dryRunResult && !dryRunRecordCountMatches) {
+      finalImportBlockers.push("The dry-run record count no longer matches.")
+    }
+    if (dryRunResult && !dryRunBunchesMatch) {
+      finalImportBlockers.push("The dry-run bunch total no longer matches.")
+    }
+    if (dryRunResult && !dryRunNutsMatch) {
+      finalImportBlockers.push("The dry-run nut total no longer matches.")
+    }
+    if (!dryRunTokenIsCurrent) {
+      finalImportBlockers.push("A valid, unexpired dry-run token is required.")
+    }
+    if (confirmationPhraseInput.trim() !== importPlan.confirmationPhrase) {
+      finalImportBlockers.push("Enter the exact dynamic confirmation phrase.")
+    }
+  }
   const postImportRunId = Number(postImportResult?.run.id)
   const completedVerification =
     postImportResult?.durableVerification ?? postImportResult?.verification
@@ -1075,17 +1180,21 @@ export function HarvestManualReviewWorkspace() {
         className={`rounded-2xl border-2 p-4 text-sm ${
           manualImportEnabled
             ? "border-emerald-400 bg-emerald-50 text-emerald-950"
-            : "border-rose-400 bg-rose-50 text-rose-950"
+            : "border-amber-400 bg-amber-50 text-amber-950"
         }`}
       >
         <div className="flex items-start gap-3">
           <LockKeyhole className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-black uppercase">
-              {manualImportEnabled ? "Manual import control enabled" : "Manual import remains locked"}
+              {manualImportEnabled
+                ? "MANUAL REVIEW & IMPORT AVAILABLE"
+                : "MANUAL REVIEW & IMPORT CONFIGURATION UNAVAILABLE"}
             </p>
             <p className="mt-1 font-semibold">
-              Scan, review, export, and rollback-only dry run remain separate from the final commit control.
+              {manualImportEnabled
+                ? "A committed import is available only after the selected date has zero unresolved issues, the final import set is reviewed, and the authoritative dry run passes."
+                : "Review and dry-run controls remain fail-closed until the server manual-only commit gate is available."}
             </p>
           </div>
         </div>
@@ -1187,7 +1296,13 @@ export function HarvestManualReviewWorkspace() {
       </Panel>
 
       <Panel title="Step 2 — Date-Scoped Summary" icon={ShieldCheck}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {!hasSelectedHarvestDate ? (
+          <p className="rounded-xl border p-4 text-sm font-semibold text-muted-foreground">
+            Select a Harvest Date to calculate the date-scoped batch.
+          </p>
+        ) : (
+          <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border p-3">
             <p className="text-xs font-bold uppercase text-muted-foreground">Scan / Timestamp</p>
             <p className="font-black">{selectedScanId ? `Scan ${selectedScanId}` : "—"}</p>
@@ -1252,6 +1367,8 @@ export function HarvestManualReviewWorkspace() {
             {batchStatusError}
           </p>
         ) : null}
+          </>
+        )}
       </Panel>
 
       <Panel title="Step 3 — Review Submissions" icon={ClipboardCheck}>
@@ -1290,6 +1407,23 @@ export function HarvestManualReviewWorkspace() {
               <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Excluded Sources</p><p className="text-2xl font-black">{numberText(excludedCount(importPlan))}</p></div>
               <div className="rounded-xl border p-3"><p className="text-xs font-bold uppercase text-muted-foreground">Unresolved Groups</p><p className="text-2xl font-black text-rose-700">{numberText(importPlan.unresolvedGroupCount)}</p></div>
             </div>
+            <label className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={finalTotalsReviewed}
+                onChange={(event) => {
+                  setFinalTotalsReviewed(event.target.checked)
+                  setDryRunResult(null)
+                  setConfirmationPhraseInput("")
+                }}
+                disabled={busy !== null || !importPlan.readyForImport}
+                className="mt-0.5 size-4"
+              />
+              <span>
+                I reviewed the complete Final Import Set and confirm its effective record,
+                bunch and nut totals.
+              </span>
+            </label>
             <div className="max-h-[32rem] overflow-auto rounded-xl border">
               <table className="min-w-[1500px] text-left text-xs">
                 <thead className="sticky top-0 bg-background">
@@ -1360,6 +1494,7 @@ export function HarvestManualReviewWorkspace() {
             !importPlan ||
             !importPlanMatchesSelection ||
             !importPlan.readyForImport ||
+            !finalTotalsReviewed ||
             !selectedScanIsLatest
           }
           className="mt-4 rounded-lg bg-sky-700 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-50"
@@ -1424,23 +1559,30 @@ export function HarvestManualReviewWorkspace() {
 
       <Panel title="Step 6 — Manual Import & History" icon={History}>
         <div
+          role="status"
+          aria-live="polite"
           className={`rounded-xl border p-4 ${
-            manualImportEnabled
-              ? "border-emerald-200 bg-emerald-50"
-              : "border-rose-300 bg-rose-50"
+            finalImportBlockers.length === 0
+              ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+              : "border-amber-300 bg-amber-50 text-amber-950"
           }`}
         >
-          <div className="flex items-start gap-3">
-            <LockKeyhole className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
-            <div>
-              <p className="font-black uppercase">
-                {manualImportEnabled ? "Manual import gate is enabled" : "Manual import is disabled"}
-              </p>
-              <p className="mt-1 text-sm font-semibold">
-                The final control also requires the exact phrase, a matching successful dry run, and its one-use backend token.
-              </p>
-            </div>
-          </div>
+          <p className="font-black uppercase">
+            {finalImportBlockers.length === 0
+              ? "All manual import requirements are satisfied"
+              : "Manual import requirements remaining"}
+          </p>
+          {finalImportBlockers.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm font-semibold">
+              {finalImportBlockers.map((blocker) => (
+                <li key={blocker}>{blocker}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-sm font-semibold">
+              Enter the exact dynamic phrase and use Confirm Manual Import once.
+            </p>
+          )}
         </div>
         <label className="mt-4 block text-xs font-bold uppercase text-muted-foreground">
           Dynamic Confirmation Phrase
@@ -1448,25 +1590,23 @@ export function HarvestManualReviewWorkspace() {
             value={confirmationPhraseInput}
             onChange={(event) => setConfirmationPhraseInput(event.target.value)}
             placeholder={importPlan?.confirmationPhrase ?? "Build the final import set first"}
-            disabled={!manualImportEnabled || !dryRunMatchesPlan || !dryRunResult?.dryRunToken}
+            disabled={
+              !manualImportEnabled ||
+              !importPlanMatchesSelection ||
+              !finalTotalsReviewed ||
+              !dryRunMatchesPlan ||
+              !dryRunTokenIsCurrent
+            }
             className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
         <button
           type="button"
           onClick={() => void importReviewedBatch()}
-          disabled={
-            busy !== null ||
-            !manualImportEnabled ||
-            !importPlan ||
-            !importPlanMatchesSelection ||
-            !dryRunMatchesPlan ||
-            !dryRunResult?.dryRunToken ||
-            confirmationPhraseInput.trim() !== importPlan.confirmationPhrase
-          }
+          disabled={busy !== null || finalImportBlockers.length > 0}
           className="mt-3 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {!manualImportEnabled ? "Manual Import Disabled" : busy === "import" ? "Importing…" : "Confirm Manual Import"}
+          {busy === "import" ? "Importing…" : "Confirm Manual Import"}
         </button>
         {postImportResult ? (
           <section
