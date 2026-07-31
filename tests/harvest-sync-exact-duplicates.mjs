@@ -1,226 +1,264 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const component = readFileSync(resolve(root, "components/admin/harvest-sync-admin-client.tsx"), "utf8")
-const proxy = readFileSync(resolve(root, "app/api/admin/harvest-sync/[[...path]]/route.ts"), "utf8")
-const harvestCyclePage = readFileSync(resolve(root, "app/admin/harvest-cycle/page.tsx"), "utf8")
-const harvestCycleDuplicates = readFileSync(
-  resolve(root, "components/admin/harvest-cycle-duplicate-tree-entries.tsx"),
-  "utf8",
-)
+const read = (path) => readFileSync(resolve(root, path), "utf8")
 
-assert.match(component, /Exact Duplicates — Automatically Resolved/)
-assert.match(component, /exact_duplicate_group_count/)
-assert.match(component, /exact_duplicate_superseded_count/)
-assert.match(component, /exact_duplicate_retained_count/)
-assert.match(component, /SUPERSEDED_EXACT_DUPLICATE/)
-assert.match(component, /item\.classification === "DUPLICATE_REVIEW_REQUIRED"/)
-assert.doesNotMatch(
-  component,
-  /\["DUPLICATE_REVIEW_REQUIRED",\s*"SUPERSEDED_EXACT_DUPLICATE"\]\.includes/,
-  "Automatically resolved rows must not appear in the discrepancy list",
-)
-assert.match(component, /Download Complete Pre-Import CSV/)
-assert.match(component, /Download Complete Audit CSV/)
-assert.match(component, /"pre-import" \| "date-audit"/)
-assert.match(component, /x-content-sha256/)
-assert.match(proxy, /X-Content-SHA256/)
-assert.match(component, /\$\{kind\}\.csv/)
-assert.match(component, /Review Date-Scoped Import Set/)
-assert.match(component, /Confirm Final Batch Import/)
-assert.match(component, /confirmation_token/)
-assert.match(component, /No Harvest record is inserted during scanning/)
-assert.match(component, /PREVIEW REVIEW MODE — HARVEST IMPORT DISABLED/)
-assert.match(component, /status\?\.importEnabled !== true/)
-assert.match(component, /Harvest Import Disabled/)
-assert.match(component, /Open Scan/)
-assert.match(component, /Harvest Date/)
-assert.match(component, /Tree Number Search/)
-assert.match(component, /Natural ascending/)
-assert.match(component, /CONFLICT_GROUP_PAGE_SIZE/)
-assert.match(component, /ODK Instance/)
-assert.match(component, /Submitter \/ Device/)
-assert.match(component, /Clean Single Submissions — Automatically Ready/)
-assert.match(component, /SINGLE_VALID_AUTO_READY/)
-assert.match(component, /Cross-Date Cycle Safety Review/)
-assert.match(component, /Cycle Safety Reviews/)
-assert.match(component, /Save Supervisor Selection/)
-assert.match(component, /Save and Open Next Unresolved/)
-assert.match(component, /decision: "SELECT_SUBMISSION"/)
-assert.match(component, /hydrateConflictReviewState\(data\.items \?\? \[\]\)/)
-assert.match(component, /const issuesRequestId = useRef\(0\)/)
-assert.match(component, /requestId !== issuesRequestId\.current/)
-assert.match(component, /Issue response did not match requested Scan/)
-assert.match(component, /const batchStatusRequestId = useRef\(0\)/)
-assert.match(component, /requestId !== batchStatusRequestId\.current/)
-assert.match(component, /Date-scoped batch response did not match the requested Scan, Harvest Date and Cycle/)
-assert.match(component, /const importPreviewRequestId = useRef\(0\)/)
-assert.match(component, /requestId !== importPreviewRequestId\.current/)
-assert.match(component, /Import preview response did not match the requested Scan, Harvest Date, Cycle and fingerprint/)
-assert.match(component, /batchStatusMatchesTarget/)
-assert.ok(
-  (component.match(/batchStatusMatchesSelection/g) ?? []).length >= 8,
-  "Date-scoped preview, CSV, decision and import controls must all use the selected batch identity",
-)
-assert.match(component, /CSV response did not include a valid X-Content-SHA256 integrity header/)
-assert.match(component, /crypto\.subtle\.digest\("SHA-256"/)
-assert.match(component, /CSV integrity verification failed/)
-assert.match(component, /CSV downloaded and verified/)
-assert.match(component, /RESOLVED_CONFLICT_DECISIONS = new Set\(\["SELECT_SUBMISSION", "KEEP_LATEST"\]\)/)
-assert.match(component, /selected_effective_instance_id \?\? row\?\.odk_instance_id/)
-assert.match(component, /isActiveValidConflictCandidate/)
-assert.match(component, /row\?\.classification === "DUPLICATE_REVIEW_REQUIRED"/)
-assert.match(component, /const \[scanLoadVersion/)
-assert.match(component, /setScanLoadVersion\(\(version\) => version \+ 1\)/)
-assert.match(component, /setBatchStatus\(null\)/)
-assert.match(component, /A valid Harvest Date and matching date-scoped batch verification are required/)
-assert.match(component, /Harvest import remains locked in this page/)
-assert.match(component, /setStatus\(null\)/)
-assert.match(component, /manualConflictExclusionCount/)
-assert.match(component, /exactDuplicateSuperseded/)
-assert.match(component, /totalExcludedCount/)
-assert.match(component, /const allDateConflictGroups = useMemo/)
-assert.match(component, /allDateConflictGroups\.findIndex/)
-assert.match(component, /setTreeFilter\(""\)/)
-assert.match(component, /Date-Scoped Batch Readiness/)
-assert.match(component, /storedDateScopedBatchFingerprint/)
-assert.match(component, /dateScopedFingerprintMatches/)
-assert.match(component, /globalSourceChanged/)
-assert.match(component, /Global ODK Source/)
-assert.match(component, /Clean Singles Auto-Ready/)
-assert.match(component, /Hidden Eligible Candidates/)
-assert.match(component, /Download Complete Pre-Import CSV/)
-assert.match(component, /Download Complete Audit CSV/)
-assert.match(component, /\/batch-status\?/)
-assert.match(component, /"pre-import" \| "date-audit"/)
-assert.match(component, /\$\{kind\}\.csv/)
-assert.match(component, /harvest_date: dateFilter/)
-assert.match(component, /harvest_cycle: String\(cycle\)/)
-assert.match(component, /date_scoped_batch_fingerprint/)
-assert.match(component, /confirmation_phrase/)
-assert.match(component, /expected_record_count/)
-assert.match(component, /expected_total_bunches/)
-assert.match(component, /expected_total_nuts/)
-assert.match(component, /status\?\.importEnabled !== true/)
-assert.match(component, /!importPlan\.readyForImport/)
-assert.match(proxy, /response\.arrayBuffer\(\)/, "CSV proxying must preserve non-JSON responses")
-assert.match(harvestCyclePage, /HARVEST_CYCLE_FETCH_ATTEMPTS = 2/)
-assert.match(harvestCyclePage, /HARVEST_CYCLE_RETRY_DELAY_MS = 250/)
-assert.match(harvestCyclePage, /response\.status < 500/)
-assert.match(harvestCyclePage, /HarvestCycleDuplicateTreeEntries/)
-assert.doesNotMatch(harvestCycleDuplicates, /APPROVED_DUPLICATE_SCAN_ID/)
-assert.doesNotMatch(harvestCycleDuplicates, /DISPLAY_ROW_LIMIT/)
-assert.match(harvestCycleDuplicates, /\/api\/admin\/harvest-sync\/scans"/)
-assert.match(harvestCycleDuplicates, /completedScans\[0\]/)
-assert.match(harvestCycleDuplicates, /aria-label="Harvest Sync Scan"/)
-assert.match(harvestCycleDuplicates, /aria-label="Harvest Date"/)
-assert.match(harvestCycleDuplicates, /CONFLICTING DUPLICATE TREE ENTRIES — REVIEW REQUIRED/)
-assert.match(harvestCycleDuplicates, /TREE NUMBER \/ DATA ERRORS — CORRECTION REQUIRED/)
-assert.match(harvestCycleDuplicates, /EXACT DUPLICATES — AUTOMATICALLY RESOLVED/)
-const harvestCycleConflictSection = harvestCycleDuplicates.slice(
-  harvestCycleDuplicates.indexOf("CONFLICTING DUPLICATE TREE ENTRIES — REVIEW REQUIRED"),
-  harvestCycleDuplicates.indexOf("TREE NUMBER / DATA ERRORS — CORRECTION REQUIRED"),
-)
-assert.match(harvestCycleConflictSection, /type="radio"/)
-assert.match(harvestCycleConflictSection, /Record to Retain/)
-assert.match(harvestCycleDuplicates, /Supervisor confirmed correct labour entry/)
-assert.match(harvestCycleDuplicates, /Duplicate recording of the same harvest/)
-assert.match(harvestCycleDuplicates, /Quantity confirmed after field verification/)
-assert.match(harvestCycleConflictSection, /CONFLICT_SUPERVISOR_REASONS/)
-assert.match(harvestCycleConflictSection, /Other reason details/)
-assert.match(harvestCycleConflictSection, /Save Supervisor Selection/)
-assert.match(harvestCycleConflictSection, /Save and Open Next Unresolved/)
-assert.match(harvestCycleDuplicates, /issue_type: "CONFLICTING_DUPLICATE"/)
-assert.match(harvestCycleDuplicates, /decision: "SELECT_SUBMISSION"/)
-assert.match(harvestCycleDuplicates, /selected_effective_instance_id: selectedRow\?\.odk_instance_id/)
-assert.match(harvestCycleConflictSection, /groupStatus\?\.groupMatches === true/)
-assert.match(harvestCycleConflictSection, /Supervisor decision saved/)
-assert.match(harvestCycleConflictSection, /supervisor_admin_user/)
-assert.match(harvestCycleConflictSection, /supervisor_decision_updated_at/)
-assert.match(harvestCycleDuplicates, /conflictGroupResolved/)
-assert.match(harvestCycleDuplicates, /resolvedConflictCount/)
-assert.match(harvestCycleDuplicates, /remainingConflictCount/)
-assert.match(harvestCycleDuplicates, /setOpenConflictGroupKey\(nextUnresolved\[0\]\)/)
-assert.match(harvestCycleDuplicates, /businessSignature/)
-assert.match(harvestCycleDuplicates, /item\.total_bunches/)
-assert.match(harvestCycleDuplicates, /item\.total_nuts/)
-assert.match(harvestCycleDuplicates, /DUPLICATE_REVIEW_REQUIRED/)
-assert.match(harvestCycleDuplicates, /SUPERSEDED_EXACT_DUPLICATE/)
-assert.match(harvestCycleDuplicates, /EXPLICIT_ERROR_CLASSIFICATIONS/)
-assert.match(harvestCycleDuplicates, /UNMATCHED_TREE/)
-assert.match(harvestCycleDuplicates, /INVALID_DATA/)
-assert.match(harvestCycleDuplicates, /ODK_HAS_ISSUES/)
-assert.match(harvestCycleDuplicates, /LATE_SUBMISSION/)
-assert.match(harvestCycleDuplicates, /IMPORT_ERROR/)
-assert.match(harvestCycleDuplicates, /supervisor_decision/)
-assert.match(harvestCycleDuplicates, /tree_exists_in_master/)
-assert.match(harvestCycleDuplicates, /Pagination/)
-assert.match(harvestCycleDuplicates, /Supervisor Action/)
-assert.match(harvestCycleDuplicates, /Supervisor Reason/)
-assert.match(harvestCycleDuplicates, /Save Supervisor Decision/)
-assert.match(harvestCycleDuplicates, /Amend Supervisor Decision/)
-assert.match(harvestCycleDuplicates, /KEEP_EXISTING_CYCLE_RECORD/)
-assert.match(harvestCycleDuplicates, /USE_PENDING_SUBMISSION/)
-assert.match(harvestCycleDuplicates, /DEFER_DECISION/)
-assert.match(harvestCycleDuplicates, /CORRECTION ACTION REQUIRED/)
-assert.match(harvestCycleDuplicates, /Group fingerprint unchanged/)
-assert.match(harvestCycleDuplicates, /fingerprint-status/)
-assert.match(
-  harvestCycleDuplicates,
-  /New ODK source changes exist after Scan/,
-)
-assert.match(
-  harvestCycleDuplicates,
-  /This Tree Number’s source data changed after the decision was saved/,
-)
-assert.match(harvestCycleDuplicates, /New scan required/)
-assert.match(harvestCycleDuplicates, /Existing Harvest Record ID/)
-assert.doesNotMatch(harvestCycleDuplicates, /Allow both/)
-assert.match(
-  harvestCycleConflictSection,
-  /VALID RECORD WITH INVALID ZERO SUBMISSION — SUPERVISOR REVIEW REQUIRED/,
-)
-assert.match(harvestCycleDuplicates, /is_invalid_zero_submission/)
-assert.match(harvestCycleDuplicates, /effective_classification/)
-assert.match(harvestCycleDuplicates, /mixedValidInvalidZeroGroup/)
-assert.match(harvestCycleDuplicates, /Number\.isInteger/)
-assert.doesNotMatch(harvestCycleDuplicates, /Number\(value\) === 0/)
-assert.match(harvestCycleConflictSection, /INVALID DATA/)
-assert.match(harvestCycleConflictSection, /Not selectable/)
-assert.match(
-  harvestCycleConflictSection,
-  /Retain valid submission and exclude invalid zero submission/,
-)
-assert.match(harvestCycleConflictSection, /Defer for field verification/)
-assert.match(harvestCycleDuplicates, /RETAIN_VALID_EXCLUDE_INVALID_ZERO/)
-assert.match(harvestCycleDuplicates, /VALID_RECORD_WITH_INVALID_ZERO_SUBMISSION/)
-assert.match(harvestCycleDuplicates, /Accidental empty submission/)
-assert.match(harvestCycleDuplicates, /Valid labour entry confirmed/)
-assert.match(
-  harvestCycleDuplicates,
-  /Zero-value duplicate excluded after supervisor verification/,
-)
-assert.match(harvestCycleDuplicates, /Field verification required/)
-assert.match(harvestCycleConflictSection, /Save Supervisor Decision/)
-assert.match(harvestCycleConflictSection, /EXCLUDED_INVALID_ZERO_SUBMISSION/)
-for (const heading of [
-  "Tree Number",
-  "Harvest Date",
-  "ODK Time",
-  "ODK Instance ID",
-  "Submitter / Device",
-  "B1",
-  "B2",
-  "B3",
-  "Bunch Count",
-  "Total Nuts",
-  "Status",
-  "Supervisor Decision",
+const adminPage = read("app/admin/page.tsx")
+const cyclePage = read("app/admin/harvest-cycle/page.tsx")
+const cycleClient = read("components/admin/harvest-cycle-admin-client.tsx")
+const syncPage = read("app/admin/harvest-sync/page.tsx")
+const workspace = read("components/admin/harvest-manual-review-workspace.tsx")
+const review = read("components/admin/harvest-review-sections.tsx")
+const model = read("lib/harvest-review-model.ts")
+const proxy = read("app/api/admin/harvest-sync/[[...path]]/route.ts")
+const envExample = read(".env.example")
+
+// Preserve unrelated Admin tools and update only the two separate Harvest destinations.
+for (const title of [
+  "Motor Runtime Entry",
+  "Well Water Entry",
+  "Beetle Trap Entry",
+  "Fertiliser & Pesticide Inventory Entry",
 ]) {
-  assert.match(harvestCycleDuplicates, new RegExp(`>${heading}<`))
+  assert.match(adminPage, new RegExp(title.replace(/[&]/g, "\\&")))
+}
+assert.match(adminPage, /title: "Harvest Cycle Admin"/)
+assert.match(
+  adminPage,
+  /Open, close and maintain Harvest Cycles, dates, sale details and Cycle totals\./,
+)
+assert.match(adminPage, /title: "Harvest Manual Review & Import"/)
+assert.match(
+  adminPage,
+  /Scan ODK, resolve duplicate or invalid submissions, run a dry run and manually import the reviewed Harvest batch\./,
+)
+assert.match(adminPage, /href: "\/admin\/harvest-cycle"/)
+assert.match(adminPage, /href: "\/admin\/harvest-sync"/)
+
+// Cycle administration is operationally separate from review/import.
+assert.match(cyclePage, /Harvest Cycle Admin/)
+assert.match(cyclePage, /Latest Manual Harvest Import/)
+assert.match(cyclePage, /Open Harvest Manual Review &amp; Import/)
+assert.match(cyclePage, /href="\/admin\/harvest-sync"/)
+assert.doesNotMatch(cyclePage, /HarvestCycleDuplicateTreeEntries/)
+assert.doesNotMatch(cyclePage, /Scan ODK/)
+assert.doesNotMatch(cyclePage, /Auto Sync|Automatic Preview Harvest/)
+assert.match(cyclePage, /HARVEST_CYCLE_FETCH_ATTEMPTS = 2/)
+assert.match(cyclePage, /HARVEST_CYCLE_RETRY_DELAY_MS = 250/)
+assert.match(cycleClient, /Harvest Cycle History/)
+for (const retainedControl of [
+  "Open New Harvest Cycle",
+  "Close Current Harvest Cycle",
+  "Update Sale Details",
+  "Current Harvest Cycle Status",
+]) {
+  assert.match(cycleClient, new RegExp(retainedControl))
 }
 
-console.log("Harvest Sync exact-duplicate UI contract checks passed.")
+// Exact permanent page copy and one authoritative workspace.
+assert.match(syncPage, /Harvest Manual Review &amp; Import/)
+assert.match(
+  syncPage,
+  /Review ODK Harvest submissions, resolve discrepancies, run a safety dry run and manually import the approved date-specific batch\./,
+)
+assert.match(syncPage, /<span className="font-extrabold">Mode:<\/span> Manual Review &amp; Import/)
+assert.match(syncPage, /Database:<\/span> mfms_server_uat/)
+assert.match(syncPage, /ODK Project:<\/span> 17/)
+assert.match(syncPage, /Form:<\/span> mfms_preview_harvest_test_v1/)
+assert.match(syncPage, /HarvestManualReviewWorkspace/)
+assert.doesNotMatch(syncPage, /Automatic schedule|Harvest ODK Sync/)
+assert.equal(
+  existsSync(resolve(root, "components/admin/harvest-cycle-duplicate-tree-entries.tsx")),
+  false,
+)
+assert.equal(
+  existsSync(resolve(root, "components/admin/harvest-sync-admin-client.tsx")),
+  false,
+)
+
+const stepHeadings = [
+  "Step 1 — Select Batch",
+  "Step 2 — Date-Scoped Summary",
+  "Step 3 — Review Submissions",
+  "Step 4 — Final Import Set & Verified Exports",
+  "Step 5 — Authoritative Rollback-Only Dry Run",
+  "Step 6 — Manual Import & History",
+]
+let lastStepIndex = -1
+for (const heading of stepHeadings) {
+  const index = workspace.indexOf(heading)
+  assert.ok(index > lastStepIndex, `${heading} must exist in the required order`)
+  lastStepIndex = index
+}
+
+// Cycle -> date -> scan, persisted scan navigation, and strict date scope.
+assert.match(workspace, /Load Previous Scan/)
+assert.match(workspace, /type="date"/)
+assert.match(workspace, /list="persisted-harvest-dates"/)
+assert.match(workspace, /required/)
+assert.match(workspace, /Select the open Harvest Cycle and a required Harvest date before Scan ODK/)
+assert.match(workspace, /!\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(targetDate\)/)
+assert.match(workspace, /Harvest Cycle/)
+assert.match(workspace, /Cycle \{openCycle\} — Open/)
+assert.match(workspace, /\/batch-status\?/)
+assert.match(workspace, /targetHarvestDate !== targetDate/)
+assert.match(workspace, /selectedScanIsLatest/)
+
+// All six review categories share one scan/date owner, live search, natural sort, and pagination.
+const categoryHeadings = [
+  "Clean single submissions — standing-rule ready",
+  "Exact duplicates — standing-rule resolved",
+  "Conflicting duplicate submissions",
+  "Valid records with invalid-zero duplicates",
+  "Tree number and data errors — correction required",
+  "Cycle safety decisions",
+]
+let lastCategoryIndex = -1
+for (const heading of categoryHeadings) {
+  const index = review.indexOf(heading)
+  assert.ok(index > lastCategoryIndex, `${heading} must exist in the required order`)
+  lastCategoryIndex = index
+}
+assert.match(review, /Tree Number Search/)
+assert.match(review, /Natural ascending/)
+assert.match(review, /REVIEW_GROUP_PAGE_SIZE/)
+assert.match(review, /REVIEW_ROW_PAGE_SIZE/)
+assert.match(review, /Category counts update live/)
+assert.match(review, /overflow-x-auto/)
+assert.match(adminPage, /grid gap-4 md:grid-cols-2/)
+assert.match(workspace, /grid gap-4 md:grid-cols-2 lg:grid-cols-4/)
+assert.ok(
+  (workspace.match(/overflow-(?:x-)?auto/g) ?? []).length >= 2,
+  "Wide final/history tables must remain horizontally scrollable on mobile",
+)
+assert.ok(
+  (review.match(/sm:grid-cols-|md:grid-cols-|lg:grid-cols-/g) ?? []).length >= 10,
+  "Review controls and counters must use responsive breakpoints rather than fixed desktop columns",
+)
+
+// Preserve strict business validation and deterministic exact-duplicate handling.
+assert.match(model, /Number\.isInteger/)
+assert.match(model, /item\.total_bunches === expectedBunches/)
+assert.match(model, /item\.total_nuts === expectedNuts/)
+assert.match(model, /earliestSubmission/)
+assert.match(model, /left\.odk_instance_id\.localeCompare\(right\.odk_instance_id\)/)
+assert.match(model, /READY_EXACT_DUPLICATE/)
+assert.match(model, /SUPERSEDED_EXACT_DUPLICATE/)
+assert.match(model, /SINGLE_VALID_AUTO_READY/)
+assert.match(model, /naturalTreeCompare/)
+
+// Supervisor controls, group fingerprints, invalid-zero policy, cycle safety and safe corrections.
+assert.match(review, /Save and Open Next Unresolved/)
+assert.match(review, /issue_type: "CONFLICTING_DUPLICATE"/)
+assert.match(review, /decision: "SELECT_SUBMISSION"/)
+assert.match(review, /groupStatus\?\.groupMatches === true/)
+assert.match(review, /RETAIN_VALID_EXCLUDE_INVALID_ZERO/)
+assert.match(review, /VALID_RECORD_WITH_INVALID_ZERO_SUBMISSION/)
+assert.match(review, /Not selectable/)
+assert.match(review, /Retain valid submission and exclude invalid zero submission/)
+assert.match(review, /KEEP_EXISTING_CYCLE_RECORD/)
+assert.match(review, /USE_PENDING_SUBMISSION/)
+assert.match(review, /CORRECTION ACTION REQUIRED/)
+assert.match(review, /MAP_TO_EXISTING_TREE/)
+assert.match(review, /Validate Exact Tree Number/)
+assert.match(review, /\/api\/coconut-harvest\/trees\?/)
+assert.match(review, /data\.treeNumbers \?\? \[\]\)\.some\(\(treeNo\) => treeNo === target\)/)
+assert.match(review, /resolved_tree_no: mapIsValid \? target : null/)
+assert.match(review, /Original submitted value/)
+assert.match(review, /Other error classes can only be deferred and remain blocked/)
+assert.match(review, /DEFER_DECISION/)
+assert.match(review, /fingerprint-status/)
+
+// Final plan, verified exports, authoritative dry run, opaque token, and fail-closed manual commit.
+assert.match(workspace, /Review Final Import Set/)
+assert.match(workspace, /Download Pre-Import CSV/)
+assert.match(workspace, /Download Full Audit CSV/)
+assert.match(workspace, /x-content-sha256/)
+assert.match(workspace, /crypto\.subtle\.digest\("SHA-256"/)
+assert.match(workspace, /CSV integrity verification failed/)
+assert.match(workspace, /\/import-dry-run/)
+assert.match(workspace, /Run Import Dry Run/)
+assert.match(workspace, /transactionRolledBack/)
+assert.match(workspace, /hostLockVerified/)
+assert.match(workspace, /postgresAdvisoryLockVerified/)
+assert.match(workspace, /selectedOtherDateCount/)
+assert.match(workspace, /auditRowsGenerated/)
+assert.match(workspace, /projectedCycleTotals/)
+assert.match(workspace, /Internal Plan Integrity Digest/)
+assert.match(workspace, /The opaque one-use dry-run token is never displayed/)
+assert.doesNotMatch(workspace, />\{importPlan\.confirmationToken\}</)
+assert.match(workspace, /\/manual-import/)
+assert.doesNotMatch(workspace, /fetch\("\/api\/admin\/harvest-sync\/import"/)
+assert.match(workspace, /Confirm Manual Import/)
+assert.match(workspace, /status\?\.manualImportEnabled === true/)
+assert.match(workspace, /dry_run_token/)
+assert.doesNotMatch(workspace, /candidateCount > 197|197-record safety cap/)
+
+// Structured post-import verification and durable history/download controls.
+assert.match(workspace, /Post-Import Verification/)
+assert.match(workspace, /history\/\$\{runId\}\/post-import-verification/)
+assert.match(workspace, /history\/dry-runs\/\$\{target\.sourceId\}/)
+assert.match(workspace, /history\/\$\{target\.sourceId\}\/\$\{kind\}\.csv/)
+assert.match(workspace, /data\.entries \?\? \[\]/)
+assert.match(workspace, /entry\.runType === "DRY_RUN"/)
+assert.match(workspace, /Pre-Import CSV/)
+assert.match(workspace, /Records CSV/)
+assert.match(workspace, /Audit CSV/)
+for (const heading of [
+  "Harvest Date",
+  "Cycle",
+  "Status",
+  "Count",
+  "Bunches",
+  "Nuts",
+  "User",
+  "Completed",
+  "Date Fingerprint",
+  "Control Path",
+]) {
+  assert.match(workspace, new RegExp(`>${heading}<`))
+}
+assert.match(workspace, /DRY RUN \/ CONSUMED BY COMMIT/)
+assert.match(workspace, /COMMITTED IMPORT/)
+assert.match(workspace, /recordsReceipt\.sha256/)
+assert.match(workspace, /auditReceipt\.sha256/)
+assert.match(workspace, /durableVerification/)
+assert.match(workspace, /Download Post-Import Records CSV/)
+assert.match(workspace, /Download Post-Import Audit CSV/)
+assert.match(workspace, /cycleTotalsProjected/)
+
+// Audit-only sections start collapsed; important asynchronous feedback is announced.
+assert.match(review, /id === "review-clean-singles"/)
+assert.match(review, /id === "review-exact-duplicates"/)
+assert.match(review, /<details>/)
+assert.match(workspace, /aria-live=\{message\.ok \? "polite" : "assertive"\}/)
+assert.match(review, /aria-live="polite"/)
+assert.match(workspace, /htmlFor="harvest-persisted-scan"/)
+assert.match(review, /htmlFor="harvest-review-tree-search"/)
+assert.match(review, /htmlFor="harvest-review-tree-sort"/)
+assert.match(workspace, /invalid-zero source submissions/)
+assert.match(workspace, /already-imported source submissions/)
+
+// Server-only runtime lock, backend lock, and retired legacy route must all agree.
+assert.match(envExample, /HARVEST_MANUAL_IMPORT_ENABLED=false/)
+assert.doesNotMatch(envExample, /NEXT_PUBLIC_HARVEST_MANUAL_IMPORT_ENABLED/)
+assert.match(proxy, /process\.env\.HARVEST_MANUAL_IMPORT_ENABLED/)
+assert.match(proxy, /rawSuffix === "manual-import"/)
+assert.match(proxy, /isManualImportRuntimeEnabled\(\)/)
+assert.match(proxy, /manualImportEnabled:/)
+assert.match(proxy, /rawSuffix === "import"/)
+assert.match(proxy, /status: 410/)
+assert.match(proxy, /status: 423/)
+assert.match(proxy, /response\.arrayBuffer\(\)/)
+assert.match(proxy, /X-Content-SHA256/)
+assert.match(proxy, /request\.headers\.get\("authorization"\)/)
+assert.match(proxy, /createHmac\("sha256", signingSecret\)/)
+assert.match(proxy, /X-MFMS-Authenticated-User/)
+assert.match(proxy, /X-MFMS-Authenticated-User-Timestamp/)
+assert.match(proxy, /X-MFMS-Authenticated-User-Signature/)
+assert.match(proxy, /`\$\{target\.pathname\}\$\{target\.search\}`/)
+
+console.log("Harvest manual-review UI contract checks passed.")

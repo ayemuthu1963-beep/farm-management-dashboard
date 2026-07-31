@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { AlertTriangle, CalendarRange, CheckCircle2, CircleDollarSign, LockKeyhole, RefreshCw, ShieldCheck, Sprout } from "lucide-react"
+import { AlertTriangle, CalendarRange, CheckCircle2, CircleDollarSign, History, LockKeyhole, RefreshCw, ShieldCheck, Sprout } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
 
 export interface HarvestCycleSummary {
@@ -430,6 +430,49 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
           </button>
           <ResultBox result={saleResult} />
         </form>
+      </Panel>
+
+      <Panel title="Harvest Cycle History" icon={History}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">
+          Read-only dates, status, harvest totals and sale details for every recorded Harvest Cycle.
+        </p>
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="min-w-[980px] text-left text-xs">
+            <thead className="bg-muted/40">
+              <tr className="border-b">
+                <th className="p-3">Cycle</th>
+                <th className="p-3">Start Date</th>
+                <th className="p-3">End Date</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Trees</th>
+                <th className="p-3 text-right">Bunches</th>
+                <th className="p-3 text-right">Nuts</th>
+                <th className="p-3 text-right">Sale Value</th>
+                <th className="p-3 text-right">Sale Price / Nut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cycles.map((cycle) => (
+                <tr key={cycle.harvestCycle} className="border-b last:border-b-0">
+                  <td className="p-3 font-black">{cycle.harvestCycle}</td>
+                  <td className="p-3">{formatDate(cycle.harvestStartDate)}</td>
+                  <td className="p-3">{formatDate(cycle.harvestEndDate)}</td>
+                  <td className="p-3">
+                    <span className="rounded-full border px-2 py-1 font-bold">{cycle.harvestStatus}</span>
+                  </td>
+                  <td className="p-3 text-right">{formatNumber(cycle.totalTreesHarvested)}</td>
+                  <td className="p-3 text-right">{formatNumber(cycle.totalBunches)}</td>
+                  <td className="p-3 text-right">{formatNumber(cycle.totalNuts)}</td>
+                  <td className="p-3 text-right">{formatCurrency(cycle.totalSaleValue)}</td>
+                  <td className="p-3 text-right">{formatNumber(cycle.salePricePerNut)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {cycles.length === 0 ? (
+          <p className="mt-3 rounded-xl border p-3 text-sm text-muted-foreground">No Harvest Cycle history is available.</p>
+        ) : null}
       </Panel>
     </div>
   )

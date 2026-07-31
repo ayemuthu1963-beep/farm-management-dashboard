@@ -27,13 +27,13 @@ const adminTiles = [
   },
   {
     title: "Harvest Cycle Admin",
-    description: "Open and maintain Preview harvest cycles with database-write validation.",
+    description: "Open, close and maintain Harvest Cycles, dates, sale details and Cycle totals.",
     href: "/admin/harvest-cycle",
     icon: CalendarRange,
   },
   {
-    title: "Harvest ODK Sync",
-    description: "Scan Project 17, review duplicate/unmatched entries and import approved Harvest records.",
+    title: "Harvest Manual Review & Import",
+    description: "Scan ODK, resolve duplicate or invalid submissions, run a dry run and manually import the reviewed Harvest batch.",
     href: "/admin/harvest-sync",
     icon: DatabaseZap,
   },

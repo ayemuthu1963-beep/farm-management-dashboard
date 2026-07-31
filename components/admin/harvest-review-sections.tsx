@@ -1,0 +1,1517 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { AlertTriangle, CheckCircle2, Search, ShieldCheck } from "lucide-react"
+import {
+  REVIEW_GROUP_PAGE_SIZE,
+  REVIEW_ROW_PAGE_SIZE,
+  RESOLVED_CONFLICT_DECISIONS,
+  SAVED_CONFLICT_DECISIONS,
+  buildReviewBuckets,
+  conflictGroupResolved,
+  cycleCollisionResolved,
+  displayHarvestDate,
+  displayHarvestValue,
+  groupFingerprintStatusKey,
+  invalidZeroGroupResolved,
+  isActiveValidConflictCandidate,
+  isAllZeroInvalidSubmission,
+  mixedValidInvalidZeroGroup,
+  selectedConflictInstance,
+  type HarvestScanItem,
+  type HarvestScanResponse,
+  type ReviewGroup,
+} from "@/lib/harvest-review-model"
+
+type CycleDecisionAction =
+  | "KEEP_EXISTING_CYCLE_RECORD"
+  | "USE_PENDING_SUBMISSION"
+  | "DEFER_DECISION"
+  | ""
+
+type ConflictDecisionAction =
+  | "SELECT_SUBMISSION"
+  | "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
+  | "DEFER_DECISION"
+  | ""
+
+type ErrorDecisionAction = "MAP_TO_EXISTING_TREE" | "DEFER_DECISION" | ""
+
+interface DecisionDraft {
+  action: CycleDecisionAction
+  selectedInstanceId: string
+  reason: string
+  otherReason: string
+}
+
+interface ErrorDecisionDraft {
+  action: ErrorDecisionAction
+  resolvedTreeNo: string
+  validatedTreeNo: string
+  reason: string
+}
+
+interface ConflictDecisionDraft {
+  selectedInstanceId: string
+  action: ConflictDecisionAction
+  reason: string
+  otherReason: string
+}
+
+interface FingerprintStatus {
+  scanId: number
+  matches: boolean
+  checkedAt: string
+  treeNo?: string
+  groupMatches?: boolean
+  groupFingerprintVersion?: string
+  storedGroupFingerprint?: string
+  baselineGroupFingerprint?: string
+  currentGroupFingerprint?: string
+  immutableScanMatchesSavedDecision?: boolean
+  storedScanFingerprint?: string
+  currentLiveFingerprint?: string
+  fullSourceMatches?: boolean
+  liveSourceChanged?: boolean
+  finalImportRequiresNewScan?: boolean
+}
+
+interface Props {
+  scanData: HarvestScanResponse | null
+  targetDate: string
+  disabled?: boolean
+  onDecisionSaved: () => Promise<void>
+}
+
+const SUPERVISOR_REASONS = [
+  "Existing Cycle record is correct",
+  "Pending labour submission is correct",
+  "Duplicate recording of the same harvest",
+  "Field verification required",
+  "Other",
+] as const
+
+const CONFLICT_SUPERVISOR_REASONS = [
+  "Supervisor confirmed correct labour entry",
+  "Duplicate recording of the same harvest",
+  "Quantity confirmed after field verification",
+  "Other",
+] as const
+
+const INVALID_ZERO_SUPERVISOR_REASONS = [
+  "Accidental empty submission",
+  "Valid labour entry confirmed",
+  "Zero-value duplicate excluded after supervisor verification",
+  "Field verification required",
+  "Other",
+] as const
+
+const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
+  "KEEP_EXISTING_CYCLE_RECORD",
+  "USE_PENDING_SUBMISSION",
+  "DEFER_DECISION",
+])
+
+const EMPTY_DECISION_DRAFT: DecisionDraft = {
+  action: "",
+  selectedInstanceId: "",
+  reason: "",
+  otherReason: "",
+}
+
+function statusBadge(classification: string): string {
+  if (classification === "UNMATCHED_TREE") return "border-orange-200 bg-orange-50 text-orange-800"
+  if (classification === "DUPLICATE_REVIEW_REQUIRED") return "border-rose-200 bg-rose-50 text-rose-800"
+  if (classification === "INVALID_DATA") return "border-rose-200 bg-rose-50 text-rose-800"
+  return "border-amber-200 bg-amber-50 text-amber-800"
+}
+
+function decisionState(action: string | null | undefined): string {
+  if (action === "KEEP_EXISTING_CYCLE_RECORD") return "Resolved"
+  if (action === "USE_PENDING_SUBMISSION") return "Correction required"
+  return "Unresolved"
+}
+
+function storedConflictDecisionDraft(rows: HarvestScanItem[]): ConflictDecisionDraft {
+  const mixedGroup = mixedValidInvalidZeroGroup(rows)
+  const decisionRow =
+    rows.find((row) => SAVED_CONFLICT_DECISIONS.has(String(row.supervisor_decision ?? ""))) ??
+    rows.find((row) => selectedConflictInstance(row))
+  const savedReason = decisionRow?.supervisor_reason ?? ""
+  const allowedReasons = mixedGroup ? INVALID_ZERO_SUPERVISOR_REASONS : CONFLICT_SUPERVISOR_REASONS
+  const savedReasonIsChoice = allowedReasons.some((reason) => reason === savedReason)
+  const savedAction = String(decisionRow?.supervisor_decision ?? "") as ConflictDecisionAction
+  return {
+    selectedInstanceId:
+      selectedConflictInstance(decisionRow) ??
+      (mixedGroup && savedAction !== "DEFER_DECISION" ? mixedGroup.valid.odk_instance_id : ""),
+    action:
+      savedAction === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" || savedAction === "DEFER_DECISION"
+        ? savedAction
+        : mixedGroup
+          ? ""
+          : "SELECT_SUBMISSION",
+    reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
+    otherReason: savedReasonIsChoice ? "" : savedReason,
+  }
+}
+
+function Pagination({
+  page,
+  pageCount,
+  total,
+  unit,
+  onPageChange,
+}: {
+  page: number
+  pageCount: number
+  total: number
+  unit: string
+  onPageChange: (page: number) => void
+}) {
+  if (pageCount <= 1) return null
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3 text-xs font-bold">
+      <button
+        type="button"
+        className="rounded-lg border px-3 py-2 disabled:opacity-40"
+        disabled={page <= 1}
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+      >
+        Previous
+      </button>
+      <span className="text-center">
+        Page {page} of {pageCount} · {total.toLocaleString("en-IN")} {unit}
+      </span>
+      <button
+        type="button"
+        className="rounded-lg border px-3 py-2 disabled:opacity-40"
+        disabled={page >= pageCount}
+        onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+      >
+        Next
+      </button>
+    </div>
+  )
+}
+
+function ReviewSection({
+  id,
+  title,
+  icon: Icon,
+  count,
+  collapsedByDefault = false,
+  children,
+}: {
+  id: string
+  title: string
+  icon: typeof ShieldCheck
+  count: number
+  collapsedByDefault?: boolean
+  children: React.ReactNode
+}) {
+  const startsCollapsed =
+    collapsedByDefault ||
+    id === "review-clean-singles" ||
+    id === "review-exact-duplicates"
+  const heading = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <Icon className="size-5 text-primary" aria-hidden="true" />
+        <h3 className="text-sm font-black uppercase tracking-wide text-foreground sm:text-base">
+          {title}
+        </h3>
+      </div>
+      <span className="rounded-full border bg-background px-3 py-1 text-xs font-black">
+        {count.toLocaleString("en-IN")}
+      </span>
+    </div>
+  )
+
+  return (
+    <section id={id} className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
+      {startsCollapsed ? (
+        <details>
+          <summary className="cursor-pointer list-none">{heading}</summary>
+          <div className="mt-4">{children}</div>
+        </details>
+      ) : (
+        <>
+          <div className="mb-4">{heading}</div>
+          {children}
+        </>
+      )}
+    </section>
+  )
+}
+
+export function HarvestReviewSections({
+  scanData,
+  targetDate,
+  disabled = false,
+  onDecisionSaved,
+}: Props) {
+  const [treeSearch, setTreeSearch] = useState("")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const [singlePage, setSinglePage] = useState(1)
+  const [exactPage, setExactPage] = useState(1)
+  const [conflictPage, setConflictPage] = useState(1)
+  const [invalidZeroPage, setInvalidZeroPage] = useState(1)
+  const [errorPage, setErrorPage] = useState(1)
+  const [cyclePage, setCyclePage] = useState(1)
+  const [openConflictGroupKey, setOpenConflictGroupKey] = useState<string | null>(null)
+  const [conflictDecisionDrafts, setConflictDecisionDrafts] = useState<
+    Record<string, ConflictDecisionDraft>
+  >({})
+  const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DecisionDraft>>({})
+  const [errorDecisionDrafts, setErrorDecisionDrafts] = useState<
+    Record<string, ErrorDecisionDraft>
+  >({})
+  const [treeValidationBusy, setTreeValidationBusy] = useState<string | null>(null)
+  const [groupFingerprintStatuses, setGroupFingerprintStatuses] = useState<
+    Record<string, FingerprintStatus>
+  >({})
+  const [decisionSaving, setDecisionSaving] = useState<string | null>(null)
+  const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({})
+
+  const selectedScanId = scanData?.scan.id ?? null
+  const buckets = useMemo(
+    () =>
+      buildReviewBuckets(
+        scanData?.items ?? [],
+        targetDate,
+        scanData?.scan.cycle_no ?? null,
+        treeSearch,
+        sortDirection,
+      ),
+    [scanData, sortDirection, targetDate, treeSearch],
+  )
+  const allDecisionGroups = useMemo(
+    () => [...buckets.conflicts, ...buckets.invalidZeroGroups],
+    [buckets.conflicts, buckets.invalidZeroGroups],
+  )
+
+  const loadGroupFingerprintStatus = useCallback(
+    async (scanId: number, treeNo: string, harvestDate?: string | null) => {
+      const dateQuery = harvestDate
+        ? `&harvest_date=${encodeURIComponent(displayHarvestDate(harvestDate))}`
+        : ""
+      const statusKey = groupFingerprintStatusKey(treeNo, harvestDate)
+      const response = await fetch(
+        `/api/admin/harvest-sync/scans/${scanId}/fingerprint-status?tree_no=${encodeURIComponent(treeNo)}${dateQuery}`,
+        { cache: "no-store" },
+      )
+      const data = (await response.json()) as FingerprintStatus & {
+        detail?: string
+        error?: string
+      }
+      if (!response.ok) {
+        throw new Error(
+          data.detail ?? data.error ?? `Tree ${treeNo} fingerprint check returned HTTP ${response.status}.`,
+        )
+      }
+      setGroupFingerprintStatuses((current) => ({ ...current, [statusKey]: data }))
+      return data
+    },
+    [],
+  )
+
+  useEffect(() => {
+    setSinglePage(1)
+    setExactPage(1)
+    setConflictPage(1)
+    setInvalidZeroPage(1)
+    setErrorPage(1)
+    setCyclePage(1)
+    setOpenConflictGroupKey(null)
+  }, [selectedScanId, sortDirection, targetDate, treeSearch])
+
+  useEffect(() => {
+    setConflictDecisionDrafts({})
+    setDecisionDrafts({})
+    setErrorDecisionDrafts({})
+    setDecisionMessages({})
+    setGroupFingerprintStatuses({})
+    if (!selectedScanId || !targetDate) return
+    for (const { pending } of buckets.cycleCollisions) {
+      const treeNo = String(pending.original_tree_no ?? "").trim()
+      if (!treeNo) continue
+      void loadGroupFingerprintStatus(selectedScanId, treeNo).catch((error) => {
+        setDecisionMessages((current) => ({
+          ...current,
+          [pending.odk_instance_id]:
+            error instanceof Error ? error.message : "Unable to verify the cycle-safety group fingerprint.",
+        }))
+      })
+    }
+  }, [selectedScanId, targetDate, scanData?.scan.id, loadGroupFingerprintStatus])
+
+  function updateConflictDecisionDraft(
+    key: string,
+    rows: HarvestScanItem[],
+    update: Partial<ConflictDecisionDraft>,
+  ) {
+    setConflictDecisionDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] ?? storedConflictDecisionDraft(rows)),
+        ...update,
+      },
+    }))
+  }
+
+  function updateDecisionDraft(instanceId: string, update: Partial<DecisionDraft>) {
+    setDecisionDrafts((current) => ({
+      ...current,
+      [instanceId]: {
+        ...(current[instanceId] ?? EMPTY_DECISION_DRAFT),
+        ...update,
+      },
+    }))
+  }
+
+  async function saveConflictDecision(
+    group: ReviewGroup,
+    openNextUnresolved: boolean,
+  ) {
+    const { key, rows } = group
+    const draft = conflictDecisionDrafts[key] ?? storedConflictDecisionDraft(rows)
+    const mixedGroup = mixedValidInvalidZeroGroup(rows)
+    const reason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+    const selectedRow = rows.find(
+      (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
+    )
+    const decision: ConflictDecisionAction = mixedGroup ? draft.action : "SELECT_SUBMISSION"
+    const validMixedSelection =
+      decision === "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
+        ? selectedRow?.odk_instance_id === mixedGroup?.valid.odk_instance_id
+        : decision === "DEFER_DECISION"
+    const treeNo = String(rows[0]?.original_tree_no ?? "").trim()
+    const groupStatus =
+      groupFingerprintStatuses[groupFingerprintStatusKey(treeNo, rows[0]?.harvest_date)]
+    if (
+      disabled ||
+      !selectedScanId ||
+      (mixedGroup
+        ? !validMixedSelection
+        : !selectedRow || !isActiveValidConflictCandidate(selectedRow)) ||
+      !reason ||
+      groupStatus?.groupMatches !== true
+    ) {
+      return
+    }
+
+    const currentIndex = allDecisionGroups.findIndex((candidate) => candidate.key === key)
+    const following = [
+      ...allDecisionGroups.slice(currentIndex + 1),
+      ...allDecisionGroups.slice(0, Math.max(0, currentIndex)),
+    ]
+    const nextUnresolved = following.find((candidate) => !conflictGroupResolved(candidate.rows))
+
+    setDecisionSaving(key)
+    setDecisionMessages((current) => ({ ...current, [key]: "" }))
+    try {
+      const payload = mixedGroup
+        ? {
+            scan_id: selectedScanId,
+            odk_instance_id: mixedGroup.valid.odk_instance_id,
+            issue_type: "VALID_RECORD_WITH_INVALID_ZERO_SUBMISSION",
+            decision,
+            selected_effective_instance_id:
+              decision === "DEFER_DECISION" ? null : mixedGroup.valid.odk_instance_id,
+            reason,
+          }
+        : {
+            scan_id: selectedScanId,
+            odk_instance_id: selectedRow?.odk_instance_id,
+            issue_type: "CONFLICTING_DUPLICATE",
+            decision: "SELECT_SUBMISSION",
+            selected_effective_instance_id: selectedRow?.odk_instance_id,
+            reason,
+          }
+      const response = await fetch("/api/admin/harvest-sync/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = (await response.json()) as { detail?: string; error?: string }
+      if (!response.ok) {
+        throw new Error(result.detail ?? result.error ?? `Decision API returned HTTP ${response.status}.`)
+      }
+      await onDecisionSaved()
+      if (openNextUnresolved && nextUnresolved) {
+        const nextIndex = allDecisionGroups.findIndex(
+          (candidate) => candidate.key === nextUnresolved.key,
+        )
+        if (nextIndex < buckets.conflicts.length) {
+          setConflictPage(Math.floor(nextIndex / REVIEW_GROUP_PAGE_SIZE) + 1)
+        } else {
+          setInvalidZeroPage(
+            Math.floor((nextIndex - buckets.conflicts.length) / REVIEW_GROUP_PAGE_SIZE) + 1,
+          )
+        }
+        setOpenConflictGroupKey(nextUnresolved.key)
+      } else {
+        setOpenConflictGroupKey(null)
+      }
+      setDecisionMessages((current) => ({
+        ...current,
+        [key]:
+          openNextUnresolved && nextUnresolved
+            ? "Supervisor decision saved. The next unresolved group is open."
+            : "Supervisor decision saved.",
+      }))
+    } catch (error) {
+      setDecisionMessages((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "Unable to save the supervisor decision.",
+      }))
+    } finally {
+      setDecisionSaving(null)
+    }
+  }
+
+  async function saveCycleDecision(
+    pending: HarvestScanItem,
+    pendingCandidates: HarvestScanItem[],
+  ) {
+    const savedReason = pending.supervisor_reason ?? ""
+    const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
+    const fallbackDraft: DecisionDraft = {
+      action: CYCLE_COLLISION_DECISIONS.has(pending.supervisor_decision as CycleDecisionAction)
+        ? (pending.supervisor_decision as CycleDecisionAction)
+        : "",
+      selectedInstanceId:
+        pending.selected_effective_instance_id ??
+        (pendingCandidates.length === 1 ? pendingCandidates[0].odk_instance_id : ""),
+      reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
+      otherReason: savedReasonIsChoice ? "" : savedReason,
+    }
+    const draft = decisionDrafts[pending.odk_instance_id] ?? fallbackDraft
+    const reason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+    const treeNo = String(pending.original_tree_no ?? "").trim()
+    const groupStatus = groupFingerprintStatuses[groupFingerprintStatusKey(treeNo)]
+    const selectedPending = pendingCandidates.find(
+      (candidate) => candidate.odk_instance_id === draft.selectedInstanceId,
+    )
+    if (
+      disabled ||
+      !draft.action ||
+      (draft.action === "USE_PENDING_SUBMISSION" &&
+        (!selectedPending || !isActiveValidConflictCandidate(selectedPending))) ||
+      !reason ||
+      groupStatus?.groupMatches !== true ||
+      !selectedScanId
+    ) {
+      return
+    }
+    setDecisionSaving(pending.odk_instance_id)
+    setDecisionMessages((current) => ({ ...current, [pending.odk_instance_id]: "" }))
+    try {
+      const response = await fetch("/api/admin/harvest-sync/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scan_id: selectedScanId,
+          odk_instance_id:
+            draft.action === "USE_PENDING_SUBMISSION"
+              ? selectedPending?.odk_instance_id
+              : pending.odk_instance_id,
+          issue_type: "CYCLE_COLLISION",
+          decision: draft.action,
+          selected_effective_instance_id:
+            draft.action === "USE_PENDING_SUBMISSION"
+              ? selectedPending?.odk_instance_id
+              : null,
+          reason,
+        }),
+      })
+      const result = (await response.json()) as { detail?: string; error?: string }
+      if (!response.ok) {
+        throw new Error(result.detail ?? result.error ?? `Decision API returned HTTP ${response.status}.`)
+      }
+      await onDecisionSaved()
+      setDecisionMessages((current) => ({
+        ...current,
+        [pending.odk_instance_id]: "Supervisor decision saved.",
+      }))
+    } catch (error) {
+      setDecisionMessages((current) => ({
+        ...current,
+        [pending.odk_instance_id]:
+          error instanceof Error ? error.message : "Unable to save the supervisor decision.",
+      }))
+    } finally {
+      setDecisionSaving(null)
+    }
+  }
+
+  function errorDecisionDraft(row: HarvestScanItem): ErrorDecisionDraft {
+    const savedAction =
+      row.supervisor_decision === "MAP_TO_EXISTING_TREE" ||
+      row.supervisor_decision === "DEFER_DECISION"
+        ? row.supervisor_decision
+        : ""
+    return {
+      action: savedAction,
+      resolvedTreeNo: row.supervisor_resolved_tree_no ?? "",
+      validatedTreeNo:
+        savedAction === "MAP_TO_EXISTING_TREE"
+          ? row.supervisor_resolved_tree_no ?? ""
+          : "",
+      reason: row.supervisor_reason ?? "",
+    }
+  }
+
+  function updateErrorDecisionDraft(
+    row: HarvestScanItem,
+    update: Partial<ErrorDecisionDraft>,
+  ) {
+    setErrorDecisionDrafts((current) => ({
+      ...current,
+      [row.odk_instance_id]: {
+        ...(current[row.odk_instance_id] ?? errorDecisionDraft(row)),
+        ...update,
+      },
+    }))
+  }
+
+  async function validateResolvedTree(row: HarvestScanItem) {
+    const draft = errorDecisionDrafts[row.odk_instance_id] ?? errorDecisionDraft(row)
+    const target = draft.resolvedTreeNo.trim()
+    if (!target) return
+    setTreeValidationBusy(row.odk_instance_id)
+    setDecisionMessages((current) => ({ ...current, [row.odk_instance_id]: "" }))
+    try {
+      const query = new URLSearchParams({ q: target, limit: "25" })
+      const response = await fetch(`/api/coconut-harvest/trees?${query.toString()}`, {
+        cache: "no-store",
+      })
+      const data = (await response.json()) as { treeNumbers?: string[]; error?: string }
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to validate the Tree Number against Tree Master.")
+      }
+      if (!(data.treeNumbers ?? []).some((treeNo) => treeNo === target)) {
+        throw new Error("Enter an exact existing Tree Number from Tree Master.")
+      }
+      updateErrorDecisionDraft(row, { validatedTreeNo: target })
+      setDecisionMessages((current) => ({
+        ...current,
+        [row.odk_instance_id]: `Tree ${target} was verified in Tree Master.`,
+      }))
+    } catch (error) {
+      updateErrorDecisionDraft(row, { validatedTreeNo: "" })
+      setDecisionMessages((current) => ({
+        ...current,
+        [row.odk_instance_id]:
+          error instanceof Error ? error.message : "Unable to validate the Tree Number.",
+      }))
+    } finally {
+      setTreeValidationBusy(null)
+    }
+  }
+
+  async function saveDataErrorDecision(row: HarvestScanItem) {
+    const draft = errorDecisionDrafts[row.odk_instance_id] ?? errorDecisionDraft(row)
+    const target = draft.resolvedTreeNo.trim()
+    const reason = draft.reason.trim()
+    const treeNo = String(row.original_tree_no ?? "").trim()
+    const fingerprintKey = groupFingerprintStatusKey(treeNo, row.harvest_date)
+    const groupStatus = groupFingerprintStatuses[fingerprintKey]
+    const mapIsValid =
+      draft.action === "MAP_TO_EXISTING_TREE" &&
+      row.classification === "UNMATCHED_TREE" &&
+      target &&
+      draft.validatedTreeNo === target
+    const deferIsValid = draft.action === "DEFER_DECISION"
+    if (
+      disabled ||
+      !selectedScanId ||
+      !reason ||
+      (!mapIsValid && !deferIsValid) ||
+      groupStatus?.groupMatches !== true
+    ) {
+      return
+    }
+    setDecisionSaving(row.odk_instance_id)
+    setDecisionMessages((current) => ({ ...current, [row.odk_instance_id]: "" }))
+    try {
+      const response = await fetch("/api/admin/harvest-sync/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scan_id: selectedScanId,
+          odk_instance_id: row.odk_instance_id,
+          issue_type: row.issue_type ?? row.classification,
+          decision: draft.action,
+          resolved_tree_no: mapIsValid ? target : null,
+          selected_effective_instance_id: null,
+          reason,
+        }),
+      })
+      const result = (await response.json()) as { detail?: string; error?: string }
+      if (!response.ok) {
+        throw new Error(result.detail ?? result.error ?? `Decision API returned HTTP ${response.status}.`)
+      }
+      await onDecisionSaved()
+      setDecisionMessages((current) => ({
+        ...current,
+        [row.odk_instance_id]:
+          mapIsValid
+            ? `Mapping decision saved. Original submitted value ${displayHarvestValue(row.original_tree_no)} remains in the audit.`
+            : "Deferred decision saved. This record remains blocked.",
+      }))
+    } catch (error) {
+      setDecisionMessages((current) => ({
+        ...current,
+        [row.odk_instance_id]:
+          error instanceof Error ? error.message : "Unable to save the data-error decision.",
+      }))
+    } finally {
+      setDecisionSaving(null)
+    }
+  }
+
+  function renderDecisionGroup(group: ReviewGroup) {
+    const { key, rows } = group
+    const first = rows[0]
+    const treeNo = String(first.original_tree_no ?? "").trim()
+    const mixedGroup = mixedValidInvalidZeroGroup(rows)
+    const decisionRow = rows.find((row) =>
+      SAVED_CONFLICT_DECISIONS.has(String(row.supervisor_decision ?? "")),
+    )
+    const draft = conflictDecisionDrafts[key] ?? storedConflictDecisionDraft(rows)
+    const fingerprintKey = groupFingerprintStatusKey(treeNo, first.harvest_date)
+    const groupStatus = groupFingerprintStatuses[fingerprintKey]
+    const finalReason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+    const selectedCandidate = rows.find(
+      (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
+    )
+    const canSave =
+      !disabled &&
+      (mixedGroup
+        ? (draft.action === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" &&
+            selectedCandidate?.odk_instance_id === mixedGroup.valid.odk_instance_id) ||
+          draft.action === "DEFER_DECISION"
+        : Boolean(selectedCandidate && isActiveValidConflictCandidate(selectedCandidate))) &&
+      Boolean(finalReason) &&
+      groupStatus?.groupMatches === true &&
+      decisionSaving !== key
+
+    return (
+      <details
+        key={key}
+        open={openConflictGroupKey === key}
+        onToggle={(event) => {
+          if (event.currentTarget.open) {
+            setOpenConflictGroupKey(key)
+            if (selectedScanId && treeNo && !groupFingerprintStatuses[fingerprintKey]) {
+              void loadGroupFingerprintStatus(selectedScanId, treeNo, first.harvest_date).catch(
+                (error) => {
+                  setDecisionMessages((current) => ({
+                    ...current,
+                    [key]:
+                      error instanceof Error
+                        ? error.message
+                        : "Unable to verify the group fingerprint.",
+                  }))
+                },
+              )
+            }
+          } else if (openConflictGroupKey === key) {
+            setOpenConflictGroupKey(null)
+          }
+        }}
+        className="rounded-xl border bg-background"
+        data-testid={`review-group-${key}`}
+      >
+        <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
+          Tree {displayHarvestValue(first.original_tree_no)} · {displayHarvestDate(first.harvest_date)} ·{" "}
+          {rows.length} source submissions
+          {decisionRow?.supervisor_decision ? " · Supervisor decision saved" : ""}
+        </summary>
+        <div className="border-t p-4">
+          {decisionRow?.supervisor_decision ? (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+              <p className="font-black">Saved supervisor decision: {decisionRow.supervisor_decision}</p>
+              <p className="mt-1">
+                Selected:{" "}
+                <span className="font-mono">{selectedConflictInstance(decisionRow) ?? "—"}</span>
+              </p>
+              <p className="mt-1">Reason: {decisionRow.supervisor_reason ?? "—"}</p>
+              <p className="mt-1">
+                Supervisor: {displayHarvestValue(decisionRow.supervisor_admin_user)} ·{" "}
+                {displayHarvestValue(
+                  decisionRow.supervisor_decision_updated_at ??
+                    decisionRow.supervisor_decision_at,
+                )}
+              </p>
+            </div>
+          ) : null}
+          <div className="overflow-x-auto">
+            <table className="min-w-[1180px] text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th className="p-2">Retain</th>
+                  <th className="p-2">Tree</th>
+                  <th className="p-2">Harvest Date</th>
+                  <th className="p-2">ODK Time</th>
+                  <th className="p-2">ODK Instance ID</th>
+                  <th className="p-2">Submitter / Device</th>
+                  <th className="p-2">B1</th>
+                  <th className="p-2">B2</th>
+                  <th className="p-2">B3</th>
+                  <th className="p-2">Bunch Count</th>
+                  <th className="p-2">Total Nuts</th>
+                  <th className="p-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const invalidZero = Boolean(
+                    mixedGroup?.invalid.some(
+                      (candidate) => candidate.odk_instance_id === row.odk_instance_id,
+                    ),
+                  )
+                  const effectiveClassification = invalidZero
+                    ? "INVALID_DATA"
+                    : row.effective_classification ?? row.classification
+                  return (
+                    <tr key={`${row.scan_id}-${row.odk_instance_id}`} className="border-b">
+                      <td className="p-2">
+                        {invalidZero ? (
+                          <span className="font-bold text-muted-foreground">Not selectable</span>
+                        ) : (
+                          <label className="inline-flex items-center gap-2 font-bold">
+                            <input
+                              type="radio"
+                              name={`review-${key}`}
+                              checked={String(draft.selectedInstanceId) === String(row.odk_instance_id)}
+                              onChange={() =>
+                                updateConflictDecisionDraft(key, rows, {
+                                  selectedInstanceId: row.odk_instance_id,
+                                })
+                              }
+                              disabled={
+                                disabled ||
+                                decisionSaving !== null ||
+                                !isActiveValidConflictCandidate(row) ||
+                                groupStatus?.groupMatches !== true
+                              }
+                              aria-label={`Retain ODK instance ${row.odk_instance_id} for Tree ${displayHarvestValue(row.original_tree_no)}`}
+                            />
+                            Retain
+                          </label>
+                        )}
+                      </td>
+                      <td className="p-2 font-bold">{displayHarvestValue(row.original_tree_no)}</td>
+                      <td className="p-2">{displayHarvestDate(row.harvest_date)}</td>
+                      <td className="p-2">{displayHarvestValue(row.odk_submission_timestamp)}</td>
+                      <td className="p-2 font-mono">{row.odk_instance_id}</td>
+                      <td className="p-2">
+                        {displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}
+                      </td>
+                      <td className="p-2">{displayHarvestValue(row.b1)}</td>
+                      <td className="p-2">{displayHarvestValue(row.b2)}</td>
+                      <td className="p-2">{displayHarvestValue(row.b3)}</td>
+                      <td className="p-2">{displayHarvestValue(row.total_bunches)}</td>
+                      <td className="p-2">{displayHarvestValue(row.total_nuts)}</td>
+                      <td className="p-2">
+                        <span className={`rounded-full border px-2 py-1 ${statusBadge(effectiveClassification)}`}>
+                          {invalidZero ? "INVALID DATA" : effectiveClassification}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className={`mt-4 grid gap-3 ${mixedGroup ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+            {mixedGroup ? (
+              <label className="text-xs font-bold uppercase text-muted-foreground">
+                Supervisor Action
+                <select
+                  aria-label={`Supervisor Action for invalid-zero Tree ${displayHarvestValue(first.original_tree_no)}`}
+                  value={draft.action}
+                  onChange={(event) =>
+                    updateConflictDecisionDraft(key, rows, {
+                      action: event.target.value as ConflictDecisionAction,
+                    })
+                  }
+                  disabled={disabled}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                >
+                  <option value="">Select Supervisor Action</option>
+                  <option value="RETAIN_VALID_EXCLUDE_INVALID_ZERO">
+                    Retain valid submission and exclude invalid zero submission
+                  </option>
+                  <option value="DEFER_DECISION">Defer for field verification</option>
+                </select>
+              </label>
+            ) : null}
+            <label className="text-xs font-bold uppercase text-muted-foreground">
+              Supervisor Reason
+              <select
+                aria-label={`Supervisor Reason for Tree ${displayHarvestValue(first.original_tree_no)}`}
+                value={draft.reason}
+                onChange={(event) =>
+                  updateConflictDecisionDraft(key, rows, {
+                    reason: event.target.value,
+                    otherReason: event.target.value === "Other" ? draft.otherReason : "",
+                  })
+                }
+                disabled={disabled}
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+              >
+                <option value="">Select Supervisor Reason</option>
+                {(mixedGroup ? INVALID_ZERO_SUPERVISOR_REASONS : CONFLICT_SUPERVISOR_REASONS).map(
+                  (reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <div className="rounded-lg border bg-muted/20 p-3 text-xs font-semibold">
+              {groupStatus?.groupMatches === true
+                ? "Group fingerprint unchanged. The decision may be saved."
+                : groupStatus?.groupMatches === false
+                  ? "This group changed after the scan. Run Scan ODK and review it again."
+                  : "Open this group to verify its fingerprint."}
+            </div>
+          </div>
+          {draft.reason === "Other" ? (
+            <label className="mt-3 block text-xs font-bold uppercase text-muted-foreground">
+              Other reason details
+              <textarea
+                value={draft.otherReason}
+                onChange={(event) =>
+                  updateConflictDecisionDraft(key, rows, { otherReason: event.target.value })
+                }
+                disabled={disabled}
+                className="mt-1 min-h-20 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                required
+              />
+            </label>
+          ) : null}
+          {mixedGroup && draft.action === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" ? (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+              The valid submission stays in the proposed import set.{" "}
+              {mixedGroup.invalid.length.toLocaleString("en-IN")} all-zero invalid{" "}
+              {mixedGroup.invalid.length === 1 ? "submission is" : "submissions are"} preserved in
+              the audit and excluded under RETAIN_VALID_EXCLUDE_INVALID_ZERO.
+            </p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void saveConflictDecision(group, false)}
+              disabled={!canSave}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {decisionSaving === key ? "Saving…" : "Save Supervisor Decision"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveConflictDecision(group, true)}
+              disabled={!canSave}
+              className="rounded-lg border border-primary px-4 py-2 text-sm font-black text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {decisionSaving === key ? "Saving…" : "Save and Open Next Unresolved"}
+            </button>
+            <span className="text-xs font-semibold text-muted-foreground">
+              This saves only the reconciliation decision. It does not write a Harvest record.
+            </span>
+          </div>
+          {decisionMessages[key] ? (
+            <p
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="mt-3 text-xs font-bold"
+            >
+              {decisionMessages[key]}
+            </p>
+          ) : null}
+        </div>
+      </details>
+    )
+  }
+
+  const visibleSingles = buckets.cleanSingles.slice(
+    (singlePage - 1) * REVIEW_ROW_PAGE_SIZE,
+    singlePage * REVIEW_ROW_PAGE_SIZE,
+  )
+  const visibleExact = buckets.exactGroups.slice(
+    (exactPage - 1) * REVIEW_ROW_PAGE_SIZE,
+    exactPage * REVIEW_ROW_PAGE_SIZE,
+  )
+  const visibleConflicts = buckets.conflicts.slice(
+    (conflictPage - 1) * REVIEW_GROUP_PAGE_SIZE,
+    conflictPage * REVIEW_GROUP_PAGE_SIZE,
+  )
+  const visibleInvalidZero = buckets.invalidZeroGroups.slice(
+    (invalidZeroPage - 1) * REVIEW_GROUP_PAGE_SIZE,
+    invalidZeroPage * REVIEW_GROUP_PAGE_SIZE,
+  )
+  const visibleErrors = buckets.errors.slice(
+    (errorPage - 1) * REVIEW_ROW_PAGE_SIZE,
+    errorPage * REVIEW_ROW_PAGE_SIZE,
+  )
+  const visibleCycle = buckets.cycleCollisions.slice(
+    (cyclePage - 1) * REVIEW_GROUP_PAGE_SIZE,
+    cyclePage * REVIEW_GROUP_PAGE_SIZE,
+  )
+
+  if (!scanData || !targetDate) {
+    return (
+      <p className="rounded-xl border p-4 text-sm font-semibold text-muted-foreground">
+        Select a persisted scan and Harvest date to open the review sections.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[1fr_14rem]">
+        <div className="text-xs font-bold uppercase text-muted-foreground">
+          <label htmlFor="harvest-review-tree-search">Tree Number Search</label>
+          <div className="relative mt-1">
+            <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
+            <input
+              id="harvest-review-tree-search"
+              value={treeSearch}
+              onChange={(event) => setTreeSearch(event.target.value)}
+              placeholder="For example, 243 or 845.1"
+              className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm text-foreground"
+            />
+          </div>
+        </div>
+        <div className="text-xs font-bold uppercase text-muted-foreground">
+          <label htmlFor="harvest-review-tree-sort">Tree Sort</label>
+          <select
+            id="harvest-review-tree-sort"
+            value={sortDirection}
+            onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
+            className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+          >
+            <option value="asc">Natural ascending</option>
+            <option value="desc">Natural descending</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.cleanSingles.length}</span> clean singles</p>
+        <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.exactGroups.length}</span> exact groups</p>
+        <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.conflicts.length}</span> conflicts</p>
+        <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.invalidZeroGroups.length}</span> invalid-zero groups</p>
+        <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.errors.length}</span> data errors</p>
+        <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.cycleCollisions.length}</span> cycle-safety groups</p>
+      </div>
+
+      <ReviewSection id="review-clean-singles" title="Clean single submissions — standing-rule ready" icon={CheckCircle2} count={buckets.cleanSingles.length}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">
+          Each valid one-submission group is included as SINGLE_VALID_AUTO_READY without a separate decision.
+        </p>
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="min-w-[1050px] text-left text-xs">
+            <thead><tr className="border-b"><th className="p-2">Tree</th><th className="p-2">Date</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">ODK Time</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th><th className="p-2">Status</th></tr></thead>
+            <tbody>
+              {visibleSingles.map((row) => (
+                <tr key={row.odk_instance_id} className="border-b">
+                  <td className="p-2 font-bold">{displayHarvestValue(row.original_tree_no)}</td>
+                  <td className="p-2">{displayHarvestDate(row.harvest_date)}</td>
+                  <td className="p-2 font-mono">{row.odk_instance_id}</td>
+                  <td className="p-2">{displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}</td>
+                  <td className="p-2">{displayHarvestValue(row.odk_submission_timestamp)}</td>
+                  <td className="p-2">{displayHarvestValue(row.b1)}</td>
+                  <td className="p-2">{displayHarvestValue(row.b2)}</td>
+                  <td className="p-2">{displayHarvestValue(row.b3)}</td>
+                  <td className="p-2">{displayHarvestValue(row.total_bunches)}</td>
+                  <td className="p-2">{displayHarvestValue(row.total_nuts)}</td>
+                  <td className="p-2 font-bold">SINGLE_VALID_AUTO_READY</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {buckets.cleanSingles.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No clean singles match the current filter.</p> : null}
+        <Pagination page={singlePage} pageCount={Math.max(1, Math.ceil(buckets.cleanSingles.length / REVIEW_ROW_PAGE_SIZE))} total={buckets.cleanSingles.length} unit="records" onPageChange={setSinglePage} />
+      </ReviewSection>
+
+      <ReviewSection id="review-exact-duplicates" title="Exact duplicates — standing-rule resolved" icon={ShieldCheck} count={buckets.exactGroups.length}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">
+          The earliest valid submission is retained; equal timestamps use the lexicographically lowest ODK instance ID.
+        </p>
+        <div className="space-y-2">
+          {visibleExact.map((group) => (
+            <details key={group.key} className="rounded-xl border bg-background">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
+                Tree {displayHarvestValue(group.retained.original_tree_no)} · {displayHarvestDate(group.retained.harvest_date)} · {group.superseded.length} excluded
+              </summary>
+              <div className="overflow-x-auto border-t p-3">
+                <table className="min-w-[900px] text-left text-xs">
+                  <thead><tr className="border-b"><th className="p-2">Disposition</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">ODK Time</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Bunches</th><th className="p-2">Nuts</th></tr></thead>
+                  <tbody>
+                    {[group.retained, ...group.superseded].map((row) => (
+                      <tr key={row.odk_instance_id} className="border-b">
+                        <td className="p-2 font-bold">{row === group.retained ? "Retained" : "Excluded"}</td>
+                        <td className="p-2 font-mono">{row.odk_instance_id}</td>
+                        <td className="p-2">{displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}</td>
+                        <td className="p-2">{displayHarvestValue(row.odk_submission_timestamp)}</td>
+                        <td className="p-2">{displayHarvestValue(row.b1)}</td>
+                        <td className="p-2">{displayHarvestValue(row.b2)}</td>
+                        <td className="p-2">{displayHarvestValue(row.b3)}</td>
+                        <td className="p-2">{displayHarvestValue(row.total_bunches)}</td>
+                        <td className="p-2">{displayHarvestValue(row.total_nuts)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </div>
+        {buckets.exactGroups.length === 0 ? <p className="text-sm text-muted-foreground">No exact-duplicate groups match the current filter.</p> : null}
+        <Pagination page={exactPage} pageCount={Math.max(1, Math.ceil(buckets.exactGroups.length / REVIEW_ROW_PAGE_SIZE))} total={buckets.exactGroups.length} unit="groups" onPageChange={setExactPage} />
+      </ReviewSection>
+
+      <ReviewSection id="review-conflicts" title="Conflicting duplicate submissions" icon={AlertTriangle} count={buckets.conflicts.length}>
+        <div className="mb-3 grid gap-2 sm:grid-cols-2">
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs"><span className="font-black">{buckets.conflicts.filter((group) => conflictGroupResolved(group.rows)).length}</span> resolved</p>
+          <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs"><span className="font-black">{buckets.conflicts.filter((group) => !conflictGroupResolved(group.rows)).length}</span> unresolved</p>
+        </div>
+        <div className="space-y-3">{visibleConflicts.map(renderDecisionGroup)}</div>
+        {buckets.conflicts.length === 0 ? <p className="text-sm text-muted-foreground">No conflicting groups match the current filter.</p> : null}
+        <Pagination page={conflictPage} pageCount={Math.max(1, Math.ceil(buckets.conflicts.length / REVIEW_GROUP_PAGE_SIZE))} total={buckets.conflicts.length} unit="groups" onPageChange={setConflictPage} />
+      </ReviewSection>
+
+      <ReviewSection id="review-invalid-zero" title="Valid records with invalid-zero duplicates" icon={AlertTriangle} count={buckets.invalidZeroGroups.length}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">
+          Retain the sole valid submission and exclude only all-zero invalid submissions under RETAIN_VALID_EXCLUDE_INVALID_ZERO.
+        </p>
+        <div className="mb-3 grid gap-2 sm:grid-cols-2">
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs"><span className="font-black">{buckets.invalidZeroGroups.filter((group) => invalidZeroGroupResolved(group.rows)).length}</span> resolved</p>
+          <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs"><span className="font-black">{buckets.invalidZeroGroups.filter((group) => !invalidZeroGroupResolved(group.rows)).length}</span> unresolved</p>
+        </div>
+        <div className="space-y-3">{visibleInvalidZero.map(renderDecisionGroup)}</div>
+        {buckets.invalidZeroGroups.length === 0 ? <p className="text-sm text-muted-foreground">No invalid-zero groups match the current filter.</p> : null}
+        <Pagination page={invalidZeroPage} pageCount={Math.max(1, Math.ceil(buckets.invalidZeroGroups.length / REVIEW_GROUP_PAGE_SIZE))} total={buckets.invalidZeroGroups.length} unit="groups" onPageChange={setInvalidZeroPage} />
+      </ReviewSection>
+
+      <ReviewSection id="review-data-errors" title="Tree number and data errors — correction required" icon={AlertTriangle} count={buckets.errors.length}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">
+          An unmatched submitted Tree Number may be mapped only to an exact Tree Master value. The original submitted value is always preserved. Other error classes can only be deferred and remain blocked.
+        </p>
+        <div className="space-y-3">
+          {visibleErrors.map((row) => {
+            const draft = errorDecisionDrafts[row.odk_instance_id] ?? errorDecisionDraft(row)
+            const treeNo = String(row.original_tree_no ?? "").trim()
+            const fingerprintKey = groupFingerprintStatusKey(treeNo, row.harvest_date)
+            const groupStatus = groupFingerprintStatuses[fingerprintKey]
+            const target = draft.resolvedTreeNo.trim()
+            const mapIsValid =
+              row.classification === "UNMATCHED_TREE" &&
+              draft.action === "MAP_TO_EXISTING_TREE" &&
+              target.length > 0 &&
+              draft.validatedTreeNo === target
+            const deferIsValid = draft.action === "DEFER_DECISION"
+            const canSave =
+              !disabled &&
+              Boolean(draft.reason.trim()) &&
+              (mapIsValid || deferIsValid) &&
+              groupStatus?.groupMatches === true &&
+              decisionSaving !== row.odk_instance_id
+            return (
+              <details
+                key={row.odk_instance_id}
+                className="rounded-xl border bg-background"
+                onToggle={(event) => {
+                  if (
+                    event.currentTarget.open &&
+                    selectedScanId &&
+                    treeNo &&
+                    !groupFingerprintStatuses[fingerprintKey]
+                  ) {
+                    void loadGroupFingerprintStatus(
+                      selectedScanId,
+                      treeNo,
+                      row.harvest_date,
+                    ).catch((error) => {
+                      setDecisionMessages((current) => ({
+                        ...current,
+                        [row.odk_instance_id]:
+                          error instanceof Error
+                            ? error.message
+                            : "Unable to verify the source group fingerprint.",
+                      }))
+                    })
+                  }
+                }}
+              >
+                <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold">
+                  Submitted Tree {displayHarvestValue(row.original_tree_no)} ·{" "}
+                  {displayHarvestDate(row.harvest_date)} · {row.classification}
+                  {row.supervisor_decision ? " · Supervisor decision saved" : ""}
+                </summary>
+                <div className="border-t p-4">
+                  <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">
+                        Original submitted value
+                      </span>
+                      <span className="font-black">{displayHarvestValue(row.original_tree_no)}</span>
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">ODK Instance</span>
+                      <span className="font-mono">{row.odk_instance_id}</span>
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">Submitter / Device</span>
+                      {displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}
+                    </p>
+                    <p className="rounded-lg border p-2">
+                      <span className="block font-bold uppercase text-muted-foreground">Exact error</span>
+                      {displayHarvestValue(row.note)}
+                    </p>
+                  </div>
+                  {row.supervisor_decision ? (
+                    <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+                      Saved: {row.supervisor_decision} — {row.supervisor_reason ?? "—"} ·{" "}
+                      {displayHarvestValue(row.supervisor_admin_user)} ·{" "}
+                      {displayHarvestValue(
+                        row.supervisor_decision_updated_at ?? row.supervisor_decision_at,
+                      )}
+                    </p>
+                  ) : null}
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">
+                      Supervisor Action
+                      <select
+                        value={draft.action}
+                        onChange={(event) =>
+                          updateErrorDecisionDraft(row, {
+                            action: event.target.value as ErrorDecisionAction,
+                            resolvedTreeNo: "",
+                            validatedTreeNo: "",
+                          })
+                        }
+                        disabled={disabled}
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                      >
+                        <option value="">Select Supervisor Action</option>
+                        {row.classification === "UNMATCHED_TREE" ? (
+                          <option value="MAP_TO_EXISTING_TREE">Map to exact existing Tree Number</option>
+                        ) : null}
+                        <option value="DEFER_DECISION">Defer and keep blocked</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-bold uppercase text-muted-foreground">
+                      Mandatory Supervisor Reason
+                      <textarea
+                        value={draft.reason}
+                        onChange={(event) =>
+                          updateErrorDecisionDraft(row, { reason: event.target.value })
+                        }
+                        disabled={disabled}
+                        className="mt-1 min-h-20 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                      />
+                    </label>
+                  </div>
+                  {draft.action === "MAP_TO_EXISTING_TREE" ? (
+                    <div className="mt-3 rounded-xl border p-3">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">
+                        Exact Tree Master Target
+                        <input
+                          value={draft.resolvedTreeNo}
+                          onChange={(event) =>
+                            updateErrorDecisionDraft(row, {
+                              resolvedTreeNo: event.target.value,
+                              validatedTreeNo: "",
+                            })
+                          }
+                          disabled={disabled}
+                          placeholder="Type the exact existing Tree Number"
+                          className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                        />
+                      </label>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void validateResolvedTree(row)}
+                          disabled={disabled || !target || treeValidationBusy !== null}
+                          className="rounded-lg border border-primary px-3 py-2 text-xs font-black text-primary disabled:opacity-40"
+                        >
+                          {treeValidationBusy === row.odk_instance_id
+                            ? "Validating…"
+                            : "Validate Exact Tree Number"}
+                        </button>
+                        <span
+                          className={`text-xs font-bold ${
+                            draft.validatedTreeNo === target && target
+                              ? "text-emerald-700"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {draft.validatedTreeNo === target && target
+                            ? `Tree ${target} verified in Tree Master.`
+                            : "Save remains disabled until the exact value is verified."}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                        Mapping changes only the proposed effective Tree Number. Original ODK value{" "}
+                        {displayHarvestValue(row.original_tree_no)} remains unchanged and auditable.
+                      </p>
+                    </div>
+                  ) : null}
+                  {draft.action === "DEFER_DECISION" ? (
+                    <p className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs font-semibold">
+                      This record remains unresolved and excluded from the final import set.
+                    </p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void saveDataErrorDecision(row)}
+                      disabled={!canSave}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {decisionSaving === row.odk_instance_id
+                        ? "Saving…"
+                        : row.supervisor_decision
+                          ? "Amend Supervisor Decision"
+                          : "Save Supervisor Decision"}
+                    </button>
+                    <span className="text-xs font-bold text-muted-foreground">
+                      {groupStatus?.groupMatches === true
+                        ? "Group fingerprint unchanged."
+                        : groupStatus?.groupMatches === false
+                          ? "Group fingerprint changed; run Scan ODK again."
+                          : "Open this row to verify its group fingerprint."}
+                    </span>
+                    {decisionMessages[row.odk_instance_id] ? (
+                      <span
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                        className="text-xs font-bold"
+                      >
+                        {decisionMessages[row.odk_instance_id]}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </details>
+            )
+          })}
+        </div>
+        {buckets.errors.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No correction-required rows match the current filter.</p> : null}
+        <Pagination page={errorPage} pageCount={Math.max(1, Math.ceil(buckets.errors.length / REVIEW_ROW_PAGE_SIZE))} total={buckets.errors.length} unit="records" onPageChange={setErrorPage} />
+      </ReviewSection>
+
+      <ReviewSection id="review-cycle-safety" title="Cycle safety decisions" icon={ShieldCheck} count={buckets.cycleCollisions.length}>
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">
+          These pending submissions collide with an existing record for the same Tree Number in the open Harvest Cycle.
+        </p>
+        <div className="space-y-4">
+          {visibleCycle.map(({ key, pending, pendingCandidates, records }) => {
+            const treeNo = String(pending.original_tree_no ?? "").trim()
+            const groupStatus = groupFingerprintStatuses[groupFingerprintStatusKey(treeNo)] ?? null
+            const hasImportedRecord = records.some(
+              (record) => record.classification === "ALREADY_IMPORTED",
+            )
+            const savedAction = CYCLE_COLLISION_DECISIONS.has(
+              pending.supervisor_decision as CycleDecisionAction,
+            )
+              ? (pending.supervisor_decision as CycleDecisionAction)
+              : ""
+            const savedReason = pending.supervisor_reason ?? ""
+            const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
+            const draft =
+              decisionDrafts[pending.odk_instance_id] ??
+              ({
+                action: savedAction,
+                selectedInstanceId:
+                  pending.selected_effective_instance_id ??
+                  (pendingCandidates.length === 1
+                    ? pendingCandidates[0].odk_instance_id
+                    : ""),
+                reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
+                otherReason: savedReasonIsChoice ? "" : savedReason,
+              } satisfies DecisionDraft)
+            const finalReason = draft.reason === "Other" ? draft.otherReason.trim() : draft.reason.trim()
+            const selectedPending = pendingCandidates.find(
+              (candidate) => candidate.odk_instance_id === draft.selectedInstanceId,
+            )
+            const canSave =
+              !disabled &&
+              Boolean(draft.action) &&
+              (draft.action !== "USE_PENDING_SUBMISSION" ||
+                Boolean(selectedPending && isActiveValidConflictCandidate(selectedPending))) &&
+              Boolean(finalReason) &&
+              groupStatus?.groupMatches === true &&
+              decisionSaving !== pending.odk_instance_id
+            return (
+              <div key={key} className="rounded-xl border border-amber-300 bg-amber-50/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-black">Tree {displayHarvestValue(pending.original_tree_no)} · Cycle {displayHarvestValue(scanData.scan.cycle_no)}</p>
+                    <p className="mt-1 text-xs font-semibold text-muted-foreground">{displayHarvestValue(pending.note)}</p>
+                  </div>
+                  <span className="rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-black text-amber-950">
+                    {decisionState(pending.supervisor_decision)}
+                  </span>
+                </div>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-[1320px] text-left text-xs">
+                    <thead><tr className="border-b"><th className="p-2">Tree</th><th className="p-2">Date</th><th className="p-2">Cycle</th><th className="p-2">Status</th><th className="p-2">ODK Instance</th><th className="p-2">Submitter / Device</th><th className="p-2">ODK Time</th><th className="p-2">Bunches</th><th className="p-2">B1</th><th className="p-2">B2</th><th className="p-2">B3</th><th className="p-2">Nuts</th><th className="p-2">Source</th><th className="p-2">Harvest Record ID</th></tr></thead>
+                    <tbody>
+                      {records.map((record) => {
+                        const imported = record.classification === "ALREADY_IMPORTED"
+                        const selectablePending = pendingCandidates.some(
+                          (candidate) => candidate.odk_instance_id === record.odk_instance_id,
+                        )
+                        return (
+                          <tr key={record.odk_instance_id} className="border-b bg-background/80">
+                            <td className="p-2 font-bold">
+                              <span className="flex items-center gap-2">
+                                {draft.action === "USE_PENDING_SUBMISSION" && selectablePending ? (
+                                  <input
+                                    type="radio"
+                                    name={`cycle-pending-${key}`}
+                                    value={record.odk_instance_id}
+                                    checked={draft.selectedInstanceId === record.odk_instance_id}
+                                    onChange={() =>
+                                      updateDecisionDraft(pending.odk_instance_id, {
+                                        selectedInstanceId: record.odk_instance_id,
+                                      })
+                                    }
+                                    disabled={disabled}
+                                    aria-label={`Use pending ODK submission ${record.odk_instance_id} for Tree ${treeNo}`}
+                                  />
+                                ) : null}
+                                {displayHarvestValue(record.original_tree_no)}
+                              </span>
+                            </td>
+                            <td className="p-2">{displayHarvestDate(record.harvest_date)}</td>
+                            <td className="p-2">{displayHarvestValue(scanData.scan.cycle_no)}</td>
+                            <td className="p-2 font-bold">{imported ? "Imported" : "Pending"}</td>
+                            <td className="p-2 font-mono">{record.odk_instance_id}</td>
+                            <td className="p-2">{displayHarvestValue(record.submitter_name)} / {displayHarvestValue(record.device_id)}</td>
+                            <td className="p-2">{displayHarvestValue(record.odk_submission_timestamp)}</td>
+                            <td className="p-2">{displayHarvestValue(record.total_bunches)}</td>
+                            <td className="p-2">{displayHarvestValue(record.b1)}</td>
+                            <td className="p-2">{displayHarvestValue(record.b2)}</td>
+                            <td className="p-2">{displayHarvestValue(record.b3)}</td>
+                            <td className="p-2">{displayHarvestValue(record.total_nuts)}</td>
+                            <td className="p-2">{imported ? displayHarvestValue(record.existing_record_source) : "ODK"}</td>
+                            <td className="p-2">{imported ? displayHarvestValue(record.existing_harvest_record_id) : "—"}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">
+                    Supervisor Action
+                    <select
+                      value={draft.action}
+                      onChange={(event) =>
+                        updateDecisionDraft(pending.odk_instance_id, {
+                          action: event.target.value as CycleDecisionAction,
+                          reason: "",
+                          otherReason: "",
+                        })
+                      }
+                      disabled={disabled}
+                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                    >
+                      <option value="">Select Supervisor Action</option>
+                      {hasImportedRecord ? (
+                        <>
+                          <option value="KEEP_EXISTING_CYCLE_RECORD">Keep existing Cycle record</option>
+                          <option value="USE_PENDING_SUBMISSION">Use pending submission instead</option>
+                        </>
+                      ) : null}
+                      <option value="DEFER_DECISION">Defer decision</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-bold uppercase text-muted-foreground">
+                    Supervisor Reason
+                    <select
+                      value={draft.reason}
+                      onChange={(event) =>
+                        updateDecisionDraft(pending.odk_instance_id, {
+                          reason: event.target.value,
+                          otherReason: event.target.value === "Other" ? draft.otherReason : "",
+                        })
+                      }
+                      disabled={disabled}
+                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                    >
+                      <option value="">Select Supervisor Reason</option>
+                      {SUPERVISOR_REASONS.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {draft.reason === "Other" ? (
+                  <textarea
+                    value={draft.otherReason}
+                    onChange={(event) => updateDecisionDraft(pending.odk_instance_id, { otherReason: event.target.value })}
+                    disabled={disabled}
+                    aria-label={`Other Supervisor Reason for Tree ${treeNo}`}
+                    className="mt-3 min-h-20 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  />
+                ) : null}
+                {draft.action === "KEEP_EXISTING_CYCLE_RECORD" ? (
+                  <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+                    The pending submission is excluded from the proposed import set. The existing Cycle record and ODK submission remain unchanged.
+                  </p>
+                ) : null}
+                {draft.action === "USE_PENDING_SUBMISSION" ? (
+                  <p className="mt-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-950">
+                    CORRECTION ACTION REQUIRED — controlled replacement of the existing record is required before this pending submission can be used.
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void saveCycleDecision(pending, pendingCandidates)}
+                    disabled={!canSave}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {decisionSaving === pending.odk_instance_id ? "Saving…" : pending.supervisor_decision ? "Amend Supervisor Decision" : "Save Supervisor Decision"}
+                  </button>
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {groupStatus?.groupMatches === true ? "Group fingerprint unchanged." : groupStatus?.groupMatches === false ? "Group fingerprint changed; run Scan ODK again." : "Checking group fingerprint…"}
+                  </span>
+                  {decisionMessages[pending.odk_instance_id] ? (
+                    <span
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                      className="text-xs font-bold"
+                    >
+                      {decisionMessages[pending.odk_instance_id]}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {buckets.cycleCollisions.length === 0 ? <p className="text-sm text-muted-foreground">No cycle-safety collisions match the current filter.</p> : null}
+        <Pagination page={cyclePage} pageCount={Math.max(1, Math.ceil(buckets.cycleCollisions.length / REVIEW_GROUP_PAGE_SIZE))} total={buckets.cycleCollisions.length} unit="groups" onPageChange={setCyclePage} />
+      </ReviewSection>
+
+      <p className="text-xs font-semibold text-muted-foreground">
+        Search currently shows {buckets.submissions.length.toLocaleString("en-IN")} submissions in{" "}
+        {buckets.treeGroupCount.toLocaleString("en-IN")} tree/date groups. Category counts update live.
+      </p>
+    </div>
+  )
+}
