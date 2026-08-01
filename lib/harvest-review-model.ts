@@ -78,6 +78,8 @@ export interface HarvestScanItem {
   supervisor_existing_harvest_record_id?: number | null
   supervisor_group_source_fingerprint?: string | null
   supervisor_group_fingerprint_version?: string | null
+  supervisor_correction_status?: string | null
+  supervisor_correction_run_id?: number | null
   existing_record_source?: string | null
   is_invalid_zero_submission?: boolean
   effective_classification?: string | null
@@ -113,6 +115,12 @@ export interface CycleCollisionGroup {
   records: HarvestScanItem[]
 }
 
+export interface AppliedCorrectionAuditItem {
+  key: string
+  runId: number
+  row: HarvestScanItem
+}
+
 export interface ReviewBuckets {
   submissions: HarvestScanItem[]
   treeGroupCount: number
@@ -122,6 +130,7 @@ export interface ReviewBuckets {
   invalidZeroGroups: ReviewGroup[]
   errors: HarvestScanItem[]
   cycleCollisions: CycleCollisionGroup[]
+  appliedCorrections: AppliedCorrectionAuditItem[]
 }
 
 export interface ReviewUnresolvedCounts {
@@ -310,6 +319,14 @@ export function dataErrorGroupResolved(item: HarvestScanItem): boolean {
   )
 }
 
+export function isAppliedControlledCorrection(item: HarvestScanItem): boolean {
+  return Boolean(
+    String(item.supervisor_correction_status ?? "").toUpperCase() === "APPLIED" &&
+      Number.isInteger(Number(item.supervisor_correction_run_id)) &&
+      Number(item.supervisor_correction_run_id) > 0,
+  )
+}
+
 export function reviewUnresolvedCounts(buckets: ReviewBuckets): ReviewUnresolvedCounts {
   const conflictKeys = buckets.conflicts
     .filter((group) => !conflictGroupResolved(group.rows))
@@ -370,8 +387,27 @@ export function buildReviewBuckets(
       )
     })
 
-  const grouped = new Map<string, HarvestScanItem[]>()
+  const allGrouped = new Map<string, HarvestScanItem[]>()
   for (const item of submissions) {
+    const key = reviewGroupKey(item)
+    allGrouped.set(key, [...(allGrouped.get(key) ?? []), item])
+  }
+  const appliedCorrections = submissions
+    .filter(isAppliedControlledCorrection)
+    .map((row) => ({
+      key: `correction-${Number(row.supervisor_correction_run_id)}`,
+      runId: Number(row.supervisor_correction_run_id),
+      row,
+    }))
+    .filter(
+      (entry, index, entries) =>
+        entries.findIndex((candidate) => candidate.runId === entry.runId) === index,
+    )
+  const operationalSubmissions = submissions.filter(
+    (item) => !isAppliedControlledCorrection(item),
+  )
+  const grouped = new Map<string, HarvestScanItem[]>()
+  for (const item of operationalSubmissions) {
     const key = reviewGroupKey(item)
     grouped.set(key, [...(grouped.get(key) ?? []), item])
   }
@@ -392,11 +428,12 @@ export function buildReviewBuckets(
 
   const exactKeys = new Set(exactGroups.map((group) => group.key))
   const cyclePendingByTree = new Map<string, HarvestScanItem[]>()
-  for (const item of submissions.filter(isCycleCollision)) {
+  for (const item of operationalSubmissions.filter(isCycleCollision)) {
     const treeNo = String(item.original_tree_no ?? "").trim()
     const key = `${treeNo}|${cycleNo ?? ""}`
     const allPendingCandidates = allItems.filter(
       (candidate) =>
+        !isAppliedControlledCorrection(candidate) &&
         isCycleCollision(candidate) &&
         String(candidate.original_tree_no ?? "").trim() === treeNo,
     )
@@ -411,6 +448,7 @@ export function buildReviewBuckets(
       const records = allItems
         .filter(
           (item) =>
+            !isAppliedControlledCorrection(item) &&
             item.original_tree_no === pending.original_tree_no &&
             (
               item.classification === "ALREADY_IMPORTED" ||
@@ -466,7 +504,7 @@ export function buildReviewBuckets(
         (item.classification === "READY_NEW" || item.classification === "SINGLE_VALID_AUTO_READY"),
     )
 
-  const errors = submissions.filter((item) => {
+  const errors = operationalSubmissions.filter((item) => {
     const key = reviewGroupKey(item)
     if (cycleKeys.has(key) || exactKeys.has(key) || conflictKeys.has(key) || invalidZeroKeys.has(key)) {
       return false
@@ -478,12 +516,13 @@ export function buildReviewBuckets(
 
   return {
     submissions,
-    treeGroupCount: grouped.size,
+    treeGroupCount: allGrouped.size,
     cleanSingles,
     exactGroups,
     conflicts,
     invalidZeroGroups,
     errors,
     cycleCollisions,
+    appliedCorrections,
   }
 }

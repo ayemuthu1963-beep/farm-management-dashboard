@@ -150,6 +150,34 @@ assert.deepEqual(scan10Unresolved, {
   cycleSafetyGroupsRemaining: 2,
   totalUnresolvedGroupsRemaining: 8,
 })
+
+// Scan 11-style applied corrections leave the operational queues and remain audit-only.
+const scan11Items = scan10Items.map((item) =>
+  item.original_tree_no === "1634"
+    ? {
+        ...item,
+        supervisor_correction_status: "APPLIED",
+        supervisor_correction_run_id: 1,
+      }
+    : item,
+)
+const scan11Buckets = buildReviewBuckets(scan11Items, "2026-07-30", "19")
+const scan11Unresolved = reviewUnresolvedCounts(scan11Buckets)
+assert.equal(scan11Buckets.submissions.length, 709)
+assert.equal(scan11Buckets.treeGroupCount, 704)
+assert.equal(scan11Buckets.cleanSingles.length, 696)
+assert.equal(scan11Buckets.conflicts.length, 5)
+assert.equal(scan11Buckets.errors.length, 1)
+assert.equal(scan11Buckets.cycleCollisions.length, 1)
+assert.equal(scan11Buckets.appliedCorrections.length, 1)
+assert.equal(scan11Buckets.appliedCorrections[0].row.original_tree_no, "1634")
+assert.deepEqual(scan11Unresolved, {
+  conflictingDuplicateGroupsRemaining: 5,
+  invalidZeroGroupsRemaining: 0,
+  dataErrorGroupsRemaining: 1,
+  cycleSafetyGroupsRemaining: 1,
+  totalUnresolvedGroupsRemaining: 7,
+})
 const newPendingCycleIssue = [
   scanItem({
     odk_instance_id: "uuid:new-cycle-30",
@@ -393,6 +421,10 @@ assert.match(review, /RETAIN_PENDING_CYCLE_SUBMISSION/)
 assert.match(review, /Retain \{displayHarvestDateLong\(candidate\.harvest_date\)\} submission and exclude/)
 assert.match(review, /Use pending submission as a correction proposal/)
 assert.match(review, /PENDING_CROSS_DATE_CYCLE_COLLISION/)
+assert.match(review, /Controlled Harvest corrections — applied audit/)
+assert.match(review, /Completed replacements are audit history only/)
+assert.match(model, /supervisor_correction_status/)
+assert.match(review, /Download audit CSV/)
 
 // A saved correction proposal is distinct from amending the supervisor decision.
 assert.match(review, /HarvestControlledReplacement/)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertTriangle, CheckCircle2, Search, ShieldCheck } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Download, History, Search, ShieldCheck } from "lucide-react"
 import { HarvestControlledReplacement } from "@/components/admin/harvest-controlled-replacement"
 import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
@@ -248,7 +248,8 @@ function ReviewSection({
   const startsCollapsed =
     collapsedByDefault ||
     id === "review-clean-singles" ||
-    id === "review-exact-duplicates"
+    id === "review-exact-duplicates" ||
+    id === "review-applied-corrections"
   const heading = (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-2">
@@ -294,6 +295,7 @@ export function HarvestReviewSections({
   const [invalidZeroPage, setInvalidZeroPage] = useState(1)
   const [errorPage, setErrorPage] = useState(1)
   const [cyclePage, setCyclePage] = useState(1)
+  const [appliedCorrectionPage, setAppliedCorrectionPage] = useState(1)
   const [openConflictGroupKey, setOpenConflictGroupKey] = useState<string | null>(null)
   const [conflictDecisionDrafts, setConflictDecisionDrafts] = useState<
     Record<string, ConflictDecisionDraft>
@@ -406,6 +408,7 @@ export function HarvestReviewSections({
     setInvalidZeroPage(1)
     setErrorPage(1)
     setCyclePage(1)
+    setAppliedCorrectionPage(1)
     setOpenConflictGroupKey(null)
   }, [selectedScanId, sortDirection, targetDate, treeSearch])
 
@@ -1016,6 +1019,10 @@ export function HarvestReviewSections({
     (cyclePage - 1) * REVIEW_GROUP_PAGE_SIZE,
     cyclePage * REVIEW_GROUP_PAGE_SIZE,
   )
+  const visibleAppliedCorrections = buckets.appliedCorrections.slice(
+    (appliedCorrectionPage - 1) * REVIEW_ROW_PAGE_SIZE,
+    appliedCorrectionPage * REVIEW_ROW_PAGE_SIZE,
+  )
 
   if (!scanData || !targetDate) {
     return (
@@ -1063,6 +1070,60 @@ export function HarvestReviewSections({
         <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.errors.length}</span> data errors</p>
         <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.cycleCollisions.length}</span> cycle-safety groups</p>
       </div>
+
+      {buckets.appliedCorrections.length > 0 ? (
+        <ReviewSection
+          id="review-applied-corrections"
+          title="Controlled Harvest corrections — applied audit"
+          icon={History}
+          count={buckets.appliedCorrections.length}
+          collapsedByDefault
+        >
+          <p className="mb-3 text-sm font-semibold text-muted-foreground">
+            Completed replacements are audit history only. They are excluded from actionable conflicts, errors and Cycle-safety counts.
+          </p>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="min-w-[760px] text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th className="p-2">Correction Run</th>
+                  <th className="p-2">Tree</th>
+                  <th className="p-2">Harvest Date</th>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">ODK Instance</th>
+                  <th className="p-2">Audit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleAppliedCorrections.map(({ key, runId, row }) => (
+                  <tr key={key} className="border-b bg-background">
+                    <td className="p-2 font-black">{runId}</td>
+                    <td className="p-2 font-black">{displayHarvestValue(row.original_tree_no)}</td>
+                    <td className="p-2">{displayHarvestDate(row.harvest_date)}</td>
+                    <td className="p-2 font-black text-emerald-700">CORRECTION APPLIED</td>
+                    <td className="p-2 font-mono">{row.odk_instance_id}</td>
+                    <td className="p-2">
+                      <a
+                        href={`/api/admin/harvest-sync/controlled-replacements/${runId}/audit.csv`}
+                        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-black"
+                      >
+                        <Download className="size-3.5" aria-hidden="true" /> Download audit CSV
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            page={appliedCorrectionPage}
+            pageCount={Math.max(1, Math.ceil(buckets.appliedCorrections.length / REVIEW_ROW_PAGE_SIZE))}
+            total={buckets.appliedCorrections.length}
+            unit="corrections"
+            onPageChange={setAppliedCorrectionPage}
+          />
+        </ReviewSection>
+      ) : null}
 
       <ReviewSection id="review-clean-singles" title="Clean single submissions — standing-rule ready" icon={CheckCircle2} count={buckets.cleanSingles.length}>
         <p className="mb-3 text-sm font-semibold text-muted-foreground">
