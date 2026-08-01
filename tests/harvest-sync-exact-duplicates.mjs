@@ -6,6 +6,7 @@ import { formatIstDateTime } from "../lib/format-ist-date-time.ts"
 import {
   buildReviewBuckets,
   cycleCollisionResolved,
+  pendingCycleDispositionForTarget,
   reviewUnresolvedCounts,
 } from "../lib/harvest-review-model.ts"
 
@@ -207,6 +208,29 @@ const pendingCandidates = [
   scanItem({ odk_instance_id: "uuid:pending-30" }),
   scanItem({ odk_instance_id: "uuid:pending-31", harvest_date: "2026-07-31" }),
 ]
+for (const storedAction of [
+  "RETAIN_PENDING_CYCLE_SUBMISSION",
+  "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+]) {
+  assert.equal(
+    pendingCycleDispositionForTarget(
+      storedAction,
+      "uuid:pending-31",
+      pendingCandidates,
+      "2026-07-30",
+    ),
+    "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+  )
+  assert.equal(
+    pendingCycleDispositionForTarget(
+      storedAction,
+      "uuid:pending-31",
+      pendingCandidates,
+      "2026-07-31",
+    ),
+    "RETAIN_PENDING_CYCLE_SUBMISSION",
+  )
+}
 assert.equal(
   cycleCollisionResolved(
     scanItem({ supervisor_decision: "RETAIN_PENDING_CYCLE_SUBMISSION" }),
@@ -224,6 +248,112 @@ assert.equal(
     pendingCandidates,
   ),
   true,
+)
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({
+      supervisor_decision: "RETAIN_PENDING_CYCLE_SUBMISSION",
+      selected_effective_instance_id: "uuid:pending-31",
+    }),
+    pendingCandidates,
+  ),
+  true,
+  "a saved legacy retain-other-date decision remains resolved without rewriting it",
+)
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({
+      supervisor_decision: "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+      selected_effective_instance_id: "uuid:pending-31",
+    }),
+    pendingCandidates,
+    "2026-07-30",
+  ),
+  true,
+  "the explicit action resolves the target date only when another-date candidate is selected",
+)
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({
+      harvest_date: "2026-07-30",
+      supervisor_decision: "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+      selected_effective_instance_id: "uuid:pending-31",
+    }),
+    pendingCandidates,
+    "2026-07-31",
+  ),
+  true,
+  "the explicit disposition remains resolved when its retained date is viewed later",
+)
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({
+      supervisor_decision: "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+      selected_effective_instance_id: "uuid:pending-30",
+    }),
+    pendingCandidates,
+    "2026-07-30",
+  ),
+  false,
+  "the explicit exclude-target action must reject a selected target-date candidate",
+)
+assert.equal(
+  cycleCollisionResolved(
+    scanItem({
+      harvest_date: "2026-07-30",
+      supervisor_decision: "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+      selected_effective_instance_id: "uuid:pending-31",
+    }),
+    [
+      ...pendingCandidates,
+      scanItem({ odk_instance_id: "uuid:pending-01", harvest_date: "2026-08-01" }),
+    ],
+    "2026-08-01",
+  ),
+  false,
+  "the explicit two-date disposition must not resolve a third pending date",
+)
+const explicitOtherDateDisposition = newPendingCycleIssue.map((item) =>
+  item.odk_instance_id === "uuid:new-cycle-30"
+    ? {
+        ...item,
+        supervisor_decision: "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
+        selected_effective_instance_id: "uuid:new-cycle-31",
+      }
+    : item,
+)
+assert.equal(
+  reviewUnresolvedCounts(
+    buildReviewBuckets(explicitOtherDateDisposition, "2026-07-30", "19"),
+  ).totalUnresolvedGroupsRemaining,
+  0,
+  "the excluded target-date view must show the explicit disposition as resolved",
+)
+assert.equal(
+  reviewUnresolvedCounts(
+    buildReviewBuckets(explicitOtherDateDisposition, "2026-07-31", "19"),
+  ).totalUnresolvedGroupsRemaining,
+  0,
+  "the retained future-date view must preserve the anchored disposition as resolved",
+)
+const explicitDispositionWithThirdDate = [
+  ...explicitOtherDateDisposition,
+  scanItem({
+    odk_instance_id: "uuid:new-cycle-01",
+    harvest_date: "2026-08-01",
+    original_tree_no: "1119",
+    classification: "DUPLICATE_REVIEW_REQUIRED",
+    issue_type: "PENDING_CROSS_DATE_CYCLE_COLLISION",
+    group_key: "2026-08-01|1119",
+    note: null,
+  }),
+]
+assert.equal(
+  reviewUnresolvedCounts(
+    buildReviewBuckets(explicitDispositionWithThirdDate, "2026-08-01", "19"),
+  ).totalUnresolvedGroupsRemaining,
+  1,
+  "a third pending date must remain unresolved until it receives its own decision",
 )
 
 // Preserve unrelated Admin tools and update only the two separate Harvest destinations.
@@ -418,7 +548,18 @@ assert.match(review, /DEFER_DECISION/)
 assert.match(review, /fingerprint-status/)
 assert.match(review, /Multiple pending submissions for the same Tree Number occur on different dates in the same open Harvest Cycle/)
 assert.match(review, /RETAIN_PENDING_CYCLE_SUBMISSION/)
+assert.match(review, /EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE/)
 assert.match(review, /Retain \{displayHarvestDateLong\(candidate\.harvest_date\)\} submission and exclude/)
+assert.match(review, /Duplicate recording across Harvest dates/)
+assert.match(review, /Field verification required/)
+assert.match(review, /submission is correct/)
+assert.match(review, /candidateIsTargetDate/)
+assert.match(review, /targetDatePendingCandidates\.length === 1/)
+assert.match(review, /const decisionAnchorInstanceId =/)
+assert.match(review, /\? targetDateAnchor\?\.odk_instance_id/)
+assert.match(review, /odk_instance_id: decisionAnchorInstanceId/)
+assert.match(review, /selected_effective_instance_id:/)
+assert.match(review, /Exclude the \{displayHarvestDayMonth\(targetDate\)\} submission from this date-specific batch/)
 assert.match(review, /Use pending submission as a correction proposal/)
 assert.match(review, /PENDING_CROSS_DATE_CYCLE_COLLISION/)
 assert.match(review, /Controlled Harvest corrections — applied audit/)
@@ -538,6 +679,7 @@ for (const authoritativeCountField of [
 ]) {
   assert.match(workspace, new RegExp(`statusPlan\\?\\.${authoritativeCountField}`))
 }
+assert.match(workspace, /cycleCollisionResolved\(pending, pendingCandidates, targetDate\)/)
 assert.doesNotMatch(workspace, /candidateCount > 197|197-record safety cap/)
 
 // Structured post-import verification and durable history/download controls.

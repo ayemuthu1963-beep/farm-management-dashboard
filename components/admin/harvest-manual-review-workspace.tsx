@@ -1074,7 +1074,7 @@ export function HarvestManualReviewWorkspace() {
     reviewBuckets.invalidZeroGroups.filter((group) => invalidZeroGroupResolved(group.rows)).length
   const cycleResolved =
     reviewBuckets.cycleCollisions.filter(({ pending, pendingCandidates }) =>
-      cycleCollisionResolved(pending, pendingCandidates),
+      cycleCollisionResolved(pending, pendingCandidates, targetDate),
     ).length
   const unresolvedCounts = reviewUnresolvedCounts(reviewBuckets)
   const conflictsUnresolved = Number(

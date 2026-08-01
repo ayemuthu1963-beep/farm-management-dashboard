@@ -122,6 +122,7 @@ export interface AppliedCorrectionAuditItem {
 }
 
 export interface ReviewBuckets {
+  targetDate: string
   submissions: HarvestScanItem[]
   treeGroupCount: number
   cleanSingles: HarvestScanItem[]
@@ -298,16 +299,34 @@ export function invalidZeroGroupResolved(rows: HarvestScanItem[]): boolean {
 export function cycleCollisionResolved(
   item: HarvestScanItem,
   pendingCandidates?: HarvestScanItem[],
+  targetDate?: string,
 ): boolean {
   if (item.supervisor_decision === "KEEP_EXISTING_CYCLE_RECORD") return true
-  if (item.supervisor_decision !== "RETAIN_PENDING_CYCLE_SUBMISSION") return false
+  if (
+    item.supervisor_decision !== "RETAIN_PENDING_CYCLE_SUBMISSION" &&
+    item.supervisor_decision !== "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE"
+  ) return false
   const selectedInstanceId = String(item.selected_effective_instance_id ?? "").trim()
-  return Boolean(
-    selectedInstanceId &&
-      (!pendingCandidates ||
-        pendingCandidates.some(
-          (candidate) => candidate.odk_instance_id === selectedInstanceId,
-        )),
+  if (!selectedInstanceId) return false
+  if (!pendingCandidates) {
+    return item.supervisor_decision === "RETAIN_PENDING_CYCLE_SUBMISSION"
+  }
+  const selected = pendingCandidates.find(
+    (candidate) => candidate.odk_instance_id === selectedInstanceId,
+  )
+  if (!selected) return false
+  if (item.supervisor_decision === "RETAIN_PENDING_CYCLE_SUBMISSION") {
+    return true
+  }
+  const excludedAnchorDate = displayHarvestDate(item.harvest_date)
+  const selectedDate = displayHarvestDate(selected.harvest_date)
+  const viewedTargetDate = displayHarvestDate(targetDate)
+  return (
+    excludedAnchorDate !== "—" &&
+    selectedDate !== "—" &&
+    viewedTargetDate !== "—" &&
+    selectedDate !== excludedAnchorDate &&
+    (viewedTargetDate === excludedAnchorDate || viewedTargetDate === selectedDate)
   )
 }
 
@@ -327,6 +346,28 @@ export function isAppliedControlledCorrection(item: HarvestScanItem): boolean {
   )
 }
 
+export function pendingCycleDispositionForTarget(
+  action: string,
+  selectedInstanceId: string | null | undefined,
+  pendingCandidates: HarvestScanItem[],
+  targetDate: string,
+): string {
+  if (
+    (action !== "RETAIN_PENDING_CYCLE_SUBMISSION" &&
+      action !== "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE") ||
+    !selectedInstanceId
+  ) {
+    return action
+  }
+  const selected = pendingCandidates.find(
+    (candidate) => candidate.odk_instance_id === selectedInstanceId,
+  )
+  if (!selected) return action
+  return displayHarvestDate(selected.harvest_date) === targetDate
+    ? "RETAIN_PENDING_CYCLE_SUBMISSION"
+    : "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE"
+}
+
 export function reviewUnresolvedCounts(buckets: ReviewBuckets): ReviewUnresolvedCounts {
   const conflictKeys = buckets.conflicts
     .filter((group) => !conflictGroupResolved(group.rows))
@@ -340,7 +381,7 @@ export function reviewUnresolvedCounts(buckets: ReviewBuckets): ReviewUnresolved
   const cycleSafetyKeys = buckets.cycleCollisions
     .filter(
       ({ pending, pendingCandidates }) =>
-        !cycleCollisionResolved(pending, pendingCandidates),
+        !cycleCollisionResolved(pending, pendingCandidates, buckets.targetDate),
     )
     .map((group) => group.key)
 
@@ -515,6 +556,7 @@ export function buildReviewBuckets(
   })
 
   return {
+    targetDate,
     submissions,
     treeGroupCount: allGrouped.size,
     cleanSingles,

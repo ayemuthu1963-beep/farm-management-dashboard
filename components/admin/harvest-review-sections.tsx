@@ -24,6 +24,7 @@ import {
   isActiveValidConflictCandidate,
   isAllZeroInvalidSubmission,
   mixedValidInvalidZeroGroup,
+  pendingCycleDispositionForTarget,
   selectedConflictInstance,
   type HarvestScanItem,
   type HarvestScanResponse,
@@ -34,6 +35,7 @@ type CycleDecisionAction =
   | "KEEP_EXISTING_CYCLE_RECORD"
   | "USE_PENDING_SUBMISSION"
   | "RETAIN_PENDING_CYCLE_SUBMISSION"
+  | "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE"
   | "DEFER_DECISION"
   | ""
 
@@ -118,6 +120,7 @@ const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
   "KEEP_EXISTING_CYCLE_RECORD",
   "USE_PENDING_SUBMISSION",
   "RETAIN_PENDING_CYCLE_SUBMISSION",
+  "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE",
   "DEFER_DECISION",
 ])
 
@@ -128,6 +131,21 @@ function normalizedCycleDecisionAction(value: unknown): CycleDecisionAction {
   return CYCLE_COLLISION_DECISIONS.has(value as CycleDecisionAction)
     ? (value as CycleDecisionAction)
     : ""
+}
+
+function normalizedCycleDecisionActionForTarget(
+  value: unknown,
+  selectedInstanceId: string | null | undefined,
+  pendingCandidates: HarvestScanItem[],
+  targetDate: string,
+): CycleDecisionAction {
+  const action = normalizedCycleDecisionAction(value)
+  return pendingCycleDispositionForTarget(
+    action,
+    selectedInstanceId,
+    pendingCandidates,
+    targetDate,
+  ) as CycleDecisionAction
 }
 
 const EMPTY_DECISION_DRAFT: DecisionDraft = {
@@ -155,10 +173,34 @@ function displayHarvestDateLong(value: string | null | undefined): string {
   return `${Number(match[3])} ${months[Number(match[2]) - 1]} ${match[1]}`
 }
 
+function displayHarvestDayMonth(value: string | null | undefined): string {
+  const date = displayHarvestDate(value)
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!match) return date
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ]
+  return `${Number(match[3])} ${months[Number(match[2]) - 1]}`
+}
+
+function pendingCycleSupervisorReasons(rows: HarvestScanItem[]): string[] {
+  const dateReasons = [...new Set(rows.map((row) => displayHarvestDate(row.harvest_date)))]
+    .sort()
+    .map((date) => `${displayHarvestDayMonth(date)} submission is correct`)
+  return [
+    ...dateReasons,
+    "Duplicate recording across Harvest dates",
+    "Field verification required",
+    "Other",
+  ]
+}
+
 function decisionState(action: string | null | undefined): string {
   if (
     action === "KEEP_EXISTING_CYCLE_RECORD" ||
-    action === "RETAIN_PENDING_CYCLE_SUBMISSION"
+    action === "RETAIN_PENDING_CYCLE_SUBMISSION" ||
+    action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE"
   ) return "Resolved"
   if (
     action === "USE_PENDING_SUBMISSION" ||
@@ -563,9 +605,17 @@ export function HarvestReviewSections({
     hasImportedRecord: boolean,
   ) {
     const savedReason = pending.supervisor_reason ?? ""
-    const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
+    const reasonOptions = hasImportedRecord
+      ? [...SUPERVISOR_REASONS]
+      : pendingCycleSupervisorReasons(pendingCandidates)
+    const savedReasonIsChoice = reasonOptions.some((reason) => reason === savedReason)
     const fallbackDraft: DecisionDraft = {
-      action: normalizedCycleDecisionAction(pending.supervisor_decision),
+      action: normalizedCycleDecisionActionForTarget(
+        pending.supervisor_decision,
+        pending.selected_effective_instance_id,
+        pendingCandidates,
+        targetDate,
+      ),
       selectedInstanceId:
         pending.selected_effective_instance_id ??
         (pendingCandidates.length === 1 ? pendingCandidates[0].odk_instance_id : ""),
@@ -579,18 +629,46 @@ export function HarvestReviewSections({
     const selectedPending = pendingCandidates.find(
       (candidate) => candidate.odk_instance_id === draft.selectedInstanceId,
     )
+    const targetDatePendingCandidates = pendingCandidates.filter(
+      (candidate) => displayHarvestDate(candidate.harvest_date) === targetDate,
+    )
+    const targetDateAnchor =
+      targetDatePendingCandidates.length === 1 ? targetDatePendingCandidates[0] : null
+    const selectedIsTargetDate = Boolean(
+      selectedPending && displayHarvestDate(selectedPending.harvest_date) === targetDate,
+    )
+    const validPendingCycleSelection = Boolean(
+      selectedPending &&
+        isActiveValidConflictCandidate(selectedPending) &&
+        ((draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" && selectedIsTargetDate) ||
+          (draft.action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE" &&
+            !selectedIsTargetDate &&
+            targetDateAnchor !== null)),
+    )
     if (
       disabled ||
       !draft.action ||
       ((draft.action === "USE_PENDING_SUBMISSION" ||
-        draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION") &&
+        draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" ||
+        draft.action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE") &&
         (!selectedPending || !isActiveValidConflictCandidate(selectedPending))) ||
+      (!hasImportedRecord &&
+        ((draft.action === "DEFER_DECISION" && targetDateAnchor === null) ||
+          (draft.action !== "DEFER_DECISION" && !validPendingCycleSelection))) ||
       !reason ||
       groupStatus?.groupMatches !== true ||
       !selectedScanId
     ) {
       return
     }
+    const decisionAnchorInstanceId =
+      draft.action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE" ||
+      (!hasImportedRecord && draft.action === "DEFER_DECISION")
+        ? targetDateAnchor?.odk_instance_id
+        : draft.action === "USE_PENDING_SUBMISSION" ||
+            draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION"
+          ? selectedPending?.odk_instance_id
+          : pending.odk_instance_id
     setDecisionSaving(pending.odk_instance_id)
     setDecisionMessages((current) => ({ ...current, [pending.odk_instance_id]: "" }))
     try {
@@ -599,18 +677,15 @@ export function HarvestReviewSections({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           scan_id: selectedScanId,
-          odk_instance_id:
-            draft.action === "USE_PENDING_SUBMISSION" ||
-            draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION"
-              ? selectedPending?.odk_instance_id
-              : pending.odk_instance_id,
+          odk_instance_id: decisionAnchorInstanceId,
           issue_type: hasImportedRecord
             ? "CYCLE_COLLISION"
             : "PENDING_CROSS_DATE_CYCLE_COLLISION",
           decision: draft.action,
           selected_effective_instance_id:
             draft.action === "USE_PENDING_SUBMISSION" ||
-            draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION"
+            draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" ||
+            draft.action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE"
               ? selectedPending?.odk_instance_id
               : null,
           reason,
@@ -1501,9 +1576,19 @@ export function HarvestReviewSections({
             const hasImportedRecord = records.some(
               (record) => record.classification === "ALREADY_IMPORTED",
             )
-            const savedAction = normalizedCycleDecisionAction(pending.supervisor_decision)
+            const savedAction = normalizedCycleDecisionActionForTarget(
+              pending.supervisor_decision,
+              pending.selected_effective_instance_id,
+              pendingCandidates,
+              targetDate,
+            )
             const savedReason = pending.supervisor_reason ?? ""
-            const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
+            const cycleReasonOptions = hasImportedRecord
+              ? [...SUPERVISOR_REASONS]
+              : pendingCycleSupervisorReasons(pendingCandidates)
+            const savedReasonIsChoice = cycleReasonOptions.some(
+              (reason) => reason === savedReason,
+            )
             const draft =
               decisionDrafts[pending.odk_instance_id] ??
               ({
@@ -1520,6 +1605,26 @@ export function HarvestReviewSections({
             const selectedPending = pendingCandidates.find(
               (candidate) => candidate.odk_instance_id === draft.selectedInstanceId,
             )
+            const targetDatePendingCandidates = pendingCandidates.filter(
+              (candidate) => displayHarvestDate(candidate.harvest_date) === targetDate,
+            )
+            const targetDateAnchor =
+              targetDatePendingCandidates.length === 1
+                ? targetDatePendingCandidates[0]
+                : null
+            const selectedIsTargetDate = Boolean(
+              selectedPending &&
+                displayHarvestDate(selectedPending.harvest_date) === targetDate,
+            )
+            const pendingCycleSelectionIsValid = Boolean(
+              selectedPending &&
+                isActiveValidConflictCandidate(selectedPending) &&
+                ((draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" &&
+                  selectedIsTargetDate) ||
+                  (draft.action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE" &&
+                    !selectedIsTargetDate &&
+                    targetDateAnchor !== null)),
+            )
             const canSave =
               !disabled &&
               Boolean(draft.action) &&
@@ -1529,9 +1634,8 @@ export function HarvestReviewSections({
                   (draft.action === "USE_PENDING_SUBMISSION" &&
                     Boolean(selectedPending && isActiveValidConflictCandidate(selectedPending))))) ||
                 (!hasImportedRecord &&
-                  (draft.action === "DEFER_DECISION" ||
-                    (draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" &&
-                      Boolean(selectedPending && isActiveValidConflictCandidate(selectedPending)))))) &&
+                  ((draft.action === "DEFER_DECISION" && targetDateAnchor !== null) ||
+                    pendingCycleSelectionIsValid))) &&
               Boolean(finalReason) &&
               groupStatus?.groupMatches === true &&
               decisionSaving !== pending.odk_instance_id
@@ -1629,6 +1733,11 @@ export function HarvestReviewSections({
                       </legend>
                       <div className="space-y-2 text-sm font-semibold">
                         {pendingCandidates.map((candidate) => {
+                          const candidateIsTargetDate =
+                            displayHarvestDate(candidate.harvest_date) === targetDate
+                          const candidateAction: CycleDecisionAction = candidateIsTargetDate
+                            ? "RETAIN_PENDING_CYCLE_SUBMISSION"
+                            : "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE"
                           const excludedDates = pendingCandidates
                             .filter((other) => other.odk_instance_id !== candidate.odk_instance_id)
                             .map((other) => displayHarvestDateLong(other.harvest_date))
@@ -1639,12 +1748,12 @@ export function HarvestReviewSections({
                                 type="radio"
                                 name={`pending-cycle-action-${key}`}
                                 checked={
-                                  draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" &&
+                                  draft.action === candidateAction &&
                                   draft.selectedInstanceId === candidate.odk_instance_id
                                 }
                                 onChange={() =>
                                   updateDecisionDraft(pending.odk_instance_id, {
-                                    action: "RETAIN_PENDING_CYCLE_SUBMISSION",
+                                    action: candidateAction,
                                     selectedInstanceId: candidate.odk_instance_id,
                                   })
                                 }
@@ -1690,7 +1799,7 @@ export function HarvestReviewSections({
                       className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
                     >
                       <option value="">Select Supervisor Reason</option>
-                      {SUPERVISOR_REASONS.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
+                      {cycleReasonOptions.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
                     </select>
                   </label>
                 </div>
@@ -1716,6 +1825,11 @@ export function HarvestReviewSections({
                 {draft.action === "RETAIN_PENDING_CYCLE_SUBMISSION" && selectedPending ? (
                   <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
                     Retain the {displayHarvestDateLong(selectedPending.harvest_date)} pending submission and exclude the other pending submission(s). Both original ODK submissions remain unchanged and auditable.
+                  </p>
+                ) : null}
+                {draft.action === "EXCLUDE_TARGET_DATE_RETAIN_OTHER_DATE" && selectedPending ? (
+                  <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
+                    Exclude the {displayHarvestDayMonth(targetDate)} submission from this date-specific batch and retain the {displayHarvestDayMonth(selectedPending.harvest_date)} submission only for its own future date-specific review. Neither original ODK submission is changed.
                   </p>
                 ) : null}
                 <div className="mt-3 flex flex-wrap items-center gap-3">
