@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Download, Droplet, Info } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Download, Droplet, Info, RefreshCw } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { DateRangeSelector } from "@/components/farm/date-range-selector"
@@ -14,12 +14,28 @@ import {
   type WellDashboardData,
   type WellDashboardResponse,
 } from "@/lib/well-data"
+import { formatIstDateTime } from "@/lib/format-ist-date-time"
+import {
+  formatWellWaterSyncSuccess,
+  getWellWaterSyncErrorMessage,
+  isCompletedWellWaterSync,
+} from "@/lib/well-water-sync"
+
+type SyncNotice = {
+  kind: "success" | "warning" | "error"
+  message: string
+}
 
 export default function WellWaterPage() {
   const [query, setQuery] = useState("days=5")
   const [data, setData] = useState<WellDashboardData>(emptyWellDashboardData)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [refreshVersion, setRefreshVersion] = useState(0)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncNotice, setSyncNotice] = useState<SyncNotice | null>(null)
+  const [latestSuccessfulSyncAt, setLatestSuccessfulSyncAt] = useState<string | null>(null)
+  const syncInProgressRef = useRef(false)
 
   function exportCsv() {
     const blob = new Blob([buildWellWaterCsv(data)], { type: "text/csv;charset=utf-8" })
@@ -51,7 +67,6 @@ export default function WellWaterPage() {
         }
       } catch (error) {
         if (isActive) {
-          setData(emptyWellDashboardData)
           setErrorMessage(error instanceof Error ? error.message : "Unable to load Well Water data")
         }
       } finally {
@@ -66,7 +81,46 @@ export default function WellWaterPage() {
     return () => {
       isActive = false
     }
-  }, [query])
+  }, [query, refreshVersion])
+
+  async function syncWellWaterNow() {
+    if (syncInProgressRef.current) return
+
+    syncInProgressRef.current = true
+    setIsSyncing(true)
+    setSyncNotice(null)
+
+    try {
+      const response = await fetch("/api/admin/well-water/sync", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        credentials: "same-origin",
+      })
+      const payload: unknown = await response.json().catch(() => null)
+
+      if (!response.ok || !isCompletedWellWaterSync(payload)) {
+        throw new Error(getWellWaterSyncErrorMessage(payload))
+      }
+
+      setSyncNotice({
+        kind: payload.records_rejected_or_failed > 0 ? "warning" : "success",
+        message: formatWellWaterSyncSuccess(payload),
+      })
+      setLatestSuccessfulSyncAt(
+        payload.latest_successful_sync_at || payload.sync_completed_at,
+      )
+      setRefreshVersion((version) => version + 1)
+    } catch (error) {
+      setSyncNotice({
+        kind: "error",
+        message: error instanceof Error ? error.message : getWellWaterSyncErrorMessage(null),
+      })
+    } finally {
+      syncInProgressRef.current = false
+      setIsSyncing(false)
+    }
+  }
 
   return (
     <DashboardShell>
@@ -86,16 +140,50 @@ export default function WellWaterPage() {
               <p className="text-sm text-muted-foreground">All figures in Litres</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={isLoading || data.totalReadings === 0}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download className="size-4" aria-hidden="true" />
-            Export CSV
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={syncWellWaterNow}
+              disabled={isSyncing}
+              aria-busy={isSyncing}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`size-4 ${isSyncing ? "animate-spin" : ""}`} aria-hidden="true" />
+              {isSyncing ? "Syncing…" : "Sync ODK Now"}
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={isLoading || data.totalReadings === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Export CSV
+            </button>
+          </div>
         </div>
+
+        {syncNotice ? (
+          <div
+            role={syncNotice.kind === "error" ? "alert" : "status"}
+            aria-live={syncNotice.kind === "error" ? "assertive" : "polite"}
+            className={
+              syncNotice.kind === "error"
+                ? "rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"
+                : syncNotice.kind === "warning"
+                  ? "rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-medium text-foreground"
+                  : "rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-medium text-foreground"
+            }
+          >
+            {syncNotice.message}
+          </div>
+        ) : null}
+
+        {latestSuccessfulSyncAt ? (
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            Latest successful sync: {formatIstDateTime(latestSuccessfulSyncAt)}
+          </p>
+        ) : null}
 
         {/* Date range (full width) */}
         <DateRangeSelector onChange={setQuery} />
@@ -107,7 +195,7 @@ export default function WellWaterPage() {
         )}
 
         {/* North + South wells */}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
           <WellSection
             title="North Well"
             icon={Droplet}

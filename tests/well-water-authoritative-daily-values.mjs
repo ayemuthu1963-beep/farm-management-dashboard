@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs"
 import {
   buildWellDashboardData,
   buildWellWaterCsv,
+  formatLitresAxisTick,
   formatSignedLitres,
+  includeZeroInWellChartDomain,
   toChartData,
 } from "../lib/well-data.ts"
 
@@ -142,6 +144,38 @@ assert.equal(
   northChart.at(-1).morningDifference,
   northRecord.differenceInMorningReadings,
 )
+
+const dashboardWithNumericStrings = buildWellDashboardData({
+  ...payload,
+  daily_rows: [
+    {
+      ...northDays[0],
+      morning_water_liters: "448470",
+      evening_water_liters: "446820",
+      motor_runtime_minutes: "74",
+      water_pumped_out_liters: "61666.666666666664",
+      observed_storage_change_liters: "-1650",
+      difference_in_morning_readings_litres: "25000",
+      capacity_liters: "1128270",
+      liters_per_inch: "1650",
+    },
+    ...northDays.slice(1),
+    ...southDays,
+  ],
+})
+const numericStringChartPoint = toChartData(dashboardWithNumericStrings.northWellRecords).at(-1)
+assert.equal(typeof numericStringChartPoint.morningWater, "number")
+assert.equal(typeof numericStringChartPoint.eveningWater, "number")
+assert.equal(typeof numericStringChartPoint.pumpedOut, "number")
+assert.equal(typeof numericStringChartPoint.morningDifference, "number")
+assert.equal(numericStringChartPoint.morningWater, 448470)
+assert.equal(numericStringChartPoint.pumpedOut, 61666.666666666664)
+
+assert.equal(formatLitresAxisTick(0), "0")
+assert.equal(formatLitresAxisTick(200000), "2,00,000 L")
+assert.equal(formatLitresAxisTick("489720"), "4,89,720 L")
+assert.deepEqual(includeZeroInWellChartDomain([120000, 489720]), [0, 489720])
+assert.deepEqual(includeZeroInWellChartDomain([-1300, 489720]), [-1300, 489720])
 
 const csv = buildWellWaterCsv(dashboard)
 assert.match(csv, /Difference in Morning Readings \(Litres\)/)

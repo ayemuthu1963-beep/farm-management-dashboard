@@ -17,13 +17,6 @@ const columns = [
   },
 ] as const
 
-const remarkStyles: Record<string, string> = {
-  Normal: "bg-secondary text-secondary-foreground",
-  "Slight Rain": "bg-chart-1/15 text-chart-1",
-  "Light Rain": "bg-chart-1/15 text-chart-1",
-  "Configuration requires verification": "bg-amber-100 text-amber-800",
-}
-
 function formatLitres(value: number | null): string {
   if (value === null) return "—"
   return formatNumberIN(Math.round(value))
@@ -31,8 +24,8 @@ function formatLitres(value: number | null): string {
 
 export function WellTable({ records, headerClassName }: WellTableProps) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
+    <div className="max-w-full min-w-0 overflow-x-auto">
+      <table className="w-full min-w-[560px] table-fixed border-collapse text-sm">
         <thead>
           <tr className={cn("text-left text-[11px] font-semibold uppercase tracking-wide", headerClassName)}>
             <th className="px-3 py-3">Date</th>
@@ -42,13 +35,12 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
                 <span className="block text-[10px] font-normal normal-case opacity-80">{col.unit}</span>
               </th>
             ))}
-            <th className="px-3 py-3">Remarks</th>
           </tr>
         </thead>
         <tbody>
           {records.length === 0 && (
             <tr className="border-t border-border">
-              <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
+              <td colSpan={5} className="px-3 py-6 text-center text-sm text-muted-foreground">
                 No well water readings found for the selected period.
               </td>
             </tr>
@@ -64,16 +56,6 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
                 title="Difference between this morning’s water volume and the previous calendar date’s morning water volume."
               >
                 {formatSignedLitres(record.differenceInMorningReadings)}
-              </td>
-              <td className="px-3 py-3">
-                <span
-                  className={cn(
-                    "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
-                    remarkStyles[record.remarks] ?? "bg-secondary text-secondary-foreground",
-                  )}
-                >
-                  {record.remarks}
-                </span>
               </td>
             </tr>
           ))}

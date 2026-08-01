@@ -23,27 +23,34 @@ export function WellSection({
   capacity,
 }: WellSectionProps) {
   return (
-    <Panel
-      title={title}
-      icon={icon}
-      iconClassName={iconClassName}
-      bodyClassName="space-y-5 p-4 sm:p-5"
-      headerRight={
-        capacity ? (
-          <span className="text-[11px] font-medium normal-case tracking-normal text-muted-foreground">
-            Full Capacity
-            <span className="block text-sm font-bold text-foreground">{capacity}</span>
-          </span>
-        ) : undefined
-      }
-    >
-      <WellTable records={records} headerClassName={tableHeaderClassName} />
-      <div>
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-foreground">
-          {title} - Water Trend <span className="font-normal text-muted-foreground">(Last 5 Days)</span>
-        </h3>
+    <div className="flex min-w-0 flex-col gap-5">
+      <Panel
+        title={title}
+        icon={icon}
+        iconClassName={iconClassName}
+        className="min-w-0"
+        bodyClassName="min-w-0"
+        headerRight={
+          capacity ? (
+            <span className="text-[11px] font-medium normal-case tracking-normal text-muted-foreground">
+              Full Capacity
+              <span className="block text-sm font-bold text-foreground">{capacity}</span>
+            </span>
+          ) : undefined
+        }
+      >
+        <WellTable records={records} headerClassName={tableHeaderClassName} />
+      </Panel>
+
+      <Panel
+        title={`${title} Water Trend`}
+        icon={icon}
+        iconClassName={iconClassName}
+        className="min-w-0"
+        bodyClassName="min-w-0"
+      >
         <WellChart data={toChartData(records)} />
-      </div>
-    </Panel>
+      </Panel>
+    </div>
   )
 }

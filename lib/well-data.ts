@@ -8,24 +8,25 @@
 
 export type WellId = "north" | "south"
 export type WellCode = "well1" | "well2"
+type NumericApiValue = number | string
 
 export interface WellDailyApiRow {
   date: string
   well_id: WellId
   well_code: WellCode
   well_name: string
-  morning_water_liters: number | null
-  evening_water_liters: number | null
-  motor_runtime_minutes: number
-  water_pumped_out_liters: number | null
-  observed_storage_change_liters: number | null
-  difference_in_morning_readings_litres: number | null
+  morning_water_liters: NumericApiValue | null
+  evening_water_liters: NumericApiValue | null
+  motor_runtime_minutes: NumericApiValue
+  water_pumped_out_liters: NumericApiValue | null
+  observed_storage_change_liters: NumericApiValue | null
+  difference_in_morning_readings_litres: NumericApiValue | null
   remarks: string
   reading_count: number
   morning_reading_id: number | null
   evening_reading_id: number | null
-  capacity_liters: number | null
-  liters_per_inch: number | null
+  capacity_liters: NumericApiValue | null
+  liters_per_inch: NumericApiValue | null
   calculation_method: string | null
 }
 
@@ -122,6 +123,30 @@ export function formatNumberIN(num: number): string {
   return num.toLocaleString("en-IN")
 }
 
+function toNullableFiniteNumber(value: NumericApiValue | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const numericValue = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(numericValue) ? numericValue : null
+}
+
+export function formatLitresAxisTick(value: unknown): string {
+  const numericValue =
+    typeof value === "number" || typeof value === "string"
+      ? toNullableFiniteNumber(value)
+      : null
+  if (numericValue === null) return ""
+  const roundedValue = Math.round(numericValue)
+  return roundedValue === 0 ? "0" : `${formatNumberIN(roundedValue)} L`
+}
+
+export function includeZeroInWellChartDomain(
+  [rawMinimum, rawMaximum]: readonly [number, number],
+): [number, number] {
+  const minimum = Number.isFinite(rawMinimum) ? rawMinimum : 0
+  const maximum = Number.isFinite(rawMaximum) ? rawMaximum : 0
+  return [Math.min(0, minimum), Math.max(0, maximum)]
+}
+
 export function formatSignedLitres(value: number | null, includeUnit = false): string {
   if (value === null) return "—"
   const rounded = Math.round(value)
@@ -177,24 +202,28 @@ function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
     row.remarks === SOUTH_WELL_CONFIGURATION_WARNING
       ? SOUTH_WELL_CONFIGURATION_WARNING
       : undefined
+  const morningWater = toNullableFiniteNumber(row.morning_water_liters)
+  const eveningWater = toNullableFiniteNumber(row.evening_water_liters)
 
   return {
     date: formatTableDate(row.date),
-    morningWater: row.morning_water_liters,
-    eveningWater: row.evening_water_liters,
-    morningWaterDisplay: waterDisplay(row.morning_water_liters),
-    eveningWaterDisplay: waterDisplay(row.evening_water_liters),
-    motorRuntimeMinutes: row.motor_runtime_minutes,
-    waterPumpedOut: row.water_pumped_out_liters,
-    observedStorageChange: row.observed_storage_change_liters,
-    differenceInMorningReadings: row.difference_in_morning_readings_litres,
+    morningWater,
+    eveningWater,
+    morningWaterDisplay: waterDisplay(morningWater),
+    eveningWaterDisplay: waterDisplay(eveningWater),
+    motorRuntimeMinutes: toNullableFiniteNumber(row.motor_runtime_minutes) ?? 0,
+    waterPumpedOut: toNullableFiniteNumber(row.water_pumped_out_liters),
+    observedStorageChange: toNullableFiniteNumber(row.observed_storage_change_liters),
+    differenceInMorningReadings: toNullableFiniteNumber(row.difference_in_morning_readings_litres),
     remarks: row.remarks,
     configurationWarning,
   }
 }
 
 function capacityFromRows(rows: WellDailyApiRow[]): string {
-  return formatCapacity(rows.find((row) => row.capacity_liters)?.capacity_liters)
+  return formatCapacity(
+    toNullableFiniteNumber(rows.find((row) => row.capacity_liters)?.capacity_liters),
+  )
 }
 
 function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {

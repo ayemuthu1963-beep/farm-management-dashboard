@@ -12,7 +12,13 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import type { ChartPoint } from "@/lib/well-data"
-import { formatNumberIN, formatSignedLitres, seriesConfig } from "@/lib/well-data"
+import {
+  formatLitresAxisTick,
+  formatNumberIN,
+  formatSignedLitres,
+  includeZeroInWellChartDomain,
+  seriesConfig,
+} from "@/lib/well-data"
 
 interface WellChartProps {
   data: ChartPoint[]
@@ -20,9 +26,9 @@ interface WellChartProps {
 
 export function WellChart({ data }: WellChartProps) {
   return (
-    <div className="h-72 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
+    <div className="h-72 min-h-72 w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 12 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="date"
@@ -31,16 +37,13 @@ export function WellChart({ data }: WellChartProps) {
             axisLine={{ stroke: "var(--border)" }}
           />
           <YAxis
-            width={44}
+            width={96}
+            domain={includeZeroInWellChartDomain}
+            tickFormatter={formatLitresAxisTick}
             tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+            tickMargin={8}
             tickLine={false}
             axisLine={false}
-            label={{
-              value: "Litres",
-              angle: -90,
-              position: "insideLeft",
-              style: { fill: "var(--muted-foreground)", fontSize: 11, textAnchor: "middle" },
-            }}
           />
           <Tooltip
             formatter={(value, name) => [
