@@ -69,11 +69,30 @@ const southDays = [
     liters_per_inch: 1300,
     calculation_method: "REMAINING_COLUMN_CAPPED",
   },
+  {
+    date: "2026-07-25",
+    well_id: "south",
+    well_code: "well2",
+    well_name: "South Well",
+    morning_water_liters: null,
+    evening_water_liters: 390000,
+    motor_runtime_minutes: 0,
+    water_pumped_out_liters: 0,
+    observed_storage_change_liters: null,
+    difference_in_morning_readings_litres: null,
+    remarks: "Morning reading unavailable",
+    reading_count: 1,
+    morning_reading_id: null,
+    evening_reading_id: 85,
+    capacity_liters: 632531,
+    liters_per_inch: 1300,
+    calculation_method: "REMAINING_COLUMN_CAPPED",
+  },
 ]
 
 const payload = {
   summary: {
-    total_readings: 5,
+    total_readings: 6,
     first_reading_date: "2026-07-25",
     latest_reading_date: "2026-07-26",
     selected_start_date: "2026-07-25",
@@ -87,7 +106,7 @@ const payload = {
 
 const dashboard = buildWellDashboardData(payload)
 const [northRecord, northSingleReading] = dashboard.northWellRecords
-const [southRecord] = dashboard.southWellRecords
+const [southRecord, southEveningOnly] = dashboard.southWellRecords
 
 assert.equal(Math.round(northRecord.waterPumpedOut), 61667)
 assert.equal(Math.round(southRecord.waterPumpedOut), 150000)
@@ -100,6 +119,11 @@ assert.equal(southRecord.differenceInMorningReadings, -1300)
 assert.equal(northSingleReading.morningWaterDisplay, "4,48,470")
 assert.equal(northSingleReading.eveningWaterDisplay, "—")
 assert.equal(northSingleReading.differenceInMorningReadings, null)
+assert.equal(southEveningOnly.morningWater, null)
+assert.equal(southEveningOnly.morningWaterDisplay, "—")
+assert.equal(southEveningOnly.eveningWater, 390000)
+assert.equal(southEveningOnly.eveningWaterDisplay, "3,90,000")
+assert.equal(southEveningOnly.differenceInMorningReadings, null)
 assert.equal(formatSignedLitres(25000, true), "+25,000 L")
 assert.equal(formatSignedLitres(-25000, true), "−25,000 L")
 assert.equal(formatSignedLitres(0, true), "0 L")
@@ -123,6 +147,11 @@ const csv = buildWellWaterCsv(dashboard)
 assert.match(csv, /Difference in Morning Readings \(Litres\)/)
 assert.match(csv, /"25000"/)
 assert.match(csv, /"-1300"/)
+assert.ok(
+  csv.includes(
+    '"South Well","25/07/2026","","390000","0","","Morning reading unavailable"',
+  ),
+)
 assert.doesNotMatch(csv, /Estimated Recharge/i)
 
 const source = readFileSync(new URL("../lib/well-data.ts", import.meta.url), "utf8")
