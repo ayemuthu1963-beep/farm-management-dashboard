@@ -13,6 +13,7 @@ interface TreeNumberAutocompleteProps {
   options: readonly TreeNumberOption[]
   loading?: boolean
   loadError?: boolean
+  disabled?: boolean
   placeholder?: string
   maxSuggestions?: number
   showPlot?: boolean
@@ -28,6 +29,7 @@ export function TreeNumberAutocomplete({
   options,
   loading = false,
   loadError = false,
+  disabled = false,
   placeholder = "Type or select a Tree Number",
   maxSuggestions = 25,
   showPlot = false,
@@ -99,8 +101,11 @@ export function TreeNumberAutocomplete({
         aria-controls={listboxId}
         aria-activedescendant={activeOptionId}
         autoComplete="off"
+        disabled={disabled}
         value={value}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          if (!disabled) setOpen(true)
+        }}
         onBlur={() => window.setTimeout(() => setOpen(false), 100)}
         onChange={(event) => {
           onValueChange(event.target.value)
@@ -131,7 +136,7 @@ export function TreeNumberAutocomplete({
           }
         }}
         placeholder={placeholder}
-        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       />
 
       <div className="mt-1 min-h-4 text-xs text-muted-foreground" aria-live="polite">
