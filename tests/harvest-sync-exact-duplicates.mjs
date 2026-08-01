@@ -18,6 +18,7 @@ const cycleClient = read("components/admin/harvest-cycle-admin-client.tsx")
 const syncPage = read("app/admin/harvest-sync/page.tsx")
 const workspace = read("components/admin/harvest-manual-review-workspace.tsx")
 const review = read("components/admin/harvest-review-sections.tsx")
+const controlledReplacement = read("components/admin/harvest-controlled-replacement.tsx")
 const model = read("lib/harvest-review-model.ts")
 const proxy = read("app/api/admin/harvest-sync/[[...path]]/route.ts")
 const envExample = read(".env.example")
@@ -393,6 +394,47 @@ assert.match(review, /Retain \{displayHarvestDateLong\(candidate\.harvest_date\)
 assert.match(review, /Use pending submission as a correction proposal/)
 assert.match(review, /PENDING_CROSS_DATE_CYCLE_COLLISION/)
 
+// A saved correction proposal is distinct from amending the supervisor decision.
+assert.match(review, /HarvestControlledReplacement/)
+assert.match(review, /pending\.supervisor_decision === "USE_PENDING_SUBMISSION"/)
+assert.match(review, /pending\.selected_effective_instance_id/)
+for (const copy of [
+  "Controlled Harvest Record Replacement",
+  "CORRECTION REQUIRED",
+  "Run Controlled Replacement Dry Run",
+  "Apply Controlled Replacement",
+  "CORRECTION APPLIED",
+  "Download Correction Audit CSV",
+]) {
+  assert.match(controlledReplacement, new RegExp(copy))
+}
+for (const field of [
+  "Existing imported record — before",
+  "Reviewed pending submission — after",
+  "Tree count change",
+  "Bunch count change",
+  "Nut count change",
+  "Current Cycle totals",
+  "Projected Cycle totals",
+  "Supervisor reason",
+  "ODK instance ID",
+]) {
+  assert.match(controlledReplacement, new RegExp(field))
+}
+assert.match(controlledReplacement, /\/controlled-replacements\/proposal/)
+assert.match(controlledReplacement, /\/controlled-replacements\/dry-run/)
+assert.match(controlledReplacement, /\/controlled-replacements\/apply/)
+assert.match(controlledReplacement, /transactionRolledBack !== true/)
+assert.match(controlledReplacement, /dryRunToken/)
+assert.doesNotMatch(controlledReplacement, />\{dryRun\.dryRunToken\}</)
+assert.match(controlledReplacement, /confirmationInput\.trim\(\) !== proposal\.confirmationPhrase/)
+assert.match(controlledReplacement, /manualCorrectionEnabled !== true/)
+assert.match(controlledReplacement, /pendingCycleSourceFingerprint/)
+assert.match(controlledReplacement, /pending_cycle_source_fingerprint: current\.pendingCycleSourceFingerprint/)
+assert.match(controlledReplacement, /\^\[a-f0-9\]\{64\}\$\/i\.test\(proposal\.pendingCycleSourceFingerprint\)/)
+assert.match(controlledReplacement, /disabled=\{disabled \|\| busy !== null \|\| applyBlockers\.length > 0\}/)
+assert.match(controlledReplacement, /Refresh the date-scoped batch before the next normal dry run or import/)
+
 // Final plan, verified exports, authoritative dry run, opaque token, and fail-closed manual commit.
 assert.match(workspace, /Review Final Import Set/)
 assert.match(workspace, /Download Pre-Import CSV/)
@@ -513,9 +555,12 @@ assert.match(workspace, /already-imported source submissions/)
 
 // Server-only runtime lock, backend lock, and retired legacy route must all agree.
 assert.match(envExample, /HARVEST_MANUAL_IMPORT_ENABLED=false/)
+assert.match(envExample, /HARVEST_MANUAL_CORRECTION_ENABLED=false/)
 assert.doesNotMatch(envExample, /NEXT_PUBLIC_HARVEST_MANUAL_IMPORT_ENABLED/)
 assert.match(proxy, /process\.env\.HARVEST_MANUAL_IMPORT_ENABLED/)
 assert.match(proxy, /rawSuffix === "manual-import"/)
+assert.match(proxy, /rawSuffix === "controlled-replacements\/apply"/)
+assert.match(proxy, /isManualCorrectionRuntimeEnabled\(\)/)
 assert.match(proxy, /isManualImportRuntimeEnabled\(\)/)
 assert.match(proxy, /manualImportEnabled:/)
 assert.match(proxy, /rawSuffix === "import"/)

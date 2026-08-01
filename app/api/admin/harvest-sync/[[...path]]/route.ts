@@ -16,6 +16,10 @@ function isManualImportRuntimeEnabled(): boolean {
   return (process.env.HARVEST_MANUAL_IMPORT_ENABLED ?? "").trim().toLowerCase() === "true"
 }
 
+function isManualCorrectionRuntimeEnabled(): boolean {
+  return (process.env.HARVEST_MANUAL_CORRECTION_ENABLED ?? "").trim().toLowerCase() === "true"
+}
+
 type RouteContext = { params: Promise<{ path?: string[] }> | { path?: string[] } }
 
 const AUTHENTICATED_USER_HEADER = "X-MFMS-Authenticated-User"
@@ -89,6 +93,16 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
       { status: 423 },
     )
   }
+  if (
+    method === "POST" &&
+    rawSuffix === "controlled-replacements/apply" &&
+    !isManualCorrectionRuntimeEnabled()
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "Controlled Harvest corrections are locked by the frontend runtime." },
+      { status: 423 },
+    )
+  }
   const authHeader = getBasicAuthHeader()
   if (!authHeader) {
     return NextResponse.json({ ok: false, error: "Harvest API credentials are not configured." }, { status: 500 })
@@ -133,6 +147,41 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
         manualImportEnabled:
           isManualImportRuntimeEnabled() &&
           (body as { manualImportEnabled?: unknown }).manualImportEnabled === true,
+      },
+      { status: response.status },
+    )
+  }
+  if (
+    method === "GET" &&
+    rawSuffix === "controlled-replacements/proposal" &&
+    response.ok &&
+    body &&
+    typeof body === "object"
+  ) {
+    const bodyRecord = body as {
+      proposal?: { manualCorrectionEnabled?: unknown }
+      manualCorrectionEnabled?: unknown
+    }
+    if (bodyRecord.proposal && typeof bodyRecord.proposal === "object") {
+      return NextResponse.json(
+        {
+          ...bodyRecord,
+          proposal: {
+            ...bodyRecord.proposal,
+            manualCorrectionEnabled:
+              isManualCorrectionRuntimeEnabled() &&
+              bodyRecord.proposal.manualCorrectionEnabled === true,
+          },
+        },
+        { status: response.status },
+      )
+    }
+    return NextResponse.json(
+      {
+        ...bodyRecord,
+        manualCorrectionEnabled:
+          isManualCorrectionRuntimeEnabled() &&
+          bodyRecord.manualCorrectionEnabled === true,
       },
       { status: response.status },
     )

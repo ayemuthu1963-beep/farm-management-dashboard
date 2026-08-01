@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, CheckCircle2, Search, ShieldCheck } from "lucide-react"
+import { HarvestControlledReplacement } from "@/components/admin/harvest-controlled-replacement"
 import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
 import {
@@ -120,6 +121,15 @@ const CYCLE_COLLISION_DECISIONS = new Set<CycleDecisionAction>([
   "DEFER_DECISION",
 ])
 
+function normalizedCycleDecisionAction(value: unknown): CycleDecisionAction {
+  if (value === "USE_PENDING_SUBMISSION_AS_CORRECTION_PROPOSAL") {
+    return "USE_PENDING_SUBMISSION"
+  }
+  return CYCLE_COLLISION_DECISIONS.has(value as CycleDecisionAction)
+    ? (value as CycleDecisionAction)
+    : ""
+}
+
 const EMPTY_DECISION_DRAFT: DecisionDraft = {
   action: "",
   selectedInstanceId: "",
@@ -150,7 +160,10 @@ function decisionState(action: string | null | undefined): string {
     action === "KEEP_EXISTING_CYCLE_RECORD" ||
     action === "RETAIN_PENDING_CYCLE_SUBMISSION"
   ) return "Resolved"
-  if (action === "USE_PENDING_SUBMISSION") return "Correction required"
+  if (
+    action === "USE_PENDING_SUBMISSION" ||
+    action === "USE_PENDING_SUBMISSION_AS_CORRECTION_PROPOSAL"
+  ) return "Correction required"
   return "Unresolved"
 }
 
@@ -549,9 +562,7 @@ export function HarvestReviewSections({
     const savedReason = pending.supervisor_reason ?? ""
     const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
     const fallbackDraft: DecisionDraft = {
-      action: CYCLE_COLLISION_DECISIONS.has(pending.supervisor_decision as CycleDecisionAction)
-        ? (pending.supervisor_decision as CycleDecisionAction)
-        : "",
+      action: normalizedCycleDecisionAction(pending.supervisor_decision),
       selectedInstanceId:
         pending.selected_effective_instance_id ??
         (pendingCandidates.length === 1 ? pendingCandidates[0].odk_instance_id : ""),
@@ -1423,14 +1434,13 @@ export function HarvestReviewSections({
           {visibleCycle.map(({ key, pending, pendingCandidates, records }) => {
             const treeNo = String(pending.original_tree_no ?? "").trim()
             const groupStatus = groupFingerprintStatuses[groupFingerprintStatusKey(treeNo)] ?? null
+            const importedRecord = records.find(
+              (record) => record.classification === "ALREADY_IMPORTED",
+            )
             const hasImportedRecord = records.some(
               (record) => record.classification === "ALREADY_IMPORTED",
             )
-            const savedAction = CYCLE_COLLISION_DECISIONS.has(
-              pending.supervisor_decision as CycleDecisionAction,
-            )
-              ? (pending.supervisor_decision as CycleDecisionAction)
-              : ""
+            const savedAction = normalizedCycleDecisionAction(pending.supervisor_decision)
             const savedReason = pending.supervisor_reason ?? ""
             const savedReasonIsChoice = SUPERVISOR_REASONS.some((reason) => reason === savedReason)
             const draft =
@@ -1670,6 +1680,26 @@ export function HarvestReviewSections({
                     </span>
                   ) : null}
                 </div>
+                {hasImportedRecord &&
+                (pending.supervisor_decision === "USE_PENDING_SUBMISSION" ||
+                  pending.supervisor_decision ===
+                    "USE_PENDING_SUBMISSION_AS_CORRECTION_PROPOSAL") &&
+                pending.selected_effective_instance_id ? (
+                  <HarvestControlledReplacement
+                    scanId={selectedScanId!}
+                    harvestDate={displayHarvestDate(pending.harvest_date)}
+                    harvestCycle={scanData.scan.cycle_no ?? ""}
+                    treeNo={treeNo}
+                    existingHarvestRecordId={
+                      importedRecord?.existing_harvest_record_id ??
+                      pending.supervisor_existing_harvest_record_id ??
+                      null
+                    }
+                    pendingOdkInstanceId={pending.selected_effective_instance_id}
+                    disabled={disabled}
+                    onReplacementApplied={onDecisionSaved}
+                  />
+                ) : null}
               </div>
             )
           })}
