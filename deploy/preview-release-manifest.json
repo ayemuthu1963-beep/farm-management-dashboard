@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "environment": "Preview",
+  "target_url": "https://preview.muthufarms.com",
+  "deployment_kind": "frontend-only",
+  "base_commit": "024d68ff51b40a92c350414d43706370fc80f33e",
+  "allowed_paths": [
+    ".github/workflows/preview-server-deploy.yml",
+    ".github/workflows/preview-server-preflight.yml",
+    ".github/workflows/preview-server-rollback.yml",
+    "app/api/irrigation-management/route.ts",
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "deploy/preview-release-manifest.json",
+    "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
+    "lib/irrigation-data.ts",
+    "package.json",
+    "scripts/preview-server-deploy.sh",
+    "scripts/preview-server-preflight.sh",
+    "tests/admin-entry-workflows.mjs",
+    "tests/irrigation-management-corrections.mjs",
+    "tests/preview-deployment-workflow.mjs"
+  ],
+  "protected_invariants": {
+    "production": "unchanged",
+    "backend": "unchanged",
+    "database": "unchanged",
+    "odk": "unchanged",
+    "schedules": "unchanged",
+    "proxy_configuration": "unchanged"
+  }
+}

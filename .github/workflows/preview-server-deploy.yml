@@ -1,0 +1,184 @@
+name: Deploy Preview frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_revision:
+        description: Exact 40-character revision currently running on Preview
+        required: true
+        type: string
+      candidate_revision:
+        description: Exact 40-character preview-release revision to deploy
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY PREVIEW ONLY to authorize the guarded switch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-preview-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require exact Preview-only inputs
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          CURRENT_REVISION: ${{ inputs.current_revision }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Preview deployment must be dispatched from main" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "DEPLOY PREVIEW ONLY" ]] || {
+            echo "Confirmation did not match DEPLOY PREVIEW ONLY" >&2
+            exit 1
+          }
+          [[ "$CURRENT_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Current revision is not an exact lowercase commit SHA" >&2
+            exit 1
+          }
+          [[ "$CANDIDATE_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Candidate revision is not an exact lowercase commit SHA" >&2
+            exit 1
+          }
+          [[ "$CURRENT_REVISION" != "$CANDIDATE_REVISION" ]] || {
+            echo "Candidate revision is already running" >&2
+            exit 1
+          }
+
+          repo_url="https://github.com/$REPOSITORY.git"
+          remote_release=$(git ls-remote "$repo_url" refs/heads/preview-release | awk 'NR == 1 {print $1}')
+          [[ "$remote_release" == "$CANDIDATE_REVISION" ]] || {
+            echo "Candidate is not the exact preview-release head" >&2
+            exit 1
+          }
+
+          verify_dir=$(mktemp -d "$RUNNER_TEMP/mfms-preview-release.XXXXXX")
+          trap 'rm -rf "$verify_dir"' EXIT
+          git -C "$verify_dir" init --quiet
+          git -C "$verify_dir" remote add origin "$repo_url"
+          git -C "$verify_dir" fetch --quiet --no-tags --filter=blob:none \
+            origin refs/heads/preview-release:refs/remotes/origin/preview-release
+          [[ "$(git -C "$verify_dir" rev-parse refs/remotes/origin/preview-release)" == "$CANDIDATE_REVISION" ]]
+          git -C "$verify_dir" merge-base --is-ancestor "$CURRENT_REVISION" "$CANDIDATE_REVISION" || {
+            echo "Candidate does not contain the current Preview revision" >&2
+            exit 1
+          }
+
+  deploy:
+    needs: authorize
+    environment:
+      name: Preview
+      url: https://preview.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Validate and install the dedicated Preview deploy identity
+        id: ssh
+        shell: bash
+        env:
+          PREVIEW_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_DEPLOY_SSH_PRIVATE_KEY }}
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_KNOWN_HOSTS: ${{ secrets.PREVIEW_SSH_KNOWN_HOSTS }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          for required_name in \
+            PREVIEW_DEPLOY_SSH_PRIVATE_KEY \
+            PREVIEW_SSH_HOST \
+            PREVIEW_SSH_KNOWN_HOSTS \
+            PREVIEW_SSH_USER
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Missing required Preview environment setting: $required_name" >&2
+              exit 1
+            fi
+          done
+
+          [[ "$PREVIEW_SSH_HOST" == "168.144.179.221" ]] || {
+            echo "The configured host is not the approved Preview server" >&2
+            exit 1
+          }
+          [[ "$PREVIEW_SSH_USER" == "muthu" ]] || {
+            echo "The configured user is not the approved Preview account" >&2
+            exit 1
+          }
+
+          ssh_dir="$RUNNER_TEMP/mfms-preview-deploy-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PREVIEW_DEPLOY_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PREVIEW_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$PREVIEW_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the approved Preview frontend revision
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          CURRENT_REVISION: ${{ inputs.current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/preview-server-deployment.txt"
+          : > "$report"
+
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PREVIEW_SSH_USER@$PREVIEW_SSH_HOST" \
+            "deploy-preview $CANDIDATE_REVISION $CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee "$report"
+
+          grep -Fqx 'deployment_environment=Preview' "$report"
+          grep -Fqx 'deployment_url=https://preview.muthufarms.com' "$report"
+          grep -Fqx 'backend_unchanged=true' "$report"
+          grep -Fqx 'database_unchanged=true' "$report"
+          grep -Fqx 'odk_unchanged=true' "$report"
+          grep -Fqx 'schedules_unchanged=true' "$report"
+          grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          grep -Fqx 'production_touched=0' "$report"
+          grep -Fqx 'PREVIEW_DEPLOYMENT=PASS' "$report"
+
+      - name: Upload sanitized Preview deployment report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: preview-server-deployment-${{ github.run_id }}
+          path: ${{ runner.temp }}/preview-server-deployment.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-preview-deploy-ssh"
