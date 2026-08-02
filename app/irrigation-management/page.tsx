@@ -12,6 +12,8 @@ import { IrrigationMapWithDetails } from "@/components/irrigation/irrigation-map
 import { IrrigationChartsHybrid } from "@/components/irrigation/irrigation-charts-hybrid"
 import { IrrigationZoneTableHybrid } from "@/components/irrigation/irrigation-zone-table-hybrid"
 import { emptyIrrigationData, statusColors, type IrrigationData, type ZoneId } from "@/lib/irrigation-data"
+import { buildIrrigationZoneCsv } from "@/lib/irrigation-export"
+import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
 
 const environmentBanner = process.env.NEXT_PUBLIC_MFMS_ENV_BANNER?.trim()
 const environmentDatabaseLabel = process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL?.trim()
@@ -26,11 +28,12 @@ const environmentDataScope =
 const liveDataLabel = `LIVE ${environmentDataScope} DATABASE DATA`
 
 export default function IrrigationManagementPage() {
-  const [periodQuery, setPeriodQuery] = useState("period=last7")
+  const [periodQuery, setPeriodQuery] = useState(() => buildIrrigationPeriodQuery("lastN"))
   const [data, setData] = useState<IrrigationData>(emptyIrrigationData)
   const [selectedZoneId, setSelectedZoneId] = useState<ZoneId>("P1E")
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [refreshVersion, setRefreshVersion] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -44,7 +47,6 @@ export default function IrrigationManagementPage() {
         if (active) setData(payload)
       } catch (error) {
         if (active) {
-          setData(emptyIrrigationData)
           setErrorMessage(error instanceof Error ? error.message : "Unable to load irrigation data")
         }
       } finally {
@@ -52,8 +54,27 @@ export default function IrrigationManagementPage() {
       }
     }
     load()
-    return () => { active = false }
-  }, [periodQuery])
+    return () => {
+      active = false
+    }
+  }, [periodQuery, refreshVersion])
+
+  function refreshData() {
+    setRefreshVersion((version) => version + 1)
+  }
+
+  function exportZoneData() {
+    if (data.source !== "live") return
+    const blob = new Blob([buildIrrigationZoneCsv(data)], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `mfms-irrigation-by-zone-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
 
   const alertZones = data.zones.filter((zone) => zone.status !== "irrigated")
 
@@ -71,9 +92,21 @@ export default function IrrigationManagementPage() {
           </div>
         </div>
 
-        {errorMessage ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}. Live data unavailable; no fallback data is being shown.</div> : null}
+        {errorMessage ? (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+            {errorMessage}. {data.source === "live"
+              ? "Live data could not be refreshed; the last loaded data remains visible."
+              : "Live data unavailable; no fallback data is being shown."}
+          </div>
+        ) : null}
 
-        <IrrigationPeriodSelector onPeriodChange={setPeriodQuery} onRefresh={() => setPeriodQuery((query) => `${query}&refresh=${Date.now()}`)} isLoading={isLoading} />
+        <IrrigationPeriodSelector
+          onPeriodChange={setPeriodQuery}
+          onRefresh={refreshData}
+          onExport={exportZoneData}
+          isLoading={isLoading}
+          canExport={data.source === "live"}
+        />
         <IrrigationSummaryCards summary={data.summary} zoneCount={data.zones.length} isLoading={isLoading} />
 
         <section className="space-y-3">
@@ -87,11 +120,24 @@ export default function IrrigationManagementPage() {
         <IrrigationMapWithDetails zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} isLoading={isLoading} />
 
         <Panel title="Operational Alerts" icon={AlertTriangle}>
-          {isLoading ? <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">Checking live irrigation status...</div> : alertZones.length === 0 ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">All six operational zones have irrigation records for the selected period.</div> : <div className="grid gap-3 md:grid-cols-2">{alertZones.map((zone) => <div key={zone.id} className={`rounded-lg border p-3 text-sm ${statusColors[zone.status].bg} ${statusColors[zone.status].border}`}><div className={`font-semibold ${statusColors[zone.status].text}`}>{zone.name} — {zone.statusLabel}</div><div className="mt-1 text-muted-foreground">Records: {zone.recordsCount}. Mapping: {zone.configuredMotorValves.join(", ")}</div></div>)}</div>}
+          {isLoading ? (
+            <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">Checking live irrigation status...</div>
+          ) : alertZones.length === 0 ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">All six operational zones have irrigation records for the selected period.</div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {alertZones.map((zone) => (
+                <div key={zone.id} className={`rounded-lg border p-3 text-sm ${statusColors[zone.status].bg} ${statusColors[zone.status].border}`}>
+                  <div className={`font-semibold ${statusColors[zone.status].text}`}>{zone.name} — {zone.statusLabel}</div>
+                  <div className="mt-1 text-muted-foreground">Records: {zone.recordsCount}. Mapping: {zone.configuredMotorValves.join(", ")}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </Panel>
 
-        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={errorMessage} />
-        <IrrigationZoneTableHybrid records={data.records} isLoading={isLoading} errorMessage={errorMessage} />
+        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={data.source === "live" ? null : errorMessage} />
+        <IrrigationZoneTableHybrid records={data.records} isLoading={isLoading} errorMessage={data.source === "live" ? null : errorMessage} />
       </main>
     </DashboardShell>
   )

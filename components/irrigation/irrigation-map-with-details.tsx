@@ -68,7 +68,7 @@ function AreaBox({
           </div>
         ))}
         {zone.fiveDayHistory?.length ? null : (
-          <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">Five-day history unavailable.</div>
+          <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">Seven-day history unavailable.</div>
         )}
       </div>
     </button>
@@ -81,7 +81,7 @@ export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2">
-        <Panel title="Farm Irrigation Map" icon={Map} headerRight={<span className="text-xs text-muted-foreground">Five-day water per tree</span>}>
+        <Panel title="Farm Irrigation Map" icon={Map} headerRight={<span className="text-xs text-muted-foreground">Seven-day water per tree</span>}>
           {isLoading ? (
             <div className="flex h-[420px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
               Loading live irrigation map...
@@ -114,7 +114,7 @@ export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, 
           </div>
 
           <div className="rounded-lg border border-border p-3">
-            <div className="text-sm font-semibold text-foreground">Five-day water per tree</div>
+            <div className="text-sm font-semibold text-foreground">Seven-day water per tree</div>
             <div className="mt-2 space-y-2">
               {(selectedZone.fiveDayHistory ?? []).map((day) => (
                 <div key={`selected-${selectedZone.id}-${day.date}`} className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm">

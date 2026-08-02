@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { PUMP_LITRES_PER_HOUR, cropLitresPerTreePerHour, formatRuntimeMinutes, statusColors, zoneConfigs, zoneOrder, type CropWaterFigure, type IrrigationData, type IrrigationRecord, type IrrigationStatus, type TrendPoint, type Zone, type ZoneFiveDayHistory, type ZoneId } from "@/lib/irrigation-data"
+import { buildRecentIrrigationHistory } from "@/lib/irrigation-history"
+import {
+  getIrrigationDateBounds,
+  getRecentIrrigationHistoryDates,
+  IRRIGATION_PERIOD_VALIDATION_ERRORS,
+  resolveIrrigationDateBounds,
+} from "@/lib/irrigation-period"
+import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
 
 interface MotorRuntimeEntry {
   entry_id?: number
@@ -26,28 +34,9 @@ interface MergedMotorRuntimeEntry extends MotorRuntimeEntry {
   max_created_at?: string | null
 }
 
-const IST_TIME_ZONE = "Asia/Kolkata"
-
 const plotToZone = new Map<string, ZoneId>(zoneOrder.map((id) => [zoneConfigs[id].plot, id]))
 plotToZone.set("Nutmeg", "NM")
 plotToZone.set("Nutmug", "NM")
-
-function getIsoDateInTimeZone(date = new Date(), timeZone = IST_TIME_ZONE): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date)
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-  return `${values.year}-${values.month}-${values.day}`
-}
-
-function addCalendarDays(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T12:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "--"
@@ -62,26 +51,6 @@ function formatShortDate(value: string): string {
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
 }
 
-function getDateBounds(searchParams: URLSearchParams): { startDate?: string; endDate?: string; label: string } {
-  const period = searchParams.get("period") ?? "last7"
-  const today = getIsoDateInTimeZone()
-  const yesterday = addCalendarDays(today, -1)
-  if (period === "custom") {
-    const startDate = searchParams.get("startDate") ?? undefined
-    const endDate = searchParams.get("endDate") ?? undefined
-    if (startDate && endDate && startDate > endDate) throw new Error("Start date cannot be after end date")
-    return { startDate, endDate, label: startDate && endDate ? `${startDate} to ${endDate}` : "Custom range" }
-  }
-  if (period === "cycle") return { label: "Current Irrigation Cycle" }
-  if (period === "today") {
-    return { startDate: today, endDate: today, label: "Today" }
-  }
-  if (period === "yesterday") {
-    return { startDate: yesterday, endDate: yesterday, label: "Yesterday" }
-  }
-  return { startDate: addCalendarDays(yesterday, -6), endDate: yesterday, label: "Last 7 Days" }
-}
-
 function isWithinRange(entryDate: string, startDate?: string, endDate?: string): boolean {
   if (startDate && entryDate < startDate) return false
   if (endDate && entryDate > endDate) return false
@@ -93,11 +62,6 @@ function runtimeWater(totalMinutes: number): number { return Math.round((totalMi
 function cropWaterFigure(zoneId: ZoneId, totalMinutes: number): CropWaterFigure {
   const crop = zoneConfigs[zoneId].crop
   return { crop, litresPerTree: Math.round((totalMinutes / 60) * cropLitresPerTreePerHour[crop]) }
-}
-
-function getFiveDayWindow(endDate?: string): string[] {
-  const finalDate = endDate ?? addCalendarDays(getIsoDateInTimeZone(), -1)
-  return Array.from({ length: 5 }, (_, index) => addCalendarDays(finalDate, -index))
 }
 
 function getEntryId(entry: MotorRuntimeEntry): number | undefined {
@@ -191,39 +155,6 @@ function buildRecord(entry: MergedMotorRuntimeEntry, zoneId: ZoneId): Irrigation
   }
 }
 
-function buildFiveDayHistory(entries: MotorRuntimeEntry[], historyDates: string[]): Record<ZoneId, ZoneFiveDayHistory[]> {
-  const mergedEntries = mergeEntries(entries)
-  const today = getIsoDateInTimeZone()
-  const minutesByZoneAndDate = new Map<ZoneId, Map<string, number>>()
-  for (const id of zoneOrder) minutesByZoneAndDate.set(id, new Map<string, number>())
-
-  for (const entry of mergedEntries) {
-    const zoneId = plotToZone.get(entry.plot)
-    if (!zoneId || !historyDates.includes(entry.entry_date)) continue
-    const dateMap = minutesByZoneAndDate.get(zoneId) ?? new Map<string, number>()
-    dateMap.set(entry.entry_date, (dateMap.get(entry.entry_date) ?? 0) + entry.total_minutes)
-    minutesByZoneAndDate.set(zoneId, dateMap)
-  }
-
-  return Object.fromEntries(zoneOrder.map((zoneId) => {
-    const crop = zoneConfigs[zoneId].crop
-    const dateMap = minutesByZoneAndDate.get(zoneId) ?? new Map<string, number>()
-    const history = historyDates.map((date) => {
-      const totalMinutes = dateMap.get(date) ?? 0
-      const perTreeLitres = totalMinutes > 0 ? Math.round((totalMinutes / 60) * cropLitresPerTreePerHour[crop]) : null
-      return {
-        date,
-        displayDate: formatShortDate(date),
-        totalMinutes,
-        perTreeLitres,
-        status: totalMinutes > 0 ? "Irrigated" : "No Record",
-        isCurrentIncompleteDay: date === today,
-      } satisfies ZoneFiveDayHistory
-    })
-    return [zoneId, history]
-  })) as Record<ZoneId, ZoneFiveDayHistory[]>
-}
-
 function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: Record<ZoneId, ZoneFiveDayHistory[]>): IrrigationData {
   const mergedEntries = mergeEntries(entries)
   const byZone = new Map<ZoneId, MergedMotorRuntimeEntry[]>()
@@ -282,33 +213,47 @@ function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   try {
-    const { startDate, endDate, label } = getDateBounds(searchParams)
-    const historyDates = getFiveDayWindow(endDate)
+    const { startDate, endDate, label } = resolveIrrigationDateBounds(searchParams)
+    const historyDates = getRecentIrrigationHistoryDates(endDate)
     const historyStartDate = historyDates.at(-1)
     const historyEndDate = historyDates[0]
+    if (!historyStartDate || !historyEndDate) throw new Error("Unable to resolve irrigation history dates")
     const headers: HeadersInit = {}
     const authHeader = getBasicAuthHeader()
     if (authHeader) headers.Authorization = authHeader
-    const buildUpstreamParams = (rangeStart?: string, rangeEnd?: string) => {
-      const upstreamParams = new URLSearchParams({ limit: "100" })
-      if (rangeStart) upstreamParams.set("start_date", rangeStart)
-      if (rangeEnd) upstreamParams.set("end_date", rangeEnd)
-      return upstreamParams
-    }
-    const selectedParams = buildUpstreamParams(startDate, endDate)
-    const historyParams = buildUpstreamParams(historyStartDate, historyEndDate)
-    const [selectedResponse, historyResponse] = await Promise.all([
-      fetch(`${getApiBaseUrl()}/api/motor-runtime/entries?${selectedParams.toString()}`, { headers, cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/api/motor-runtime/entries?${historyParams.toString()}`, { headers, cache: "no-store" }),
+    const baseUrl = getApiBaseUrl()
+    const [selectedRows, historyRows] = await Promise.all([
+      fetchAllMotorRuntimeEntries<MotorRuntimeEntry>({
+        baseUrl,
+        startDate,
+        endDate,
+        headers,
+        responseLabel: "Motor Runtime API",
+      }),
+      fetchAllMotorRuntimeEntries<MotorRuntimeEntry>({
+        baseUrl,
+        startDate: historyStartDate,
+        endDate: historyEndDate,
+        headers,
+        responseLabel: "Motor Runtime history API",
+      }),
     ])
-    if (!selectedResponse.ok) throw new Error(`Motor Runtime API returned ${selectedResponse.status}`)
-    if (!historyResponse.ok) throw new Error(`Motor Runtime history API returned ${historyResponse.status}`)
-    const selectedRows = (await selectedResponse.json()) as MotorRuntimeEntry[]
-    const historyRows = (await historyResponse.json()) as MotorRuntimeEntry[]
-    const fiveDayHistory = buildFiveDayHistory(historyRows.filter((row) => isWithinRange(row.entry_date, historyStartDate, historyEndDate)), historyDates)
+    const litresPerTreePerHourByZone = Object.fromEntries(zoneOrder.map((zoneId) => [
+      zoneId,
+      cropLitresPerTreePerHour[zoneConfigs[zoneId].crop],
+    ])) as Record<ZoneId, number>
+    const fiveDayHistory = buildRecentIrrigationHistory({
+      entries: historyRows.filter((row) => isWithinRange(row.entry_date, historyStartDate, historyEndDate)),
+      historyDates,
+      zoneIds: zoneOrder,
+      zoneByPlot: plotToZone,
+      litresPerTreePerHourByZone,
+      today: getIrrigationDateBounds("today").startDate,
+    })
     return NextResponse.json(buildData(selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)), label, fiveDayHistory), { headers: { "Cache-Control": "no-store, max-age=0" } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to fetch irrigation data"
-    return NextResponse.json({ error: message }, { status: message === "Start date cannot be after end date" ? 400 : 503, headers: { "Cache-Control": "no-store, max-age=0" } })
+    const isBadRequest = IRRIGATION_PERIOD_VALIDATION_ERRORS.includes(message as typeof IRRIGATION_PERIOD_VALIDATION_ERRORS[number])
+    return NextResponse.json({ error: message }, { status: isBadRequest ? 400 : 503, headers: { "Cache-Control": "no-store, max-age=0" } })
   }
 }
