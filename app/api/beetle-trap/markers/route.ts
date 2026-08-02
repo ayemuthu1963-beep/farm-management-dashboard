@@ -19,6 +19,10 @@ interface ApiLocationRow {
   records_count?: string | number | null
   cumulative_count_start_date?: string | null
   pheromone_lure_installed_date?: string | null
+  inspection_records?: Array<{
+    inspection_date?: string | null
+    beetle_count?: string | number | null
+  }> | null
 }
 
 interface BeetleMarker {
@@ -32,6 +36,7 @@ interface BeetleMarker {
   recordsCount: number
   pheromoneInstalledOn: string
   resetDate: string
+  inspectionRecords: Array<{ inspectionDate: string; beetleCount: number }>
   countBand: "Very Low" | "Low" | "Medium" | "High" | "Very High"
 }
 
@@ -51,6 +56,15 @@ function formatDate(value: string | null | undefined): string {
   return value
 }
 
+function inspectionRecords(row: ApiLocationRow): Array<{ inspectionDate: string; beetleCount: number }> {
+  return (row.inspection_records ?? [])
+    .filter((record) => typeof record?.inspection_date === "string" && record.inspection_date.length > 0)
+    .map((record) => ({
+      inspectionDate: record.inspection_date as string,
+      beetleCount: toNumber(record.beetle_count),
+    }))
+}
+
 function toMarker(row: ApiLocationRow): BeetleMarker {
   const cumulativeCount = toNumber(row.cumulative_beetle_count)
 
@@ -65,6 +79,7 @@ function toMarker(row: ApiLocationRow): BeetleMarker {
     recordsCount: toNumber(row.records_count),
     pheromoneInstalledOn: formatDate(row.pheromone_lure_installed_date),
     resetDate: formatDate(row.cumulative_count_start_date),
+    inspectionRecords: inspectionRecords(row),
     countBand: bandForCount(cumulativeCount).band,
   }
 }

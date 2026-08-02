@@ -5,8 +5,10 @@ import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { ExportButton } from "@/components/farm/export-button"
 import { BeetleTrapMapArea } from "@/components/beetle/beetle-trap-map-area"
+import { BeetleTrapHeaderActions } from "@/components/beetle/beetle-trap-header-actions"
 import { BeetleDailyChart, type BeetleDailyCountRow } from "@/components/beetle/beetle-daily-chart"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
 
 export const dynamic = "force-dynamic"
 
@@ -272,12 +274,56 @@ function BeetleAreaTable({ data }: { data: BeetleDashboardData | null }) {
   )
 }
 
+function BeetleStatusTiles({
+  data,
+  latest,
+}: {
+  data: BeetleDashboardData | null
+  latest: BeetleDashboardData["summary"]["latest_inspection"] | null | undefined
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <Panel title="Beetle Infection by Area" icon={MapPin}>
+        <BeetleAreaTable data={data} />
+      </Panel>
+      <Panel title="Recent Inspection Status" icon={CircleCheck}>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-3 rounded-lg border border-chart-2/30 bg-chart-2/10 p-3">
+            <CircleCheck className="mt-0.5 size-5 shrink-0 text-chart-2" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Latest Beetle Count import date</p>
+              <p className="text-sm text-muted-foreground">{formatDisplayDate(latest?.inspection_date)} · {latest?.inspected_traps ?? 0} / {data?.summary.total_traps ?? 0} traps have count records for this date</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-lg border border-chart-1/30 bg-chart-1/10 p-3">
+            <Clock className="mt-0.5 size-5 shrink-0 text-chart-1" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Next inspection due</p>
+              <p className="text-sm text-muted-foreground">{formatDisplayDate(data?.summary.next_inspection_date)} · {daysUntil(data?.summary.next_inspection_date)}</p>
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="font-medium text-foreground">Latest-date traps with count records</span>
+              <span className="text-muted-foreground">{latest?.inspected_traps ?? 0} / {data?.summary.total_traps ?? 0}</span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-chart-2" style={{ width: `${data ? ((latest?.inspected_traps ?? 0) / data.summary.total_traps) * 100 : 0}%` }} />
+            </div>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
 export default async function BeetleTrapPage({ searchParams }: { searchParams?: Promise<PageSearchParams> }) {
   const resolvedSearchParams = searchParams ? await searchParams : {}
   const data = await getBeetleDashboardData(resolvedSearchParams)
   const cards = summaryCards(data)
   const rows = dailyRows(data)
   const latest = data?.summary.latest_inspection
+  const manualSyncAvailable = isBeetleTrapManualSyncAvailable()
 
   return (
     <DashboardShell>
@@ -294,7 +340,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
               <p className="text-sm text-muted-foreground">Traps are inspected every 2 days</p>
             </div>
           </div>
-          <ExportButton />
+          {manualSyncAvailable ? <BeetleTrapHeaderActions /> : <ExportButton />}
         </div>
 
         {!data && (
@@ -309,7 +355,9 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           ))}
         </div>
 
-        <BeetleTrapMapArea />
+        <BeetleTrapMapArea>
+          <BeetleStatusTiles data={data} latest={latest} />
+        </BeetleTrapMapArea>
 
         <Panel title="Daily Beetle Count – Last 15 Inspection Dates" icon={CalendarDays} headerRight={<span className="text-xs font-medium text-muted-foreground">Live from beetle_trap_counts</span>}>
           <BeetleDailyChart counts={rows} />
@@ -340,7 +388,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           </div>
         </Panel>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        {data && false ? <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Panel title="Beetle Infection by Area" icon={MapPin}>
             <BeetleAreaTable data={data} />
           </Panel>
@@ -366,12 +414,12 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
                   <span className="text-muted-foreground">{latest?.inspected_traps ?? 0} / {data?.summary.total_traps ?? 0}</span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-chart-2" style={{ width: `${data ? ((latest?.inspected_traps ?? 0) / data.summary.total_traps) * 100 : 0}%` }} />
+                  <div className="h-full rounded-full bg-chart-2" style={{ width: `${data ? ((latest?.inspected_traps ?? 0) / (data?.summary.total_traps ?? 1)) * 100 : 0}%` }} />
                 </div>
               </div>
             </div>
           </Panel>
-        </div>
+        </div> : null}
       </div>
     </DashboardShell>
   )

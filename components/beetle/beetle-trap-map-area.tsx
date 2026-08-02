@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Bug, Info, MapPin, Table2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Panel } from "@/components/farm/panel"
@@ -11,7 +11,13 @@ import {
   type LeafletMap,
 } from "@/components/maps/farm-orthomosaic-map"
 import { bandForCount, countBands } from "@/lib/beetle-data"
+import { BEETLE_TRAP_DATA_UPDATED_EVENT } from "@/lib/beetle-sync"
 import { cn } from "@/lib/utils"
+
+interface BeetleInspectionRecord {
+  inspectionDate: string
+  beetleCount: number
+}
 
 interface BeetleTrapMarker {
   trapNo: string
@@ -24,6 +30,7 @@ interface BeetleTrapMarker {
   recordsCount: number
   pheromoneInstalledOn: string
   resetDate: string
+  inspectionRecords: BeetleInspectionRecord[]
   countBand: "Very Low" | "Low" | "Medium" | "High" | "Very High"
 }
 
@@ -67,17 +74,20 @@ function escapeHtml(value: string): string {
 }
 
 function markerPopupHtml(marker: BeetleTrapMarker): string {
+  const inspectionRows = marker.inspectionRecords.length
+    ? marker.inspectionRecords.map((record) => `<tr>
+        <td style="border-top:1px solid #d7e3d9;padding:5px 0;color:#34513a;">${escapeHtml(record.inspectionDate)}</td>
+        <td style="border-top:1px solid #d7e3d9;padding:5px 0;text-align:right;font-weight:700;">${record.beetleCount}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="2" style="border-top:1px solid #d7e3d9;padding:5px 0;color:#34513a;">No inspection records since reset.</td></tr>`
+
   return `<div style="min-width:210px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#0f2415;">
     <div style="font-weight:800;font-size:15px;margin-bottom:6px;">${escapeHtml(marker.trapNo)}</div>
-    <div style="display:grid;gap:5px;font-size:12px;">
-      <div><strong>Trap Type:</strong> ${escapeHtml(marker.trapType)}</div>
-      <div><strong>Cumulative Beetle Count Since Reset:</strong> ${marker.cumulativeCount}</div>
-      <div><strong>Latest Inspection Date:</strong> ${escapeHtml(marker.latestInspectionDate)}</div>
-      <div><strong>Latest Count:</strong> ${marker.latestCount}</div>
-      <div><strong>Records Count:</strong> ${marker.recordsCount}</div>
-      <div><strong>Cumulative Count Start Date:</strong> ${escapeHtml(marker.resetDate)}</div>
-      <div><strong>Pheromone Lure Installed Date:</strong> ${escapeHtml(marker.pheromoneInstalledOn)}</div>
-    </div>
+    <div style="font-size:12px;margin-bottom:8px;"><strong>Cumulative Beetle Count Since Reset:</strong> ${marker.cumulativeCount}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr><th style="padding:0 0 4px;text-align:left;color:#34513a;">Date</th><th style="padding:0 0 4px;text-align:right;color:#34513a;">Beetle Count</th></tr></thead>
+      <tbody>${inspectionRows}</tbody>
+    </table>
   </div>`
 }
 
@@ -209,7 +219,7 @@ function markerHtml(marker: BeetleTrapMarker): string {
   ">${number}</div>`
 }
 
-export function BeetleTrapMapArea() {
+export function BeetleTrapMapArea({ children }: { children?: ReactNode }) {
   const [markers, setMarkers] = useState<BeetleTrapMarker[]>([])
   const [status, setStatus] = useState("Loading real trap locations from database...")
   const [error, setError] = useState("")
@@ -217,38 +227,33 @@ export function BeetleTrapMapArea() {
   const leafletRef = useRef<LeafletApi | null>(null)
   const layerRef = useRef<LeafletLayerGroup | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const loadMarkers = useCallback(async () => {
+    try {
+      const response = await fetch("/api/beetle-trap/markers", { cache: "no-store" })
+      const data = (await response.json()) as BeetleMarkerResponse
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`)
 
-    fetch("/api/beetle-trap/markers", { cache: "no-store" })
-      .then(async (response) => {
-        const data = (await response.json()) as BeetleMarkerResponse
-        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`)
-        return data
-      })
-      .then((data) => {
-        if (cancelled) return
-        const realMarkers = data.markers ?? []
-        setMarkers(realMarkers)
-        setStatus(
-          realMarkers.length
-            ? `Real database trap locations and beetle counts loaded: ${realMarkers.length} traps.`
-            : "No active trap locations found in database.",
-        )
-        setError("")
-      })
-      .catch((fetchError: unknown) => {
-        if (cancelled) return
-        const message = fetchError instanceof Error ? fetchError.message : "Unknown marker loading error"
-        setMarkers([])
-        setStatus("Real trap locations could not be loaded.")
-        setError(message)
-      })
-
-    return () => {
-      cancelled = true
+      const realMarkers = data.markers ?? []
+      setMarkers(realMarkers)
+      setStatus(
+        realMarkers.length
+          ? `Real database trap locations and beetle counts loaded: ${realMarkers.length} traps.`
+          : "No active trap locations found in database.",
+      )
+      setError("")
+    } catch (fetchError) {
+      const message = fetchError instanceof Error ? fetchError.message : "Unknown marker loading error"
+      setMarkers([])
+      setStatus("Real trap locations could not be loaded.")
+      setError(message)
     }
   }, [])
+
+  useEffect(() => {
+    void loadMarkers()
+    window.addEventListener(BEETLE_TRAP_DATA_UPDATED_EVENT, loadMarkers)
+    return () => window.removeEventListener(BEETLE_TRAP_DATA_UPDATED_EVENT, loadMarkers)
+  }, [loadMarkers])
 
   const handleMapReady = useCallback((map: LeafletMap, leaflet: LeafletApi) => {
     leafletRef.current = leaflet
@@ -299,6 +304,8 @@ export function BeetleTrapMapArea() {
         controlsPlacement="below"
         onMapReady={handleMapReady}
       />
+
+      {children}
 
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
         <MapPin className="mr-2 inline size-4 align-text-bottom" aria-hidden="true" />
