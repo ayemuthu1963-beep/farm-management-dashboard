@@ -19,6 +19,20 @@ function fmt(value: unknown, name: unknown): [string, string] {
   return [`${formatNumberIN(n)} L`, label]
 }
 
+function fmtPerTree(value: unknown, name: unknown): [string, string] {
+  const n = typeof value === "number" ? value : Number(value ?? 0)
+  return [`${formatNumberIN(n)} L/tree`, String(name)]
+}
+
+const perTreeSeries = [
+  { key: "P1E", name: "Plot 1 East", color: "#2563eb" },
+  { key: "P1W", name: "Plot 1 West", color: "#16a34a" },
+  { key: "P2E", name: "Plot 2 East", color: "#f59e0b" },
+  { key: "P2W", name: "Plot 2 West", color: "#dc2626" },
+  { key: "JF", name: "Jackfruit", color: "#7c3aed" },
+  { key: "NM", name: "Nutmeg", color: "#0891b2" },
+] as const
+
 function ChartState({ label, wide = false }: { label: string; wide?: boolean }) {
   return (
     <Panel title="Irrigation Charts" className={wide ? "lg:col-span-2" : undefined}>
@@ -33,58 +47,18 @@ export function IrrigationChartsHybrid({ zones, trend, isLoading = false, errorM
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartState label="Loading live chart data..." />
         <ChartState label="Loading live chart data..." />
-        <ChartState label="Loading live chart data..." wide />
       </div>
     )
   }
   if (errorMessage) return <ChartState label={errorMessage} wide />
 
-  const runtimeWaterData = zones.map((zone) => ({
-    zone: zone.abbr,
-    runtimeHours: zone.totalRuntimeHours,
-    waterLitres: zone.totalWaterSupplied,
-  }))
-  const perTreeData = zones.map((zone) => ({
-    zone: zone.abbr,
-    waterPerTree: zone.waterPerTree,
-    crop: zone.crop,
-  }))
   const hasAnyData = zones.some((zone) => zone.totalRuntimeMinutes > 0) || trend.length > 0
   if (!hasAnyData) return <ChartState label="No live irrigation records for the selected period." wide />
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <Panel title="Runtime and Water Pumped by Zone">
+      <Panel title="Daily Irrigation Trend">
         <ResponsiveContainer width="100%" height={310}>
-          <LineChart data={runtimeWaterData} margin={{ left: 8, right: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="zone" />
-            <YAxis yAxisId="runtime" label={{ value: "Runtime (hours)", angle: -90, position: "insideLeft" }} />
-            <YAxis yAxisId="water" orientation="right" tickFormatter={(value: number) => formatNumberIN(value)} label={{ value: "Water (L)", angle: 90, position: "insideRight" }} width={88} />
-            <Tooltip formatter={(value, name) => fmt(value, name)} />
-            <Legend />
-            <Line yAxisId="runtime" type="monotone" dataKey="runtimeHours" stroke="#2563eb" name="Runtime (hours)" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            <Line yAxisId="water" type="monotone" dataKey="waterLitres" stroke="#10b981" name="Water Pumped" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </Panel>
-
-      <Panel title="Water Supplied per Tree">
-        <ResponsiveContainer width="100%" height={310}>
-          <LineChart data={perTreeData} margin={{ left: 8, right: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="zone" />
-            <YAxis tickFormatter={(value: number) => formatNumberIN(value)} label={{ value: "Litres per tree", angle: -90, position: "insideLeft" }} width={80} />
-            <Tooltip formatter={(value, name) => fmt(value, name)} />
-            <Legend />
-            <Line type="monotone" dataKey="waterPerTree" stroke="#f59e0b" name="Water per Tree" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-          </LineChart>
-        </ResponsiveContainer>
-        <p className="mt-3 text-xs text-muted-foreground">Rates: Coconut 100 L/tree/hour, Nutmeg 80 L/tree/hour, Jackfruit 60 L/tree/hour.</p>
-      </Panel>
-
-      <Panel title="Daily Irrigation Trend" className="lg:col-span-2">
-        <ResponsiveContainer width="100%" height={330}>
           <LineChart data={trend} margin={{ left: 8, right: 8 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="displayDate" />
@@ -96,6 +70,22 @@ export function IrrigationChartsHybrid({ zones, trend, isLoading = false, errorM
             <Line yAxisId="runtime" type="monotone" dataKey="totalRuntimeHours" stroke="#16a34a" name="Runtime (hours)" strokeWidth={2.5} dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
+      </Panel>
+
+      <Panel title="Water Supplied per Tree">
+        <ResponsiveContainer width="100%" height={310}>
+          <LineChart data={trend} margin={{ left: 8, right: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="displayDate" />
+            <YAxis tickFormatter={(value: number) => formatNumberIN(value)} label={{ value: "Total water per tree (L)", angle: -90, position: "insideLeft" }} width={80} />
+            <Tooltip formatter={(value, name) => fmtPerTree(value, name)} labelFormatter={(label) => `Date: ${label}`} />
+            <Legend />
+            {perTreeSeries.map((series) => (
+              <Line key={series.key} type="monotone" dataKey={series.key} stroke={series.color} name={series.name} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+        <p className="mt-3 text-xs text-muted-foreground">Rates: Plot 1 and Plot 2 zones 100 L/tree/hour; Jackfruit and Nutmeg 60 L/tree/hour.</p>
       </Panel>
     </div>
   )

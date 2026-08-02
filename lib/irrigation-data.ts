@@ -11,7 +11,7 @@ export const PUMP_LITRES_PER_HOUR = 50_000
 
 export const cropLitresPerTreePerHour: Record<CropType, number> = {
   Coconut: 100,
-  Nutmeg: 80,
+  Nutmeg: 60,
   Jackfruit: 60,
 }
 

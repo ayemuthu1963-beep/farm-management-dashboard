@@ -138,7 +138,7 @@ const runtimeHours = runtimeMinutes / 60
 assert.equal(runtimeHours, 2.5)
 assert.equal(runtimeHours * PUMP_LITRES_PER_HOUR, 125_000)
 assert.equal(runtimeHours * cropLitresPerTreePerHour.Coconut, 250)
-assert.equal(runtimeHours * cropLitresPerTreePerHour.Nutmeg, 200)
+assert.equal(runtimeHours * cropLitresPerTreePerHour.Nutmeg, 150)
 assert.equal(runtimeHours * cropLitresPerTreePerHour.Jackfruit, 150)
 
 console.log("Preview admin entry workflow invariants: PASS")

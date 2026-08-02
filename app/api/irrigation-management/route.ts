@@ -195,8 +195,8 @@ function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: 
     const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: 0, P1W: 0, P2E: 0, P2W: 0, JF: 0, NM: 0 }
     for (const zoneId of zoneOrder) {
       const minutes = dateMinutes.get(zoneId) ?? 0
-      point[zoneId] = runtimeWater(minutes)
-      point.totalWaterLitres += point[zoneId]
+      point[zoneId] = cropWaterFigure(zoneId, minutes).litresPerTree
+      point.totalWaterLitres += runtimeWater(minutes)
       point.totalRuntimeHours += minutes / 60
     }
     point.totalRuntimeHours = Number(point.totalRuntimeHours.toFixed(2))

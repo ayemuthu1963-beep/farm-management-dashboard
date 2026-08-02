@@ -4,7 +4,7 @@ import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { emptyIrrigationData } from "../lib/irrigation-data.ts"
+import { cropLitresPerTreePerHour, emptyIrrigationData } from "../lib/irrigation-data.ts"
 import { buildIrrigationZoneCsv } from "../lib/irrigation-export.ts"
 import { buildRecentIrrigationHistory } from "../lib/irrigation-history.ts"
 import {
@@ -274,23 +274,30 @@ assert.deepEqual(history.P1E[0], {
 assert.equal(history.P1E[1].status, "No Record")
 assert.equal(history.P1E[1].perTreeLitres, null)
 
-// Both named zone charts use marked lines, retain their axes, and contain no bars.
+// The requested chart pair is half-width: Daily Irrigation Trend first, then
+// Water Supplied per Tree by date with one line for every operational zone.
 assert.doesNotMatch(charts, /\bBarChart\b|<Bar\b/)
-const runtimeChart = charts.slice(
-  charts.indexOf('<Panel title="Runtime and Water Pumped by Zone">'),
+assert.doesNotMatch(charts, /Runtime and Water Pumped by Zone/)
+assert.equal((charts.match(/<Panel title="Daily Irrigation Trend"/g) ?? []).length, 1)
+assert.doesNotMatch(charts, /Daily Irrigation Trend" className="lg:col-span-2/)
+const dailyTrendChart = charts.slice(
+  charts.indexOf('<Panel title="Daily Irrigation Trend">'),
   charts.indexOf('<Panel title="Water Supplied per Tree">'),
 )
-assert.match(runtimeChart, /<LineChart data=\{runtimeWaterData\}/)
-assert.match(runtimeChart, /yAxisId="runtime"/)
-assert.match(runtimeChart, /yAxisId="water"/)
-assert.match(runtimeChart, /dataKey="runtimeHours"[\s\S]*dot=\{\{ r: 4 \}\}/)
-assert.match(runtimeChart, /dataKey="waterLitres"[\s\S]*dot=\{\{ r: 4 \}\}/)
-const perTreeChart = charts.slice(
-  charts.indexOf('<Panel title="Water Supplied per Tree">'),
-  charts.indexOf('<Panel title="Daily Irrigation Trend"'),
-)
-assert.match(perTreeChart, /<LineChart data=\{perTreeData\}/)
-assert.match(perTreeChart, /dataKey="waterPerTree"[\s\S]*dot=\{\{ r: 4 \}\}/)
+assert.match(dailyTrendChart, /<LineChart data=\{trend\}/)
+assert.match(dailyTrendChart, /<XAxis dataKey="displayDate"/)
+assert.match(dailyTrendChart, /dataKey="totalWaterLitres"/)
+assert.match(dailyTrendChart, /dataKey="totalRuntimeHours"/)
+const perTreeChart = charts.slice(charts.indexOf('<Panel title="Water Supplied per Tree">'))
+assert.match(perTreeChart, /<LineChart data=\{trend\}/)
+assert.match(perTreeChart, /<XAxis dataKey="displayDate"/)
+assert.match(perTreeChart, /Total water per tree \(L\)/)
+for (const zoneId of ["P1E", "P1W", "P2E", "P2W", "JF", "NM"]) {
+  assert.match(charts, new RegExp(`key: "${zoneId}"`))
+}
+assert.deepEqual(cropLitresPerTreePerHour, { Coconut: 100, Nutmeg: 60, Jackfruit: 60 })
+assert.match(route, /point\[zoneId\] = cropWaterFigure\(zoneId, minutes\)\.litresPerTree/)
+assert.match(route, /point\.totalWaterLitres \+= runtimeWater\(minutes\)/)
 
 const chartModule = loadTsxModule("components/irrigation/irrigation-charts-hybrid.tsx", {
   "react/jsx-runtime": jsxRuntime,
@@ -299,22 +306,43 @@ const chartModule = loadTsxModule("components/irrigation/irrigation-charts-hybri
   "@/lib/irrigation-data": { formatNumberIN: (value) => String(value) },
 })
 const chartTree = chartModule.IrrigationChartsHybrid({
-  zones: [{
-    ...emptyIrrigationData.zones[0],
-    totalRuntimeMinutes: 60,
-    totalRuntimeHours: 1,
-    totalWaterSupplied: 50_000,
-    waterPerTree: 100,
+  zones: emptyIrrigationData.zones.map((zone) => ({ ...zone, totalRuntimeMinutes: 60 })),
+  trend: [{
+    date: "2026-08-01",
+    displayDate: "01 Aug",
+    totalWaterLitres: 300_000,
+    totalRuntimeHours: 6,
+    P1E: 100,
+    P1W: 100,
+    P2E: 100,
+    P2W: 100,
+    JF: 60,
+    NM: 60,
   }],
-  trend: [],
 })
 const chartElements = []
 walkElements(chartTree, (element) => chartElements.push(element))
-assert.equal(chartElements.filter((element) => element.type === "LineChart").length, 3)
+assert.equal(chartElements.filter((element) => element.type === "LineChart").length, 2)
 assert.equal(chartElements.some((element) => element.type === "BarChart" || element.type === "Bar"), false)
 const renderedLines = chartElements.filter((element) => element.type === "Line")
-assert.deepEqual(renderedLines.slice(0, 3).map((element) => element.props.dataKey), ["runtimeHours", "waterLitres", "waterPerTree"])
-assert.ok(renderedLines.slice(0, 3).every((element) => element.props.dot?.r >= 4))
+assert.deepEqual(renderedLines.map((element) => element.props.dataKey), [
+  "totalWaterLitres",
+  "totalRuntimeHours",
+  "P1E",
+  "P1W",
+  "P2E",
+  "P2W",
+  "JF",
+  "NM",
+])
+assert.deepEqual(renderedLines.slice(2).map((element) => element.props.name), [
+  "Plot 1 East",
+  "Plot 1 West",
+  "Plot 2 East",
+  "Plot 2 West",
+  "Jackfruit",
+  "Nutmeg",
+])
 
 // A failed period request cannot leave stale data visible under the newly selected label.
 assert.match(page, /setData\(emptyIrrigationData\)/)
