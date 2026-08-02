@@ -7,6 +7,9 @@ blocked() {
 }
 
 [[ $# -eq 0 ]] || blocked "arguments are not accepted"
+if [[ -n "${SSH_ORIGINAL_COMMAND:-}" && "$SSH_ORIGINAL_COMMAND" != "bash -s --" ]]; then
+  blocked "the SSH key is restricted to the Preview preflight command"
+fi
 [[ "$(id -u)" -ne 0 ]] || blocked "root SSH access is prohibited"
 [[ "$(id -un)" == "muthu" ]] || blocked "the approved Preview SSH user is muthu"
 
