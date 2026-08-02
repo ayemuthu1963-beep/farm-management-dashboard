@@ -47,6 +47,7 @@ export default function IrrigationManagementPage() {
         if (active) setData(payload)
       } catch (error) {
         if (active) {
+          setData(emptyIrrigationData)
           setErrorMessage(error instanceof Error ? error.message : "Unable to load irrigation data")
         }
       } finally {
@@ -92,13 +93,7 @@ export default function IrrigationManagementPage() {
           </div>
         </div>
 
-        {errorMessage ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
-            {errorMessage}. {data.source === "live"
-              ? "Live data could not be refreshed; the last loaded data remains visible."
-              : "Live data unavailable; no fallback data is being shown."}
-          </div>
-        ) : null}
+        {errorMessage ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}. Live data unavailable; no fallback data is being shown.</div> : null}
 
         <IrrigationPeriodSelector
           onPeriodChange={setPeriodQuery}
@@ -136,8 +131,8 @@ export default function IrrigationManagementPage() {
           )}
         </Panel>
 
-        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={data.source === "live" ? null : errorMessage} />
-        <IrrigationZoneTableHybrid records={data.records} isLoading={isLoading} errorMessage={data.source === "live" ? null : errorMessage} />
+        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={errorMessage} />
+        <IrrigationZoneTableHybrid records={data.records} isLoading={isLoading} errorMessage={errorMessage} />
       </main>
     </DashboardShell>
   )

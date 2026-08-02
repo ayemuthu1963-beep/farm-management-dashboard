@@ -316,9 +316,9 @@ const renderedLines = chartElements.filter((element) => element.type === "Line")
 assert.deepEqual(renderedLines.slice(0, 3).map((element) => element.props.dataKey), ["runtimeHours", "waterLitres", "waterPerTree"])
 assert.ok(renderedLines.slice(0, 3).every((element) => element.props.dot?.r >= 4))
 
-// A failed refresh reports the error without discarding or hiding previously loaded live data.
-assert.doesNotMatch(page, /setData\(emptyIrrigationData\)/)
-assert.equal((page.match(/errorMessage=\{data\.source === "live" \? null : errorMessage\}/g) ?? []).length, 2)
+// A failed period request cannot leave stale data visible under the newly selected label.
+assert.match(page, /setData\(emptyIrrigationData\)/)
+assert.equal((page.match(/errorMessage=\{errorMessage\}/g) ?? []).length, 2)
 
 // Export remains wired to a real CSV download and preserves escaping.
 const exportData = {
