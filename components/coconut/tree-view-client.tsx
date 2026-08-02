@@ -12,6 +12,7 @@ import {
   formatRupees,
   type TreeHarvestRow,
 } from "@/lib/coconut-harvest-data"
+import { calculateTreeHarvestTotals } from "@/lib/tree-harvest-totals"
 
 interface TreeViewData {
   treeNo: string
@@ -54,6 +55,7 @@ export function TreeViewClient({
 
   const last10Summary = performanceSummary(last10Harvests)
   const sinceJan2025Summary = performanceSummary(sinceJan2025Harvests)
+  const treeHistoryTotals = useMemo(() => calculateTreeHarvestTotals(treeHistory), [treeHistory])
 
   async function loadTreeOptions(query: string) {
     try {
@@ -260,41 +262,62 @@ export function TreeViewClient({
         {dataStatus === "idle" ? null : (
           <Panel title="Tree Harvest History" icon={History}>
             <div className="overflow-x-auto">
-              {treeHistory.length > 0 ? (
-                <table className="w-full min-w-[720px] border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-                      <th className="px-3 py-2.5">Harvest Cycle</th>
-                      <th className="px-3 py-2.5">Harvest Date</th>
-                      <th className="px-3 py-2.5 text-right">Nuts-B1</th>
-                      <th className="px-3 py-2.5 text-right">Nuts-B2</th>
-                      <th className="px-3 py-2.5 text-right">Nuts-B3</th>
-                      <th className="px-3 py-2.5 text-right">Total-B</th>
-                      <th className="px-3 py-2.5 text-right">Total Nuts</th>
-                      <th className="px-3 py-2.5 text-right">Total Sale</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {treeHistory.map((r) => (
-                      <tr key={`${r.cycle}-${r.harvestDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
-                        <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">Cycle {r.cycle}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.harvestDate}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{r.nutsB1}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{r.nutsB2}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{r.nutsB3}</td>
-                        <td className="px-3 py-2.5 text-right text-muted-foreground">{r.totalBunches}</td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-foreground">{r.totalNuts}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{formatRupees(r.totalSale)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : dataStatus === "loading" ? (
+              {dataStatus === "loading" && treeHistory.length === 0 ? (
                 <HarvestRequestState tone="loading" message="Searching harvest records..." />
               ) : (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  No harvest records found for tree {treeNo}.
-                </p>
+                <table className="w-full min-w-[980px] border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
+                      <th className="whitespace-nowrap px-3 py-2.5">Tree No</th>
+                      <th className="whitespace-nowrap px-3 py-2.5">Cycle</th>
+                      <th className="whitespace-nowrap px-3 py-2.5">Harvest Date</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Nuts Bunch : 1</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Nuts Bunch : 2</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Nuts Bunch : 3</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Total Bunches</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Total Nuts</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Total Sale</th>
+                    </tr>
+                  </thead>
+                  <tbody data-testid="tree-history-totals">
+                    <tr
+                      data-testid="tree-history-totals-row"
+                      className="border-b border-border font-bold text-destructive"
+                    >
+                      <td className="whitespace-nowrap px-3 py-2.5">Total</td>
+                      <td className="px-3 py-2.5" aria-label="Cycle total not applicable" />
+                      <td className="px-3 py-2.5" aria-label="Harvest date total not applicable" />
+                      <td className="px-3 py-2.5 text-right">{treeHistoryTotals.nutsB1}</td>
+                      <td className="px-3 py-2.5 text-right">{treeHistoryTotals.nutsB2}</td>
+                      <td className="px-3 py-2.5 text-right">{treeHistoryTotals.nutsB3}</td>
+                      <td className="px-3 py-2.5 text-right">{treeHistoryTotals.totalBunches}</td>
+                      <td className="px-3 py-2.5 text-right">{treeHistoryTotals.totalNuts}</td>
+                      <td className="px-3 py-2.5 text-right">{formatRupees(treeHistoryTotals.totalSale)}</td>
+                    </tr>
+                  </tbody>
+                  <tbody data-testid="tree-history-records">
+                    {treeHistory.map((r) => (
+                      <tr key={`${r.cycle}-${r.harvestDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
+                        <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{treeNo}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">Cycle {r.cycle}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.harvestDate}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.nutsB1 ?? 0}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.nutsB2 ?? 0}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.nutsB3 ?? 0}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{r.totalBunches ?? 0}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-foreground">{r.totalNuts ?? 0}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{formatRupees(r.totalSale ?? 0)}</td>
+                      </tr>
+                    ))}
+                    {treeHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                          No harvest records found for tree {treeNo}.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
               )}
             </div>
           </Panel>
