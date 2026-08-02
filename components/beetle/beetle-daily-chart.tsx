@@ -6,6 +6,10 @@ export interface BeetleDailyCountRow {
   date: string
   rhinoceros: number
   redPalmWeevil: number
+  plot1Rhinoceros: number
+  plot1RedPalmWeevil: number
+  plot2Rhinoceros: number
+  plot2RedPalmWeevil: number
 }
 
 interface BeetleDailyChartProps {

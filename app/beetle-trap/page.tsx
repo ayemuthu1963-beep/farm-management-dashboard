@@ -27,6 +27,10 @@ interface LiveDailyCount {
   inspection_date: string
   rhinoceros: number
   red_palm_weevil: number
+  plot_1_rhinoceros: number
+  plot_1_red_palm_weevil: number
+  plot_2_rhinoceros: number
+  plot_2_red_palm_weevil: number
   inspected_traps: number
 }
 
@@ -188,6 +192,10 @@ function dailyRows(data: BeetleDashboardData | null): BeetleDailyCountRow[] {
     date: formatDisplayDate(d.inspection_date),
     rhinoceros: d.rhinoceros,
     redPalmWeevil: d.red_palm_weevil,
+    plot1Rhinoceros: d.plot_1_rhinoceros,
+    plot1RedPalmWeevil: d.plot_1_red_palm_weevil,
+    plot2Rhinoceros: d.plot_2_rhinoceros,
+    plot2RedPalmWeevil: d.plot_2_red_palm_weevil,
   }))
 }
 
@@ -362,25 +370,33 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
         <Panel title="Daily Beetle Count – Last 15 Inspection Dates" icon={CalendarDays} headerRight={<span className="text-xs font-medium text-muted-foreground">Live from beetle_trap_counts</span>}>
           <BeetleDailyChart counts={rows} />
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse text-sm">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead>
                 <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-                  <th className="px-3 py-2.5">Date</th>
-                  <th className="px-3 py-2.5 text-right">Rhinoceros Beetle Count</th>
-                  <th className="px-3 py-2.5 text-right">Red Palm Weevil Count</th>
+                  <th className="px-3 py-2.5" rowSpan={2}>Date</th>
+                  <th className="px-3 py-2.5 text-center" colSpan={2}>Plot 1</th>
+                  <th className="px-3 py-2.5 text-center" colSpan={2}>Plot 2</th>
+                </tr>
+                <tr className="border-b border-primary/20 bg-primary/5 text-left text-xs font-semibold text-primary">
+                  <th className="px-3 py-2 text-right">Rhinoceros Beetle Count</th>
+                  <th className="px-3 py-2 text-right">Red Palm Weevil Count</th>
+                  <th className="px-3 py-2 text-right">Rhinoceros Beetle Count</th>
+                  <th className="px-3 py-2 text-right">Red Palm Weevil Count</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((d) => (
                   <tr key={d.date} className="border-b border-border last:border-0 hover:bg-muted/50">
                     <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{d.date}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{d.rhinoceros}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{d.redPalmWeevil}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot1Rhinoceros}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot1RedPalmWeevil}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot2Rhinoceros}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot2RedPalmWeevil}</td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={3}>No Beetle Count records are available yet.</td>
+                    <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={5}>No Beetle Count records are available yet.</td>
                   </tr>
                 )}
               </tbody>

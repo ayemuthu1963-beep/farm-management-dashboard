@@ -36,5 +36,13 @@ for (const removedField of [
 
 assert.ok(page.indexOf("<BeetleTrapMapArea>") < page.indexOf("<BeetleStatusTiles"))
 assert.ok(mapArea.indexOf("{children}") < mapArea.indexOf("<TrapTable markers={markers} />"))
+assert.match(page, /plot_1_rhinoceros/)
+assert.match(page, /plot_1_red_palm_weevil/)
+assert.match(page, /plot_2_rhinoceros/)
+assert.match(page, /plot_2_red_palm_weevil/)
+assert.match(page, /rowSpan=\{2\}>Date<\/th>/)
+assert.match(page, /colSpan=\{2\}>Plot 1<\/th>/)
+assert.match(page, /colSpan=\{2\}>Plot 2<\/th>/)
+assert.match(page, /min-w-\[760px\]/)
 
 console.log("Beetle Trap Preview/UAT amendment frontend contracts passed.")
