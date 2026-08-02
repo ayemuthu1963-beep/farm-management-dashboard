@@ -24,8 +24,13 @@ jobs:
         shell: bash
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
+          WORKFLOW_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Preview preflight must be dispatched from main" >&2
+            exit 1
+          }
           [[ "$CONFIRMATION" == "INSPECT PREVIEW ONLY" ]] || {
             echo "Confirmation did not match INSPECT PREVIEW ONLY" >&2
             exit 1
@@ -39,17 +44,17 @@ jobs:
 
     steps:
       - name: Check out trusted preflight source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Validate and install the dedicated Preview SSH identity
         id: ssh
         shell: bash
         env:
-          PREVIEW_SSH_HOST: ${{ secrets.PREVIEW_SSH_HOST }}
-          PREVIEW_SSH_USER: ${{ secrets.PREVIEW_SSH_USER }}
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
           PREVIEW_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_SSH_PRIVATE_KEY }}
           PREVIEW_SSH_KNOWN_HOSTS: ${{ secrets.PREVIEW_SSH_KNOWN_HOSTS }}
         run: |
@@ -62,7 +67,7 @@ jobs:
             PREVIEW_SSH_KNOWN_HOSTS
           do
             if [[ -z "${!required_name:-}" ]]; then
-              echo "Missing required Preview environment secret: $required_name" >&2
+              echo "Missing required Preview environment setting: $required_name" >&2
               exit 1
             fi
           done
@@ -91,8 +96,8 @@ jobs:
       - name: Run read-only Preview inspection
         shell: bash
         env:
-          PREVIEW_SSH_HOST: ${{ secrets.PREVIEW_SSH_HOST }}
-          PREVIEW_SSH_USER: ${{ secrets.PREVIEW_SSH_USER }}
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
           IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
           KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
         run: |
@@ -116,7 +121,7 @@ jobs:
 
       - name: Upload sanitized preflight report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: preview-server-preflight-${{ github.run_id }}
           path: ${{ runner.temp }}/preview-server-preflight.txt

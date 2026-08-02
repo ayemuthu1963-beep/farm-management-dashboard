@@ -9,7 +9,8 @@ Production.
 - The workflow runs only through `workflow_dispatch`.
 - The exact confirmation text is `INSPECT PREVIEW ONLY`.
 - The job uses the protected GitHub Environment named `preview`.
-- GitHub permissions are read-only.
+- GitHub permissions are read-only, and external Actions are pinned to full
+  immutable commit hashes.
 - SSH host verification is pinned; `ssh-keyscan` is not used by the workflow.
 - Root SSH is prohibited. The approved remote account is `muthu`.
 - The initial workflow only inspects the current Preview containers and returns a
@@ -27,11 +28,12 @@ In `ayemuthu1963-beep/farm-management-dashboard`:
 2. Create an environment named exactly `preview`.
 3. Restrict deployment branches to `main` and add a required reviewer when the
    repository plan supports it.
-4. Add these environment secrets:
+4. Add these environment variables:
    - `PREVIEW_SSH_HOST`: the Preview server hostname or IP address.
    - `PREVIEW_SSH_USER`: `muthu`.
+5. Add these environment secrets:
    - `PREVIEW_SSH_PRIVATE_KEY`: a dedicated, unencrypted SSH private key whose
-     public key is authorized only for the Preview deployment account.
+     public key is restricted to the trusted Preview preflight command.
    - `PREVIEW_SSH_KNOWN_HOSTS`: the trusted `known_hosts` entry for the Preview
      server, copied from a computer that has already verified that server.
 
