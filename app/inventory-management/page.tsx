@@ -1,7 +1,7 @@
 import { Boxes } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
-import { InventoryDashboardClient } from "@/components/inventory/inventory-dashboard-client"
+import { AssetRegisterDashboardClient } from "@/components/asset-register/asset-register-dashboard-client"
 
 export default function InventoryManagementPage() {
   return (
@@ -16,16 +16,16 @@ export default function InventoryManagementPage() {
             </span>
             <div>
               <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">
-                Inventory Management
+                Farm Asset Register
               </h1>
               <p className="text-sm text-muted-foreground">
-                Stock received, stock used, opening balance, expiry and live inventory balance.
+                Independent register of durable farm assets, their location, condition and operational status.
               </p>
             </div>
           </div>
         </div>
 
-        <InventoryDashboardClient />
+        <AssetRegisterDashboardClient />
       </div>
     </DashboardShell>
   )

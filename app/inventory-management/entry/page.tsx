@@ -1,7 +1,7 @@
 import { ClipboardList } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
-import { InventoryEntryClient } from "@/components/inventory/inventory-entry-client"
+import { AssetRegisterEntryClient } from "@/components/asset-register/asset-register-entry-client"
 
 export default function InventoryEntryPage() {
   return (
@@ -16,16 +16,16 @@ export default function InventoryEntryPage() {
             </span>
             <div>
               <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">
-                Inventory Entry
+                Register Farm Asset
               </h1>
               <p className="text-sm text-muted-foreground">
-                Record opening stock, stock received, stock used, returns, expiry and adjustments.
+                Record a durable farm asset independently from fertiliser and consumable-stock records.
               </p>
             </div>
           </div>
         </div>
 
-        <InventoryEntryClient />
+        <AssetRegisterEntryClient />
       </div>
     </DashboardShell>
   )

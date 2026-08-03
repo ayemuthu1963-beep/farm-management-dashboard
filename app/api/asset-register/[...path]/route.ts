@@ -8,32 +8,23 @@ interface RouteContext {
 async function proxy(request: Request, context: RouteContext) {
   const { path } = await context.params
   const url = new URL(request.url)
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
+  const headers: HeadersInit = { "Content-Type": "application/json" }
   const authHeader = getBasicAuthHeader()
 
-  if (authHeader) {
-    headers.Authorization = authHeader
-  }
+  if (authHeader) headers.Authorization = authHeader
 
   try {
     const body = request.method === "GET" ? undefined : await request.text()
-    const response = await fetch(`${getApiBaseUrl()}/api/inventory/${path.join("/")}${url.search}`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/asset-register/${path.join("/")}${url.search}`, {
       method: request.method,
       headers,
       body,
       cache: "no-store",
     })
-
-    const payload = await response.json()
-
-    return NextResponse.json(payload, { status: response.status })
+    return NextResponse.json(await response.json(), { status: response.status })
   } catch (error) {
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unable to reach Inventory API",
-      },
+      { error: error instanceof Error ? error.message : "Unable to reach the Asset Register API" },
       { status: 503 },
     )
   }

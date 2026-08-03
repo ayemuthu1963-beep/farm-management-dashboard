@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "b501f8fed1d9a3a8fe11065e6a9de7147ef75e69")
+assert.equal(manifest.base_commit, "bbafae5aa644dae72c1c8b7a5e86d4ab48f13fcf")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -240,8 +240,24 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(manifest.allowed_paths, [...manifest.allowed_paths].sort())
 assert.equal(new Set(manifest.allowed_paths).size, manifest.allowed_paths.length)
 for (const requiredPath of [
-  "components/home/home-footer.tsx",
+  "app/admin/page.tsx",
+  "app/api/asset-register/[...path]/route.ts",
+  "app/inventory-management/entry/page.tsx",
+  "app/inventory-management/page.tsx",
+  "components/asset-register/asset-register-dashboard-client.tsx",
+  "components/asset-register/asset-register-entry-client.tsx",
+  "components/inventory/inventory-dashboard-client.tsx",
+  "components/inventory/inventory-entry-client.tsx",
+  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
+  "docs/PREVIEW_ASSET_REGISTER_RELEASE.md",
+  "lib/asset-register-types.ts",
+  "lib/inventory-types.ts",
+  "lib/mfms-navigation.ts",
+  "package.json",
+  "scripts/test-preview-release.sh",
+  "tests/asset-register-release.mjs",
+  "tests/harvest-sync-exact-duplicates.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]) {
   assert.ok(manifest.allowed_paths.includes(requiredPath), `Missing manifest path: ${requiredPath}`)
