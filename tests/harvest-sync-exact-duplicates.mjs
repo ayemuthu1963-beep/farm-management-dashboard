@@ -356,15 +356,15 @@ assert.equal(
   "a third pending date must remain unresolved until it receives its own decision",
 )
 
-// Preserve unrelated Admin tools and update only the two separate Harvest destinations.
+// The Admin Console contains operational tools only; the asset register is not an Admin entry tile.
 for (const title of [
   "Motor Runtime Entry",
   "Well Water Entry",
   "Beetle Trap Entry",
-  "Fertiliser & Pesticide Inventory Entry",
 ]) {
   assert.match(adminPage, new RegExp(title.replace(/[&]/g, "\\&")))
 }
+assert.doesNotMatch(adminPage, /Fertiliser & Pesticide Inventory Entry/)
 assert.match(adminPage, /title: "Harvest Cycle Admin"/)
 assert.match(
   adminPage,

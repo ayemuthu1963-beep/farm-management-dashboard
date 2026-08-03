@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, PackageCheck, ShieldCheck } from "lucide-react"
+import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, ShieldCheck } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 import { getPreviewDatabaseLabel, getPreviewEnvironmentLabel } from "@/components/admin/preview-admin-notice"
@@ -36,12 +36,6 @@ const adminTiles = [
     description: "Scan ODK, resolve duplicate or invalid submissions, run a dry run and manually import the reviewed Harvest batch.",
     href: "/admin/harvest-sync",
     icon: DatabaseZap,
-  },
-  {
-    title: "Fertiliser & Pesticide Inventory Entry",
-    description: "Open the inventory entry workflow for receipts, usage and adjustments.",
-    href: "/inventory-management/entry",
-    icon: PackageCheck,
   },
 ]
 
