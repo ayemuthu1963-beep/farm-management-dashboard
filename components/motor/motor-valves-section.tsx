@@ -4,7 +4,7 @@ import type { ValveGroup } from "@/lib/motor-data"
 
 export function MotorValvesSection({ valveGroups }: { valveGroups: ValveGroup[] }) {
   return (
-    <Panel title="Valve Runtime History" icon={Droplets}>
+    <Panel title="Valve Runtime History" icon={Droplets} iconClassName="text-emerald-700" className="border-emerald-100 bg-emerald-50/35">
       <div className="space-y-6">
         {valveGroups.every((group) => group.valves.length === 0) && <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">No valve runtime records found for the selected period.</p>}
         {valveGroups.map((group) => group.valves.length > 0 ? (
