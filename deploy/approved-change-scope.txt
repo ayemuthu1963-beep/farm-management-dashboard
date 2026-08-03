@@ -16,3 +16,17 @@ frontend:scripts/test-preview-release.sh
 frontend:scripts/test-preview-live-contracts.sh
 frontend:scripts/check-preview-config-drift.sh
 frontend:scripts/run-preview-candidate.sh
+frontend:app/motor-runtime/page.tsx
+frontend:components/motor/motor-log-section.tsx
+frontend:components/motor/motor-status-cards.tsx
+frontend:components/motor/motor-table.tsx
+frontend:components/motor/motor-valves-section.tsx
+frontend:.github/workflows/preview-server-deploy.yml
+frontend:.github/workflows/preview-server-preflight.yml
+frontend:.github/workflows/preview-server-rollback.yml
+frontend:deploy/preview-release-manifest.json
+frontend:docs/PREVIEW_GITHUB_ACTIONS_SETUP.md
+frontend:package.json
+frontend:scripts/preview-server-deploy.sh
+frontend:scripts/preview-server-preflight.sh
+frontend:tests/preview-deployment-workflow.mjs

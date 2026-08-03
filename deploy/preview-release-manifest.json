@@ -3,11 +3,23 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "bbc53b86bc331b0cb1a286eb4c430d684f6ec10b",
+  "base_commit": "919b47ee7408acc153a9b47f278a8075affced4f",
   "allowed_paths": [
-    "components/maps/farm-map-client.tsx",
-    "components/maps/farm-orthomosaic-map.tsx",
-    "deploy/preview-release-manifest.json"
+    ".github/workflows/preview-server-deploy.yml",
+    ".github/workflows/preview-server-preflight.yml",
+    ".github/workflows/preview-server-rollback.yml",
+    "app/motor-runtime/page.tsx",
+    "components/motor/motor-log-section.tsx",
+    "components/motor/motor-status-cards.tsx",
+    "components/motor/motor-table.tsx",
+    "components/motor/motor-valves-section.tsx",
+    "deploy/approved-change-scope.txt",
+    "deploy/preview-release-manifest.json",
+    "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
+    "package.json",
+    "scripts/preview-server-deploy.sh",
+    "scripts/preview-server-preflight.sh",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

@@ -13,8 +13,8 @@ export function MotorLogSection({ recordsByMotor }: { recordsByMotor: Record<Mot
   const [active, setActive] = useState<MotorId>("M1")
 
   return (
-    <Panel title="Runtime History" icon={ClipboardList}>
-      <div className="mb-4 inline-flex rounded-lg border border-border bg-muted p-1" role="tablist" aria-label="Select motor">
+    <Panel title="Runtime History" icon={ClipboardList} iconClassName="text-sky-700" className="border-sky-200/80 bg-sky-50/55">
+      <div className="mb-4 grid w-full grid-cols-3 gap-1 rounded-xl border border-sky-200 bg-white/75 p-1.5 shadow-inner" role="tablist" aria-label="Select motor">
         {tabs.map((id) => (
           <button
             key={id}
@@ -22,7 +22,16 @@ export function MotorLogSection({ recordsByMotor }: { recordsByMotor: Record<Mot
             role="tab"
             aria-selected={active === id}
             onClick={() => setActive(id)}
-            className={cn("rounded-md px-4 py-1.5 text-sm font-semibold transition-colors", active === id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            className={cn(
+              "rounded-lg px-4 py-2 text-sm font-extrabold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              active === id
+                ? id === "M1"
+                  ? "bg-sky-600 text-white shadow-sm"
+                  : id === "M2"
+                    ? "bg-amber-500 text-white shadow-sm"
+                    : "bg-emerald-600 text-white shadow-sm"
+                : "bg-white/70 text-slate-600 hover:bg-white hover:text-foreground",
+            )}
           >
             {id}
           </button>
