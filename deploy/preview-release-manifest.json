@@ -3,9 +3,9 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "d5e1c9ac59075438fd1e99a33cd903016130c3d1",
+  "base_commit": "6641b9d865583461dee20cd583104d1754b4e890",
   "allowed_paths": [
-    "components/irrigation/zone-status-cards.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
     "deploy/preview-release-manifest.json",
     "tests/irrigation-management-corrections.mjs",
     "tests/preview-deployment-workflow.mjs"
