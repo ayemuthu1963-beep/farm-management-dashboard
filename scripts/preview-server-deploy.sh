@@ -1,0 +1,674 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+umask 077
+
+blocked() {
+  echo "PREVIEW_DEPLOY_BLOCKED=$1" >&2
+  return 1
+}
+
+[[ $# -eq 0 ]] || blocked "arguments are not accepted"
+[[ "$(id -u)" -ne 0 ]] || blocked "root SSH access is prohibited"
+[[ "$(id -un)" == "muthu" ]] || blocked "the approved Preview SSH user is muthu"
+
+for required_command in \
+  awk cat chmod cmp crontab curl date docker flock git grep id install mktemp mv \
+  python3 rm sed seq sha256sum sleep sort ss tr
+do
+  command -v "$required_command" >/dev/null 2>&1 \
+    || blocked "required command is unavailable: $required_command"
+done
+
+readonly repo_url="https://github.com/ayemuthu1963-beep/farm-management-dashboard.git"
+readonly release_ref="refs/heads/preview-release"
+readonly live_container="mfms-pilot-web"
+readonly backend_container="harvest-api-pilot"
+readonly proxy_container="central-nginx-1"
+readonly preview_network="harvest-net"
+readonly preview_url="https://preview.muthufarms.com"
+readonly live_port="3015"
+readonly candidate_port="3016"
+readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
+readonly state_file="$state_dir/last-successful-frontend-switch"
+readonly lock_file="$state_dir/deployment.lock"
+
+[[ "$preview_url" == "https://preview.muthufarms.com" ]] \
+  || blocked "the public target is not Preview"
+
+install -d -m 700 "$state_dir"
+exec 9>"$lock_file"
+flock -n 9 || blocked "another Preview deployment or rollback is already running"
+
+operation=""
+candidate_revision=""
+expected_current_revision=""
+run_id=""
+readonly deploy_command_pattern='^deploy-preview ([0-9a-f]{40}) ([0-9a-f]{40}) ([0-9]+)$'
+readonly rollback_command_pattern='^rollback-preview ([0-9a-f]{40}) ([0-9]+)$'
+
+original_command=${SSH_ORIGINAL_COMMAND:-}
+if [[ "$original_command" =~ $deploy_command_pattern ]]; then
+  operation="deploy"
+  candidate_revision=${BASH_REMATCH[1]}
+  expected_current_revision=${BASH_REMATCH[2]}
+  run_id=${BASH_REMATCH[3]}
+elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
+  operation="rollback"
+  expected_current_revision=${BASH_REMATCH[1]}
+  run_id=${BASH_REMATCH[2]}
+else
+  blocked "the SSH key accepts only an exact Preview deploy or rollback command"
+fi
+
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+work_dir=$(mktemp -d "$state_dir/work.XXXXXX")
+source_dir="$work_dir/source"
+environment_file="$work_dir/frontend.env"
+before_unrelated="$work_dir/unrelated.before"
+after_unrelated="$work_dir/unrelated.after"
+
+candidate_container=""
+transaction_backup=""
+replacement_origin=""
+original_container_id=""
+original_image_id=""
+original_image_tag=""
+original_revision=""
+original_network_ip=""
+transaction_active=0
+automatic_restore_result="not-required"
+
+container_exists() {
+  docker container inspect "$1" >/dev/null 2>&1
+}
+
+container_running() {
+  [[ "$(docker inspect --format '{{.State.Running}}' "$1")" == "true" ]]
+}
+
+network_ip_for_container() {
+  docker inspect \
+    --format "{{with index .NetworkSettings.Networks \"$preview_network\"}}{{.IPAddress}}{{end}}" \
+    "$1"
+}
+
+disconnect_preview_network() {
+  local container=$1
+  if [[ -n "$(network_ip_for_container "$container")" ]]; then
+    docker network disconnect "$preview_network" "$container"
+  fi
+}
+
+ensure_preview_network_ip() {
+  local container=$1 expected_ip=$2 current_ip attempt
+  for attempt in $(seq 1 30); do
+    current_ip=$(network_ip_for_container "$container")
+    if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
+      docker network disconnect "$preview_network" "$container" >/dev/null 2>&1 || true
+      current_ip=""
+    fi
+    if [[ -z "$current_ip" ]]; then
+      docker network connect --ip "$expected_ip" "$preview_network" "$container" \
+        >/dev/null 2>&1 || {
+          sleep 1
+          continue
+        }
+      current_ip=$(network_ip_for_container "$container")
+    fi
+    [[ "$current_ip" == "$expected_ip" ]] && return 0
+    sleep 1
+  done
+  return 1
+}
+
+image_revision_for_container() {
+  local container=$1 image_id
+  image_id=$(docker inspect --format '{{.Image}}' "$container")
+  docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_id"
+}
+
+image_environment_for_container() {
+  local container=$1 image_id
+  image_id=$(docker inspect --format '{{.Image}}' "$container")
+  docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.environment"}}' "$image_id"
+}
+
+snapshot_unrelated_containers() {
+  local id name
+  docker ps -aq | while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    name=$(docker inspect --format '{{.Name}}' "$id")
+    name=${name#/}
+    case "$name" in
+      "$live_container"|"$live_container"-candidate-*|"$live_container"-pre-*)
+        continue
+        ;;
+    esac
+    docker inspect --format '{{.Id}}|{{.Name}}|{{.Image}}|{{.State.Running}}|{{.HostConfig.NetworkMode}}|{{json .HostConfig.PortBindings}}' "$id"
+  done | LC_ALL=C sort
+}
+
+cron_digest() {
+  (crontab -l 2>/dev/null || true) | sha256sum | awk '{print $1}'
+}
+
+proxy_digest() {
+  docker exec "$proxy_container" sh -c \
+    'for file in /etc/nginx/conf.d/*.conf; do [ -f "$file" ] && cat "$file"; done' \
+    | sha256sum | awk '{print $1}'
+}
+
+proxy_target_count() {
+  docker exec "$proxy_container" sh -c \
+    "grep -R -F 'proxy_pass http://mfms-pilot-web:3000' /etc/nginx/conf.d 2>/dev/null | wc -l" \
+    | tr -d '[:space:]'
+}
+
+wait_for_version() {
+  local base_url=$1 expected_revision=$2 payload attempt
+  for attempt in $(seq 1 60); do
+    if payload=$(curl -fsS --max-time 10 "$base_url/api/version" 2>/dev/null); then
+      if python3 -c \
+        'import json,sys; data=json.load(sys.stdin); raise SystemExit(0 if data.get("git_commit")==sys.argv[1] and data.get("environment")=="Preview" else 1)' \
+        "$expected_revision" <<<"$payload"; then
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+wait_for_public_preview_guard() {
+  local status attempt
+  for attempt in $(seq 1 30); do
+    status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+      "$preview_url/api/version" 2>/dev/null || true)
+    [[ "$status" == "401" ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+smoke_routes() {
+  local base_url=$1 failures=0 route marker body
+  while IFS='|' read -r route marker; do
+    body=$(mktemp "$work_dir/smoke.XXXXXX")
+    if ! curl -fsS -L --max-time 20 "$base_url$route" -o "$body"; then
+      failures=$((failures + 1))
+    elif ! grep -Fqi "$marker" "$body"; then
+      failures=$((failures + 1))
+    elif grep -Eqi 'mfms_local_test|mock fallback|localhost:[0-9]+' "$body"; then
+      failures=$((failures + 1))
+    fi
+    rm -f "$body"
+  done <<'EOF'
+/|DIGITAL FARM MANAGEMENT SYSTEM
+/irrigation-management|Irrigation
+/well-water|Well Water
+/motor-runtime|Motor Runtime
+/beetle-trap|Beetle Trap
+/farm-map|Farm Map
+/admin|Admin
+EOF
+  [[ "$failures" -eq 0 ]]
+}
+
+assert_candidate_port_available() {
+  local listeners
+  listeners=$(ss -H -ltn "sport = :$candidate_port" 2>/dev/null || true)
+  [[ -z "$listeners" ]] \
+    || blocked "Preview candidate port $candidate_port is already allocated"
+}
+
+write_environment_file() {
+  local source_container=$1 target_revision=${2:-} target_timestamp=${3:-}
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
+    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT)=/' \
+    > "$environment_file"
+  if [[ -n "$target_revision" ]]; then
+    printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\n' \
+      "$target_revision" "$target_timestamp" >> "$environment_file"
+  fi
+  chmod 600 "$environment_file"
+  grep -Fqx 'MFMS_ENV=preview' "$environment_file" \
+    || blocked "frontend environment is not Preview"
+  grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_uat' "$environment_file" \
+    || blocked "frontend database target is not UAT"
+}
+
+start_candidate() {
+  local image=$1 revision=$2
+  candidate_container="$live_container-candidate-$run_id-$timestamp"
+  docker run -d \
+    --name "$candidate_container" \
+    --network "$preview_network" \
+    --restart no \
+    -p "127.0.0.1:$candidate_port:3000" \
+    --env-file "$environment_file" \
+    "$image" >/dev/null
+  wait_for_version "http://127.0.0.1:$candidate_port" "$revision" \
+    || blocked "candidate /api/version did not report the approved revision"
+  smoke_routes "http://127.0.0.1:$candidate_port" \
+    || blocked "candidate route smoke test failed"
+}
+
+remove_candidate() {
+  if [[ -n "$candidate_container" ]] && container_exists "$candidate_container"; then
+    docker rm -f "$candidate_container" >/dev/null
+  fi
+  candidate_container=""
+}
+
+assert_live_contract() {
+  local expected_revision=$1 expected_image_id=$2 expected_unrelated=$3
+  container_exists "$live_container" || blocked "Preview frontend container is missing"
+  container_running "$live_container" || blocked "Preview frontend container is not running"
+  [[ "$(image_revision_for_container "$live_container")" == "$expected_revision" ]] \
+    || blocked "Preview frontend revision does not match"
+  [[ "$(image_environment_for_container "$live_container")" == "Preview" ]] \
+    || blocked "Preview frontend image is not labelled Preview"
+  [[ "$(docker inspect --format '{{.Image}}' "$live_container")" == "$expected_image_id" ]] \
+    || blocked "Preview frontend image ID does not match"
+  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$live_container")" == "unless-stopped" ]] \
+    || blocked "Preview frontend restart policy changed"
+  [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$live_container")" == "$preview_network" ]] \
+    || blocked "Preview frontend network changed"
+  [[ "$(network_ip_for_container "$live_container")" == "$original_network_ip" ]] \
+    || blocked "Preview frontend network address changed"
+  [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$live_container")" == \
+      '{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3015"}]}' ]] \
+    || blocked "Preview frontend host port changed"
+  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "0" ]] \
+    || blocked "Preview frontend mounts changed"
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$live_container" \
+    | grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_uat' \
+    || blocked "Preview frontend no longer targets the UAT database"
+  [[ "$(docker inspect --format '{{.Id}}' "$backend_container")" == "$backend_id_before" ]] \
+    || blocked "Preview backend container changed"
+  [[ "$(docker inspect --format '{{.Image}}' "$backend_container")" == "$backend_image_before" ]] \
+    || blocked "Preview backend image changed"
+  container_running "$backend_container" || blocked "Preview backend stopped"
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$backend_container" \
+    | grep -Fqx 'POSTGRES_DB=mfms_server_uat' \
+    || blocked "Preview backend no longer targets the UAT database"
+  [[ "$(cron_digest)" == "$cron_digest_before" ]] || blocked "Preview schedules changed"
+  [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || blocked "proxy configuration changed"
+  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target changed"
+  snapshot_unrelated_containers > "$after_unrelated"
+  cmp -s "$expected_unrelated" "$after_unrelated" \
+    || blocked "a backend, Production, ODK, proxy, database, or unrelated container changed"
+}
+
+restore_original_frontend() {
+  local live_id="" recovery_name=""
+  automatic_restore_result="failed"
+  if container_exists "$live_container"; then
+    live_id=$(docker inspect --format '{{.Id}}' "$live_container")
+    if [[ "$live_id" != "$original_container_id" ]]; then
+      docker stop --time 30 "$live_container" >/dev/null 2>&1 || true
+      disconnect_preview_network "$live_container" >/dev/null 2>&1 || true
+      if [[ -n "$replacement_origin" ]]; then
+        if ! docker rename "$live_container" "$replacement_origin" >/dev/null 2>&1; then
+          recovery_name="$replacement_origin-recovery-$timestamp"
+          docker rename "$live_container" "$recovery_name" >/dev/null 2>&1 \
+            || docker rm -f "$live_container" >/dev/null 2>&1 \
+            || true
+        fi
+      else
+        docker rm -f "$live_container" >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+  if [[ -n "$transaction_backup" ]] && container_exists "$transaction_backup"; then
+    docker rename "$transaction_backup" "$live_container" >/dev/null 2>&1 || return 1
+  fi
+  if container_exists "$live_container"; then
+    ensure_preview_network_ip "$live_container" "$original_network_ip" \
+      >/dev/null 2>&1 || return 1
+    docker start "$live_container" >/dev/null 2>&1 || return 1
+    if wait_for_version "http://127.0.0.1:$live_port" "$original_revision" \
+      && smoke_routes "http://127.0.0.1:$live_port" \
+      && wait_for_public_preview_guard; then
+      automatic_restore_result="pass"
+    fi
+  fi
+}
+
+cleanup() {
+  set +e
+  remove_candidate
+  if [[ -n "$work_dir" && "$work_dir" == "$state_dir"/work.* ]]; then
+    rm -rf "$work_dir"
+  fi
+}
+
+on_error() {
+  local status=$?
+  trap - ERR
+  echo "PREVIEW_TRANSACTION_ERROR=operation=$operation status=$status" >&2
+  exit "$status"
+}
+
+on_exit() {
+  local status=$?
+  trap - ERR EXIT HUP INT TERM
+  set +e
+  if [[ "$status" -ne 0 && "$transaction_active" -eq 1 ]]; then
+    restore_original_frontend
+    echo "AUTOMATIC_RESTORE=$automatic_restore_result" >&2
+  fi
+  cleanup
+  exit "$status"
+}
+
+trap on_error ERR
+trap on_exit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+validate_common_live_state() {
+  container_exists "$live_container" || blocked "Preview frontend container is missing"
+  container_running "$live_container" || blocked "Preview frontend container is not running"
+  container_exists "$backend_container" || blocked "Preview backend container is missing"
+  container_running "$backend_container" || blocked "Preview backend container is not running"
+  container_exists "$proxy_container" || blocked "Preview proxy container is missing"
+  [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$live_container")" == "$preview_network" ]] \
+    || blocked "live frontend is not on the Preview network"
+  [[ "$(image_environment_for_container "$live_container")" == "Preview" ]] \
+    || blocked "live frontend image is not labelled Preview"
+  [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$live_container")" == \
+      '{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3015"}]}' ]] \
+    || blocked "live frontend is not bound to the approved Preview port"
+  [[ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^mfms-pilot-web-candidate-' || true)" -eq 0 ]] \
+    || blocked "a stale Preview candidate container exists"
+
+  original_container_id=$(docker inspect --format '{{.Id}}' "$live_container")
+  original_image_id=$(docker inspect --format '{{.Image}}' "$live_container")
+  original_image_tag=$(docker inspect --format '{{.Config.Image}}' "$live_container")
+  original_revision=$(image_revision_for_container "$live_container")
+  original_network_ip=$(network_ip_for_container "$live_container")
+  [[ "$original_revision" =~ ^[0-9a-f]{40}$ ]] || blocked "live Preview revision is invalid"
+  python3 - "$original_network_ip" <<'PY' \
+    || blocked "live Preview network address is invalid"
+import ipaddress
+import sys
+
+address = ipaddress.ip_address(sys.argv[1])
+raise SystemExit(0 if address.version == 4 and not address.is_unspecified else 1)
+PY
+  [[ "$original_revision" == "$expected_current_revision" ]] \
+    || blocked "live Preview revision differs from the approved current revision"
+
+  backend_id_before=$(docker inspect --format '{{.Id}}' "$backend_container")
+  backend_image_before=$(docker inspect --format '{{.Image}}' "$backend_container")
+  cron_digest_before=$(cron_digest)
+  proxy_digest_before=$(proxy_digest)
+  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target is not unique"
+  snapshot_unrelated_containers > "$before_unrelated"
+  wait_for_public_preview_guard \
+    || blocked "public Preview authentication guard is unavailable"
+}
+
+validate_release_manifest() {
+  local manifest="$source_dir/deploy/preview-release-manifest.json"
+  local actual_paths="$work_dir/actual-paths.txt"
+  [[ -f "$manifest" ]] || blocked "Preview release manifest is missing"
+  git -C "$source_dir" diff --name-only "$original_revision..$candidate_revision" \
+    | LC_ALL=C sort -u > "$actual_paths"
+  [[ -s "$actual_paths" ]] || blocked "candidate contains no changes from live Preview"
+  python3 - "$manifest" "$actual_paths" "$original_revision" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+manifest_path, actual_path, current = sys.argv[1:]
+data = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
+
+expected_invariants = {
+    "production": "unchanged",
+    "backend": "unchanged",
+    "database": "unchanged",
+    "odk": "unchanged",
+    "schedules": "unchanged",
+    "proxy_configuration": "unchanged",
+}
+
+if data.get("schema_version") != 1:
+    raise SystemExit("invalid manifest schema")
+if data.get("environment") != "Preview":
+    raise SystemExit("manifest environment is not Preview")
+if data.get("target_url") != "https://preview.muthufarms.com":
+    raise SystemExit("manifest target URL is not Preview")
+if data.get("deployment_kind") != "frontend-only":
+    raise SystemExit("manifest is not frontend-only")
+if data.get("base_commit") != current:
+    raise SystemExit("manifest base does not match live Preview")
+if data.get("protected_invariants") != expected_invariants:
+    raise SystemExit("manifest protected invariants are incomplete")
+
+allowed = data.get("allowed_paths")
+if not isinstance(allowed, list) or not allowed:
+    raise SystemExit("manifest allowed_paths is empty")
+if len(allowed) != len(set(allowed)):
+    raise SystemExit("manifest allowed_paths contains duplicates")
+for path in allowed:
+    if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
+        raise SystemExit("manifest contains an invalid path")
+    if re.search(r"(^|/)(\.env($|\.)|docker-compose[^/]*|migrations?)(/|$)", path):
+        raise SystemExit(f"hard-forbidden deployment path: {path}")
+    if path.startswith(".github/workflows/production") or path.startswith("deploy/production"):
+        raise SystemExit(f"Production path is forbidden: {path}")
+
+actual = [line for line in pathlib.Path(actual_path).read_text(encoding="utf-8").splitlines() if line]
+unexpected = sorted(set(actual) - set(allowed))
+missing = sorted(set(allowed) - set(actual))
+if unexpected or missing:
+    print("manifest scope mismatch", file=sys.stderr)
+    for path in unexpected:
+        print(f"unexpected={path}", file=sys.stderr)
+    for path in missing:
+        print(f"missing={path}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+write_state() {
+  local deployed_revision=$1 deployed_image_id=$2 deployed_image_tag=$3
+  local rollback_container=$4 rollback_revision=$5 rollback_image_id=$6 rollback_image_tag=$7
+  local temporary_state
+  temporary_state=$(mktemp "$state_dir/state.XXXXXX")
+  cat > "$temporary_state" <<EOF
+deployed_revision=$deployed_revision
+deployed_image_id=$deployed_image_id
+deployed_image_tag=$deployed_image_tag
+rollback_container=$rollback_container
+rollback_revision=$rollback_revision
+rollback_image_id=$rollback_image_id
+rollback_image_tag=$rollback_image_tag
+run_id=$run_id
+updated_at=$timestamp
+EOF
+  chmod 600 "$temporary_state"
+  mv "$temporary_state" "$state_file"
+}
+
+read_state_value() {
+  local key=$1 value
+  value=$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$state_file")
+  [[ $(grep -Ec "^${key}=" "$state_file") -eq 1 ]] || blocked "rollback state key is invalid: $key"
+  printf '%s\n' "$value"
+}
+
+deploy_preview() {
+  local remote_release new_image new_image_id
+  remote_release=$(git ls-remote "$repo_url" "$release_ref" | awk 'NR == 1 {print $1}')
+  [[ "$remote_release" == "$candidate_revision" ]] \
+    || blocked "candidate is not the exact preview-release head"
+
+  validate_common_live_state
+  assert_candidate_port_available
+  git clone --filter=blob:none --no-checkout "$repo_url" "$source_dir" >/dev/null 2>&1
+  git -C "$source_dir" fetch --no-tags origin "+$release_ref:refs/remotes/origin/preview-release" >/dev/null 2>&1
+  [[ "$(git -C "$source_dir" rev-parse refs/remotes/origin/preview-release)" == "$candidate_revision" ]] \
+    || blocked "cloned preview-release head differs from approval"
+  git -C "$source_dir" checkout --detach "$candidate_revision" >/dev/null 2>&1
+  git -C "$source_dir" merge-base --is-ancestor "$original_revision" "$candidate_revision" \
+    || blocked "candidate does not contain the live Preview baseline"
+  [[ -z "$(git -C "$source_dir" status --short)" ]] || blocked "candidate checkout is not clean"
+  validate_release_manifest
+
+  new_image="mfms-v0-preview:github-${candidate_revision:0:7}-$timestamp"
+  docker build \
+    --pull=false \
+    --file "$source_dir/Dockerfile.preview" \
+    --build-arg "MFMS_GIT_COMMIT=$candidate_revision" \
+    --build-arg "MFMS_BUILD_TIMESTAMP=$timestamp" \
+    --build-arg "MFMS_BUILD_ENVIRONMENT=Preview" \
+    --tag "$new_image" \
+    "$source_dir" >/dev/null
+  new_image_id=$(docker image inspect --format '{{.Id}}' "$new_image")
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$new_image")" == "$candidate_revision" ]] \
+    || blocked "built image revision label is invalid"
+  [[ "$(docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.environment"}}' "$new_image")" == "Preview" ]] \
+    || blocked "built image is not labelled Preview"
+
+  write_environment_file "$live_container" "$candidate_revision" "$timestamp"
+  start_candidate "$new_image" "$candidate_revision"
+  remove_candidate
+
+  transaction_backup="$live_container-pre-github-$run_id-$timestamp"
+  transaction_active=1
+  docker stop --time 30 "$live_container" >/dev/null
+  disconnect_preview_network "$live_container"
+  docker rename "$live_container" "$transaction_backup"
+  docker run -d \
+    --name "$live_container" \
+    --network "$preview_network" \
+    --ip "$original_network_ip" \
+    --restart unless-stopped \
+    -p "127.0.0.1:$live_port:3000" \
+    --env-file "$environment_file" \
+    "$new_image" >/dev/null
+
+  wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
+    || blocked "replacement /api/version failed"
+  smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
+  wait_for_public_preview_guard || blocked "public Preview authentication guard failed"
+  assert_live_contract "$candidate_revision" "$new_image_id" "$before_unrelated"
+
+  trap '' HUP INT TERM
+  write_state \
+    "$candidate_revision" "$new_image_id" "$new_image" \
+    "$transaction_backup" "$original_revision" "$original_image_id" "$original_image_tag"
+  transaction_active=0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  echo "deployment_environment=Preview"
+  echo "deployment_url=$preview_url"
+  echo "public_preview_guard=401"
+  echo "previous_revision=$original_revision"
+  echo "deployed_revision=$candidate_revision"
+  echo "deployed_image=$new_image"
+  echo "deployed_image_id=$new_image_id"
+  echo "rollback_container=$transaction_backup"
+  echo "backend_unchanged=true"
+  echo "database_unchanged=true"
+  echo "odk_unchanged=true"
+  echo "schedules_unchanged=true"
+  echo "proxy_configuration_unchanged=true"
+  echo "production_touched=0"
+  echo "PREVIEW_DEPLOYMENT=PASS"
+}
+
+rollback_preview() {
+  local deployed_revision deployed_image_id deployed_image_tag
+  local rollback_container rollback_revision rollback_image_id rollback_image_tag
+  local replacement_id
+  [[ -f "$state_file" ]] || blocked "no successful GitHub Preview deployment is recorded"
+  validate_common_live_state
+
+  deployed_revision=$(read_state_value deployed_revision)
+  deployed_image_id=$(read_state_value deployed_image_id)
+  deployed_image_tag=$(read_state_value deployed_image_tag)
+  rollback_container=$(read_state_value rollback_container)
+  rollback_revision=$(read_state_value rollback_revision)
+  rollback_image_id=$(read_state_value rollback_image_id)
+  rollback_image_tag=$(read_state_value rollback_image_tag)
+
+  [[ "$deployed_revision" =~ ^[0-9a-f]{40}$ && "$rollback_revision" =~ ^[0-9a-f]{40}$ ]] \
+    || blocked "rollback state revisions are invalid"
+  [[ "$deployed_image_id" =~ ^sha256:[0-9a-f]{64}$ && "$rollback_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] \
+    || blocked "rollback state image IDs are invalid"
+  [[ "$rollback_container" =~ ^mfms-pilot-web-pre-(github|rollback)-[0-9]+-[0-9]{8}T[0-9]{6}Z$ ]] \
+    || blocked "rollback container name is invalid"
+  [[ "$deployed_revision" == "$expected_current_revision" && "$original_revision" == "$deployed_revision" ]] \
+    || blocked "current Preview does not match the recorded rollback state"
+  [[ "$original_image_id" == "$deployed_image_id" ]] \
+    || blocked "current Preview image does not match the recorded rollback state"
+  container_exists "$rollback_container" || blocked "recorded rollback container is missing"
+  ! container_running "$rollback_container" || blocked "recorded rollback container is unexpectedly running"
+  [[ "$(docker inspect --format '{{.Image}}' "$rollback_container")" == "$rollback_image_id" ]] \
+    || blocked "rollback container image ID changed"
+  [[ "$(image_revision_for_container "$rollback_container")" == "$rollback_revision" ]] \
+    || blocked "rollback container revision changed"
+
+  write_environment_file "$rollback_container"
+  start_candidate "$rollback_image_id" "$rollback_revision"
+  remove_candidate
+
+  transaction_backup="$live_container-pre-rollback-$run_id-$timestamp"
+  replacement_origin="$rollback_container"
+  transaction_active=1
+  docker stop --time 30 "$live_container" >/dev/null
+  disconnect_preview_network "$live_container"
+  docker rename "$live_container" "$transaction_backup"
+  docker rename "$rollback_container" "$live_container"
+  ensure_preview_network_ip "$live_container" "$original_network_ip" \
+    || blocked "rollback replacement could not preserve the Preview network address"
+  docker start "$live_container" >/dev/null
+  replacement_id=$(docker inspect --format '{{.Image}}' "$live_container")
+
+  wait_for_version "http://127.0.0.1:$live_port" "$rollback_revision" \
+    || blocked "rollback replacement /api/version failed"
+  smoke_routes "http://127.0.0.1:$live_port" || blocked "rollback local smoke test failed"
+  wait_for_public_preview_guard || blocked "public Preview rollback authentication guard failed"
+  assert_live_contract "$rollback_revision" "$replacement_id" "$before_unrelated"
+
+  trap '' HUP INT TERM
+  write_state \
+    "$rollback_revision" "$replacement_id" "$rollback_image_tag" \
+    "$transaction_backup" "$deployed_revision" "$deployed_image_id" "$deployed_image_tag"
+  transaction_active=0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  echo "rollback_environment=Preview"
+  echo "rollback_url=$preview_url"
+  echo "public_preview_guard=401"
+  echo "previous_revision=$deployed_revision"
+  echo "restored_revision=$rollback_revision"
+  echo "rollback_container_retained=$transaction_backup"
+  echo "backend_unchanged=true"
+  echo "database_unchanged=true"
+  echo "odk_unchanged=true"
+  echo "schedules_unchanged=true"
+  echo "proxy_configuration_unchanged=true"
+  echo "production_touched=0"
+  echo "PREVIEW_ROLLBACK=PASS"
+}
+
+case "$operation" in
+  deploy)
+    deploy_preview
+    ;;
+  rollback)
+    rollback_preview
+    ;;
+esac
