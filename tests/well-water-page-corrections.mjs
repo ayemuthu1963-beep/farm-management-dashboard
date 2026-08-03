@@ -13,6 +13,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
 
 const page = read("app/well-water/page.tsx")
+const dateRangeSelector = read("components/farm/date-range-selector.tsx")
+const summaryCards = read("components/farm/summary-cards.tsx")
 const wellSection = read("components/farm/well-section.tsx")
 const wellTable = read("components/farm/well-table.tsx")
 const wellChart = read("components/farm/well-chart.tsx")
@@ -34,12 +36,21 @@ assert.match(wellData, /record\.remarks/)
 assert.equal((wellSection.match(/<Panel\b/g) ?? []).length, 2)
 assert.ok(wellSection.indexOf("<WellTable") < wellSection.indexOf("<WellChart"))
 assert.match(wellSection, /title=\{`\$\{title\} Water Trend`\}/)
-assert.equal((wellSection.match(/className="min-w-0"/g) ?? []).length, 2)
+assert.equal((wellSection.match(/className=\{panelClassName/g) ?? []).length, 2)
 assert.equal((wellSection.match(/bodyClassName="min-w-0"/g) ?? []).length, 2)
 
 // North remains before South on mobile; xl retains the approved two-column layout.
 assert.ok(page.indexOf('title="North Well"') < page.indexOf('title="South Well"'))
 assert.match(page, /grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2/)
+
+// Use restrained, existing MFMS colour tokens to distinguish the visible tiles.
+assert.match(dateRangeSelector, /border-chart-1\/30 bg-chart-1\/5/)
+assert.match(summaryCards, /border-primary\/25 bg-primary\/5/)
+assert.match(summaryCards, /border-chart-1\/30 bg-chart-1\/10/)
+assert.match(summaryCards, /border-chart-3\/30 bg-chart-3\/10/)
+assert.match(summaryCards, /border-chart-2\/30 bg-chart-2\/10/)
+assert.match(page, /panelClassName="border-chart-1\/30 bg-chart-1\/5"/)
+assert.match(page, /panelClassName="border-chart-3\/30 bg-chart-3\/5"/)
 
 // The responsive chart reserves enough room for Indian-formatted litre ticks.
 assert.match(wellChart, /margin=\{\{ top: 8, right: 12, bottom: 4, left: 12 \}\}/)

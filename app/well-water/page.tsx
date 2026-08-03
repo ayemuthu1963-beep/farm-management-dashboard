@@ -206,6 +206,7 @@ export default function WellWaterPage() {
             capacity={isLoading ? "Loading..." : data.wellCapacity.north}
             records={data.northWellRecords}
             tableHeaderClassName="bg-primary/10 text-primary"
+            panelClassName="border-chart-1/30 bg-chart-1/5"
           />
           <WellSection
             title="South Well"
@@ -214,6 +215,7 @@ export default function WellWaterPage() {
             capacity={isLoading ? "Loading..." : data.wellCapacity.south}
             records={data.southWellRecords}
             tableHeaderClassName="bg-chart-3/15 text-chart-3"
+            panelClassName="border-chart-3/30 bg-chart-3/5"
           />
         </div>
 

@@ -9,23 +9,36 @@ const iconMap: Record<SummaryStat["icon"], LucideIcon> = {
   recharge: RotateCw,
 }
 
-// Distinct accent per metric type to match the design's colored icon tiles.
-const accentMap: Record<SummaryStat["icon"], string> = {
-  drop: "bg-chart-2/15 text-chart-2",
-  "drop-alt": "bg-chart-2/15 text-chart-2",
-  pump: "bg-chart-1/15 text-chart-1",
-  recharge: "bg-chart-4/15 text-chart-4",
+const wellToneMap: Record<SummaryStat["wellId"], { card: string; icon: string; title: string }> = {
+  north: {
+    card: "border-chart-1/30 bg-chart-1/10",
+    icon: "bg-chart-1/15 text-chart-1",
+    title: "text-chart-1",
+  },
+  south: {
+    card: "border-chart-3/30 bg-chart-3/10",
+    icon: "bg-chart-3/15 text-chart-3",
+    title: "text-chart-3",
+  },
+  both: {
+    card: "border-chart-2/30 bg-chart-2/10",
+    icon: "bg-chart-2/15 text-chart-2",
+    title: "text-chart-2",
+  },
 }
 
 function StatCard({ stat }: { stat: SummaryStat }) {
   const Icon = iconMap[stat.icon]
+  const tone = wellToneMap[stat.wellId]
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
-      <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", accentMap[stat.icon])}>
+    <div className={cn("flex items-start gap-3 rounded-xl border p-4 shadow-sm", tone.card)}>
+      <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", tone.icon)}>
         <Icon className="size-5" aria-hidden="true" />
       </span>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-primary">{stat.well}</p>
+        <p className={cn("text-[11px] font-semibold uppercase leading-tight tracking-wide", tone.title)}>
+          {stat.well}
+        </p>
         <p className="text-[11px] leading-tight text-muted-foreground">{stat.label}</p>
         {stat.value === null ? (
           <>
@@ -49,7 +62,7 @@ interface SummaryCardsProps {
 
 export function SummaryCards({ stats }: SummaryCardsProps) {
   return (
-    <section className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+    <section className="rounded-xl border border-primary/25 bg-primary/5 p-4 shadow-sm sm:p-5">
       <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-foreground">Summary (Selected Period)</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {stats.map((stat) => (

@@ -64,7 +64,11 @@ export function DateRangeSelector({ onChange }: DateRangeSelectorProps) {
   }
 
   return (
-    <Panel title="Select Date Range" icon={CalendarRange}>
+    <Panel
+      title="Select Date Range"
+      icon={CalendarRange}
+      className="border-chart-1/30 bg-chart-1/5"
+    >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 lg:flex-row lg:items-end">
         <div className="flex-1">
           <label htmlFor="start-date" className="mb-1.5 block text-xs font-medium text-muted-foreground">

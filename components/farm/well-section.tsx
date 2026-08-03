@@ -10,6 +10,7 @@ interface WellSectionProps {
   records: WellDailyRecord[]
   tableHeaderClassName?: string
   iconClassName?: string
+  panelClassName?: string
   /** full storage capacity, shown to the right of the well heading */
   capacity?: string
 }
@@ -20,6 +21,7 @@ export function WellSection({
   records,
   tableHeaderClassName,
   iconClassName,
+  panelClassName,
   capacity,
 }: WellSectionProps) {
   return (
@@ -28,7 +30,7 @@ export function WellSection({
         title={title}
         icon={icon}
         iconClassName={iconClassName}
-        className="min-w-0"
+        className={panelClassName ? `min-w-0 ${panelClassName}` : "min-w-0"}
         bodyClassName="min-w-0"
         headerRight={
           capacity ? (
@@ -46,7 +48,7 @@ export function WellSection({
         title={`${title} Water Trend`}
         icon={icon}
         iconClassName={iconClassName}
-        className="min-w-0"
+        className={panelClassName ? `min-w-0 ${panelClassName}` : "min-w-0"}
         bodyClassName="min-w-0"
       >
         <WellChart data={toChartData(records)} />
