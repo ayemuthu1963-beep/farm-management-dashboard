@@ -281,6 +281,17 @@ for (const source of [zoneStatusCards, map]) {
   assert.match(source, /displayZones\.map\(\(zone\) =>/)
 }
 
+// Zone Status uses full zone names, crop-specific icons, and six restrained tile tones.
+assert.doesNotMatch(zoneStatusCards, /\{zone\.abbr\}/)
+assert.match(zoneStatusCards, /Overlay: Plot 1 East \+ Plot 2 West/)
+assert.doesNotMatch(zoneStatusCards, /Overlay: P1E \+ P2W/)
+for (const icon of ["LandPlot", "TreePine", "Leaf"]) {
+  assert.match(zoneStatusCards, new RegExp(`\\b${icon}\\b`))
+}
+for (const tone of ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "primary"]) {
+  assert.match(zoneStatusCards, new RegExp(`border-${tone}\\/30 bg-${tone}\\/10`))
+}
+
 // The requested chart pair is half-width: Daily Irrigation Trend first, then
 // Water Supplied per Tree by date with one line for every operational zone.
 assert.doesNotMatch(charts, /\bBarChart\b|<Bar\b/)
