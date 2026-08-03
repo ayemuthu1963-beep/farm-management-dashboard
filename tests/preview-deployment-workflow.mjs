@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "bbafae5aa644dae72c1c8b7a5e86d4ab48f13fcf")
+assert.equal(manifest.base_commit, "b501f8fed1d9a3a8fe11065e6a9de7147ef75e69")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -237,30 +237,41 @@ assert.deepEqual(manifest.protected_invariants, {
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
-assert.deepEqual(manifest.allowed_paths, [...manifest.allowed_paths].sort())
-assert.equal(new Set(manifest.allowed_paths).size, manifest.allowed_paths.length)
-for (const requiredPath of [
+const expectedReleasePaths = [
   "app/admin/page.tsx",
+  "app/admin/tree-lifecycle/page.tsx",
+  "app/api/admin/tree-lifecycle/import/apply/route.ts",
+  "app/api/admin/tree-lifecycle/import/validate/route.ts",
+  "app/api/admin/tree-lifecycle/route.ts",
   "app/api/asset-register/[...path]/route.ts",
+  "app/coconut-harvest/tree-performance/page.tsx",
   "app/inventory-management/entry/page.tsx",
   "app/inventory-management/page.tsx",
+  "components/admin/tree-lifecycle-admin-client.tsx",
   "components/asset-register/asset-register-dashboard-client.tsx",
   "components/asset-register/asset-register-entry-client.tsx",
+  "components/home/home-footer.tsx",
   "components/inventory/inventory-dashboard-client.tsx",
   "components/inventory/inventory-entry-client.tsx",
   "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
   "docs/PREVIEW_ASSET_REGISTER_RELEASE.md",
   "lib/asset-register-types.ts",
+  "lib/coconut-harvest-api.ts",
+  "lib/coconut-harvest-data.ts",
   "lib/inventory-types.ts",
   "lib/mfms-navigation.ts",
+  "lib/tree-lifecycle.ts",
   "package.json",
   "scripts/test-preview-release.sh",
   "tests/asset-register-release.mjs",
   "tests/harvest-sync-exact-duplicates.mjs",
   "tests/preview-deployment-workflow.mjs",
-]) {
-  assert.ok(manifest.allowed_paths.includes(requiredPath), `Missing manifest path: ${requiredPath}`)
-}
+  "tests/tree-lifecycle-sapling.mjs"
+]
+assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
+
+const smokeScript = readFileSync("scripts/test-preview-release.sh", "utf8")
+assert.match(smokeScript, /check \/admin\/tree-lifecycle "Tree Lifecycle \/ Sapling Status"/)
 
 console.log("Preview deployment, rollback, preflight, and automatic trigger tests passed.")
