@@ -3,11 +3,15 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "6641b9d865583461dee20cd583104d1754b4e890",
+  "base_commit": "c79e7bb9db78bd73a3efea75777a83fddeffc326",
   "allowed_paths": [
-    "components/irrigation/irrigation-map-with-details.tsx",
+    "app/beetle-trap/page.tsx",
+    "components/beetle/beetle-daily-excel-export.tsx",
+    "components/beetle/beetle-trap-header-actions.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/irrigation-management-corrections.mjs",
+    "lib/beetle-daily-count-excel.ts",
+    "package.json",
+    "tests/beetle-trap-cumulative-period-export.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
