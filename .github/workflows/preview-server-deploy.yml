@@ -3,10 +3,6 @@ name: Deploy Preview frontend
 on:
   workflow_dispatch:
     inputs:
-      current_revision:
-        description: Exact 40-character revision currently running on Preview
-        required: true
-        type: string
       candidate_revision:
         description: Exact 40-character preview-release revision to deploy
         required: true
@@ -15,6 +11,13 @@ on:
         description: Type DEPLOY PREVIEW ONLY to authorize the guarded switch
         required: true
         type: string
+  workflow_run:
+    workflows:
+      - Preview release candidate
+    types:
+      - completed
+    branches:
+      - preview-release
 
 permissions:
   contents: read
@@ -27,42 +30,69 @@ jobs:
   authorize:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      candidate_revision: ${{ steps.release.outputs.candidate_revision }}
     steps:
-      - name: Require exact Preview-only inputs
+      - name: Resolve the exact reviewed Preview candidate
+        id: release
         shell: bash
         env:
-          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          CANDIDATE_INPUT: ${{ inputs.candidate_revision }}
           CONFIRMATION: ${{ inputs.confirmation }}
-          CURRENT_REVISION: ${{ inputs.current_revision }}
+          EVENT_NAME: ${{ github.event_name }}
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
 
           [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
-            echo "Preview deployment must be dispatched from main" >&2
-            exit 1
-          }
-          [[ "$CONFIRMATION" == "DEPLOY PREVIEW ONLY" ]] || {
-            echo "Confirmation did not match DEPLOY PREVIEW ONLY" >&2
-            exit 1
-          }
-          [[ "$CURRENT_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "Current revision is not an exact lowercase commit SHA" >&2
-            exit 1
-          }
-          [[ "$CANDIDATE_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "Candidate revision is not an exact lowercase commit SHA" >&2
-            exit 1
-          }
-          [[ "$CURRENT_REVISION" != "$CANDIDATE_REVISION" ]] || {
-            echo "Candidate revision is already running" >&2
+            echo "Preview deployment must execute from trusted main" >&2
             exit 1
           }
 
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              [[ "$CONFIRMATION" == "DEPLOY PREVIEW ONLY" ]] || {
+                echo "Confirmation did not match DEPLOY PREVIEW ONLY" >&2
+                exit 1
+              }
+              [[ "$CANDIDATE_INPUT" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "Candidate revision is not an exact lowercase commit SHA" >&2
+                exit 1
+              }
+              candidate_revision="$CANDIDATE_INPUT"
+              ;;
+            workflow_run)
+              [[ "$WORKFLOW_RUN_CONCLUSION" == "success" ]] || {
+                echo "Preview release candidate did not succeed" >&2
+                exit 1
+              }
+              [[ "$WORKFLOW_RUN_HEAD_BRANCH" == "preview-release" ]] || {
+                echo "Preview release signal did not originate from preview-release" >&2
+                exit 1
+              }
+              [[ "$WORKFLOW_RUN_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "Automatic candidate is not an exact lowercase commit SHA" >&2
+                exit 1
+              }
+              candidate_revision="$WORKFLOW_RUN_HEAD_SHA"
+              ;;
+            *)
+              echo "Unsupported Preview deployment trigger: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+
           repo_url="https://github.com/$REPOSITORY.git"
           remote_release=$(git ls-remote "$repo_url" refs/heads/preview-release | awk 'NR == 1 {print $1}')
-          [[ "$remote_release" == "$CANDIDATE_REVISION" ]] || {
+          [[ "$remote_release" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "preview-release did not resolve to an exact lowercase commit SHA" >&2
+            exit 1
+          }
+          [[ "$remote_release" == "$candidate_revision" ]] || {
             echo "Candidate is not the exact preview-release head" >&2
             exit 1
           }
@@ -73,11 +103,9 @@ jobs:
           git -C "$verify_dir" remote add origin "$repo_url"
           git -C "$verify_dir" fetch --quiet --no-tags --filter=blob:none \
             origin refs/heads/preview-release:refs/remotes/origin/preview-release
-          [[ "$(git -C "$verify_dir" rev-parse refs/remotes/origin/preview-release)" == "$CANDIDATE_REVISION" ]]
-          git -C "$verify_dir" merge-base --is-ancestor "$CURRENT_REVISION" "$CANDIDATE_REVISION" || {
-            echo "Candidate does not contain the current Preview revision" >&2
-            exit 1
-          }
+          [[ "$(git -C "$verify_dir" rev-parse refs/remotes/origin/preview-release)" == "$candidate_revision" ]]
+
+          echo "candidate_revision=$candidate_revision" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: authorize
@@ -87,6 +115,85 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Validate and install the dedicated Preview preflight identity
+        id: preflight_ssh
+        shell: bash
+        env:
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+          PREVIEW_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_SSH_PRIVATE_KEY }}
+          PREVIEW_SSH_KNOWN_HOSTS: ${{ secrets.PREVIEW_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          for required_name in \
+            PREVIEW_SSH_HOST \
+            PREVIEW_SSH_USER \
+            PREVIEW_SSH_PRIVATE_KEY \
+            PREVIEW_SSH_KNOWN_HOSTS
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Missing required Preview environment setting: $required_name" >&2
+              exit 1
+            fi
+          done
+
+          [[ "$PREVIEW_SSH_HOST" == "168.144.179.221" ]] || {
+            echo "The configured host is not the approved Preview server" >&2
+            exit 1
+          }
+          [[ "$PREVIEW_SSH_USER" == "muthu" ]] || {
+            echo "The configured user is not the approved Preview account" >&2
+            exit 1
+          }
+
+          ssh_dir="$RUNNER_TEMP/mfms-preview-preflight-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PREVIEW_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PREVIEW_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$PREVIEW_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Discover the exact live Preview revision
+        id: live
+        shell: bash
+        env:
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+          IDENTITY_FILE: ${{ steps.preflight_ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.preflight_ssh.outputs.known_hosts_file }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/preview-server-preflight.txt"
+          : > "$report"
+
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PREVIEW_SSH_USER@$PREVIEW_SSH_HOST" \
+            | tee "$report"
+
+          grep -Fqx 'READ_ONLY_PREFLIGHT=PASS' "$report"
+          grep -Fqx 'production_containers_touched=0' "$report"
+          current_revision=$(awk -F= '$1 == "frontend_image_revision" {print $2}' "$report")
+          [[ "$current_revision" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Live Preview revision is not an exact lowercase commit SHA" >&2
+            exit 1
+          }
+          echo "current_revision=$current_revision" >> "$GITHUB_OUTPUT"
+
       - name: Validate and install the dedicated Preview deploy identity
         id: ssh
         shell: bash
@@ -135,8 +242,8 @@ jobs:
       - name: Deploy the approved Preview frontend revision
         shell: bash
         env:
-          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
-          CURRENT_REVISION: ${{ inputs.current_revision }}
+          CANDIDATE_REVISION: ${{ needs.authorize.outputs.candidate_revision }}
+          CURRENT_REVISION: ${{ steps.live.outputs.current_revision }}
           IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
           KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
           PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
@@ -181,4 +288,4 @@ jobs:
       - name: Remove SSH material
         if: always()
         shell: bash
-        run: rm -rf "$RUNNER_TEMP/mfms-preview-deploy-ssh"
+        run: rm -rf "$RUNNER_TEMP/mfms-preview-deploy-ssh" "$RUNNER_TEMP/mfms-preview-preflight-ssh"

@@ -13,6 +13,10 @@ const rollbackWorkflow = readFileSync(
   ".github/workflows/preview-server-rollback.yml",
   "utf8",
 )
+const releaseSignalWorkflow = readFileSync(
+  ".github/workflows/preview-release-candidate.yml",
+  "utf8",
+)
 const preflightScript = readFileSync(
   "scripts/preview-server-preflight.sh",
   "utf8",
@@ -25,14 +29,14 @@ const manifest = JSON.parse(
   readFileSync("deploy/preview-release-manifest.json", "utf8"),
 )
 
-const workflows = [preflightWorkflow, deployWorkflow, rollbackWorkflow]
+const manualWorkflows = [preflightWorkflow, rollbackWorkflow]
 
 assert.equal(statSync("scripts/preview-server-preflight.sh").mode & 0o777, 0o755)
 assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
 
-for (const workflow of workflows) {
+for (const workflow of manualWorkflows) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
-  assert.doesNotMatch(workflow, /^\s*(push|pull_request|schedule):/m)
+  assert.doesNotMatch(workflow, /^\s*(push|pull_request|schedule|workflow_run):/m)
   assert.match(workflow, /^permissions:\n\s+contents: read$/m)
   assert.match(workflow, /^\s+name: Preview$/m)
   assert.match(workflow, /^\s+url: https:\/\/preview\.muthufarms\.com\/$/m)
@@ -47,6 +51,42 @@ for (const workflow of workflows) {
     assert.match(reference, /^[0-9a-f]{40}$/, `Action is not immutable: ${action[1]}`)
   }
 }
+
+assert.match(deployWorkflow, /^\s*workflow_dispatch:/m)
+assert.match(
+  deployWorkflow,
+  /^\s*workflow_run:\n\s+workflows:\n\s+- Preview release candidate\n\s+types:\n\s+- completed\n\s+branches:\n\s+- preview-release$/m,
+)
+assert.doesNotMatch(deployWorkflow, /^\s*(push|pull_request|schedule):/m)
+assert.match(deployWorkflow, /^permissions:\n\s+contents: read$/m)
+assert.match(deployWorkflow, /^\s+name: Preview$/m)
+assert.match(deployWorkflow, /^\s+url: https:\/\/preview\.muthufarms\.com\/$/m)
+assert.match(deployWorkflow, /^\s+group: mfms-preview-server$/m)
+assert.match(deployWorkflow, /StrictHostKeyChecking=yes/)
+assert.match(deployWorkflow, /BatchMode=yes/)
+assert.doesNotMatch(deployWorkflow, /ssh-keyscan/)
+assert.doesNotMatch(deployWorkflow, /https:\/\/muthufarms\.com(?:\/|['"])/)
+
+for (const action of deployWorkflow.matchAll(/^\s*uses:\s*([^\s#]+)/gm)) {
+  const reference = action[1].split("@")[1]
+  assert.match(reference, /^[0-9a-f]{40}$/, `Action is not immutable: ${action[1]}`)
+}
+
+assert.match(releaseSignalWorkflow, /^name: Preview release candidate$/m)
+assert.match(
+  releaseSignalWorkflow,
+  /^\s*push:\n\s+branches:\n\s+- preview-release\n\s+paths:\n\s+- deploy\/preview-release-manifest\.json$/m,
+)
+assert.doesNotMatch(releaseSignalWorkflow, /^\s*(workflow_dispatch|workflow_run|pull_request|schedule):/m)
+assert.match(releaseSignalWorkflow, /^permissions:\n\s+contents: read$/m)
+assert.match(releaseSignalWorkflow, /^\s+group: mfms-preview-release-signal$/m)
+assert.match(releaseSignalWorkflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/preview-release" \]\]/)
+assert.match(releaseSignalWorkflow, /\[\[ "\$CANDIDATE_REVISION" =~ \^\[0-9a-f\]\{40\}\$ \]\]/)
+assert.doesNotMatch(
+  releaseSignalWorkflow,
+  /(?:environment:|secrets\.|ssh(?:-|_|\b)|curl\b|actions\/checkout|deploy-preview|rollback-preview)/i,
+)
+assert.doesNotMatch(releaseSignalWorkflow, /https:\/\/muthufarms\.com(?:\/|['"])/)
 
 assert.match(preflightWorkflow, /\[\[ "\$CONFIRMATION" == "INSPECT PREVIEW ONLY" \]\]/)
 assert.match(preflightWorkflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/)
@@ -74,7 +114,6 @@ for (const secretName of [
 
 for (const workflow of [deployWorkflow, rollbackWorkflow]) {
   assert.match(workflow, /PREVIEW_DEPLOY_SSH_PRIVATE_KEY: \$\{\{ secrets\.PREVIEW_DEPLOY_SSH_PRIVATE_KEY \}\}/)
-  assert.doesNotMatch(workflow, /secrets\.PREVIEW_SSH_PRIVATE_KEY/)
   assert.match(workflow, /\[\[ "\$PREVIEW_SSH_HOST" == "168\.144\.179\.221" \]\]/)
   assert.match(workflow, /\[\[ "\$PREVIEW_SSH_USER" == "muthu" \]\]/)
   assert.match(workflow, /ssh-keygen -F "\$PREVIEW_SSH_HOST"/)
@@ -88,9 +127,34 @@ for (const workflow of [deployWorkflow, rollbackWorkflow]) {
   )
 }
 
+assert.doesNotMatch(rollbackWorkflow, /secrets\.PREVIEW_SSH_PRIVATE_KEY/)
+
+assert.match(deployWorkflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/)
 assert.match(deployWorkflow, /\[\[ "\$CONFIRMATION" == "DEPLOY PREVIEW ONLY" \]\]/)
-assert.match(deployWorkflow, /refs\/heads\/preview-release/)
-assert.match(deployWorkflow, /merge-base --is-ancestor "\$CURRENT_REVISION" "\$CANDIDATE_REVISION"/)
+assert.match(deployWorkflow, /\[\[ "\$WORKFLOW_RUN_CONCLUSION" == "success" \]\]/)
+assert.match(deployWorkflow, /\[\[ "\$WORKFLOW_RUN_HEAD_BRANCH" == "preview-release" \]\]/)
+assert.match(deployWorkflow, /\$\{\{ github\.event\.workflow_run\.head_sha \}\}/)
+assert.match(deployWorkflow, /Candidate is not the exact preview-release head/)
+assert.doesNotMatch(deployWorkflow, /push\)\n/)
+assert.doesNotMatch(
+  deployWorkflow,
+  /^\s+current_revision:\n\s+description: Exact 40-character revision currently running on Preview$/m,
+)
+assert.match(
+  deployWorkflow,
+  /PREVIEW_SSH_PRIVATE_KEY: \$\{\{ secrets\.PREVIEW_SSH_PRIVATE_KEY \}\}/,
+)
+assert.match(deployWorkflow, /name: Discover the exact live Preview revision/)
+assert.match(deployWorkflow, /READ_ONLY_PREFLIGHT=PASS/)
+assert.match(deployWorkflow, /frontend_image_revision/)
+assert.match(
+  deployWorkflow,
+  /CANDIDATE_REVISION: \$\{\{ needs\.authorize\.outputs\.candidate_revision \}\}/,
+)
+assert.match(
+  deployWorkflow,
+  /CURRENT_REVISION: \$\{\{ steps\.live\.outputs\.current_revision \}\}/,
+)
 assert.match(deployWorkflow, /deploy-preview \$CANDIDATE_REVISION \$CURRENT_REVISION \$GITHUB_RUN_ID/)
 assert.match(deployWorkflow, /PREVIEW_DEPLOYMENT=PASS/)
 assert.doesNotMatch(deployWorkflow, /actions\/checkout/)
@@ -189,4 +253,4 @@ for (const requiredPath of [
   assert.ok(manifest.allowed_paths.includes(requiredPath), `Missing manifest path: ${requiredPath}`)
 }
 
-console.log("Preview deployment, rollback, and preflight workflow tests passed.")
+console.log("Preview deployment, rollback, preflight, and automatic trigger tests passed.")
