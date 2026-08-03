@@ -290,7 +290,10 @@ for (const icon of ["LandPlot", "TreePine", "Leaf"]) {
 }
 for (const tone of ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "primary"]) {
   assert.match(zoneStatusCards, new RegExp(`border-${tone}\\/30 bg-${tone}\\/10`))
+  assert.match(map, new RegExp(`border-${tone}\\/30 bg-${tone}\\/10`))
 }
+assert.match(map, /ZONE_TILE_APPEARANCE\[zone\.id\]\.card/)
+assert.doesNotMatch(map, /rounded-2xl border bg-card/)
 
 // The requested chart pair is half-width: Daily Irrigation Trend first, then
 // Water Supplied per Tree by date with one line for every operational zone.
