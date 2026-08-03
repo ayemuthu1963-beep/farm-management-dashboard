@@ -1,0 +1,136 @@
+name: Preview server preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type INSPECT PREVIEW ONLY to run the read-only server inspection
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-preview-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the exact read-only confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Preview preflight must be dispatched from main" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "INSPECT PREVIEW ONLY" ]] || {
+            echo "Confirmation did not match INSPECT PREVIEW ONLY" >&2
+            exit 1
+          }
+
+  preflight:
+    needs: authorize
+    environment:
+      name: Preview
+      url: https://preview.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out trusted preflight source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate and install the dedicated Preview SSH identity
+        id: ssh
+        shell: bash
+        env:
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+          PREVIEW_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_SSH_PRIVATE_KEY }}
+          PREVIEW_SSH_KNOWN_HOSTS: ${{ secrets.PREVIEW_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          for required_name in \
+            PREVIEW_SSH_HOST \
+            PREVIEW_SSH_USER \
+            PREVIEW_SSH_PRIVATE_KEY \
+            PREVIEW_SSH_KNOWN_HOSTS
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Missing required Preview environment setting: $required_name" >&2
+              exit 1
+            fi
+          done
+
+          if [[ ! "$PREVIEW_SSH_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+            echo "PREVIEW_SSH_HOST contains unsupported characters" >&2
+            exit 1
+          fi
+          if [[ ! "$PREVIEW_SSH_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; then
+            echo "PREVIEW_SSH_USER contains unsupported characters" >&2
+            exit 1
+          fi
+
+          ssh_dir="$RUNNER_TEMP/mfms-preview-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PREVIEW_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PREVIEW_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Run read-only Preview inspection
+        shell: bash
+        env:
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/preview-server-preflight.txt"
+          : > "$report"
+
+          ssh \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PREVIEW_SSH_USER@$PREVIEW_SSH_HOST" \
+            'bash -s --' \
+            < scripts/preview-server-preflight.sh \
+            | tee "$report"
+
+          grep -Fqx 'READ_ONLY_PREFLIGHT=PASS' "$report"
+
+      - name: Upload sanitized preflight report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: preview-server-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/preview-server-preflight.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-preview-ssh"
