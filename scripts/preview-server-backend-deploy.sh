@@ -389,7 +389,7 @@ if data.get("protected_invariants") != expected_invariants:
 migrations = data.get("migrations")
 if not isinstance(migrations, list):
     raise SystemExit("backend release descriptor migrations must be a list")
-safe_migration = re.compile(r"^db/migrations/[0-9][A-Za-z0-9_.-]*\\.sql$")
+safe_migration = re.compile(r"^db/migrations/[0-9][A-Za-z0-9_.-]*\.sql$")
 seen = set()
 plan = []
 for item in migrations:
@@ -425,10 +425,10 @@ changed = subprocess.check_output(
     ["git", "-C", str(source), "diff", "--name-only", f"{current}..{candidate}"], text=True
 ).splitlines()
 allowed = re.compile(
-    r"^(?:api/(?:Dockerfile|requirements\\.txt|app/(?:[^/]+\\.py|routers/[^/]+\\.py))|"
-    r"db/migrations/[0-9][A-Za-z0-9_.-]*\\.sql|"
-    r"scripts/apply_preview_migrations\\.py|"
-    r"deploy/preview-backend-release\\.json|"
+    r"^(?:api/(?:Dockerfile|requirements\.txt|app/(?:[^/]+\.py|routers/[^/]+\.py))|"
+    r"db/migrations/[0-9][A-Za-z0-9_.-]*\.sql|"
+    r"scripts/apply_preview_migrations\.py|"
+    r"deploy/preview-backend-release\.json|"
     r"tests/[^/]+)$"
 )
 if not changed:
