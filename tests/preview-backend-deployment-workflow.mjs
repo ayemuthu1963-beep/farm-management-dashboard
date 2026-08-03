@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import { readFileSync, statSync } from "node:fs"
 
 const deployWorkflow = readFileSync(
@@ -18,6 +19,57 @@ const bootstrapScript = readFileSync(
   "utf8",
 )
 const setupGuide = readFileSync("docs/PREVIEW_BACKEND_RELEASE_SETUP.md", "utf8")
+
+function pythonFullmatch(pattern, value) {
+  const result = spawnSync(
+    "python3",
+    [
+      "-c",
+      "import re, sys; print('MATCH' if re.fullmatch(sys.argv[1], sys.argv[2]) else 'NO_MATCH')",
+      pattern,
+      value,
+    ],
+    { encoding: "utf8" },
+  )
+  assert.equal(result.error, undefined, "python3 must be available for validator tests")
+  assert.equal(result.status, 0, result.stderr)
+  return result.stdout.trim() === "MATCH"
+}
+
+const migrationPattern = deployScript.match(
+  /^safe_migration = re\.compile\(r"([^"]+)"\)$/m,
+)?.[1]
+assert.ok(migrationPattern, "migration validator pattern must be present")
+assert.equal(
+  pythonFullmatch(
+    migrationPattern,
+    "db/migrations/20260803_tree_lifecycle_saplings.sql",
+  ),
+  true,
+)
+assert.equal(pythonFullmatch(migrationPattern, "db/migrations/not-a-migration.sql"), false)
+
+const allowedStart = deployScript.indexOf("allowed = re.compile(\n")
+const allowedEnd = deployScript.indexOf("\nif not changed:", allowedStart)
+assert.notEqual(allowedStart, -1, "allowed backend path pattern must be present")
+assert.notEqual(allowedEnd, -1, "allowed backend path pattern must be complete")
+const allowedPattern = [...deployScript.slice(allowedStart, allowedEnd).matchAll(/r"([^"]+)"/g)]
+  .map((match) => match[1])
+  .join("")
+
+for (const path of [
+  "api/Dockerfile",
+  "api/requirements.txt",
+  "api/app/main.py",
+  "api/app/routers/tree_lifecycle.py",
+  "db/migrations/20260803_tree_lifecycle_saplings.sql",
+  "scripts/apply_preview_migrations.py",
+  "deploy/preview-backend-release.json",
+  "tests/test_preview_migrations.py",
+]) {
+  assert.equal(pythonFullmatch(allowedPattern, path), true, "must allow " + path)
+}
+assert.equal(pythonFullmatch(allowedPattern, ".github/workflows/preview-backend-deploy.yml"), false)
 
 for (const file of [
   "scripts/preview-server-backend-deploy.sh",
