@@ -126,3 +126,10 @@ The frontend backend target remains the UAT database `mfms_server_uat`
 throughout. The backend, databases, ODK operations, schedules, proxy
 configuration, and every Production container are compared before and after each
 transaction and must be unchanged.
+
+## Preview backend releases
+
+The backend has a separate restricted release key, workflow, migration policy,
+and rollback state. It is intentionally not handled by the frontend-only
+workflow. Follow [Preview Backend Release Setup](PREVIEW_BACKEND_RELEASE_SETUP.md)
+for the one-time installation and every future Preview API/database release.
