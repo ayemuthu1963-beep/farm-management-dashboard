@@ -3,7 +3,6 @@
 import { useRef, useState } from "react"
 import { RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { ExportButton } from "@/components/farm/export-button"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
 import {
   BEETLE_TRAP_DATA_UPDATED_EVENT,
@@ -76,7 +75,6 @@ export function BeetleTrapHeaderActions() {
           <RefreshCw className={`size-4 ${isSyncing ? "animate-spin" : ""}`} aria-hidden="true" />
           {isSyncing ? "Syncing…" : "Sync ODK Now"}
         </button>
-        <ExportButton />
       </div>
 
       {syncNotice ? (
