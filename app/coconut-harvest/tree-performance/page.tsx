@@ -17,6 +17,9 @@ interface TreePerformanceData {
 
 interface TreePerformanceCategoryRow {
   treeNo: string
+  plantationDate: string | null
+  monthsSincePlanted: number | null
+  lifecycleStatus: string | null
   totalNutsLast10Cycles: number
   averageNuts: number
   harvestsCount: number
@@ -40,7 +43,16 @@ interface SelectedCategory {
 type SortDirection = "asc" | "desc"
 type CategorySortKey = keyof Pick<
   TreePerformanceCategoryRow,
-  "treeNo" | "totalNutsLast10Cycles" | "averageNuts" | "harvestsCount" | "missedHarvests" | "minNuts" | "maxNuts"
+  | "treeNo"
+  | "plantationDate"
+  | "monthsSincePlanted"
+  | "lifecycleStatus"
+  | "totalNutsLast10Cycles"
+  | "averageNuts"
+  | "harvestsCount"
+  | "missedHarvests"
+  | "minNuts"
+  | "maxNuts"
 >
 
 interface CategorySortConfig {
@@ -58,6 +70,18 @@ function waitForBrowserPaint() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 }
 
+function formatPlantationDate(value: string | null): string {
+  if (!value) return "—"
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(parsed)
+}
+
 function sortCategoryRows(
   rows: TreePerformanceCategoryRow[],
   sortConfig: CategorySortConfig | null,
@@ -69,8 +93,8 @@ function sortCategoryRows(
   return [...rows].sort((a, b) => {
     const directionMultiplier = sortConfig.direction === "asc" ? 1 : -1
 
-    if (sortConfig.key === "treeNo") {
-      return numericTextCollator.compare(a.treeNo, b.treeNo) * directionMultiplier
+    if (sortConfig.key === "treeNo" || sortConfig.key === "plantationDate" || sortConfig.key === "lifecycleStatus") {
+      return numericTextCollator.compare(String(a[sortConfig.key] ?? ""), String(b[sortConfig.key] ?? "")) * directionMultiplier
     }
 
     return (Number(a[sortConfig.key]) - Number(b[sortConfig.key])) * directionMultiplier
@@ -144,29 +168,32 @@ function PerformanceTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.rank}
-              className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
-              onClick={() => onSelect({ plot, category: cleanCategory(r.category) })}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault()
-                  onSelect({ plot, category: cleanCategory(r.category) })
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <td className="px-3 py-2.5 font-medium text-muted-foreground">{r.rank}</td>
-              <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">{r.category}</td>
-              <td className="px-3 py-2.5 text-muted-foreground">{r.criteria}</td>
-              <td className="px-3 py-2.5 text-right text-foreground">{r.treeCount.toLocaleString("en-IN")}</td>
-              <td className="px-3 py-2.5 text-right text-muted-foreground">{r.minNuts}</td>
-              <td className="px-3 py-2.5 text-right text-muted-foreground">{r.maxNuts}</td>
-              <td className="px-3 py-2.5 text-right font-semibold text-foreground">{r.averageNuts.toFixed(2)}</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const isFutureBetter = cleanCategory(r.category) === "Future Better"
+            return (
+              <tr
+                key={r.rank}
+                className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
+                onClick={() => onSelect({ plot, category: cleanCategory(r.category) })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    onSelect({ plot, category: cleanCategory(r.category) })
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <td className="px-3 py-2.5 font-medium text-muted-foreground">{r.rank}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">{r.category}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">{r.criteria}</td>
+                <td className="px-3 py-2.5 text-right text-foreground">{r.treeCount.toLocaleString("en-IN")}</td>
+                <td className="px-3 py-2.5 text-right text-muted-foreground">{isFutureBetter ? "—" : r.minNuts}</td>
+                <td className="px-3 py-2.5 text-right text-muted-foreground">{isFutureBetter ? "—" : r.maxNuts}</td>
+                <td className="px-3 py-2.5 text-right font-semibold text-foreground">{isFutureBetter ? "—" : r.averageNuts.toFixed(2)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
@@ -188,6 +215,7 @@ function CategoryDetailTable({
   const [sortConfig, setSortConfig] = useState<CategorySortConfig | null>(null)
   const exportRequestInFlight = useRef(false)
   const sortedRows = useMemo(() => sortCategoryRows(data?.rows ?? [], sortConfig), [data?.rows, sortConfig])
+  const isFutureBetter = data?.category === "Future Better"
 
   function handleSort(key: CategorySortKey) {
     setSortConfig((current) => {
@@ -291,24 +319,44 @@ function CategoryDetailTable({
             <thead>
               <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
                 <SortableHeader label="Tree No" sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Total Nuts Last 10 Harvests" sortKey="totalNutsLast10Cycles" align="right" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Average Nuts" sortKey="averageNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Harvests Count" sortKey="harvestsCount" align="right" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Missed Harvests" sortKey="missedHarvests" align="right" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Min Nuts" sortKey="minNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Max Nuts" sortKey="maxNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                {isFutureBetter ? (
+                  <>
+                    <SortableHeader label="Plantation Date" sortKey="plantationDate" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Months Since Planted" sortKey="monthsSincePlanted" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Lifecycle Status" sortKey="lifecycleStatus" sortConfig={sortConfig} onSort={handleSort} />
+                  </>
+                ) : (
+                  <>
+                    <SortableHeader label="Total Nuts Last 10 Harvests" sortKey="totalNutsLast10Cycles" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Average Nuts" sortKey="averageNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Harvests Count" sortKey="harvestsCount" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Missed Harvests" sortKey="missedHarvests" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Min Nuts" sortKey="minNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Max Nuts" sortKey="maxNuts" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {sortedRows.map((row) => (
                 <tr key={row.treeNo} className="border-b border-border last:border-0">
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
-                  <td className="px-3 py-2.5 text-right text-foreground">{row.totalNutsLast10Cycles.toLocaleString("en-IN")}</td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-foreground">{row.averageNuts.toFixed(2)}</td>
-                  <td className="px-3 py-2.5 text-right text-muted-foreground">{row.harvestsCount}</td>
-                  <td className="px-3 py-2.5 text-right text-muted-foreground">{row.missedHarvests}</td>
-                  <td className="px-3 py-2.5 text-right text-muted-foreground">{row.minNuts}</td>
-                  <td className="px-3 py-2.5 text-right text-muted-foreground">{row.maxNuts}</td>
+                  {isFutureBetter ? (
+                    <>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-foreground">{formatPlantationDate(row.plantationDate)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-foreground">{row.monthsSincePlanted ?? "—"}</td>
+                      <td className="px-3 py-2.5"><span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-bold text-sky-800">{row.lifecycleStatus ?? "Sapling"}</span></td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2.5 text-right text-foreground">{row.totalNutsLast10Cycles.toLocaleString("en-IN")}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-foreground">{row.averageNuts.toFixed(2)}</td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">{row.harvestsCount}</td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">{row.missedHarvests}</td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">{row.minNuts}</td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">{row.maxNuts}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

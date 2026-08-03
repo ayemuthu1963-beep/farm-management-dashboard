@@ -35,11 +35,12 @@ export const treeClassifications: string[] = [
   "Reliable Batter",
   "Tail Ender",
   "Bench Player",
+  "Future Better",
 ]
 
 export const detailedQueryClassifications = {
   plot1: treeClassifications,
-  plot2: ["All", "Match Winner", "Reliable Batter", "Tail Ender", "Bench Player"],
+  plot2: ["All", "Match Winner", "Reliable Batter", "Tail Ender", "Bench Player", "Future Better"],
 } as const
 
 // ===========================================================================
