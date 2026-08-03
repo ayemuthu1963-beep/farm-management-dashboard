@@ -101,7 +101,7 @@ On the administrator PC, create the single authorized-key line:
 ```powershell
 $publicKey = Get-Content "${keyPath}.pub" -Raw
 $forcedKey = 'command="/home/muthu/.local/libexec/mfms-preview-backend-deploy",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ' + $publicKey.Trim()
-Set-Content -NoNewline -Path (Join-Path $keyDir 'authorized_key_line.txt') -Value $forcedKey
+Set-Content -Path (Join-Path $keyDir 'authorized_key_line.txt') -Value $forcedKey
 ```
 
 Copy it to the server:
