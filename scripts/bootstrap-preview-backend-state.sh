@@ -18,6 +18,7 @@ current_revision=$1
 
 readonly backend_repo_dir="/home/muthu/muthu-harvest-dashboard-preview-release"
 readonly backend_live_container="harvest-api-pilot"
+readonly legacy_image_tag_prefix="mfms-asset-register-api:github-"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-backend-switch"
 readonly lock_file="$state_dir/deployment.lock"
@@ -34,8 +35,13 @@ container_id=$(docker inspect --format '{{.Id}}' "$backend_live_container" 2>/de
 image_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
 image_tag=$(docker inspect --format '{{.Config.Image}}' "$backend_live_container")
 image_revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_id")
-[[ "$image_revision" == "$current_revision" ]] \
-  || blocked "live backend image label does not match CURRENT_BACKEND_COMMIT"
+if [[ -n "$image_revision" ]]; then
+  [[ "$image_revision" == "$current_revision" ]] \
+    || blocked "live backend image label does not match CURRENT_BACKEND_COMMIT"
+else
+  [[ "$image_tag" == "${legacy_image_tag_prefix}${current_revision:0:7}-"* ]] \
+    || blocked "unlabelled live backend image tag does not match CURRENT_BACKEND_COMMIT"
+fi
 git -C "$backend_repo_dir" cat-file -e "$current_revision^{commit}" \
   || blocked "CURRENT_BACKEND_COMMIT is absent from the authoritative backend checkout"
 
