@@ -14,7 +14,7 @@ blocked() {
 
 for required_command in \
   awk cat chmod cmp crontab curl date docker flock git grep id install mktemp mv \
-  python3 rm sed seq sha256sum sleep sort tr
+  python3 rm sed seq sha256sum sleep sort ss tr
 do
   command -v "$required_command" >/dev/null 2>&1 \
     || blocked "required command is unavailable: $required_command"
@@ -101,18 +101,25 @@ disconnect_preview_network() {
 }
 
 ensure_preview_network_ip() {
-  local container=$1 expected_ip=$2 current_ip
-  current_ip=$(network_ip_for_container "$container")
-  if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
-    docker network disconnect "$preview_network" "$container" || return 1
-    current_ip=""
-  fi
-  if [[ -z "$current_ip" ]]; then
-    docker network connect --ip "$expected_ip" "$preview_network" "$container" \
-      || return 1
+  local container=$1 expected_ip=$2 current_ip attempt
+  for attempt in $(seq 1 30); do
     current_ip=$(network_ip_for_container "$container")
-  fi
-  [[ "$current_ip" == "$expected_ip" ]]
+    if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
+      docker network disconnect "$preview_network" "$container" >/dev/null 2>&1 || true
+      current_ip=""
+    fi
+    if [[ -z "$current_ip" ]]; then
+      docker network connect --ip "$expected_ip" "$preview_network" "$container" \
+        >/dev/null 2>&1 || {
+          sleep 1
+          continue
+        }
+      current_ip=$(network_ip_for_container "$container")
+    fi
+    [[ "$current_ip" == "$expected_ip" ]] && return 0
+    sleep 1
+  done
+  return 1
 }
 
 image_revision_for_container() {
@@ -173,6 +180,17 @@ wait_for_version() {
   return 1
 }
 
+wait_for_public_preview_guard() {
+  local status attempt
+  for attempt in $(seq 1 30); do
+    status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+      "$preview_url/api/version" 2>/dev/null || true)
+    [[ "$status" == "401" ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
 smoke_routes() {
   local base_url=$1 failures=0 route marker body
   while IFS='|' read -r route marker; do
@@ -195,6 +213,13 @@ smoke_routes() {
 /admin|Admin
 EOF
   [[ "$failures" -eq 0 ]]
+}
+
+assert_candidate_port_available() {
+  local listeners
+  listeners=$(ss -H -ltn "sport = :$candidate_port" 2>/dev/null || true)
+  [[ -z "$listeners" ]] \
+    || blocked "Preview candidate port $candidate_port is already allocated"
 }
 
 write_environment_file() {
@@ -297,14 +322,15 @@ restore_original_frontend() {
     fi
   fi
   if [[ -n "$transaction_backup" ]] && container_exists "$transaction_backup"; then
-    docker rename "$transaction_backup" "$live_container" >/dev/null 2>&1 || return 0
+    docker rename "$transaction_backup" "$live_container" >/dev/null 2>&1 || return 1
   fi
   if container_exists "$live_container"; then
     ensure_preview_network_ip "$live_container" "$original_network_ip" \
-      >/dev/null 2>&1 || return 0
-    docker start "$live_container" >/dev/null 2>&1 || return 0
+      >/dev/null 2>&1 || return 1
+    docker start "$live_container" >/dev/null 2>&1 || return 1
     if wait_for_version "http://127.0.0.1:$live_port" "$original_revision" \
-      && smoke_routes "http://127.0.0.1:$live_port"; then
+      && smoke_routes "http://127.0.0.1:$live_port" \
+      && wait_for_public_preview_guard; then
       automatic_restore_result="pass"
     fi
   fi
@@ -382,6 +408,8 @@ PY
   proxy_digest_before=$(proxy_digest)
   [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target is not unique"
   snapshot_unrelated_containers > "$before_unrelated"
+  wait_for_public_preview_guard \
+    || blocked "public Preview authentication guard is unavailable"
 }
 
 validate_release_manifest() {
@@ -482,6 +510,7 @@ deploy_preview() {
     || blocked "candidate is not the exact preview-release head"
 
   validate_common_live_state
+  assert_candidate_port_available
   git clone --filter=blob:none --no-checkout "$repo_url" "$source_dir" >/dev/null 2>&1
   git -C "$source_dir" fetch --no-tags origin "+$release_ref:refs/remotes/origin/preview-release" >/dev/null 2>&1
   [[ "$(git -C "$source_dir" rev-parse refs/remotes/origin/preview-release)" == "$candidate_revision" ]] \
@@ -528,8 +557,7 @@ deploy_preview() {
   wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
     || blocked "replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
-  wait_for_version "$preview_url" "$candidate_revision" || blocked "public Preview /api/version failed"
-  smoke_routes "$preview_url" || blocked "public Preview smoke test failed"
+  wait_for_public_preview_guard || blocked "public Preview authentication guard failed"
   assert_live_contract "$candidate_revision" "$new_image_id" "$before_unrelated"
 
   trap '' HUP INT TERM
@@ -543,6 +571,7 @@ deploy_preview() {
 
   echo "deployment_environment=Preview"
   echo "deployment_url=$preview_url"
+  echo "public_preview_guard=401"
   echo "previous_revision=$original_revision"
   echo "deployed_revision=$candidate_revision"
   echo "deployed_image=$new_image"
@@ -608,8 +637,7 @@ rollback_preview() {
   wait_for_version "http://127.0.0.1:$live_port" "$rollback_revision" \
     || blocked "rollback replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "rollback local smoke test failed"
-  wait_for_version "$preview_url" "$rollback_revision" || blocked "public Preview rollback /api/version failed"
-  smoke_routes "$preview_url" || blocked "public Preview rollback smoke test failed"
+  wait_for_public_preview_guard || blocked "public Preview rollback authentication guard failed"
   assert_live_contract "$rollback_revision" "$replacement_id" "$before_unrelated"
 
   trap '' HUP INT TERM
@@ -623,6 +651,7 @@ rollback_preview() {
 
   echo "rollback_environment=Preview"
   echo "rollback_url=$preview_url"
+  echo "public_preview_guard=401"
   echo "previous_revision=$deployed_revision"
   echo "restored_revision=$rollback_revision"
   echo "rollback_container_retained=$transaction_backup"

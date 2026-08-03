@@ -25,9 +25,14 @@ protected `Preview` environment for approval.
 - The candidate is tested on `127.0.0.1:3016` before the live Preview frontend is
   switched. The live service remains `mfms-pilot-web` on `127.0.0.1:3015` and
   retains its existing `harvest-net` address, so the shared proxy is not reloaded.
-- Any failed switch automatically restores and re-tests the original Preview
-  frontend. The immediately previous frontend is retained for the manual rollback
-  workflow.
+- The candidate port must be unused before the build begins. The deployment stops
+  safely if another process has already bound `127.0.0.1:3016`.
+- The public Preview endpoint is intentionally HTTP-auth protected. Deployment
+  verifies the expected anonymous `401` boundary while the candidate revision and
+  route smoke tests run locally; no browser credential is stored or sent by GitHub.
+- Any failed switch retries restoration of the original Preview network address and
+  then re-tests the original frontend. The immediately previous frontend is retained
+  for the manual rollback workflow.
 - Environment values are never printed; only environment variable names are
   included in the report.
 - Production, the backend, database, ODK imports, schedules, and proxy
