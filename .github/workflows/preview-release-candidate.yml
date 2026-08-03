@@ -1,0 +1,39 @@
+name: Preview release candidate
+
+on:
+  push:
+    branches:
+      - preview-release
+    paths:
+      - deploy/preview-release-manifest.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-preview-release-signal
+  cancel-in-progress: false
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm the exact Preview release candidate
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          [[ "$WORKFLOW_REF" == "refs/heads/preview-release" ]] || {
+            echo "Preview release signal must run from preview-release" >&2
+            exit 1
+          }
+          [[ "$CANDIDATE_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Preview release signal did not receive an exact lowercase commit SHA" >&2
+            exit 1
+          }
+
+          echo "Preview release candidate signal passed"
