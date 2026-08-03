@@ -7,7 +7,7 @@ export function MotorTable({ records }: MotorTableProps) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[680px] border-collapse text-sm">
         <thead>
-          <tr className="bg-primary/10 text-left text-[11px] font-semibold uppercase tracking-wide text-primary">
+          <tr className="bg-sky-100/90 text-left text-[11px] font-bold uppercase tracking-wide text-sky-900">
             <th className="px-3 py-3">Date</th>
             <th className="px-3 py-3">Runtime</th>
             <th className="px-3 py-3">Starts</th>
@@ -25,7 +25,7 @@ export function MotorTable({ records }: MotorTableProps) {
             </tr>
           )}
           {records.map((record, index) => (
-            <tr key={`${record.date}-${record.valve ?? "none"}-${index}`} className="border-t border-border hover:bg-muted/50">
+            <tr key={`${record.date}-${record.valve ?? "none"}-${index}`} className="border-t border-sky-100/80 hover:bg-white/80">
               <td className="whitespace-nowrap px-3 py-3 text-foreground">{record.date}</td>
               <td className="px-3 py-3 text-foreground">{record.runHours.toFixed(2)} hrs</td>
               <td className="px-3 py-3 text-foreground">{record.starts}</td>
