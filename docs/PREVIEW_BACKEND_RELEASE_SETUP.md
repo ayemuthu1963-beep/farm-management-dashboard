@@ -94,14 +94,73 @@ chmod 755 /home/muthu/.local/libexec/mfms-preview-backend-deploy
 chmod 755 /home/muthu/.local/libexec/bootstrap-preview-backend-state
 ```
 
-### 3. Add only the new forced-command public key
+### 3. Create the dedicated read-only backend checkout
+
+The server must keep a clean checkout only for this deployment program. Its
+GitHub identity is separate from the forced-command SSH key used by Actions.
+It has read access to `muthu-harvest-dashboard` only.
+
+On the server as `muthu`, create the repository deploy key. Leave its
+passphrase empty so the restricted release program can fetch non-interactively:
+
+```bash
+repo_key=/home/muthu/.ssh/mfms-preview-backend-repository
+test ! -e "$repo_key" || { echo "Repository deploy key already exists; stop."; exit 1; }
+ssh-keygen -t ed25519 -a 64 -f "$repo_key" -C 'mfms-preview-backend-repository-readonly'
+cat "${repo_key}.pub"
+```
+
+Copy the displayed **public** key into GitHub:
+
+1. Open `ayemuthu1963-beep/muthu-harvest-dashboard` → **Settings** →
+   **Deploy keys** → **Add deploy key**.
+2. Title it `mfms-preview-backend-repository-readonly`.
+3. Paste the public key.
+4. Leave **Allow write access** unchecked, then save.
+
+Back on the server, add the dedicated GitHub host alias without changing any
+existing SSH host configuration:
+
+```bash
+grep -Fq 'Host github.com-mfms-preview-backend' /home/muthu/.ssh/config 2>/dev/null \
+  && { echo "GitHub host alias already exists; stop."; exit 1; }
+cat >> /home/muthu/.ssh/config <<'EOF'
+Host github.com-mfms-preview-backend
+  HostName github.com
+  User git
+  IdentityFile /home/muthu/.ssh/mfms-preview-backend-repository
+  IdentitiesOnly yes
+  HostKeyAlias github.com
+  StrictHostKeyChecking yes
+EOF
+chmod 600 /home/muthu/.ssh/config
+```
+
+The GitHub host key must already be known to the `muthu` account. Verify the
+read-only key, then create the one authoritative checkout:
+
+```bash
+ssh -T git@github.com-mfms-preview-backend
+git clone --branch preview-release --single-branch \
+  git@github.com-mfms-preview-backend:ayemuthu1963-beep/muthu-harvest-dashboard.git \
+  /home/muthu/muthu-harvest-dashboard-preview-release
+git -C /home/muthu/muthu-harvest-dashboard-preview-release branch --show-current
+test -z "$(git -C /home/muthu/muthu-harvest-dashboard-preview-release status --short)"
+```
+
+The SSH test is expected to say that GitHub does not provide shell access; the
+clone must finish successfully, the branch must be `preview-release`, and the
+final status check must be silent. If the GitHub host key or read-only key test
+fails, stop rather than weakening host-key checking or using a personal token.
+
+### 4. Add only the new forced-command public key
 
 On the administrator PC, create the single authorized-key line:
 
 ```powershell
 $publicKey = Get-Content "${keyPath}.pub" -Raw
 $forcedKey = 'command="/home/muthu/.local/libexec/mfms-preview-backend-deploy",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ' + $publicKey.Trim()
-Set-Content -Path (Join-Path $keyDir 'authorized_key_line.txt') -Value $forcedKey
+Set-Content -Path (Join-Path $keyDir 'authorized_key_line.txt') -Value $forcedKey -Encoding ascii
 ```
 
 Copy it to the server:
@@ -125,29 +184,36 @@ rm /home/muthu/.ssh/mfms-preview-backend.authorized_key
 The `grep` command must find the key comment. If `wc -l` reports anything other
 than `1`, stop instead of appending it.
 
-### 4. Bootstrap the existing Preview API as the rollback baseline
+### 5. Bootstrap the existing Preview API as the rollback baseline
 
-Still on the server, read the live image revision without changing anything:
-
-```bash
-docker image inspect "$(docker inspect --format '{{.Image}}' harvest-api-pilot)" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
-```
-
-It must print one exact 40-character lowercase commit SHA. If it is blank or
-not a SHA, stop and ask Codex to reconcile the deployed image before any
-backend deployment.
-
-Pass that printed SHA to the bootstrap program:
+Still on the server, determine the exact current commit without changing the
+container. New images have a full revision label. The legacy image tag has a
+short Git revision; the clean checkout resolves it to the full SHA.
 
 ```bash
-/home/muthu/.local/libexec/bootstrap-preview-backend-state PUT_THE_40_CHARACTER_SHA_HERE
+repo=/home/muthu/muthu-harvest-dashboard-preview-release
+image_id=$(docker inspect --format '{{.Image}}' harvest-api-pilot)
+image_tag=$(docker inspect --format '{{.Config.Image}}' harvest-api-pilot)
+image_revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_id")
+
+if [[ "$image_revision" =~ ^[0-9a-f]{40}$ ]]; then
+  current_revision=$image_revision
+else
+  short_revision=${image_tag#*:github-}
+  short_revision=${short_revision%%-*}
+  [[ "$short_revision" =~ ^[0-9a-f]{7,40}$ ]] || { echo "Cannot resolve legacy image tag; stop."; exit 1; }
+  current_revision=$(git -C "$repo" rev-parse "${short_revision}^{commit}")
+fi
+
+printf 'current_revision=%s\n' "$current_revision"
+/home/muthu/.local/libexec/bootstrap-preview-backend-state "$current_revision"
 ```
 
 The program must finish with `PREVIEW_BACKEND_BOOTSTRAP=PASS`. It writes only
 the protected Preview rollback state; it does not restart containers or modify
 the database.
 
-### 5. Save the private key only in GitHub's protected Preview environment
+### 6. Save the private key only in GitHub's protected Preview environment
 
 In `ayemuthu1963-beep/farm-management-dashboard`:
 
@@ -162,7 +228,7 @@ In `ayemuthu1963-beep/farm-management-dashboard`:
 Never save this private key in GitHub variables, repository secrets, source
 files, workflows, comments, or chat.
 
-### 6. Prove that the new key cannot open a shell
+### 7. Prove that the new key cannot open a shell
 
 From the administrator PC, this read-only restriction check must be rejected:
 
