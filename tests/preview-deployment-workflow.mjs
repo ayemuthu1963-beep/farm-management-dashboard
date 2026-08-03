@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "d5e1c9ac59075438fd1e99a33cd903016130c3d1")
+assert.equal(manifest.base_commit, "6641b9d865583461dee20cd583104d1754b4e890")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -240,7 +240,7 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(manifest.allowed_paths, [...manifest.allowed_paths].sort())
 assert.equal(new Set(manifest.allowed_paths).size, manifest.allowed_paths.length)
 for (const requiredPath of [
-  "components/irrigation/zone-status-cards.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
   "deploy/preview-release-manifest.json",
   "tests/irrigation-management-corrections.mjs",
   "tests/preview-deployment-workflow.mjs",
