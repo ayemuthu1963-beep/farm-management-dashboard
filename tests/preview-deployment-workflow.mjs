@@ -246,6 +246,8 @@ for (const requiredPath of [
   "deploy/preview-release-manifest.json",
   "lib/beetle-daily-count-excel.ts",
   "package.json",
+  "scripts/preview-server-deploy.sh",
+  "scripts/preview-server-preflight.sh",
   "tests/beetle-trap-cumulative-period-export.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]) {
