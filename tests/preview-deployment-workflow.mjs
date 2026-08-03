@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "d4b262b4c43318cdc5bdafa1271bea60dbb5d8ee")
+assert.equal(manifest.base_commit, "d5e1c9ac59075438fd1e99a33cd903016130c3d1")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -240,13 +240,10 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(manifest.allowed_paths, [...manifest.allowed_paths].sort())
 assert.equal(new Set(manifest.allowed_paths).size, manifest.allowed_paths.length)
 for (const requiredPath of [
-  "app/well-water/page.tsx",
-  "components/farm/date-range-selector.tsx",
-  "components/farm/summary-cards.tsx",
-  "components/farm/well-section.tsx",
+  "components/irrigation/zone-status-cards.tsx",
   "deploy/preview-release-manifest.json",
+  "tests/irrigation-management-corrections.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/well-water-page-corrections.mjs",
 ]) {
   assert.ok(manifest.allowed_paths.includes(requiredPath), `Missing manifest path: ${requiredPath}`)
 }
