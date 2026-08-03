@@ -103,5 +103,7 @@ assert.match(setupGuide, /PREVIEW_BACKEND_DEPLOY_SSH_PRIVATE_KEY/)
 assert.match(setupGuide, /mfms-preview-backend-deploy/)
 assert.match(setupGuide, /mfms_server_uat/)
 assert.match(setupGuide, /Production is\s+not part of this process/)
+assert.match(setupGuide, /wc -l \/home\/muthu\/\.ssh\/mfms-preview-backend\.authorized_key/)
+assert.doesNotMatch(setupGuide, /Set-Content -NoNewline/)
 
 console.log("Preview backend deployment and rollback workflow tests passed.")
