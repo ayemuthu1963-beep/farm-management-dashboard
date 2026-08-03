@@ -48,11 +48,22 @@ interface ApiTreePerformanceDetail {
   plot: "Plot 1" | "Plot 2" | string
   category: string
   tree_no: string
+  nuts_last_10_cycles: number | null
+  average_nuts: string | number | null
+  harvests_count: number | null
   missed_harvests: number | null
+  min_nuts: number | null
+  max_nuts: number | null
+  plantation_date: string | null
+  months_since_planted: number | null
+  lifecycle_status: string | null
 }
 
 export interface TreePerformanceCategoryRow {
   treeNo: string
+  plantationDate: string | null
+  monthsSincePlanted: number | null
+  lifecycleStatus: string | null
   totalNutsLast10Cycles: number
   averageNuts: number
   harvestsCount: number
@@ -208,6 +219,7 @@ function categoryWithBadge(category: string): string {
     "Reliable Batter": "\u{1F44D}",
     "Tail Ender": "\u{1F62C}",
     "Bench Player": "\u{1FA91}",
+    "Future Better": "\u{1F331}",
   }
 
   return `${badgeByCategory[category] ?? ""} ${category}`.trim()
@@ -229,28 +241,23 @@ function mapPerformanceRow(row: ApiTreePerformanceRow): PerformanceRow {
   }
 }
 
-async function mapPerformanceCategoryDetail(
+function mapPerformanceCategoryDetail(
   detail: ApiTreePerformanceDetail,
-  authHeader: string,
   lastCycles: Set<number>,
-): Promise<TreePerformanceCategoryRow> {
-  const records = (await fetchRawTreeHistory(detail.tree_no, authHeader)).filter((record) => {
-    return lastCycles.has(toCycleNumber(record.harvest_cycle ?? "0"))
-  })
-
-  const nutsByHarvest = records.map((record) => record.total_nuts ?? 0)
-  const totalNutsLast10Cycles = nutsByHarvest.reduce((sum, nuts) => sum + nuts, 0)
-  const minNuts = nutsByHarvest.length > 0 ? Math.min(...nutsByHarvest) : 0
-  const maxNuts = nutsByHarvest.length > 0 ? Math.max(...nutsByHarvest) : 0
+): TreePerformanceCategoryRow {
+  const totalNutsLast10Cycles = detail.nuts_last_10_cycles ?? 0
 
   return {
     treeNo: detail.tree_no,
+    plantationDate: detail.plantation_date ?? null,
+    monthsSincePlanted: detail.months_since_planted ?? null,
+    lifecycleStatus: detail.lifecycle_status ?? null,
     totalNutsLast10Cycles,
     averageNuts: lastCycles.size > 0 ? totalNutsLast10Cycles / lastCycles.size : 0,
-    harvestsCount: records.length,
+    harvestsCount: detail.harvests_count ?? 0,
     missedHarvests: detail.missed_harvests ?? 0,
-    minNuts,
-    maxNuts,
+    minNuts: detail.min_nuts ?? 0,
+    maxNuts: detail.max_nuts ?? 0,
   }
 }
 
@@ -686,13 +693,7 @@ export async function fetchTreePerformanceCategoryData(
     return detail.plot === plot && detail.category === cleanCategory
   })
 
-  const rows: TreePerformanceCategoryRow[] = []
-  const batchSize = 25
-
-  for (let index = 0; index < selectedDetails.length; index += batchSize) {
-    const batch = selectedDetails.slice(index, index + batchSize)
-    rows.push(...(await Promise.all(batch.map((detail) => mapPerformanceCategoryDetail(detail, authHeader, lastCycles)))))
-  }
+  const rows = selectedDetails.map((detail) => mapPerformanceCategoryDetail(detail, lastCycles))
 
   rows.sort((a, b) => {
     const totalCompare = b.totalNutsLast10Cycles - a.totalNutsLast10Cycles
@@ -850,23 +851,6 @@ function detailMatchesClassification(detail: ApiTreePerformanceDetail, filters: 
   }
 
   return false
-}
-
-async function fetchRawTreeHistory(treeNo: string, authHeader: string): Promise<ApiTreeHistoryRecord[]> {
-  const response = await fetch(`${getApiBaseUrl()}/api/trees/${encodeURIComponent(treeNo)}`, {
-    headers: {
-      Authorization: authHeader,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  })
-
-  if (!response.ok) {
-    return []
-  }
-
-  const data = (await response.json()) as { records: ApiTreeHistoryRecord[] }
-  return data.records
 }
 
 export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Promise<DetailedQueryData> {
