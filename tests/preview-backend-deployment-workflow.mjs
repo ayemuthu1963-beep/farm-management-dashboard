@@ -71,6 +71,61 @@ for (const path of [
 }
 assert.equal(pythonFullmatch(allowedPattern, ".github/workflows/preview-backend-deploy.yml"), false)
 
+function assertPythonPlanLines(label, source, expectedLines) {
+  const result = spawnSync("python3", ["-c", source], { encoding: "utf8" })
+  assert.equal(result.error, undefined, `${label} test requires python3`)
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(
+    JSON.parse(result.stdout),
+    expectedLines,
+    `${label} must be made of physical newline-delimited records`,
+  )
+}
+
+const migrationPlanSeparator = deployScript.match(
+  /""\.join\(f"\{path\}\|\{checksum\}(\\+)n" for path, checksum in plan\)/,
+)?.[1]
+assert.ok(migrationPlanSeparator, "migration plan writer must be present")
+assert.equal(
+  migrationPlanSeparator,
+  "\\",
+  "migration plan writer must use one Python newline escape",
+)
+assertPythonPlanLines(
+  "migration plan",
+  [
+    "import json",
+    'plan = [("db/migrations/one.sql", "checksum-one"), ("db/migrations/two.sql", "checksum-two")]',
+    `value = "".join(f"{path}|{checksum}${migrationPlanSeparator}n" for path, checksum in plan)`,
+    "print(json.dumps(value.splitlines()))",
+  ].join("\n"),
+  [
+    "db/migrations/one.sql|checksum-one",
+    "db/migrations/two.sql|checksum-two",
+  ],
+)
+
+const openapiPlanSeparator = deployScript.match(
+  /""\.join\(f"\{path\}(\\+)n" for path in openapi_paths\)/,
+)?.[1]
+assert.ok(openapiPlanSeparator, "OpenAPI plan writer must be present")
+assert.equal(
+  openapiPlanSeparator,
+  "\\",
+  "OpenAPI plan writer must use one Python newline escape",
+)
+assertPythonPlanLines(
+  "OpenAPI plan",
+  [
+    "import json",
+    'openapi_paths = ["/health", "/api/backend-version"]',
+    `value = "".join(f"{path}${openapiPlanSeparator}n" for path in openapi_paths)`,
+    "print(json.dumps(value.splitlines()))",
+  ].join("\n"),
+  ["/health", "/api/backend-version"],
+)
+
+
 for (const file of [
   "scripts/preview-server-backend-deploy.sh",
   "scripts/bootstrap-preview-backend-state.sh",
