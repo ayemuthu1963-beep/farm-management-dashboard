@@ -34,12 +34,16 @@ readonly proxy_container="central-nginx-1"
 readonly preview_network="harvest-net"
 readonly preview_url="https://preview.muthufarms.com"
 readonly database_name="mfms_server_uat"
-readonly live_port="8001"
+readonly live_port="8015"
 readonly candidate_port="8016"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-backend-switch"
 readonly lock_file="$state_dir/deployment.lock"
-readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8001"}]}'
+readonly approved_restart_policy="no"
+readonly approved_mount_source="/tmp"
+readonly approved_mount_target="/host-tmp"
+readonly expected_mount_contract="bind|$approved_mount_source|$approved_mount_target|true"
+readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8015"}]}'
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
   || blocked "the public target is not Preview"
@@ -104,6 +108,20 @@ network_ip_for_container() {
   docker inspect \
     --format "{{with index .NetworkSettings.Networks \"$preview_network\"}}{{.IPAddress}}{{end}}" \
     "$1"
+}
+
+mount_contract_for_container() {
+  local container=$1
+  docker inspect \
+    --format '{{range .Mounts}}{{.Type}}|{{.Source}}|{{.Destination}}|{{.RW}}{{end}}' \
+    "$container"
+}
+
+assert_approved_mount_contract() {
+  local container=$1 contract
+  contract=$(mount_contract_for_container "$container")
+  [[ "$contract" == "$expected_mount_contract" ]] \
+    || blocked "Preview backend mount contract differs from the approved /tmp to /host-tmp bind mount"
 }
 
 disconnect_preview_network() {
@@ -276,9 +294,8 @@ validate_common_live_state() {
     || blocked "Preview backend is not on the Preview network"
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$backend_live_container")" == "$expected_port_bindings" ]] \
     || blocked "Preview backend host port mapping differs from the approved $live_port mapping"
-  [[ "$(docker inspect --format '{{len .Mounts}}' "$backend_live_container")" == "0" ]] \
-    || blocked "Preview backend has an unapproved mount"
-  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$backend_live_container")" == "unless-stopped" ]] \
+  assert_approved_mount_contract "$backend_live_container"
+  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$backend_live_container")" == "$approved_restart_policy" ]] \
     || blocked "Preview backend restart policy changed"
   [[ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^harvest-api-pilot-candidate-' || true)" -eq 0 ]] \
     || blocked "a stale Preview backend candidate container exists"
@@ -308,7 +325,7 @@ prepare_backend_source() {
     || blocked "authoritative backend checkout is not clean"
   origin_url=$(git -C "$backend_repo_dir" remote get-url origin)
   case "$origin_url" in
-    "git@github.com:$backend_repository.git"|"https://github.com/$backend_repository.git"|"https://github.com/$backend_repository")
+    "git@github.com:$backend_repository.git"|"git@github.com-mfms-preview-backend:$backend_repository.git"|"https://github.com/$backend_repository.git"|"https://github.com/$backend_repository")
       ;;
     *)
       blocked "authoritative backend checkout origin is not approved"
@@ -482,6 +499,7 @@ start_candidate() {
     --network "$preview_network" \
     --restart no \
     -p "127.0.0.1:$candidate_port:8000" \
+    --mount "type=bind,source=$approved_mount_source,target=$approved_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
   wait_for_health "http://127.0.0.1:$candidate_port" \
@@ -520,7 +538,7 @@ assert_live_contract() {
     || blocked "Preview backend revision does not match"
   [[ "$(image_environment_for_container "$backend_live_container")" == "Preview" ]] \
     || blocked "Preview backend image is not labelled Preview"
-  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$backend_live_container")" == "unless-stopped" ]] \
+  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$backend_live_container")" == "$approved_restart_policy" ]] \
     || blocked "Preview backend restart policy changed"
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$backend_live_container")" == "$preview_network" ]] \
     || blocked "Preview backend network changed"
@@ -528,8 +546,7 @@ assert_live_contract() {
     || blocked "Preview backend network address changed"
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$backend_live_container")" == "$expected_port_bindings" ]] \
     || blocked "Preview backend host port changed"
-  [[ "$(docker inspect --format '{{len .Mounts}}' "$backend_live_container")" == "0" ]] \
-    || blocked "Preview backend mounts changed"
+  assert_approved_mount_contract "$backend_live_container"
   [[ "$(docker inspect --format '{{.Id}}' "$frontend_container")" == "$frontend_id_before" ]] \
     || blocked "Preview frontend container changed"
   [[ "$(docker inspect --format '{{.Image}}' "$frontend_container")" == "$frontend_image_before" ]] \
@@ -660,8 +677,9 @@ deploy_backend() {
     --name "$backend_live_container" \
     --network "$preview_network" \
     --ip "$original_network_ip" \
-    --restart unless-stopped \
+    --restart "$approved_restart_policy" \
     -p "127.0.0.1:$live_port:8000" \
+    --mount "type=bind,source=$approved_mount_source,target=$approved_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 
