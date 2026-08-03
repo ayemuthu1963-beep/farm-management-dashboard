@@ -1,12 +1,12 @@
-import { Bug, Target, TriangleAlert, MapPin, CalendarClock, CircleCheck, Clock, CalendarDays, Info, type LucideIcon } from "lucide-react"
+import { Bug, Target, TriangleAlert, MapPin, CalendarClock, CircleCheck, Clock, CalendarDays, Info, TableProperties, type LucideIcon } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
-import { ExportButton } from "@/components/farm/export-button"
 import { BeetleTrapMapArea } from "@/components/beetle/beetle-trap-map-area"
 import { BeetleTrapHeaderActions } from "@/components/beetle/beetle-trap-header-actions"
 import { BeetleDailyChart, type BeetleDailyCountRow } from "@/components/beetle/beetle-daily-chart"
+import { BeetleDailyExcelExport } from "@/components/beetle/beetle-daily-excel-export"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
 
@@ -115,10 +115,9 @@ function dashboardQuery(searchParams: PageSearchParams): URLSearchParams {
   return query
 }
 
-async function getBeetleDashboardData(searchParams: PageSearchParams): Promise<BeetleDashboardData | null> {
+async function fetchBeetleDashboardData(query: URLSearchParams): Promise<BeetleDashboardData | null> {
   const authHeader = getBasicAuthHeader()
   if (!authHeader) return null
-  const query = dashboardQuery(searchParams)
   const suffix = query.toString() ? `?${query.toString()}` : ""
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/beetle-trap/dashboard${suffix}`, {
@@ -130,6 +129,24 @@ async function getBeetleDashboardData(searchParams: PageSearchParams): Promise<B
   } catch {
     return null
   }
+}
+
+/**
+ * The dashboard's default response is intentionally compact.  The daily trend
+ * is different: it must always show the whole live pheromone/reset period, so
+ * first obtain the authoritative active reset date, then request that period.
+ */
+async function getBeetleDashboardData(searchParams: PageSearchParams): Promise<BeetleDashboardData | null> {
+  const initial = await fetchBeetleDashboardData(dashboardQuery(searchParams))
+  if (!initial) return null
+
+  const cumulativeStartDate = initial.cumulative_start_date ?? initial.admin_settings?.cumulative_count_start_date ?? null
+  if (!cumulativeStartDate || initial.cumulative_config_status !== "ok") return initial
+
+  const activePeriodQuery = new URLSearchParams({ start_date: cumulativeStartDate })
+  if (initial.current_end_date) activePeriodQuery.set("end_date", initial.current_end_date)
+
+  return (await fetchBeetleDashboardData(activePeriodQuery)) ?? initial
 }
 
 function parseDate(value: string | null | undefined): Date | null {
@@ -332,6 +349,8 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
   const rows = dailyRows(data)
   const latest = data?.summary.latest_inspection
   const manualSyncAvailable = isBeetleTrapManualSyncAvailable()
+  const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
+  const dailyCountTitle = `Daily Beetle Count (Start Date: ${formatDisplayDate(cumulativeStartDate)})`
 
   return (
     <DashboardShell>
@@ -348,7 +367,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
               <p className="text-sm text-muted-foreground">Traps are inspected every 2 days</p>
             </div>
           </div>
-          {manualSyncAvailable ? <BeetleTrapHeaderActions /> : <ExportButton />}
+          {manualSyncAvailable ? <BeetleTrapHeaderActions /> : null}
         </div>
 
         {!data && (
@@ -367,8 +386,22 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           <BeetleStatusTiles data={data} latest={latest} />
         </BeetleTrapMapArea>
 
-        <Panel title="Daily Beetle Count – Last 15 Inspection Dates" icon={CalendarDays} headerRight={<span className="text-xs font-medium text-muted-foreground">Live from beetle_trap_counts</span>}>
+        <Panel
+          title={dailyCountTitle}
+          icon={CalendarDays}
+          headerRight={<span className="text-xs font-medium text-muted-foreground">Current cumulative period</span>}
+          className="border-chart-2/30 bg-chart-2/5"
+        >
           <BeetleDailyChart counts={rows} />
+        </Panel>
+
+        <Panel
+          title="Daily Beetle Count Data"
+          icon={TableProperties}
+          headerRight={<BeetleDailyExcelExport rows={rows} startDate={cumulativeStartDate} />}
+          className="border-primary/30 bg-primary/5"
+        >
+          <p className="mb-4 text-sm text-muted-foreground">All inspection dates in the current cumulative period, starting {formatDisplayDate(cumulativeStartDate)}.</p>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead>
