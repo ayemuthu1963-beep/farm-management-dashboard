@@ -133,17 +133,19 @@ assert.equal(formatSignedLitres(null, true), "—")
 
 const northStats = dashboard.summaryStats.filter((stat) => stat.wellId === "north")
 assert.equal(Math.round(northStats.find((stat) => stat.label === "Total Pumped Out").value), 61667)
+assert.equal(dashboard.summaryStats.length, 3)
+assert.deepEqual(
+  dashboard.summaryStats.map((stat) => stat.well),
+  ["North Well", "South Well", "Both Wells"],
+)
 assert.equal(
-  northStats.find((stat) => stat.label === "Difference in Morning Readings").value,
-  25000,
+  Math.round(dashboard.summaryStats.find((stat) => stat.wellId === "both").value),
+  211667,
 )
 
 const northChart = toChartData(dashboard.northWellRecords)
 assert.equal(northChart.at(-1).pumpedOut, northRecord.waterPumpedOut)
-assert.equal(
-  northChart.at(-1).morningDifference,
-  northRecord.differenceInMorningReadings,
-)
+assert.equal("morningDifference" in northChart.at(-1), false)
 
 const dashboardWithNumericStrings = buildWellDashboardData({
   ...payload,
@@ -167,7 +169,7 @@ const numericStringChartPoint = toChartData(dashboardWithNumericStrings.northWel
 assert.equal(typeof numericStringChartPoint.morningWater, "number")
 assert.equal(typeof numericStringChartPoint.eveningWater, "number")
 assert.equal(typeof numericStringChartPoint.pumpedOut, "number")
-assert.equal(typeof numericStringChartPoint.morningDifference, "number")
+assert.equal("morningDifference" in numericStringChartPoint, false)
 assert.equal(numericStringChartPoint.morningWater, 448470)
 assert.equal(numericStringChartPoint.pumpedOut, 61666.666666666664)
 
@@ -189,11 +191,18 @@ assert.ok(
 assert.doesNotMatch(csv, /Estimated Recharge/i)
 
 const source = readFileSync(new URL("../lib/well-data.ts", import.meta.url), "utf8")
+const pageSource = readFileSync(new URL("../app/well-water/page.tsx", import.meta.url), "utf8")
+const chartSource = readFileSync(new URL("../components/farm/well-chart.tsx", import.meta.url), "utf8")
+const tableSource = readFileSync(new URL("../components/farm/well-table.tsx", import.meta.url), "utf8")
 assert.doesNotMatch(source, /morningWater\s*-\s*eveningWater/)
 assert.doesNotMatch(source, /eveningWater\s*-\s*morningWater/)
 assert.doesNotMatch(source, /50_?000/)
 assert.match(source, /row\.water_pumped_out_liters/)
 assert.match(source, /row\.difference_in_morning_readings_litres/)
 assert.doesNotMatch(source, /estimated.?recharge/i)
+assert.equal(source.includes('label: "Morning Difference"'), false)
+assert.doesNotMatch(chartSource, /Morning Difference/)
+assert.doesNotMatch(tableSource, /Difference in Morning Readings/)
+assert.ok(pageSource.indexOf("<SummaryCards") < pageSource.indexOf("{/* North + South wells */}"))
 
 console.log("Well Water authoritative daily-value frontend regression passed")

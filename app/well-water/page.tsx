@@ -188,6 +188,9 @@ export default function WellWaterPage() {
         {/* Date range (full width) */}
         <DateRangeSelector onChange={setQuery} />
 
+        {/* Summary */}
+        <SummaryCards stats={data.summaryStats} />
+
         {errorMessage && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
             {errorMessage}
@@ -213,9 +216,6 @@ export default function WellWaterPage() {
             tableHeaderClassName="bg-chart-3/15 text-chart-3"
           />
         </div>
-
-        {/* Summary */}
-        <SummaryCards stats={data.summaryStats} />
 
         {/* Footer note */}
         <div className="flex items-center gap-2 rounded-xl border border-chart-1/30 bg-chart-1/10 px-4 py-3 text-sm text-foreground">

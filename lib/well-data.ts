@@ -60,7 +60,7 @@ export interface WellDailyRecord {
 
 export interface SummaryStat {
   well: string
-  wellId: WellId
+  wellId: WellId | "both"
   label: string
   value: number | null
   icon: "drop" | "drop-alt" | "pump" | "recharge"
@@ -81,12 +81,6 @@ export interface ChartPoint {
   morningWater: number | null
   eveningWater: number | null
   pumpedOut: number | null
-  morningDifference: number | null
-}
-
-const WELL_NAME_BY_ID: Record<WellId, string> = {
-  north: "North Well",
-  south: "South Well",
 }
 
 export const SOUTH_WELL_CONFIGURATION_WARNING = "Configuration requires verification"
@@ -99,14 +93,9 @@ export const emptyWellDashboardData: WellDashboardData = {
     south: "--",
   },
   summaryStats: [
-    { well: "North Well", wellId: "north", label: "Avg Morning Water", value: 0, icon: "drop" },
-    { well: "North Well", wellId: "north", label: "Avg Evening Water", value: 0, icon: "drop-alt" },
     { well: "North Well", wellId: "north", label: "Total Pumped Out", value: 0, icon: "pump" },
-    { well: "North Well", wellId: "north", label: "Difference in Morning Readings", value: null, icon: "recharge" },
-    { well: "South Well", wellId: "south", label: "Avg Morning Water", value: 0, icon: "drop" },
-    { well: "South Well", wellId: "south", label: "Avg Evening Water", value: 0, icon: "drop-alt" },
     { well: "South Well", wellId: "south", label: "Total Pumped Out", value: 0, icon: "pump" },
-    { well: "South Well", wellId: "south", label: "Difference in Morning Readings", value: null, icon: "recharge" },
+    { well: "Both Wells", wellId: "both", label: "Total Pumped Out", value: 0, icon: "pump" },
   ],
   totalReadings: 0,
   latestReadingDate: "--",
@@ -116,7 +105,6 @@ export const seriesConfig = [
   { key: "morningWater", label: "Morning Water", color: "var(--chart-1)" },
   { key: "eveningWater", label: "Evening Water", color: "var(--chart-2)" },
   { key: "pumpedOut", label: "Pumped Out", color: "var(--chart-3)" },
-  { key: "morningDifference", label: "Morning Difference", color: "var(--chart-4)" },
 ] as const
 
 export function formatNumberIN(num: number): string {
@@ -185,12 +173,6 @@ function waterDisplay(value: number | null): string {
   return formatNumberIN(Math.round(value))
 }
 
-function average(values: Array<number | null>): number | null {
-  const validValues = values.filter((value): value is number => value !== null)
-  if (validValues.length === 0) return null
-  return Math.round(validValues.reduce((sum, value) => sum + value, 0) / validValues.length)
-}
-
 function sumAvailable(values: Array<number | null>): number | null {
   const validValues = values.filter((value): value is number => value !== null)
   if (validValues.length === 0) return null
@@ -226,39 +208,35 @@ function capacityFromRows(rows: WellDailyApiRow[]): string {
   )
 }
 
-function buildStats(wellId: WellId, records: WellDailyRecord[]): SummaryStat[] {
-  const well = WELL_NAME_BY_ID[wellId]
+function buildPumpedOutStats(
+  northRecords: WellDailyRecord[],
+  southRecords: WellDailyRecord[],
+): SummaryStat[] {
   return [
     {
-      well,
-      wellId,
-      label: "Avg Morning Water",
-      value: average(records.map((record) => record.morningWater)),
-      icon: "drop",
-      warning: "Unavailable",
-    },
-    {
-      well,
-      wellId,
-      label: "Avg Evening Water",
-      value: average(records.map((record) => record.eveningWater)),
-      icon: "drop-alt",
-      warning: "Unavailable",
-    },
-    {
-      well,
-      wellId,
+      well: "North Well",
+      wellId: "north",
       label: "Total Pumped Out",
-      value: sumAvailable(records.map((record) => record.waterPumpedOut)),
+      value: sumAvailable(northRecords.map((record) => record.waterPumpedOut)),
       icon: "pump",
       warning: "Unavailable",
     },
     {
-      well,
-      wellId,
-      label: "Difference in Morning Readings",
-      value: sumAvailable(records.map((record) => record.differenceInMorningReadings)),
-      icon: "recharge",
+      well: "South Well",
+      wellId: "south",
+      label: "Total Pumped Out",
+      value: sumAvailable(southRecords.map((record) => record.waterPumpedOut)),
+      icon: "pump",
+      warning: "Unavailable",
+    },
+    {
+      well: "Both Wells",
+      wellId: "both",
+      label: "Total Pumped Out",
+      value: sumAvailable(
+        [...northRecords, ...southRecords].map((record) => record.waterPumpedOut),
+      ),
+      icon: "pump",
       warning: "Unavailable",
     },
   ]
@@ -278,7 +256,7 @@ export function buildWellDashboardData(payload: WellDashboardResponse): WellDash
       north: capacityFromRows(northRows),
       south: capacityFromRows(southRows),
     },
-    summaryStats: [...buildStats("north", northWellRecords), ...buildStats("south", southWellRecords)],
+    summaryStats: buildPumpedOutStats(northWellRecords, southWellRecords),
     totalReadings: payload.summary?.total_readings ?? 0,
     latestReadingDate: formatDate(payload.summary?.latest_reading_date),
   }
@@ -293,7 +271,6 @@ export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
       morningWater: record.morningWater,
       eveningWater: record.eveningWater,
       pumpedOut: record.waterPumpedOut,
-      morningDifference: record.differenceInMorningReadings,
     }))
 }
 

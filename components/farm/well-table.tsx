@@ -1,4 +1,4 @@
-import { formatNumberIN, formatSignedLitres, type WellDailyRecord } from "@/lib/well-data"
+import { formatNumberIN, type WellDailyRecord } from "@/lib/well-data"
 import { cn } from "@/lib/utils"
 
 interface WellTableProps {
@@ -10,11 +10,6 @@ const columns = [
   { key: "morningWater", label: "Morning Water", unit: "(Litres)" },
   { key: "eveningWater", label: "Evening Water", unit: "(Litres)" },
   { key: "waterPumpedOut", label: "Water Pumped Out", unit: "(Litres)" },
-  {
-    key: "differenceInMorningReadings",
-    label: "Difference in Morning Readings",
-    unit: "(Litres)",
-  },
 ] as const
 
 function formatLitres(value: number | null): string {
@@ -40,7 +35,7 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
         <tbody>
           {records.length === 0 && (
             <tr className="border-t border-border">
-              <td colSpan={5} className="px-3 py-6 text-center text-sm text-muted-foreground">
+              <td colSpan={4} className="px-3 py-6 text-center text-sm text-muted-foreground">
                 No well water readings found for the selected period.
               </td>
             </tr>
@@ -51,12 +46,6 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
               <td className="px-3 py-3 text-foreground">{record.morningWaterDisplay}</td>
               <td className="px-3 py-3 text-foreground">{record.eveningWaterDisplay}</td>
               <td className="px-3 py-3 text-foreground">{formatLitres(record.waterPumpedOut)}</td>
-              <td
-                className="px-3 py-3 text-foreground"
-                title="Difference between this morning’s water volume and the previous calendar date’s morning water volume."
-              >
-                {formatSignedLitres(record.differenceInMorningReadings)}
-              </td>
             </tr>
           ))}
         </tbody>

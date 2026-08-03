@@ -22,7 +22,7 @@ const syncProxy = read("app/api/admin/well-water/sync/route.ts")
 // Remarks remain in the data contract and CSV, but are not rendered in either shared table.
 assert.doesNotMatch(wellTable, />Remarks</)
 assert.doesNotMatch(wellTable, /record\.remarks/)
-assert.match(wellTable, /colSpan=\{5\}/)
+assert.match(wellTable, /colSpan=\{4\}/)
 assert.match(wellTable, /min-w-\[560px\]/)
 assert.match(wellTable, /table-fixed/)
 assert.match(wellTable, /max-w-full min-w-0 overflow-x-auto/)

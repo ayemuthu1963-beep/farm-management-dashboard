@@ -15,7 +15,6 @@ import type { ChartPoint } from "@/lib/well-data"
 import {
   formatLitresAxisTick,
   formatNumberIN,
-  formatSignedLitres,
   includeZeroInWellChartDomain,
   seriesConfig,
 } from "@/lib/well-data"
@@ -46,12 +45,7 @@ export function WellChart({ data }: WellChartProps) {
             axisLine={false}
           />
           <Tooltip
-            formatter={(value, name) => [
-              name === "Morning Difference"
-                ? formatSignedLitres(Number(value), true)
-                : `${formatNumberIN(Math.round(Number(value)))} L`,
-              name,
-            ]}
+            formatter={(value, name) => [`${formatNumberIN(Math.round(Number(value)))} L`, name]}
             contentStyle={{
               borderRadius: 8,
               border: "1px solid var(--border)",
