@@ -6,9 +6,11 @@ import { formatWaterLitres, statusColors, type Zone, type ZoneId } from "@/lib/i
 
 interface ZoneStatusCardsProps { zones: Zone[]; selectedZoneId: ZoneId; onSelectZone: (zoneId: ZoneId) => void }
 const statusIcon = { irrigated: CheckCircle2, "no-record": CircleMinus, partial: CircleAlert, issue: CircleAlert }
+const DISPLAY_ZONE_ORDER: ZoneId[] = ["P1W", "P1E", "P2W", "P2E", "JF", "NM"]
 
 export function ZoneStatusCards({ zones, selectedZoneId, onSelectZone }: ZoneStatusCardsProps) {
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">{zones.map((zone) => {
+  const displayZones = [...zones].sort((left, right) => DISPLAY_ZONE_ORDER.indexOf(left.id) - DISPLAY_ZONE_ORDER.indexOf(right.id))
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">{displayZones.map((zone) => {
     const Icon = statusIcon[zone.status]
     const palette = statusColors[zone.status]
     const selected = selectedZoneId === zone.id

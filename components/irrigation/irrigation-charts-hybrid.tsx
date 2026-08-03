@@ -25,10 +25,10 @@ function fmtPerTree(value: unknown, name: unknown): [string, string] {
 }
 
 const perTreeSeries = [
-  { key: "P1E", name: "Plot 1 East", color: "#2563eb" },
   { key: "P1W", name: "Plot 1 West", color: "#16a34a" },
-  { key: "P2E", name: "Plot 2 East", color: "#f59e0b" },
+  { key: "P1E", name: "Plot 1 East", color: "#2563eb" },
   { key: "P2W", name: "Plot 2 West", color: "#dc2626" },
+  { key: "P2E", name: "Plot 2 East", color: "#f59e0b" },
   { key: "JF", name: "Jackfruit", color: "#7c3aed" },
   { key: "NM", name: "Nutmeg", color: "#0891b2" },
 ] as const
