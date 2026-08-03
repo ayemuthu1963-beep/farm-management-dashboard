@@ -13,6 +13,14 @@ interface Props {
 }
 
 const DISPLAY_ZONE_ORDER: ZoneId[] = ["P1W", "P1E", "P2W", "P2E", "JF", "NM"]
+const ZONE_TILE_APPEARANCE: Record<ZoneId, { card: string }> = {
+  P1W: { card: "border-chart-1/30 bg-chart-1/10" },
+  P1E: { card: "border-chart-2/30 bg-chart-2/10" },
+  P2W: { card: "border-chart-3/30 bg-chart-3/10" },
+  P2E: { card: "border-chart-4/30 bg-chart-4/10" },
+  JF: { card: "border-chart-5/30 bg-chart-5/10" },
+  NM: { card: "border-primary/30 bg-primary/10" },
+}
 
 function getZone(zones: Zone[], id: ZoneId): Zone {
   return zones.find((zone) => zone.id === id) ?? zones[0]
@@ -36,12 +44,13 @@ function AreaBox({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex min-h-[235px] flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ring",
-        selected ? "border-primary ring-2 ring-primary/20" : statusColors[zone.status].border,
+        "flex min-h-[235px] flex-col overflow-hidden rounded-2xl border text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ring",
+        ZONE_TILE_APPEARANCE[zone.id].card,
+        selected ? "ring-2 ring-primary/20" : null,
       )}
       aria-pressed={selected}
     >
-      <div className={cn("border-b px-4 py-3", selected ? "border-primary/30 bg-primary/10" : "border-border bg-muted/30")}>
+      <div className="border-b border-border/60 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-base font-extrabold uppercase tracking-wide text-foreground">{zone.name}</div>
