@@ -89,7 +89,7 @@ export default function MotorRuntimePage() {
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <MotorLogSection recordsByMotor={data.recordsByMotor} />
-          <Panel title="Runtime Trend" icon={TrendingUp}>
+          <Panel title="Runtime Trend" icon={TrendingUp} iconClassName="text-emerald-700" className="border-emerald-200/80 bg-emerald-50/55">
             <MotorChart data={data.chartData} />
           </Panel>
         </div>
