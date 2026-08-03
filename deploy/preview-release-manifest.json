@@ -3,17 +3,10 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "c79e7bb9db78bd73a3efea75777a83fddeffc326",
+  "base_commit": "b501f8fed1d9a3a8fe11065e6a9de7147ef75e69",
   "allowed_paths": [
-    "app/beetle-trap/page.tsx",
-    "components/beetle/beetle-daily-excel-export.tsx",
-    "components/beetle/beetle-trap-header-actions.tsx",
+    "components/home/home-footer.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/beetle-daily-count-excel.ts",
-    "package.json",
-    "scripts/preview-server-deploy.sh",
-    "scripts/preview-server-preflight.sh",
-    "tests/beetle-trap-cumulative-period-export.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
