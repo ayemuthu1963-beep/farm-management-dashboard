@@ -66,7 +66,7 @@ declare global {
 }
 
 interface FarmOrthomosaicMapProps {
-  mapTitle?: string
+  mapTitle?: ReactNode
   note?: string
   className?: string
   mapHeightClassName?: string
