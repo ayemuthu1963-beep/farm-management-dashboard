@@ -438,9 +438,9 @@ for path in changed:
         raise SystemExit(f"backend candidate contains an unapproved path: {path}")
 
 pathlib.Path(migrations_output).write_text(
-    "".join(f"{path}|{checksum}\\n" for path, checksum in plan), encoding="utf-8"
+    "".join(f"{path}|{checksum}\n" for path, checksum in plan), encoding="utf-8"
 )
-pathlib.Path(openapi_output).write_text("".join(f"{path}\\n" for path in openapi_paths), encoding="utf-8")
+pathlib.Path(openapi_output).write_text("".join(f"{path}\n" for path in openapi_paths), encoding="utf-8")
 PY
 }
 
