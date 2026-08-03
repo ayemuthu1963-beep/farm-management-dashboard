@@ -69,6 +69,7 @@ const page = read("app/irrigation-management/page.tsx")
 const selector = read("components/irrigation/irrigation-period-selector.tsx")
 const route = read("app/api/irrigation-management/route.ts")
 const map = read("components/irrigation/irrigation-map-with-details.tsx")
+const zoneStatusCards = read("components/irrigation/zone-status-cards.tsx")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
 
 // The period control exposes exactly the four approved choices.
@@ -274,6 +275,12 @@ assert.deepEqual(history.P1E[0], {
 assert.equal(history.P1E[1].status, "No Record")
 assert.equal(history.P1E[1].perTreeLitres, null)
 
+// Zone Status and Farm Irrigation Map change only the visible tile order.
+for (const source of [zoneStatusCards, map]) {
+  assert.match(source, /const DISPLAY_ZONE_ORDER: ZoneId\[\] = \["P1W", "P1E", "P2W", "P2E", "JF", "NM"\]/)
+  assert.match(source, /displayZones\.map\(\(zone\) =>/)
+}
+
 // The requested chart pair is half-width: Daily Irrigation Trend first, then
 // Water Supplied per Tree by date with one line for every operational zone.
 assert.doesNotMatch(charts, /\bBarChart\b|<Bar\b/)
@@ -328,18 +335,18 @@ const renderedLines = chartElements.filter((element) => element.type === "Line")
 assert.deepEqual(renderedLines.map((element) => element.props.dataKey), [
   "totalWaterLitres",
   "totalRuntimeHours",
-  "P1E",
   "P1W",
-  "P2E",
+  "P1E",
   "P2W",
+  "P2E",
   "JF",
   "NM",
 ])
 assert.deepEqual(renderedLines.slice(2).map((element) => element.props.name), [
-  "Plot 1 East",
   "Plot 1 West",
-  "Plot 2 East",
+  "Plot 1 East",
   "Plot 2 West",
+  "Plot 2 East",
   "Jackfruit",
   "Nutmeg",
 ])

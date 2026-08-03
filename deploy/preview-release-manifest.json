@@ -3,10 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "4581597496bac68eac6b99a24116869ea6c22eb2",
+  "base_commit": "57ab886e4b9771e4b4af7827f2c146e9f0db70ec",
   "allowed_paths": [
-    ".github/workflows/preview-release-candidate.yml",
-    "deploy/preview-release-manifest.json"
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
+    "components/irrigation/zone-status-cards.tsx",
+    "deploy/preview-release-manifest.json",
+    "tests/irrigation-management-corrections.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

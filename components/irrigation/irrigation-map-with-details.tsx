@@ -12,6 +12,8 @@ interface Props {
   isLoading?: boolean
 }
 
+const DISPLAY_ZONE_ORDER: ZoneId[] = ["P1W", "P1E", "P2W", "P2E", "JF", "NM"]
+
 function getZone(zones: Zone[], id: ZoneId): Zone {
   return zones.find((zone) => zone.id === id) ?? zones[0]
 }
@@ -77,6 +79,7 @@ function AreaBox({
 
 export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, isLoading = false }: Props) {
   const selectedZone = getZone(zones, selectedZoneId)
+  const displayZones = [...zones].sort((left, right) => DISPLAY_ZONE_ORDER.indexOf(left.id) - DISPLAY_ZONE_ORDER.indexOf(right.id))
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -89,7 +92,7 @@ export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, 
           ) : (
             <div className="rounded-lg border border-border bg-gradient-to-br from-slate-50 to-emerald-50 p-3 sm:p-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {zones.map((zone) => (
+                {displayZones.map((zone) => (
                   <AreaBox key={zone.id} zone={zone} selected={selectedZoneId === zone.id} onSelect={() => onSelectZone(zone.id)} />
                 ))}
               </div>
