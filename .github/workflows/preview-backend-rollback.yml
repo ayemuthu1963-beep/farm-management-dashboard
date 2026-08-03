@@ -1,0 +1,156 @@
+name: Roll back Preview backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_revision:
+        description: Exact 40-character revision currently running in Preview
+        required: true
+        type: string
+      confirmation:
+        description: Type ROLL BACK PREVIEW BACKEND to restore the retained prior API
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-preview-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      current_revision: ${{ steps.release.outputs.current_revision }}
+    steps:
+      - name: Require the exact Preview-only backend rollback request
+        id: release
+        shell: bash
+        env:
+          CURRENT_INPUT: ${{ inputs.current_revision }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Preview backend rollback must execute from trusted main" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "ROLL BACK PREVIEW BACKEND" ]] || {
+            echo "Confirmation did not match ROLL BACK PREVIEW BACKEND" >&2
+            exit 1
+          }
+          [[ "$CURRENT_INPUT" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Current backend revision is not an exact lowercase commit SHA" >&2
+            exit 1
+          }
+
+          echo "current_revision=$CURRENT_INPUT" >> "$GITHUB_OUTPUT"
+
+  rollback:
+    needs: authorize
+    environment:
+      name: Preview
+      url: https://preview.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Validate and install the dedicated Preview backend deploy identity
+        id: ssh
+        shell: bash
+        env:
+          PREVIEW_BACKEND_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_BACKEND_DEPLOY_SSH_PRIVATE_KEY }}
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_KNOWN_HOSTS: ${{ secrets.PREVIEW_SSH_KNOWN_HOSTS }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          for required_name in \
+            PREVIEW_BACKEND_DEPLOY_SSH_PRIVATE_KEY \
+            PREVIEW_SSH_HOST \
+            PREVIEW_SSH_KNOWN_HOSTS \
+            PREVIEW_SSH_USER
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Missing required Preview environment setting: $required_name" >&2
+              exit 1
+            fi
+          done
+
+          [[ "$PREVIEW_SSH_HOST" == "168.144.179.221" ]] || {
+            echo "The configured host is not the approved Preview server" >&2
+            exit 1
+          }
+          [[ "$PREVIEW_SSH_USER" == "muthu" ]] || {
+            echo "The configured user is not the approved Preview account" >&2
+            exit 1
+          }
+
+          ssh_dir="$RUNNER_TEMP/mfms-preview-backend-rollback-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PREVIEW_BACKEND_DEPLOY_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PREVIEW_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$PREVIEW_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the retained Preview backend revision
+        shell: bash
+        env:
+          CURRENT_REVISION: ${{ needs.authorize.outputs.current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/preview-backend-rollback.txt"
+          : > "$report"
+
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PREVIEW_SSH_USER@$PREVIEW_SSH_HOST" \
+            "rollback-preview-backend $CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee "$report"
+
+          grep -Fqx 'rollback_environment=Preview' "$report"
+          grep -Fqx 'rollback_component=backend' "$report"
+          grep -Fqx 'rollback_url=https://preview.muthufarms.com' "$report"
+          grep -Fqx 'database_migrations=forward-only-not-reversed' "$report"
+          grep -Fqx 'frontend_unchanged=true' "$report"
+          grep -Fqx 'odk_unchanged=true' "$report"
+          grep -Fqx 'schedules_unchanged=true' "$report"
+          grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          grep -Fqx 'production_touched=0' "$report"
+          grep -Fqx 'PREVIEW_BACKEND_ROLLBACK=PASS' "$report"
+
+      - name: Upload sanitized Preview backend rollback report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: preview-backend-rollback-${{ github.run_id }}
+          path: ${{ runner.temp }}/preview-backend-rollback.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-preview-backend-rollback-ssh"
