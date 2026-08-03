@@ -3,15 +3,12 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "d4b262b4c43318cdc5bdafa1271bea60dbb5d8ee",
+  "base_commit": "d5e1c9ac59075438fd1e99a33cd903016130c3d1",
   "allowed_paths": [
-    "app/well-water/page.tsx",
-    "components/farm/date-range-selector.tsx",
-    "components/farm/summary-cards.tsx",
-    "components/farm/well-section.tsx",
+    "components/irrigation/zone-status-cards.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/well-water-page-corrections.mjs"
+    "tests/irrigation-management-corrections.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
