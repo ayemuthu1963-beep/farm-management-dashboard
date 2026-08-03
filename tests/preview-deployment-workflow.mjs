@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "c79e7bb9db78bd73a3efea75777a83fddeffc326")
+assert.equal(manifest.base_commit, "b501f8fed1d9a3a8fe11065e6a9de7147ef75e69")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -240,15 +240,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(manifest.allowed_paths, [...manifest.allowed_paths].sort())
 assert.equal(new Set(manifest.allowed_paths).size, manifest.allowed_paths.length)
 for (const requiredPath of [
-  "app/beetle-trap/page.tsx",
-  "components/beetle/beetle-daily-excel-export.tsx",
-  "components/beetle/beetle-trap-header-actions.tsx",
+  "components/home/home-footer.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/beetle-daily-count-excel.ts",
-  "package.json",
-  "scripts/preview-server-deploy.sh",
-  "scripts/preview-server-preflight.sh",
-  "tests/beetle-trap-cumulative-period-export.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]) {
   assert.ok(manifest.allowed_paths.includes(requiredPath), `Missing manifest path: ${requiredPath}`)
