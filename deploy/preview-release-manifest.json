@@ -3,7 +3,7 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "42cc53e53b61f3843526b858b50aa05d7ec1c24a",
+  "base_commit": "f76f7cc6008a17016d66ef40732d2154ef2b9e36",
   "allowed_paths": [
     "app/api/farm-map/tree-classifications/route.ts",
     "components/maps/farm-map-client.tsx",
