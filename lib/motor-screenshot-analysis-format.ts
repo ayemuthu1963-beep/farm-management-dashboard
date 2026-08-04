@@ -27,6 +27,24 @@ export function formatRuntime(minutes: number): string {
   if (hours === 0) return `${mins} min`
   return `${hours} hr ${String(mins).padStart(2, "0")} min`
 }
+
+/** Sum exact seconds first, then round only the final value for normal display. */
+export function roundedRuntimeMinutes(seconds: number): number {
+  return Math.round(Math.max(0, seconds) / 60)
+}
+
+export function formatRuntimeSeconds(seconds: number): string {
+  return formatRuntime(roundedRuntimeMinutes(seconds))
+}
+
+/** Detailed owner-review display; normal summaries intentionally omit seconds. */
+export function formatExactRuntime(seconds: number): string {
+  const safe = Math.max(0, Math.trunc(seconds))
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  const remainder = safe % 60
+  return [hours ? `${hours} hr` : "", `${minutes} min`, `${remainder} sec`].filter(Boolean).join(" ")
+}
 /** Format an ISO date ("2026-07-30") as "30 Jul 2026". */
 export function formatDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number)

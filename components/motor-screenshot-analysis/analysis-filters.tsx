@@ -4,16 +4,10 @@ import { useState } from "react"
 import { RotateCcw, Search, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { MOTORS } from "@/lib/motor-screenshot-analysis-mock-data"
-import type {
-  CommandSource,
-  MotorId,
-  RunRecord,
-  RunStatus,
-} from "@/lib/motor-screenshot-analysis-types"
+import { FALLBACK_MOTORS } from "@/lib/motor-screenshot-analysis-config"
+import type { CommandSource, Motor, MotorId, RunStatus } from "@/lib/motor-screenshot-analysis-types"
 
 export type DateRange = "today" | "yesterday" | "7d" | "30d" | "custom"
-
 export interface Filters {
   range: DateRange
   customStart: string
@@ -23,53 +17,38 @@ export interface Filters {
   status: RunStatus | "all"
   search: string
 }
+
+function farmToday(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date())
+  const part = (name: string) => parts.find((item) => item.type === name)?.value
+  return `${part("year")}-${part("month")}-${part("day")}`
+}
+
+function addDays(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+const TODAY = farmToday()
 export const DEFAULT_FILTERS: Filters = {
   range: "30d",
-  customStart: "2026-07-28",
-  customEnd: "2026-07-31",
+  customStart: addDays(TODAY, -29),
+  customEnd: TODAY,
   motor: "all",
   source: "all",
   status: "all",
   search: "",
 }
 
-// The sample data ends 31 Jul 2026 — treat that as "today" so relative ranges
-// return meaningful records in this static preview.
-const REFERENCE_TODAY = "2026-07-31"
-
-function daysBetween(fromIso: string, toIso: string): number {
-  const from = new Date(fromIso + "T00:00:00")
-  const to = new Date(toIso + "T00:00:00")
-  return Math.round((to.getTime() - from.getTime()) / 86_400_000)
-}
-
-export function applyFilters(records: RunRecord[], filters: Filters): RunRecord[] {
-  return records.filter((r) => {
-    // Date range
-    if (filters.range === "custom") {
-      if (r.date < filters.customStart || r.date > filters.customEnd) return false
-    } else {
-      const diff = daysBetween(r.date, REFERENCE_TODAY)
-      if (filters.range === "today" && diff !== 0) return false
-      if (filters.range === "yesterday" && diff !== 1) return false
-      if (filters.range === "7d" && (diff < 0 || diff > 6)) return false
-      if (filters.range === "30d" && (diff < 0 || diff > 29)) return false
-    }
-
-    if (filters.motor !== "all" && r.motorId !== filters.motor) return false
-    if (filters.source !== "all" && r.source !== filters.source) return false
-    if (filters.status !== "all" && r.status !== filters.status) return false
-
-    if (filters.search.trim()) {
-      const q = filters.search.trim().toLowerCase()
-      const hay = [r.onReason, r.offReason, r.screenshotName, r.onTime, r.offTime]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-      if (!hay.includes(q)) return false
-    }
-    return true
-  })
+export function resolveDateRange(filters: Filters): { startDate: string; endDate: string } {
+  if (filters.range === "custom") return { startDate: filters.customStart, endDate: filters.customEnd }
+  if (filters.range === "today") return { startDate: TODAY, endDate: TODAY }
+  if (filters.range === "yesterday") {
+    const day = addDays(TODAY, -1)
+    return { startDate: day, endDate: day }
+  }
+  return { startDate: addDays(TODAY, filters.range === "7d" ? -6 : -29), endDate: TODAY }
 }
 
 const RANGES: { value: DateRange; label: string }[] = [
@@ -79,191 +58,66 @@ const RANGES: { value: DateRange; label: string }[] = [
   { value: "30d", label: "Last 30 Days" },
   { value: "custom", label: "Custom Range" },
 ]
-
-function fieldClass() {
-  return "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-}
+const fieldClass = "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
 
 export function AnalysisFilters({
   filters,
   onChange,
   resultCount,
+  motors = FALLBACK_MOTORS,
 }: {
   filters: Filters
   onChange: (next: Filters) => void
   resultCount: number
+  motors?: Motor[]
 }) {
   const [openMobile, setOpenMobile] = useState(false)
-
-  function set<K extends keyof Filters>(key: K, value: Filters[K]) {
-    onChange({ ...filters, [key]: value })
-  }
-
+  function set<K extends keyof Filters>(key: K, value: Filters[K]) { onChange({ ...filters, [key]: value }) }
   const body = (
     <div className="flex flex-col gap-4">
-      {/* Date range chips */}
       <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Date range
-        </p>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Date range</p>
         <div className="flex flex-wrap gap-1.5">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => set("range", r.value)}
-              aria-pressed={filters.range === r.value}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                filters.range === r.value
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border bg-background text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {r.label}
-            </button>
+          {RANGES.map((range) => (
+            <button key={range.value} type="button" onClick={() => set("range", range.value)} aria-pressed={filters.range === range.value} className={cn("rounded-full px-3 py-1 text-xs font-medium", filters.range === range.value ? "bg-primary text-primary-foreground" : "border border-border bg-background text-muted-foreground hover:bg-muted")}>{range.label}</button>
           ))}
         </div>
       </div>
-
       {filters.range === "custom" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
-          <div>
-            <label htmlFor="start-date" className="mb-1 block text-xs font-medium text-foreground">
-              Start Date
-            </label>
-            <input
-              id="start-date"
-              type="date"
-              value={filters.customStart}
-              onChange={(e) => set("customStart", e.target.value)}
-              className={fieldClass()}
-            />
-          </div>
-          <div>
-            <label htmlFor="end-date" className="mb-1 block text-xs font-medium text-foreground">
-              End Date
-            </label>
-            <input
-              id="end-date"
-              type="date"
-              value={filters.customEnd}
-              onChange={(e) => set("customEnd", e.target.value)}
-              className={fieldClass()}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground sm:pb-2">
-            Custom range applies automatically.
-          </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-medium text-foreground">Start date<input type="date" value={filters.customStart} onChange={(event) => set("customStart", event.target.value)} className={`mt-1 ${fieldClass}`} /></label>
+          <label className="text-xs font-medium text-foreground">End date<input type="date" value={filters.customEnd} onChange={(event) => set("customEnd", event.target.value)} className={`mt-1 ${fieldClass}`} /></label>
         </div>
       )}
-
-      {/* Record filters */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label htmlFor="motor-filter" className="mb-1 block text-xs font-medium text-foreground">
-            Motor
-          </label>
-          <select
-            id="motor-filter"
-            value={filters.motor}
-            onChange={(e) => set("motor", e.target.value as Filters["motor"])}
-            className={fieldClass()}
-          >
-            <option value="all">All Motors</option>
-            {MOTORS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-xs font-medium text-foreground">Motor
+          <select value={filters.motor} onChange={(event) => set("motor", event.target.value as Filters["motor"])} className={`mt-1 ${fieldClass}`}>
+            <option value="all">All Motors</option>{motors.map((motor) => <option key={motor.id} value={motor.id}>{motor.name}</option>)}
           </select>
-        </div>
-        <div>
-          <label htmlFor="source-filter" className="mb-1 block text-xs font-medium text-foreground">
-            Command source
-          </label>
-          <select
-            id="source-filter"
-            value={filters.source}
-            onChange={(e) => set("source", e.target.value as Filters["source"])}
-            className={fieldClass()}
-          >
-            <option value="all">All Sources</option>
-            <option value="rtc">RTC</option>
-            <option value="phone">Phone</option>
+        </label>
+        <label className="text-xs font-medium text-foreground">Command source
+          <select value={filters.source} onChange={(event) => set("source", event.target.value as Filters["source"])} className={`mt-1 ${fieldClass}`}>
+            <option value="all">All Sources</option><option value="rtc">RTC</option><option value="phone">Phone</option><option value="unknown">Unknown</option>
           </select>
-        </div>
-        <div>
-          <label htmlFor="status-filter" className="mb-1 block text-xs font-medium text-foreground">
-            Status
-          </label>
-          <select
-            id="status-filter"
-            value={filters.status}
-            onChange={(e) => set("status", e.target.value as Filters["status"])}
-            className={fieldClass()}
-          >
-            <option value="all">All Records</option>
-            <option value="complete">Complete</option>
-            <option value="unmatched">Unmatched</option>
+        </label>
+        <label className="text-xs font-medium text-foreground">Status
+          <select value={filters.status} onChange={(event) => set("status", event.target.value as Filters["status"])} className={`mt-1 ${fieldClass}`}>
+            <option value="all">All Records</option><option value="complete">Complete</option><option value="unmatched_on">Unmatched ON</option><option value="unmatched_off">Unmatched OFF</option><option value="needs_review">Needs Review</option><option value="rejected">Rejected</option>
           </select>
-        </div>
-        <div>
-          <label htmlFor="search-filter" className="mb-1 block text-xs font-medium text-foreground">
-            Search
-          </label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <input
-              id="search-filter"
-              type="search"
-              value={filters.search}
-              onChange={(e) => set("search", e.target.value)}
-              placeholder={"Reason, command, file\u2026"}
-              className={cn(fieldClass(), "pl-8")}
-            />
-          </div>
-        </div>
+        </label>
+        <label className="text-xs font-medium text-foreground">Search
+          <span className="relative mt-1 block"><Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input type="search" value={filters.search} onChange={(event) => set("search", event.target.value)} placeholder="Reason or device" className={cn(fieldClass, "pl-8")} /></span>
+        </label>
       </div>
-
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {resultCount} record{resultCount === 1 ? "" : "s"} match
-        </p>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onChange(DEFAULT_FILTERS)}>
-          <RotateCcw className="size-4" aria-hidden="true" />
-          Reset Filters
-        </Button>
+        <p className="text-xs text-muted-foreground">{resultCount} database record{resultCount === 1 ? "" : "s"} loaded</p>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onChange(DEFAULT_FILTERS)}><RotateCcw className="size-4" /> Reset Filters</Button>
       </div>
     </div>
   )
-
   return (
-    <section
-      aria-label="Filters"
-      className="rounded-xl border border-border bg-card p-4 sm:p-5"
-    >
-      {/* Mobile collapse */}
-      <div className="sm:hidden">
-        <button
-          type="button"
-          onClick={() => setOpenMobile((v) => !v)}
-          aria-expanded={openMobile}
-          className="flex w-full items-center justify-between gap-2 text-sm font-medium text-foreground"
-        >
-          <span className="flex items-center gap-2">
-            <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden="true" />
-            Filters
-          </span>
-          <span className="text-xs text-muted-foreground">{resultCount} shown</span>
-        </button>
-        {openMobile && <div className="mt-4">{body}</div>}
-      </div>
-
-      {/* Tablet / desktop */}
+    <section aria-label="Filters" className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="sm:hidden"><button type="button" onClick={() => setOpenMobile((value) => !value)} aria-expanded={openMobile} className="flex w-full items-center justify-between text-sm font-medium"><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" /> Filters</span><span className="text-xs text-muted-foreground">{resultCount} shown</span></button>{openMobile && <div className="mt-4">{body}</div>}</div>
       <div className="hidden sm:block">{body}</div>
     </section>
   )

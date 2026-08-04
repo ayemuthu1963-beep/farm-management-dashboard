@@ -84,7 +84,7 @@ export function AnalysisSummaryCards({
       <Tile
         label="Selected Period"
         value={periodLabel}
-        sub="Sample date range"
+        sub="Confirmed database records"
         icon={<CalendarRange className="size-4" aria-hidden="true" />}
       />
       {motorSummaries.map((s) => (

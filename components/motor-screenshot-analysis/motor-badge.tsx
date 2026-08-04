@@ -1,15 +1,17 @@
 import { cn } from "@/lib/utils"
-import { getMotor } from "@/lib/motor-screenshot-analysis-mock-data"
+import { getFallbackMotor } from "@/lib/motor-screenshot-analysis-config"
 import type { MotorId } from "@/lib/motor-screenshot-analysis-types"
 
 export function MotorBadge({
   motorId,
+  name,
   className,
 }: {
   motorId: MotorId
+  name?: string
   className?: string
 }) {
-  const motor = getMotor(motorId)
+  const motor = getFallbackMotor(motorId)
   return (
     <span
       className={cn(
@@ -19,7 +21,7 @@ export function MotorBadge({
       )}
     >
       <span className={cn("size-1.5 rounded-full", motor.dotClass)} aria-hidden="true" />
-      {motor.name}
+      {name ?? motor.name}
     </span>
   )
 }

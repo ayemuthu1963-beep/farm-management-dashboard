@@ -4,6 +4,15 @@ import type { RunStatus } from "@/lib/motor-screenshot-analysis-types"
 
 export function StatusBadge({ status }: { status: RunStatus }) {
   const complete = status === "complete"
+  const label = status === "unmatched_on"
+    ? "Unmatched ON"
+    : status === "unmatched_off"
+      ? "Unmatched OFF"
+      : status === "needs_review"
+        ? "Needs review"
+        : status === "rejected"
+          ? "Rejected"
+          : "Complete"
   return (
     <span
       className={cn(
@@ -18,7 +27,7 @@ export function StatusBadge({ status }: { status: RunStatus }) {
       ) : (
         <AlertTriangle className="size-3.5" aria-hidden="true" />
       )}
-      {complete ? "Complete" : "Unmatched"}
+      {label}
     </span>
   )
 }

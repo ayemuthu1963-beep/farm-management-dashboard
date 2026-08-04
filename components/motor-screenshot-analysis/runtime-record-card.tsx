@@ -18,7 +18,7 @@ export function RuntimeRecordCard({
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <MotorBadge motorId={record.motorId} />
+          <MotorBadge motorId={record.motorId} name={record.motorName} />
           <span className="text-xs text-muted-foreground">Run {record.run}</span>
         </div>
         <StatusBadge status={record.status} />
@@ -47,10 +47,10 @@ export function RuntimeRecordCard({
           <p
             className={cn(
               "font-serif text-base font-bold",
-              record.status === "unmatched" ? "text-muted-foreground" : "text-foreground",
+              record.status !== "complete" ? "text-muted-foreground" : "text-foreground",
             )}
           >
-            {record.status === "unmatched" ? "\u2014" : formatRuntime(record.runtimeMinutes)}
+            {record.status !== "complete" ? "\u2014" : formatRuntime(record.runtimeMinutes)}
           </p>
         </div>
         <button

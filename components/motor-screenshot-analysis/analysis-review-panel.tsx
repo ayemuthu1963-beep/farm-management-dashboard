@@ -1,0 +1,152 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { AlertTriangle, CheckCircle2, RefreshCw, Save, XCircle } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import type { Motor, ReviewMessage, UploadDetail } from "@/lib/motor-screenshot-analysis-types"
+import { MotorBadge } from "./motor-badge"
+
+const fieldClass = "w-full rounded-lg border border-input bg-background px-2.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+
+function localDateTime(value: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(value))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "00"
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}`
+}
+
+function indiaIso(value: string): string {
+  return new Date(`${value}+05:30`).toISOString()
+}
+
+export function AnalysisReviewPanel({
+  detail,
+  motors,
+  busy,
+  onSave,
+  onConfirm,
+  onReject,
+  onReanalyse,
+}: {
+  detail: UploadDetail
+  motors: Motor[]
+  busy: boolean
+  onSave: (messages: ReviewMessage[]) => Promise<void>
+  onConfirm: (messages: ReviewMessage[]) => Promise<void>
+  onReject: () => Promise<void>
+  onReanalyse: () => Promise<void>
+}) {
+  const [messages, setMessages] = useState(detail.messages)
+  useEffect(() => setMessages(detail.messages), [detail])
+  const motor = motors.find((item) => item.id === detail.upload.motor_id)
+  const warningCount = messages.filter((message) => message.included && (message.event_type === "unknown" || message.review_status === "needs_review" || (message.confidence ?? 1) < 0.8)).length
+
+  function update(id: number, patch: Partial<ReviewMessage>) {
+    setMessages((current) => current.map((message) => message.id === id ? { ...message, ...patch } : message))
+  }
+
+  return (
+    <section aria-labelledby="analysis-review-heading" className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="analysis-review-heading" className="font-serif text-lg font-bold text-foreground">Owner extraction review</h2>
+          <p className="text-sm text-muted-foreground">Inspect every candidate before it can affect confirmed runtime totals.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <MotorBadge motorId={detail.upload.motor_id} name={motor?.name} />
+          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">{detail.upload.analysis_status.replaceAll("_", " ")}</span>
+        </div>
+      </div>
+
+      {detail.upload.error_message && (
+        <div className="mt-4 flex gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {detail.upload.error_message}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,2fr)]">
+        <div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/motor-screenshot-analysis/uploads/${detail.upload.id}/image`}
+            alt={`Uploaded source ${detail.upload.original_filename}`}
+            className="max-h-[65vh] w-full rounded-lg border border-border bg-muted object-contain"
+          />
+          <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
+            <div className="flex justify-between gap-3"><dt>Source</dt><dd className="truncate font-medium text-foreground">{detail.upload.original_filename}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Provider</dt><dd className="font-medium text-foreground">{detail.upload.extractor_provider}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Messages</dt><dd className="font-medium text-foreground">{messages.length}</dd></div>
+          </dl>
+        </div>
+
+        <div className="min-w-0 space-y-3">
+          {messages.map((message) => (
+            <article key={message.id} className="rounded-xl border border-border bg-background p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-foreground">Tile {message.tile_index + 1}</p>
+                <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+                  <input type="checkbox" checked={message.included} onChange={(event) => update(message.id, { included: event.target.checked })} />
+                  Include
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="sm:col-span-2 text-xs font-medium text-foreground">Raw first line
+                  <input value={message.raw_first_line} onChange={(event) => update(message.id, { raw_first_line: event.target.value })} className={`mt-1 ${fieldClass}`} />
+                </label>
+                <label className="text-xs font-medium text-foreground">Parsed date and time (exact)
+                  <input type="datetime-local" step="1" value={localDateTime(message.event_timestamp)} onChange={(event) => update(message.id, { event_timestamp: indiaIso(event.target.value) })} className={`mt-1 ${fieldClass}`} />
+                </label>
+                <label className="text-xs font-medium text-foreground">Event type
+                  <select value={message.event_type} onChange={(event) => update(message.id, { event_type: event.target.value as ReviewMessage["event_type"] })} className={`mt-1 ${fieldClass}`}>
+                    <option value="mtr_on_command">MTRON command</option>
+                    <option value="mtr_off_command">MTROF command</option>
+                    <option value="motor_on">MOTOR ON</option>
+                    <option value="motor_off">MOTOR OFF</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-foreground">Command source
+                  <select value={message.command_source} onChange={(event) => update(message.id, { command_source: event.target.value as ReviewMessage["command_source"] })} className={`mt-1 ${fieldClass}`}>
+                    <option value="rtc">RTC</option><option value="phone">Phone</option><option value="unknown">Unknown</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-foreground">Device name
+                  <input value={message.device_name ?? ""} onChange={(event) => update(message.id, { device_name: event.target.value || null })} className={`mt-1 ${fieldClass}`} />
+                </label>
+                <label className="text-xs font-medium text-foreground">Review notes
+                  <input value={message.review_notes ?? ""} onChange={(event) => update(message.id, { review_notes: event.target.value || null })} className={`mt-1 ${fieldClass}`} />
+                </label>
+                <div className="text-xs text-muted-foreground">
+                  Confidence: <span className="font-medium text-foreground">{message.confidence == null ? "Not supplied" : `${Math.round(message.confidence * 100)}%`}</span>
+                  <br />Source screenshots: <span className="font-medium text-foreground">{message.source_count}</span>
+                </div>
+              </div>
+              {(message.event_type === "unknown" || message.review_status === "needs_review") && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-destructive"><AlertTriangle className="size-3.5" /> Resolve or exclude this uncertain result.</p>
+              )}
+            </article>
+          ))}
+          {messages.length === 0 && <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No extracted message candidates are available.</p>}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+        <Button type="button" variant="outline" disabled={busy || messages.length === 0} onClick={() => onSave(messages)}><Save className="size-4" /> Save Corrections</Button>
+        <Button type="button" disabled={busy || messages.length === 0 || warningCount > 0} onClick={() => onConfirm(messages)}><CheckCircle2 className="size-4" /> Confirm and Save</Button>
+        <Button type="button" variant="outline" disabled={busy} onClick={onReanalyse}><RefreshCw className="size-4" /> Reanalyse</Button>
+        <Button type="button" variant="outline" disabled={busy} onClick={onReject}><XCircle className="size-4" /> Reject Analysis</Button>
+        {warningCount > 0 && <span className="text-xs text-destructive">{warningCount} included candidate{warningCount === 1 ? "" : "s"} still require review.</span>}
+      </div>
+    </section>
+  )
+}

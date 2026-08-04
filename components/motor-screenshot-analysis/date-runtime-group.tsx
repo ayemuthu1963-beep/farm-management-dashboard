@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { CalendarDays, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { MOTORS } from "@/lib/motor-screenshot-analysis-mock-data"
-import type { DateSummary, RunRecord } from "@/lib/motor-screenshot-analysis-types"
+import { FALLBACK_MOTORS } from "@/lib/motor-screenshot-analysis-config"
+import type { DateSummary, Motor, RunRecord } from "@/lib/motor-screenshot-analysis-types"
 import { formatDate, formatRuntime } from "@/lib/motor-screenshot-analysis-format"
 import { RuntimeRecordCard } from "./runtime-record-card"
 
@@ -12,10 +12,12 @@ export function DateRuntimeGroup({
   summary,
   defaultOpen = false,
   onViewScreenshot,
+  motors = FALLBACK_MOTORS,
 }: {
   summary: DateSummary
   defaultOpen?: boolean
   onViewScreenshot: (record: RunRecord) => void
+  motors?: Motor[]
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const panelId = `date-panel-${summary.date}`
@@ -47,7 +49,7 @@ export function DateRuntimeGroup({
         </div>
 
         <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-          {MOTORS.map((m) => (
+          {motors.map((m) => (
             <div key={m.id} className="text-left">
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className={cn("size-1.5 rounded-full", m.dotClass)} aria-hidden="true" />

@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { ImageIcon, X } from "lucide-react"
+import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { getMotor } from "@/lib/motor-screenshot-analysis-mock-data"
+import { getFallbackMotor } from "@/lib/motor-screenshot-analysis-config"
 import type { RunRecord } from "@/lib/motor-screenshot-analysis-types"
 import { formatDate } from "@/lib/motor-screenshot-analysis-format"
 import { StatusBadge } from "./status-badge"
@@ -34,7 +34,7 @@ export function ScreenshotViewer({
 
   if (!record) return null
 
-  const motor = getMotor(record.motorId)
+  const motor = getFallbackMotor(record.motorId)
 
   return (
     <div
@@ -72,17 +72,25 @@ export function ScreenshotViewer({
 
         <div className="flex-1 overflow-y-auto p-4">
           {/* Screenshot placeholder — no OCR performed */}
-          <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 text-muted-foreground">
-            <ImageIcon className="size-8" aria-hidden="true" />
-            <p className="text-xs">Screenshot preview placeholder</p>
-          </div>
+          {record.screenshotId ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/motor-screenshot-analysis/uploads/${record.screenshotId}/image`}
+              alt={`Source screenshot for ${record.motorName}`}
+              className="max-h-[52vh] w-full rounded-lg border border-border bg-muted object-contain"
+            />
+          ) : (
+            <p className="rounded-lg border border-border bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+              No retained screenshot is linked to this record.
+            </p>
+          )}
 
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <div>
               <dt className="text-xs text-muted-foreground">Assigned motor</dt>
               <dd className="flex items-center gap-1.5 font-medium text-foreground">
                 <span className={cn("size-2 rounded-full", motor.dotClass)} aria-hidden="true" />
-                {motor.name}
+                {record.motorName || motor.name}
               </dd>
             </div>
             <div>

@@ -10,10 +10,10 @@ const LOGIC_POINTS = [
   "MTRON and MTROF are command messages.",
   "MOTOR ON and MOTOR OFF are actual motor-status messages.",
   "Runtime is calculated from actual MOTOR ON to actual MOTOR OFF.",
-  "A start delay of approximately 90 seconds may occur between MTRON and MOTOR ON.",
+  "MTRON is matched 30–180 seconds before MOTOR ON; MTROF is matched 0–180 seconds before MOTOR OFF.",
+  "Ambiguous extraction or command matches remain visible for owner review and are never guessed.",
   "Unmatched records are identified and excluded from the confirmed runtime total.",
-  "Times are displayed without seconds.",
-  "Runtime is displayed in hours and minutes.",
+  "Exact timestamps and runtime seconds are stored; normal reports round only the final displayed value.",
 ]
 
 export function ProcessingLogicNote() {
@@ -24,8 +24,8 @@ export function ProcessingLogicNote() {
       <div className="flex gap-3 p-4">
         <Info className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
         <p className="text-sm leading-relaxed text-foreground">
-          This is a static frontend preview. Screenshot reading, OCR validation, database storage
-          and automatic runtime calculation will be connected after frontend approval.
+          Screenshots are validated, hashed and stored privately by the authenticated MFMS backend.
+          Extracted candidates require owner review before MOTOR ON/OFF sessions affect confirmed totals.
         </p>
       </div>
 
