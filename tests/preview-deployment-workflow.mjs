@@ -242,6 +242,7 @@ const expectedReleasePaths = [
   "app/api/farm-map/tree-classifications/route.ts",
   "components/maps/farm-map-client.tsx",
   "components/maps/farm-orthomosaic-map.tsx",
+  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
   "lib/coconut-harvest-api.ts",
   "tests/farm-map-coconut-trees.mjs",
