@@ -103,6 +103,27 @@ export interface UploadDetail {
   upload: UploadRecord
   messages: ReviewMessage[]
   usage: OcrUsageRecord[]
+  provisional_sessions: ProvisionalSession[]
+}
+
+export interface ProvisionalSession {
+  motor_id: MotorId
+  operation_date: string
+  motor_on_message_id: number | null
+  motor_off_message_id: number | null
+  on_command_message_id: number | null
+  off_command_message_id: number | null
+  motor_on_at: string | null
+  motor_off_at: string | null
+  runtime_seconds: number | null
+  on_reason: string | null
+  off_reason: string | null
+  command_source: CommandSource
+  status: RunStatus
+  review_notes: string | null
+  provisional: true
+  requires_owner_confirmation: true
+  review_message_ids: number[]
 }
 
 export interface RunRecord {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { AlertTriangle, CheckCircle2, RefreshCw, Save, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { formatExactRuntime } from "@/lib/motor-screenshot-analysis-format"
 import type { GeometryBox, Motor, ReviewMessage, UploadDetail } from "@/lib/motor-screenshot-analysis-types"
 import { MotorBadge } from "./motor-badge"
 
@@ -27,6 +28,17 @@ function localDateTime(value: string | null): string {
 
 function indiaIso(value: string): string | null {
   return value ? new Date(`${value}+05:30`).toISOString() : null
+}
+
+function exactClock(value: string | null): string {
+  if (!value) return "—"
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(value))
 }
 
 function TilePreview({ uploadId, box, tile }: { uploadId: number; box?: GeometryBox | null; tile: number }) {
@@ -60,6 +72,9 @@ export function AnalysisReviewPanel({
   const [messages, setMessages] = useState(detail.messages)
   useEffect(() => setMessages(detail.messages), [detail])
   const motor = motors.find((item) => item.id === detail.upload.motor_id)
+  const provisionalSessions = detail.provisional_sessions ?? []
+  const provisionalComplete = provisionalSessions.filter((session) => session.status === "complete")
+  const provisionalSeconds = provisionalComplete.reduce((sum, session) => sum + (session.runtime_seconds ?? 0), 0)
   const warningCount = messages.filter((message) => message.included && (
     message.event_type === "unknown"
     || !message.event_timestamp
@@ -89,6 +104,34 @@ export function AnalysisReviewPanel({
         <div className="mt-4 flex gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {detail.upload.error_message}
+        </div>
+      )}
+
+      {provisionalSessions.length > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-300/60 bg-amber-50/50 p-3 dark:border-amber-700/50 dark:bg-amber-950/20">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Provisional pairing preview</h3>
+              <p className="text-xs text-muted-foreground">Candidate sessions only. They do not affect confirmed database totals until owner review is saved.</p>
+            </div>
+            <div className="text-right text-xs text-muted-foreground">
+              <p><span className="font-semibold text-foreground">{provisionalComplete.length}</span> complete candidate sessions</p>
+              <p><span className="font-semibold text-foreground">{formatExactRuntime(provisionalSeconds)}</span> candidate runtime</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {provisionalSessions.map((session, index) => (
+              <div key={`${session.status}-${session.motor_on_message_id ?? "none"}-${session.motor_off_message_id ?? "none"}-${index}`} className="rounded-lg border border-border bg-background p-2.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground">Candidate {index + 1}</span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">{session.status.replaceAll("_", " ")}</span>
+                </div>
+                <p className="mt-1 text-muted-foreground">ON <span className="font-medium text-foreground">{exactClock(session.motor_on_at)}</span> · OFF <span className="font-medium text-foreground">{exactClock(session.motor_off_at)}</span></p>
+                <p className="text-muted-foreground">Exact runtime <span className="font-medium text-foreground">{session.runtime_seconds == null ? "—" : formatExactRuntime(session.runtime_seconds)}</span></p>
+                {session.requires_owner_confirmation && <p className="mt-1 text-amber-700 dark:text-amber-300">Owner confirmation required</p>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
