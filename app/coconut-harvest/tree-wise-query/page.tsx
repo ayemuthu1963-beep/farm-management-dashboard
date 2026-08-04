@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useMemo, useRef, useState } from "react"
+import { type FormEvent, type UIEvent, useMemo, useRef, useState } from "react"
 import {
   CheckCheck,
   ChevronDown,
@@ -30,7 +30,15 @@ import {
 } from "@/lib/tree-wise-query-excel"
 
 const PAGE_SIZE = 100
-const TOTAL_COLUMN_WIDTH = 116
+const TREE_COLUMN_WIDTH = 130
+const metadataColumnWidths: Record<TreeWiseMetadata, number> = { plot: 130, classification: 145, reason: 230 }
+const cycleColumnWidths: Record<TreeWiseMeasure, number> = { bunches: 76, nuts: 84, sale: 128 }
+const totalColumnWidths: Record<TreeWiseTotal, number> = {
+  totalBunches: 80,
+  totalNuts: 88,
+  totalSale: 136,
+  totalMissed: 112,
+}
 const inputClass =
   "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
 
@@ -41,6 +49,11 @@ const totalLabels: Record<TreeWiseTotal, string> = {
   totalNuts: "Total Nuts",
   totalSale: "Total Sale",
   totalMissed: "Total Missed",
+}
+const totalHeaderLabels: Partial<Record<TreeWiseTotal, string>> = {
+  totalBunches: "Bun",
+  totalNuts: "Nuts",
+  totalSale: "Sale",
 }
 const totalMeasure: Partial<Record<TreeWiseTotal, TreeWiseMeasure>> = {
   totalBunches: "bunches",
@@ -205,19 +218,38 @@ function TreeWiseTable({
 }) {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null)
   const [page, setPage] = useState(1)
+  const topScrollRef = useRef<HTMLDivElement>(null)
+  const cycleScrollRef = useRef<HTMLDivElement>(null)
   const sortedRows = useMemo(() => sortRows(data.rows, sortConfig), [data.rows, sortConfig])
   const pageCount = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE))
   const safePage = Math.min(page, pageCount)
   const pageRows = sortedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-  const minimumWidth = 140 + metadata.length * 145 + data.cycles.length * measures.length * 105 + totals.length * TOTAL_COLUMN_WIDTH
+  const leftWidth = TREE_COLUMN_WIDTH + metadata.reduce((width, field) => width + metadataColumnWidths[field], 0)
+  const cycleGroupWidth = measures.reduce((width, measure) => width + cycleColumnWidths[measure], 0)
+  const cycleWidth = data.cycles.length * cycleGroupWidth
+  const cumulativeTotals = totals.filter((total) => total !== "totalMissed")
+  const showMissedHarvest = totals.includes("totalMissed")
+  const displayedTotals: TreeWiseTotal[] = showMissedHarvest
+    ? [...cumulativeTotals, "totalMissed"]
+    : cumulativeTotals
+  const totalWidth = displayedTotals.reduce((width, total) => width + totalColumnWidths[total], 0)
+  const paneGridStyle = { gridTemplateColumns: `${leftWidth}px minmax(0, 1fr) ${totalWidth}px` }
 
   function handleSort(key: string, direction: SortDirection) {
     setSortConfig({ key, direction })
     setPage(1)
   }
 
-  function totalRight(index: number): number {
-    return (totals.length - index - 1) * TOTAL_COLUMN_WIDTH
+  function syncFromTop(event: UIEvent<HTMLDivElement>) {
+    if (cycleScrollRef.current && cycleScrollRef.current.scrollLeft !== event.currentTarget.scrollLeft) {
+      cycleScrollRef.current.scrollLeft = event.currentTarget.scrollLeft
+    }
+  }
+
+  function syncFromTable(event: UIEvent<HTMLDivElement>) {
+    if (topScrollRef.current && topScrollRef.current.scrollLeft !== event.currentTarget.scrollLeft) {
+      topScrollRef.current.scrollLeft = event.currentTarget.scrollLeft
+    }
   }
 
   return (
@@ -226,70 +258,143 @@ function TreeWiseTable({
         {data.cycles.map((cycle) => <span key={cycle.cycle}><strong>C{cycle.cycle}:</strong> {formatCycleDate(cycle)}</span>)}
       </div>
 
-      <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-border" tabIndex={0} aria-label="Tree-wise table; scroll horizontally to view all selected columns">
-        <table className="border-collapse text-sm" style={{ minWidth: `${Math.max(760, minimumWidth)}px` }}>
-          <thead>
-            <tr className="bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
-              <th rowSpan={2} className="sticky left-0 z-30 min-w-[130px] border-r border-border bg-primary/10 px-3 py-2.5 text-left">
-                <SortableLabel label="Tree No." sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
-              </th>
-              {metadata.map((field) => (
-                <th key={field} rowSpan={2} className={`min-w-[130px] px-3 py-2.5 text-left ${field === "reason" ? "min-w-[230px]" : ""}`}>
-                  <SortableLabel label={metadataLabels[field]} sortKey={field} sortConfig={sortConfig} onSort={handleSort} />
-                </th>
-              ))}
-              {measures.length > 0 ? data.cycles.map((cycle) => (
-                <th key={cycle.cycle} colSpan={measures.length} className="border-x border-border px-3 py-2 text-center">C{cycle.cycle}</th>
-              )) : null}
-              {totals.length > 0 ? <th colSpan={totals.length} className="border-l border-border px-3 py-2 text-center">Totals</th> : null}
-            </tr>
-            <tr className="bg-primary/5 text-xs font-semibold text-primary">
-              {data.cycles.flatMap((cycle) => measures.map((measure) => (
-                <th key={`${cycle.cycle}-${measure}`} className="min-w-[105px] border-x border-border/60 px-2 py-2 text-right">
-                  <SortableLabel label={measureLabels[measure]} sortKey={`cycle:${cycle.cycle}:${measure}`} sortConfig={sortConfig} onSort={handleSort} />
-                </th>
-              )))}
-              {totals.map((total, index) => (
-                <th
-                  key={total}
-                  className="sticky z-30 min-w-[116px] border-l border-border bg-primary/10 px-2 py-2 text-right"
-                  style={{ right: `${totalRight(index)}px` }}
-                >
-                  <SortableLabel label={totalLabels[total]} sortKey={`total:${total}`} sortConfig={sortConfig} onSort={handleSort} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((row) => (
-              <tr key={row.treeNo} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="sticky left-0 z-20 whitespace-nowrap border-r border-border bg-card px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
-                {metadata.map((field) => <td key={field} className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row[field] || "—"}</td>)}
-                {data.cycles.flatMap((cycle) => measures.map((measure) => {
-                  const value = row.cycles[cycle.cycle]?.[measure] ?? 0
-                  const hasRecord = row.cycles[cycle.cycle]?.hasRecord ?? false
-                  return (
-                    <td key={`${cycle.cycle}-${measure}`} className={`border-x border-border/40 px-3 py-2.5 text-right ${hasRecord ? "text-foreground" : "bg-destructive/5 text-muted-foreground"}`}>
-                      {measure === "sale" ? formatRupees(value) : value.toLocaleString("en-IN")}
-                    </td>
-                  )
-                }))}
-                {totals.map((total, index) => {
-                  const value = Number(row[total])
-                  return (
-                    <td
-                      key={total}
-                      className="sticky z-20 min-w-[116px] border-l border-border bg-card px-3 py-2.5 text-right font-semibold text-foreground"
-                      style={{ right: `${totalRight(index)}px` }}
-                    >
-                      {total === "totalSale" ? formatRupees(value) : value.toLocaleString("en-IN")}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-1 grid max-w-full" style={paneGridStyle}>
+        <div aria-hidden="true" />
+        <div
+          ref={topScrollRef}
+          onScroll={syncFromTop}
+          className="h-6 overflow-x-scroll overflow-y-hidden overscroll-x-contain rounded border border-border bg-muted/30"
+          style={{ scrollbarGutter: "stable" }}
+          tabIndex={0}
+          aria-label="Scroll harvest cycles horizontally"
+        >
+          <div className="h-px bg-primary/20" style={{ width: `${Math.max(1, cycleWidth)}px` }} />
+        </div>
+        <div aria-hidden="true" />
+      </div>
+
+      <div className="max-w-full overflow-hidden rounded-lg border border-border">
+        <div className="grid max-w-full" style={paneGridStyle}>
+          <div className="overflow-hidden border-r border-border bg-card">
+            <table className="table-fixed border-collapse text-sm" style={{ width: `${leftWidth}px` }}>
+              <colgroup>
+                <col style={{ width: `${TREE_COLUMN_WIDTH}px` }} />
+                {metadata.map((field) => <col key={field} style={{ width: `${metadataColumnWidths[field]}px` }} />)}
+              </colgroup>
+              <thead>
+                <tr className="h-[68px] bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
+                  <th className="px-3 py-2.5 text-left">
+                    <SortableLabel label="Tree No." sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
+                  </th>
+                  {metadata.map((field) => (
+                    <th key={field} className="border-l border-border px-3 py-2.5 text-left">
+                      <SortableLabel label={metadataLabels[field]} sortKey={field} sortConfig={sortConfig} onSort={handleSort} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row) => (
+                  <tr key={row.treeNo} className="h-[42px] border-b border-border last:border-0 hover:bg-muted/50">
+                    <td className="whitespace-nowrap bg-card px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
+                    {metadata.map((field) => <td key={field} className="whitespace-nowrap border-l border-border px-3 py-2.5 text-muted-foreground">{row[field] || "—"}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            ref={cycleScrollRef}
+            onScroll={syncFromTable}
+            className="min-w-0 overflow-x-auto overscroll-x-contain"
+            tabIndex={0}
+            aria-label="Tree-wise harvest cycle columns"
+          >
+            <table className="table-fixed border-collapse text-sm" style={{ width: `${Math.max(1, cycleWidth)}px` }}>
+              <colgroup>
+                {data.cycles.flatMap((cycle) => measures.map((measure) => (
+                  <col key={`${cycle.cycle}-${measure}`} style={{ width: `${cycleColumnWidths[measure]}px` }} />
+                )))}
+              </colgroup>
+              <thead>
+                <tr className="h-[34px] bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
+                  {measures.length > 0 ? data.cycles.map((cycle) => (
+                    <th key={cycle.cycle} colSpan={measures.length} className="border-x border-border px-3 py-2 text-center">C{cycle.cycle}</th>
+                  )) : null}
+                </tr>
+                <tr className="h-[34px] bg-primary/5 text-xs font-semibold text-primary">
+                  {data.cycles.flatMap((cycle) => measures.map((measure) => (
+                    <th key={`${cycle.cycle}-${measure}`} className="border-x border-border/60 px-2 py-2 text-right">
+                      <SortableLabel label={measureLabels[measure]} sortKey={`cycle:${cycle.cycle}:${measure}`} sortConfig={sortConfig} onSort={handleSort} />
+                    </th>
+                  )))}
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row) => (
+                  <tr key={row.treeNo} className="h-[42px] border-b border-border last:border-0 hover:bg-muted/50">
+                    {data.cycles.flatMap((cycle) => measures.map((measure) => {
+                      const value = row.cycles[cycle.cycle]?.[measure] ?? 0
+                      const hasRecord = row.cycles[cycle.cycle]?.hasRecord ?? false
+                      return (
+                        <td key={`${cycle.cycle}-${measure}`} className={`border-x border-border/40 px-3 py-2.5 text-right ${hasRecord ? "text-foreground" : "bg-destructive/5 text-muted-foreground"}`}>
+                          {measure === "sale" ? formatRupees(value) : value.toLocaleString("en-IN")}
+                        </td>
+                      )
+                    }))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {displayedTotals.length > 0 ? (
+            <div className="overflow-hidden border-l border-border bg-card">
+              <table className="table-fixed border-collapse text-sm" style={{ width: `${totalWidth}px` }}>
+                <colgroup>
+                  {displayedTotals.map((total) => <col key={total} style={{ width: `${totalColumnWidths[total]}px` }} />)}
+                </colgroup>
+                <thead>
+                  <tr className="h-[34px] bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
+                    {cumulativeTotals.length > 0 ? (
+                      <th colSpan={cumulativeTotals.length} className="border-r border-border px-3 py-2 text-center last:border-r-0">Totals</th>
+                    ) : null}
+                    {showMissedHarvest ? (
+                      <th rowSpan={2} className="border-l border-border px-1 py-1 text-center align-middle first:border-l-0">
+                        <span className="inline-flex items-center justify-center gap-1">
+                          <span className="leading-tight">Missed<br />Harvest</span>
+                          <SortArrows label="Missed Harvest" sortKey="total:totalMissed" sortConfig={sortConfig} onSort={handleSort} />
+                        </span>
+                      </th>
+                    ) : null}
+                  </tr>
+                  <tr className="h-[34px] bg-primary/10 text-xs font-semibold text-primary">
+                    {cumulativeTotals.map((total) => (
+                      <th key={total} className="border-l border-border px-2 py-2 text-right first:border-l-0">
+                        <SortableLabel label={totalHeaderLabels[total] ?? totalLabels[total]} sortKey={`total:${total}`} sortConfig={sortConfig} onSort={handleSort} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((row) => (
+                    <tr key={row.treeNo} className="h-[42px] border-b border-border last:border-0 hover:bg-muted/50">
+                      {displayedTotals.map((total) => {
+                        const value = Number(row[total])
+                        return (
+                          <td key={total} className="border-l border-border bg-card px-3 py-2.5 text-right font-semibold text-foreground first:border-l-0">
+                            {total === "totalSale" ? formatRupees(value) : value.toLocaleString("en-IN")}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
