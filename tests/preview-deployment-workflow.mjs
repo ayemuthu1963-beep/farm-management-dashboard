@@ -228,6 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
+assert.equal(manifest.release_note, "Farm Map tree-number classification label colours")
 assert.equal(manifest.base_commit, "f76f7cc6008a17016d66ef40732d2154ef2b9e36")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",

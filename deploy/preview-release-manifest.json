@@ -3,6 +3,7 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
+  "release_note": "Farm Map tree-number classification label colours",
   "base_commit": "f76f7cc6008a17016d66ef40732d2154ef2b9e36",
   "allowed_paths": [
     "app/api/farm-map/tree-classifications/route.ts",
