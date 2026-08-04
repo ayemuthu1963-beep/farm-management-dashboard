@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "19daf9de4b615e9aa22f6702e7b72061b0d1ebc7")
+assert.equal(manifest.base_commit, "42cc53e53b61f3843526b858b50aa05d7ec1c24a")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",

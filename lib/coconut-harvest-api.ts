@@ -354,6 +354,19 @@ function mapLifecycleSapling(sapling: ApiTreeLifecycleSapling): TreePerformanceC
   }
 }
 
+function lifecycleSaplingPlot(sapling: ApiTreeLifecycleSapling): "Plot 1" | "Plot 2" | "" {
+  const normalizedPlot = (sapling.plot ?? "")
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]/g, "")
+
+  if (normalizedPlot === "plot1" || normalizedPlot === "p1" || normalizedPlot === "1") return "Plot 1"
+  if (normalizedPlot === "plot2" || normalizedPlot === "p2" || normalizedPlot === "2") return "Plot 2"
+
+  const inferredPlot = inferPlotFromTreeNumber(sapling.tree_no)
+  return inferredPlot === "Plot 1" || inferredPlot === "Plot 2" ? inferredPlot : ""
+}
+
 async function fetchTreeLifecycleSaplings(authHeader: string): Promise<ApiTreeLifecycleSapling[] | null> {
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/tree-lifecycle`, {
@@ -384,7 +397,7 @@ function mergeFutureBetterPerformance(
 
   if (saplings === null) return mappedRows
 
-  const treeCount = saplings.filter((sapling) => sapling.plot === plot).length
+  const treeCount = saplings.filter((sapling) => lifecycleSaplingPlot(sapling) === plot).length
   const futureBetterIndex = mappedRows.findIndex((row) => isFutureBetterCategory(row.category))
   const existing = futureBetterIndex >= 0 ? mappedRows[futureBetterIndex] : null
   const futureBetterRow: PerformanceRow = {
@@ -844,7 +857,7 @@ export async function fetchTreePerformanceCategoryData(
   const fallbackSaplings = performance.details.filter(isSaplingDetail).map(mapDetailToLifecycleSapling)
   const saplings = lifecycleSaplings ?? fallbackSaplings
   const rows = isFutureBetter
-    ? saplings.filter((sapling) => sapling.plot === plot).map(mapLifecycleSapling)
+    ? saplings.filter((sapling) => lifecycleSaplingPlot(sapling) === plot).map(mapLifecycleSapling)
     : performance.details
       .filter((detail) => detail.plot === plot && detail.category === cleanCategory && !isSaplingDetail(detail))
       .map((detail) => mapPerformanceCategoryDetail(detail, lastCycles))
