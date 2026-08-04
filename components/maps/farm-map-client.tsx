@@ -11,6 +11,7 @@ import {
   type LeafletCircleMarker,
   type LeafletLayerGroup,
   type LeafletMap,
+  type LeafletMarker,
 } from "@/components/maps/farm-orthomosaic-map"
 import {
   treeNumberOptionKey,
@@ -52,6 +53,12 @@ interface TreeHarvestSummary {
 interface TreeMapEntry {
   feature: CoconutTreeFeature
   marker: LeafletCircleMarker
+  label: LeafletMarker
+}
+
+interface TreeClassificationRow {
+  treeNo: string
+  classification: string | null
 }
 
 const TREE_SOURCES: Array<{ plot: PlotName; url: string }> = [
@@ -61,6 +68,21 @@ const TREE_SOURCES: Array<{ plot: PlotName; url: string }> = [
 const MARKER_ZOOM = 18
 const LABEL_ZOOM = 20
 const SUMMARY_CACHE_MS = 5 * 60 * 1000
+
+const TREE_LABEL_COLOURS: Record<string, { background: string; text: string; shadow: string }> = {
+  "Century Maker": { background: "#166534", text: "#ffffff", shadow: "#14532d" },
+  "Match Winner": { background: "#15803d", text: "#ffffff", shadow: "#14532d" },
+  "Reliable Batter": { background: "#1d4ed8", text: "#ffffff", shadow: "#1e3a8a" },
+  "Tail Ender": { background: "#f59e0b", text: "#111827", shadow: "#fef3c7" },
+  "Bench Player": { background: "#b91c1c", text: "#ffffff", shadow: "#7f1d1d" },
+  "Future Better": { background: "#7e22ce", text: "#ffffff", shadow: "#581c87" },
+}
+
+const DEFAULT_TREE_LABEL_COLOUR = {
+  background: "rgba(255,255,255,.82)",
+  text: "#0f172a",
+  shadow: "#ffffff",
+}
 
 function escapeHtml(value: string) {
   return value
@@ -74,6 +96,44 @@ function escapeHtml(value: string) {
 function display(value: string | number | null) {
   if (value === null || value === "") return "—"
   return typeof value === "number" ? value.toLocaleString("en-IN") : escapeHtml(value)
+}
+
+function treeLabelIcon(
+  leaflet: LeafletApi,
+  treeNo: string,
+  classification: string | null | undefined,
+) {
+  const colour = TREE_LABEL_COLOURS[classification ?? ""] ?? DEFAULT_TREE_LABEL_COLOUR
+  return leaflet.divIcon({
+    className: "",
+    html: `<span style="display:inline-block;transform:translate(-50%,-130%);padding:1px 3px;border-radius:3px;background:${colour.background};color:${colour.text};font:700 10px/1.2 sans-serif;text-shadow:0 0 2px ${colour.shadow};white-space:nowrap">${escapeHtml(treeNo)}</span>`,
+    iconSize: [1, 1],
+  })
+}
+
+async function fetchTreeClassifications(): Promise<Map<string, string | null> | null> {
+  try {
+    const response = await fetch("/api/farm-map/tree-classifications", { cache: "no-store" })
+    if (!response.ok) return null
+
+    const data = (await response.json()) as { rows?: unknown }
+    if (!Array.isArray(data.rows)) return null
+
+    return new Map(
+      data.rows
+        .filter(
+          (row): row is TreeClassificationRow =>
+            typeof row === "object" &&
+            row !== null &&
+            typeof (row as TreeClassificationRow).treeNo === "string" &&
+            ((row as TreeClassificationRow).classification === null ||
+              typeof (row as TreeClassificationRow).classification === "string"),
+        )
+        .map((row) => [row.treeNo, row.classification]),
+    )
+  } catch {
+    return null
+  }
 }
 
 function popupHtml(feature: CoconutTreeFeature, summary?: TreeHarvestSummary, error?: string) {
@@ -257,6 +317,22 @@ export function FarmMapClient() {
       const zoomHandler = () => applyVisibility()
       map.on("zoomend", zoomHandler)
 
+      let classifications: Map<string, string | null> | null = null
+      let treeGeometryLoaded = false
+      const applyClassificationColours = () => {
+        if (!classifications || !treeGeometryLoaded || cancelled) return
+
+        for (const entry of treesByKey.current.values()) {
+          const treeNo = entry.feature.properties.TreeNo
+          entry.label.setIcon(treeLabelIcon(leaflet, treeNo, classifications.get(treeNo)))
+        }
+      }
+
+      void fetchTreeClassifications().then((loadedClassifications) => {
+        classifications = loadedClassifications
+        applyClassificationColours()
+      })
+
       Promise.all(
         TREE_SOURCES.map(async ({ plot, url }) => {
           const response = await fetch(url, { cache: "force-cache" })
@@ -285,22 +361,17 @@ export function FarmMapClient() {
                 fillColor: "#0f766e",
                 fillOpacity: 0.9,
               })
-              const entry = { feature, marker }
-              marker
-                .bindTooltip(`Tree ${escapeHtml(feature.properties.TreeNo)}`, { direction: "top" })
-                .on("click", () => void selectTree(entry))
-              pointLayer.addLayer(marker)
-
+              const treeNo = feature.properties.TreeNo
               const label = leaflet.marker([latitude, longitude], {
                 interactive: false,
-                icon: leaflet.divIcon({
-                  className: "",
-                  html: `<span style="display:inline-block;transform:translate(-50%,-130%);padding:1px 3px;border-radius:3px;background:rgba(255,255,255,.82);color:#0f172a;font:700 10px/1.2 sans-serif;text-shadow:0 0 2px #fff;white-space:nowrap">${escapeHtml(feature.properties.TreeNo)}</span>`,
-                  iconSize: [1, 1],
-                }),
+                icon: treeLabelIcon(leaflet, treeNo, null),
               })
+              const entry = { feature, marker, label }
+              marker
+                .bindTooltip(`Tree ${escapeHtml(treeNo)}`, { direction: "top" })
+                .on("click", () => void selectTree(entry))
+              pointLayer.addLayer(marker)
               labelLayer.addLayer(label)
-              const treeNo = feature.properties.TreeNo
               const option = {
                 key: treeNumberOptionKey(treeNo, plot),
                 treeNo,
@@ -317,6 +388,8 @@ export function FarmMapClient() {
           setCounts(nextCounts)
           setGeometryOptions(nextGeometryOptions)
           setStatus(`${nextCounts["Plot 1"] + nextCounts["Plot 2"]} coconut trees loaded.`)
+          treeGeometryLoaded = true
+          applyClassificationColours()
           applyVisibility()
         })
         .catch(() => setStatus("Coconut tree geometry could not be loaded."))

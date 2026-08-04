@@ -138,6 +138,11 @@ export interface FarmMapTreeHarvestSummary {
   hasHarvestData: boolean
 }
 
+export interface FarmMapTreeClassification {
+  treeNo: string
+  classification: string | null
+}
+
 export interface TreePerformanceData {
   performanceCyclesUsed: number[]
   plot1Performance: PerformanceRow[]
@@ -781,6 +786,53 @@ export async function fetchFarmMapTreeHarvestSummary(treeNo: string): Promise<Fa
     missedHarvestCycles: performance?.missed_harvests ?? null,
     hasHarvestData: records.length > 0,
   }
+}
+
+export async function fetchFarmMapTreeClassifications(): Promise<FarmMapTreeClassification[]> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  const [performanceResponse, lifecycleSaplings] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+    fetchTreeLifecycleSaplings(authHeader),
+  ])
+
+  if (!performanceResponse.ok) {
+    throw new HarvestApiError(
+      `Harvest API returned ${performanceResponse.status}`,
+      performanceResponse.status,
+    )
+  }
+
+  const data = (await performanceResponse.json()) as {
+    details?: ApiTreePerformanceDetail[]
+  }
+  const classifications = new Map<string, string | null>()
+
+  for (const detail of data.details ?? []) {
+    const classification = detail.category?.trim() || null
+    if (detail.tree_no) {
+      classifications.set(
+        detail.tree_no,
+        isFutureBetterCategory(classification ?? "") ? "Future Better" : classification,
+      )
+    }
+  }
+
+  for (const sapling of lifecycleSaplings ?? []) {
+    classifications.set(sapling.tree_no, "Future Better")
+  }
+
+  return Array.from(classifications, ([treeNo, classification]) => ({ treeNo, classification }))
 }
 
 export async function fetchTreePerformanceData(): Promise<TreePerformanceData> {

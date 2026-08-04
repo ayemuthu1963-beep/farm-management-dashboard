@@ -40,6 +40,7 @@ export type LeafletMarker = {
   bindTooltip: (content: string, options?: Record<string, unknown>) => LeafletMarker
   openPopup: () => LeafletMarker
   on: (eventName: string, handler: () => void) => LeafletMarker
+  setIcon: (icon: LeafletDivIcon) => LeafletMarker
   getElement?: () => HTMLElement | undefined
 }
 

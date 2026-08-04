@@ -31,6 +31,13 @@ frontend:scripts/preview-server-deploy.sh
 frontend:scripts/preview-server-preflight.sh
 frontend:tests/preview-deployment-workflow.mjs
 
+# Farm Map tree-number label classification colours.
+frontend:app/api/farm-map/tree-classifications/route.ts
+frontend:components/maps/farm-map-client.tsx
+frontend:components/maps/farm-orthomosaic-map.tsx
+frontend:lib/coconut-harvest-api.ts
+frontend:tests/farm-map-coconut-trees.mjs
+
 # Independent Preview/UAT asset-register release.
 frontend:app/admin/page.tsx
 frontend:app/api/asset-register/[...path]/route.ts
