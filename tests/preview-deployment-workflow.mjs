@@ -238,10 +238,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/api/farm-map/tree-classifications/route.ts",
+  "components/maps/farm-map-client.tsx",
+  "components/maps/farm-orthomosaic-map.tsx",
   "deploy/preview-release-manifest.json",
   "lib/coconut-harvest-api.ts",
-  "tests/preview-deployment-workflow.mjs",
-  "tests/tree-lifecycle-sapling.mjs"
+  "tests/farm-map-coconut-trees.mjs",
+  "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

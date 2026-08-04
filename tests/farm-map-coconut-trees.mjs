@@ -92,11 +92,26 @@ assert.match(mapClient, /Plot 2/)
 assert.match(mapClient, /encodeURIComponent\(treeNo\)/)
 assert.match(mapClient, /tree-view\?treeNo=/)
 assert.match(mapClient, /difference|Harvest data/i)
+assert.match(mapClient, /\/api\/farm-map\/tree-classifications/)
+assert.match(mapClient, /"Century Maker": \{ background: "#166534"/)
+assert.match(mapClient, /"Match Winner": \{ background: "#15803d"/)
+assert.match(mapClient, /"Reliable Batter": \{ background: "#1d4ed8"/)
+assert.match(mapClient, /"Tail Ender": \{ background: "#f59e0b", text: "#111827"/)
+assert.match(mapClient, /"Bench Player": \{ background: "#b91c1c"/)
+assert.match(mapClient, /"Future Better": \{ background: "#7e22ce"/)
+assert.match(mapClient, /fillColor: "#0f766e"/)
+assert.match(mapClient, /entry\.label\.setIcon\(treeLabelIcon\(leaflet, treeNo, classifications\.get\(treeNo\)\)\)/)
 
 const route = await readFile(
   "app/api/farm-map/trees/[treeNo]/harvest-summary/route.ts",
   "utf8",
 )
 assert.match(route, /fetchFarmMapTreeHarvestSummary/)
+
+const classificationRoute = await readFile(
+  "app/api/farm-map/tree-classifications/route.ts",
+  "utf8",
+)
+assert.match(classificationRoute, /fetchFarmMapTreeClassifications/)
 
 console.log(`Farm Map coconut-tree checks passed for ${allTreeNumbers.size} trees.`)

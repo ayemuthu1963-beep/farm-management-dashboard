@@ -5,10 +5,13 @@
   "deployment_kind": "frontend-only",
   "base_commit": "42cc53e53b61f3843526b858b50aa05d7ec1c24a",
   "allowed_paths": [
+    "app/api/farm-map/tree-classifications/route.ts",
+    "components/maps/farm-map-client.tsx",
+    "components/maps/farm-orthomosaic-map.tsx",
     "deploy/preview-release-manifest.json",
     "lib/coconut-harvest-api.ts",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/tree-lifecycle-sapling.mjs"
+    "tests/farm-map-coconut-trees.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
