@@ -82,7 +82,7 @@ export function SourceInputPanel({
         {([
           ["paste", "Paste Full Text", Clipboard],
           ["txt", "Upload TXT File", FileText],
-          ["screenshot", "Screenshot OCR — Optional", ImageIcon],
+          ["screenshot", "Upload Screenshot — Optional", ImageIcon],
         ] as const).map(([value, label, Icon]) => (
           <button key={value} type="button" role="tab" aria-selected={method === value} onClick={() => setMethod(value)} className={cn("flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium", method === value ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
             <Icon className="size-4" /> {label}
