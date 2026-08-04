@@ -135,6 +135,7 @@ assert.match(deployWorkflow, /\[\[ "\$WORKFLOW_RUN_CONCLUSION" == "success" \]\]
 assert.match(deployWorkflow, /\[\[ "\$WORKFLOW_RUN_HEAD_BRANCH" == "preview-release" \]\]/)
 assert.match(deployWorkflow, /\$\{\{ github\.event\.workflow_run\.head_sha \}\}/)
 assert.match(deployWorkflow, /Candidate is not the exact preview-release head/)
+assert.match(deployWorkflow, /trap 'rm -rf "\$verify_dir" 2>\/dev\/null \|\| true' EXIT/)
 assert.doesNotMatch(deployWorkflow, /push\)\n/)
 assert.doesNotMatch(
   deployWorkflow,

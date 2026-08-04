@@ -98,7 +98,7 @@ jobs:
           }
 
           verify_dir=$(mktemp -d "$RUNNER_TEMP/mfms-preview-release.XXXXXX")
-          trap 'rm -rf "$verify_dir"' EXIT
+          trap 'rm -rf "$verify_dir" 2>/dev/null || true' EXIT
           git -C "$verify_dir" init --quiet
           git -C "$verify_dir" remote add origin "$repo_url"
           git -C "$verify_dir" fetch --quiet --no-tags --filter=blob:none \
