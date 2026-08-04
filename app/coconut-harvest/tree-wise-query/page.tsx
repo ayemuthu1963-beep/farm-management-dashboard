@@ -282,12 +282,12 @@ function TreeWiseTable({
                 {metadata.map((field) => <col key={field} style={{ width: `${metadataColumnWidths[field]}px` }} />)}
               </colgroup>
               <thead>
-                <tr className="h-[68px] bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
-                  <th className="px-3 py-2.5 text-left">
+                <tr className="h-[68px] text-xs font-semibold uppercase tracking-wide text-primary">
+                  <th className="bg-emerald-100/90 px-3 py-2.5 text-left">
                     <SortableLabel label="Tree No." sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
                   </th>
                   {metadata.map((field) => (
-                    <th key={field} className="border-l border-border px-3 py-2.5 text-left">
+                    <th key={field} className="border-l border-border bg-slate-100/90 px-3 py-2.5 text-left">
                       <SortableLabel label={metadataLabels[field]} sortKey={field} sortConfig={sortConfig} onSort={handleSort} />
                     </th>
                   ))}
@@ -296,7 +296,7 @@ function TreeWiseTable({
               <tbody>
                 {pageRows.map((row) => (
                   <tr key={row.treeNo} className="h-[42px] border-b border-border last:border-0 hover:bg-muted/50">
-                    <td className="whitespace-nowrap bg-card px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
+                    <td className="whitespace-nowrap bg-emerald-50/70 px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
                     {metadata.map((field) => <td key={field} className="whitespace-nowrap border-l border-border px-3 py-2.5 text-muted-foreground">{row[field] || "—"}</td>)}
                   </tr>
                 ))}
@@ -318,14 +318,14 @@ function TreeWiseTable({
                 )))}
               </colgroup>
               <thead>
-                <tr className="h-[34px] bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
+                <tr className="h-[34px] text-xs font-semibold uppercase tracking-wide text-primary">
                   {measures.length > 0 ? data.cycles.map((cycle) => (
-                    <th key={cycle.cycle} colSpan={measures.length} className="border-x border-border px-3 py-2 text-center">C{cycle.cycle}</th>
+                    <th key={cycle.cycle} colSpan={measures.length} className="border-x border-border bg-sky-100/90 px-3 py-2 text-center">C{cycle.cycle}</th>
                   )) : null}
                 </tr>
-                <tr className="h-[34px] bg-primary/5 text-xs font-semibold text-primary">
+                <tr className="h-[34px] text-xs font-semibold text-primary">
                   {data.cycles.flatMap((cycle) => measures.map((measure) => (
-                    <th key={`${cycle.cycle}-${measure}`} className="border-x border-border/60 px-2 py-2 text-right">
+                    <th key={`${cycle.cycle}-${measure}`} className="border-x border-border/60 bg-sky-50/90 px-2 py-2 text-right">
                       <SortableLabel label={measureLabels[measure]} sortKey={`cycle:${cycle.cycle}:${measure}`} sortConfig={sortConfig} onSort={handleSort} />
                     </th>
                   )))}
@@ -356,12 +356,12 @@ function TreeWiseTable({
                   {displayedTotals.map((total) => <col key={total} style={{ width: `${totalColumnWidths[total]}px` }} />)}
                 </colgroup>
                 <thead>
-                  <tr className="h-[34px] bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
+                  <tr className="h-[34px] text-xs font-semibold uppercase tracking-wide text-primary">
                     {cumulativeTotals.length > 0 ? (
-                      <th colSpan={cumulativeTotals.length} className="border-r border-border px-3 py-2 text-center last:border-r-0">Totals</th>
+                      <th colSpan={cumulativeTotals.length} className="border-r border-border bg-amber-100/90 px-3 py-2 text-center last:border-r-0">Totals</th>
                     ) : null}
                     {showMissedHarvest ? (
-                      <th rowSpan={2} className="border-l border-border px-1 py-1 text-center align-middle first:border-l-0">
+                      <th rowSpan={2} className="border-l border-border bg-rose-100/90 px-1 py-1 text-center align-middle first:border-l-0">
                         <span className="inline-flex items-center justify-center gap-1">
                           <span className="leading-tight">Missed<br />Harvest</span>
                           <SortArrows label="Missed Harvest" sortKey="total:totalMissed" sortConfig={sortConfig} onSort={handleSort} />
@@ -369,9 +369,9 @@ function TreeWiseTable({
                       </th>
                     ) : null}
                   </tr>
-                  <tr className="h-[34px] bg-primary/10 text-xs font-semibold text-primary">
+                  <tr className="h-[34px] text-xs font-semibold text-primary">
                     {cumulativeTotals.map((total) => (
-                      <th key={total} className="border-l border-border px-2 py-2 text-right first:border-l-0">
+                      <th key={total} className="border-l border-border bg-amber-50/90 px-2 py-2 text-right first:border-l-0">
                         <SortableLabel label={totalHeaderLabels[total] ?? totalLabels[total]} sortKey={`total:${total}`} sortConfig={sortConfig} onSort={handleSort} />
                       </th>
                     ))}
@@ -383,7 +383,7 @@ function TreeWiseTable({
                       {displayedTotals.map((total) => {
                         const value = Number(row[total])
                         return (
-                          <td key={total} className="border-l border-border bg-card px-3 py-2.5 text-right font-semibold text-foreground first:border-l-0">
+                          <td key={total} className={`border-l border-border px-3 py-2.5 text-right font-semibold text-foreground first:border-l-0 ${total === "totalMissed" ? "bg-rose-50/60" : "bg-amber-50/60"}`}>
                             {total === "totalSale" ? formatRupees(value) : value.toLocaleString("en-IN")}
                           </td>
                         )

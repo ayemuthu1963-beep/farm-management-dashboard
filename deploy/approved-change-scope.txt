@@ -38,6 +38,12 @@ frontend:components/maps/farm-orthomosaic-map.tsx
 frontend:lib/coconut-harvest-api.ts
 frontend:tests/farm-map-coconut-trees.mjs
 
+# Minor Harvest UI cosmetics and Farm Map classification legend.
+frontend:app/coconut-harvest/tree-wise-query/page.tsx
+frontend:components/coconut/tree-view-client.tsx
+frontend:tests/tree-view-totals.mjs
+frontend:tests/tree-wise-table-query.mjs
+
 # Independent Preview/UAT asset-register release.
 frontend:app/admin/page.tsx
 frontend:app/api/asset-register/[...path]/route.ts

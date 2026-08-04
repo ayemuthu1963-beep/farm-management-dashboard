@@ -101,6 +101,13 @@ assert.match(mapClient, /"Bench Player": \{ background: "#b91c1c"/)
 assert.match(mapClient, /"Future Better": \{ background: "#7e22ce"/)
 assert.match(mapClient, /fillColor: "#0f766e"/)
 assert.match(mapClient, /entry\.label\.setIcon\(treeLabelIcon\(leaflet, treeNo, classifications\.get\(treeNo\)\)\)/)
+assert.match(mapClient, /Tree Classification Colour Legend/)
+assert.match(mapClient, /Plot 1: Tree numbers 1 to 999/)
+assert.match(mapClient, /Plot 2: Tree numbers above 1000/)
+assert.match(mapClient, /Over 400 nuts in last 10 harvests/)
+assert.match(mapClient, /200 to 299 nuts in last 10 harvests/)
+assert.match(mapClient, /Saplings under 36 completed months/)
+assert.match(mapClient, />\s*1234\s*</)
 
 const route = await readFile(
   "app/api/farm-map/trees/[treeNo]/harvest-summary/route.ts",

@@ -105,5 +105,11 @@ assert.match(
   "the complete totals row must be bold and red",
 )
 assert.match(treeViewSource, /treeHistory\.length === 0[\s\S]*No harvest records found/, "empty results must retain the totals table")
+assert.match(
+  treeViewSource,
+  /const \[showPerformance, setShowPerformance\] = useState\(true\)/,
+  "Tree Performance must be visible by default",
+)
+assert.match(treeViewSource, /Hide Tree Performance/, "the visible performance section must retain its Hide button")
 
 console.log("tree-view totals tests passed")
