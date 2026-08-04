@@ -228,8 +228,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Minor Harvest UI colours, default performance, and Farm Map legend")
-assert.equal(manifest.base_commit, "bfd5961caa5da690f6df17705791f0e4551f4de2")
+assert.equal(manifest.release_note, "Motor Screenshot Runtime Analysis static frontend")
+assert.equal(manifest.base_commit, "83cd7e4de8dff2e2ce4e1d32b5d083066d86c0c6")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -239,14 +239,26 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/coconut-harvest/tree-wise-query/page.tsx",
-  "components/coconut/tree-view-client.tsx",
-  "components/maps/farm-map-client.tsx",
+  "app/motor-runtime/screenshot-analysis/page.tsx",
+  "components/motor-screenshot-analysis/analysis-filters.tsx",
+  "components/motor-screenshot-analysis/analysis-page-header.tsx",
+  "components/motor-screenshot-analysis/analysis-summary-cards.tsx",
+  "components/motor-screenshot-analysis/date-runtime-group.tsx",
+  "components/motor-screenshot-analysis/motor-badge.tsx",
+  "components/motor-screenshot-analysis/motor-summary-card.tsx",
+  "components/motor-screenshot-analysis/processing-logic-note.tsx",
+  "components/motor-screenshot-analysis/runtime-record-card.tsx",
+  "components/motor-screenshot-analysis/runtime-records-table.tsx",
+  "components/motor-screenshot-analysis/screenshot-upload-panel.tsx",
+  "components/motor-screenshot-analysis/screenshot-viewer.tsx",
+  "components/motor-screenshot-analysis/status-badge.tsx",
   "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "tests/farm-map-coconut-trees.mjs",
-  "tests/tree-view-totals.mjs",
-  "tests/tree-wise-table-query.mjs",
+  "lib/mfms-navigation.ts",
+  "lib/motor-screenshot-analysis-format.ts",
+  "lib/motor-screenshot-analysis-mock-data.ts",
+  "lib/motor-screenshot-analysis-types.ts",
+  "tests/navigation-consistency.mjs",
   "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

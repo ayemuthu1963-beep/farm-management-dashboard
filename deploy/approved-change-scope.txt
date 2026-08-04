@@ -68,3 +68,22 @@ backend:db/migrations/005_asset_register_schema.sql
 backend:scripts/apply_preview_asset_register.py
 backend:scripts/clear_legacy_inventory_preview.sql
 backend:tests/test_asset_register_release.py
+
+# Motor Screenshot Runtime Analysis static frontend release.
+frontend:app/motor-runtime/screenshot-analysis/page.tsx
+frontend:components/motor-screenshot-analysis/analysis-filters.tsx
+frontend:components/motor-screenshot-analysis/analysis-page-header.tsx
+frontend:components/motor-screenshot-analysis/analysis-summary-cards.tsx
+frontend:components/motor-screenshot-analysis/date-runtime-group.tsx
+frontend:components/motor-screenshot-analysis/motor-badge.tsx
+frontend:components/motor-screenshot-analysis/motor-summary-card.tsx
+frontend:components/motor-screenshot-analysis/processing-logic-note.tsx
+frontend:components/motor-screenshot-analysis/runtime-record-card.tsx
+frontend:components/motor-screenshot-analysis/runtime-records-table.tsx
+frontend:components/motor-screenshot-analysis/screenshot-upload-panel.tsx
+frontend:components/motor-screenshot-analysis/screenshot-viewer.tsx
+frontend:components/motor-screenshot-analysis/status-badge.tsx
+frontend:lib/motor-screenshot-analysis-format.ts
+frontend:lib/motor-screenshot-analysis-mock-data.ts
+frontend:lib/motor-screenshot-analysis-types.ts
+frontend:tests/navigation-consistency.mjs
