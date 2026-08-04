@@ -9,6 +9,7 @@ import {
   Leaf,
   MapPinned,
   Package,
+  ScanLine,
   ShieldCheck,
   Sprout,
   Users,
@@ -109,6 +110,17 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     showInSidebar: true,
     order: 5,
     ctaLabel: "Open Dashboard",
+  },
+  {
+    id: "motor-screenshot-analysis",
+    label: "Motor Screenshot Analysis",
+    href: "/motor-runtime/screenshot-analysis",
+    icon: ScanLine,
+    description: "Review static screenshot-derived motor runtime records",
+    status: "active",
+    showOnDashboard: false,
+    showInSidebar: true,
+    order: 5.5,
   },
   {
     id: "irrigation-management",
@@ -257,6 +269,17 @@ export function isNavigationItemActive(
   }
   if (item.href === "/") {
     return pathname === "/"
+  }
+  const hasMoreSpecificMatch = mfmsNavigationItems.some(
+    (candidate) =>
+      candidate.status === "active" &&
+      !candidate.external &&
+      candidate.href !== item.href &&
+      candidate.href.startsWith(`${item.href}/`) &&
+      (pathname === candidate.href || pathname.startsWith(`${candidate.href}/`)),
+  )
+  if (hasMoreSpecificMatch) {
+    return false
   }
   return pathname === item.href || pathname.startsWith(`${item.href}/`)
 }
