@@ -59,6 +59,14 @@ interface ApiTreePerformanceDetail {
   lifecycle_status: string | null
 }
 
+interface ApiTreeLifecycleSapling {
+  tree_no: string
+  plot: string | null
+  plantation_date: string | null
+  months_since_planted: number | null
+  lifecycle_status: string | null
+}
+
 interface ApiDetailedQueryRow {
   tree_no: string
   harvest_cycle: string
@@ -263,6 +271,7 @@ function mapTreeHistoryRecord(row: ApiTreeHistoryRecord): TreeHarvestRow {
 }
 
 function categoryWithBadge(category: string): string {
+  const normalizedCategory = category === "Sapling" ? "Future Better" : category
   const badgeByCategory: Record<string, string> = {
     "Century Maker": "\u{1F4AF}",
     "Match Winner": "\u{1F525}",
@@ -272,7 +281,7 @@ function categoryWithBadge(category: string): string {
     "Future Better": "\u{1F331}",
   }
 
-  return `${badgeByCategory[category] ?? ""} ${category}`.trim()
+  return `${badgeByCategory[normalizedCategory] ?? ""} ${normalizedCategory}`.trim()
 }
 
 function categoryWithoutBadge(category: string): string {
@@ -309,6 +318,89 @@ function mapPerformanceCategoryDetail(
     minNuts: detail.min_nuts ?? 0,
     maxNuts: detail.max_nuts ?? 0,
   }
+}
+
+function isFutureBetterCategory(category: string): boolean {
+  const cleanCategory = categoryWithoutBadge(category)
+  return cleanCategory === "Future Better" || cleanCategory === "Sapling"
+}
+
+function isSaplingDetail(detail: ApiTreePerformanceDetail): boolean {
+  return detail.lifecycle_status === "Sapling" || isFutureBetterCategory(detail.category)
+}
+
+function mapDetailToLifecycleSapling(detail: ApiTreePerformanceDetail): ApiTreeLifecycleSapling {
+  return {
+    tree_no: detail.tree_no,
+    plot: detail.plot,
+    plantation_date: detail.plantation_date ?? null,
+    months_since_planted: detail.months_since_planted ?? null,
+    lifecycle_status: detail.lifecycle_status ?? "Sapling",
+  }
+}
+
+function mapLifecycleSapling(sapling: ApiTreeLifecycleSapling): TreePerformanceCategoryRow {
+  return {
+    treeNo: sapling.tree_no,
+    plantationDate: sapling.plantation_date,
+    monthsSincePlanted: sapling.months_since_planted,
+    lifecycleStatus: sapling.lifecycle_status ?? "Sapling",
+    totalNutsLast10Cycles: 0,
+    averageNuts: 0,
+    harvestsCount: 0,
+    missedHarvests: 0,
+    minNuts: 0,
+    maxNuts: 0,
+  }
+}
+
+async function fetchTreeLifecycleSaplings(authHeader: string): Promise<ApiTreeLifecycleSapling[] | null> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/tree-lifecycle`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    })
+
+    if (!response.ok) return null
+
+    const data = (await response.json()) as { saplings?: ApiTreeLifecycleSapling[] }
+    return Array.isArray(data.saplings) ? data.saplings : null
+  } catch {
+    return null
+  }
+}
+
+function mergeFutureBetterPerformance(
+  rows: ApiTreePerformanceRow[],
+  plot: "Plot 1" | "Plot 2",
+  saplings: ApiTreeLifecycleSapling[] | null,
+): PerformanceRow[] {
+  const mappedRows = rows
+    .filter((row) => row.plot === plot)
+    .map((row) => mapPerformanceRow(row.category === "Sapling" ? { ...row, category: "Future Better" } : row))
+
+  if (saplings === null) return mappedRows
+
+  const treeCount = saplings.filter((sapling) => sapling.plot === plot).length
+  const futureBetterIndex = mappedRows.findIndex((row) => isFutureBetterCategory(row.category))
+  const existing = futureBetterIndex >= 0 ? mappedRows[futureBetterIndex] : null
+  const futureBetterRow: PerformanceRow = {
+    rank: existing?.rank ?? Math.max(0, ...mappedRows.map((row) => row.rank)) + 1,
+    category: categoryWithBadge("Future Better"),
+    criteria: "Saplings under 36 completed months",
+    treeCount,
+    minNuts: 0,
+    maxNuts: 0,
+    averageNuts: 0,
+  }
+
+  if (futureBetterIndex >= 0) mappedRows[futureBetterIndex] = futureBetterRow
+  else mappedRows.push(futureBetterRow)
+
+  return mappedRows.sort((left, right) => left.rank - right.rank)
 }
 
 function parseCsvLine(line: string): string[] {
@@ -685,13 +777,16 @@ export async function fetchTreePerformanceData(): Promise<TreePerformanceData> {
     throw new Error("Harvest API credentials are not configured")
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
-    headers: {
-      Authorization: authHeader,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  })
+  const [response, lifecycleSaplings] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+    fetchTreeLifecycleSaplings(authHeader),
+  ])
 
   if (!response.ok) {
     throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
@@ -700,12 +795,16 @@ export async function fetchTreePerformanceData(): Promise<TreePerformanceData> {
   const data = (await response.json()) as {
     last_cycles: ApiTreePerformanceCycle[]
     rows: ApiTreePerformanceRow[]
+    details?: ApiTreePerformanceDetail[]
   }
+  const saplings = lifecycleSaplings ?? (Array.isArray(data.details)
+    ? data.details.filter(isSaplingDetail).map(mapDetailToLifecycleSapling)
+    : null)
 
   return {
     performanceCyclesUsed: data.last_cycles.map((cycle) => toCycleNumber(cycle.harvest_cycle)),
-    plot1Performance: data.rows.filter((row) => row.plot === "Plot 1").map(mapPerformanceRow),
-    plot2Performance: data.rows.filter((row) => row.plot === "Plot 2").map(mapPerformanceRow),
+    plot1Performance: mergeFutureBetterPerformance(data.rows, "Plot 1", saplings),
+    plot2Performance: mergeFutureBetterPerformance(data.rows, "Plot 2", saplings),
   }
 }
 
@@ -719,13 +818,16 @@ export async function fetchTreePerformanceCategoryData(
     throw new Error("Harvest API credentials are not configured")
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/tree-performance`, {
-    headers: {
-      Authorization: authHeader,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  })
+  const [response, lifecycleSaplings] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }),
+    fetchTreeLifecycleSaplings(authHeader),
+  ])
 
   if (!response.ok) {
     throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
@@ -738,12 +840,14 @@ export async function fetchTreePerformanceCategoryData(
 
   const lastCycles = new Set(performance.last_cycles.map((cycle) => toCycleNumber(cycle.harvest_cycle)))
   const cleanCategory = categoryWithoutBadge(category)
-
-  const selectedDetails = performance.details.filter((detail) => {
-    return detail.plot === plot && detail.category === cleanCategory
-  })
-
-  const rows = selectedDetails.map((detail) => mapPerformanceCategoryDetail(detail, lastCycles))
+  const isFutureBetter = isFutureBetterCategory(cleanCategory)
+  const fallbackSaplings = performance.details.filter(isSaplingDetail).map(mapDetailToLifecycleSapling)
+  const saplings = lifecycleSaplings ?? fallbackSaplings
+  const rows = isFutureBetter
+    ? saplings.filter((sapling) => sapling.plot === plot).map(mapLifecycleSapling)
+    : performance.details
+      .filter((detail) => detail.plot === plot && detail.category === cleanCategory && !isSaplingDetail(detail))
+      .map((detail) => mapPerformanceCategoryDetail(detail, lastCycles))
 
   rows.sort((a, b) => {
     const totalCompare = b.totalNutsLast10Cycles - a.totalNutsLast10Cycles
@@ -756,7 +860,7 @@ export async function fetchTreePerformanceCategoryData(
 
   return {
     plot,
-    category: cleanCategory,
+    category: isFutureBetter ? "Future Better" : cleanCategory,
     rows,
     usedMockFallback: false,
   }

@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "7096c1a1faeaa4474ce5461cdd6d4c9aeb88aaa4")
+assert.equal(manifest.base_commit, "19daf9de4b615e9aa22f6702e7b72061b0d1ebc7")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -238,10 +238,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/coconut-harvest/tree-wise-query/page.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/coconut-harvest-api.ts",
   "tests/preview-deployment-workflow.mjs",
-  "tests/tree-wise-table-query.mjs"
+  "tests/tree-lifecycle-sapling.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
