@@ -37,7 +37,7 @@ export function TreeViewClient({
   const [treeHistory, setTreeHistory] = useState<TreeHarvestRow[]>(initialTreeHistory)
   const [dataStatus, setDataStatus] = useState(initialDataStatus)
   const [errorMessage, setErrorMessage] = useState("")
-  const [showPerformance, setShowPerformance] = useState(false)
+  const [showPerformance, setShowPerformance] = useState(true)
   const treeRequestInFlight = useRef(false)
 
   const last10Harvests = useMemo(() => treeHistory.slice(0, 10), [treeHistory])

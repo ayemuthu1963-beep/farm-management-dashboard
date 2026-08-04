@@ -228,8 +228,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Farm Map tree-number classification label colours")
-assert.equal(manifest.base_commit, "f76f7cc6008a17016d66ef40732d2154ef2b9e36")
+assert.equal(manifest.release_note, "Minor Harvest UI colours, default performance, and Farm Map legend")
+assert.equal(manifest.base_commit, "bfd5961caa5da690f6df17705791f0e4551f4de2")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -239,13 +239,14 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/farm-map/tree-classifications/route.ts",
+  "app/coconut-harvest/tree-wise-query/page.tsx",
+  "components/coconut/tree-view-client.tsx",
   "components/maps/farm-map-client.tsx",
-  "components/maps/farm-orthomosaic-map.tsx",
   "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "lib/coconut-harvest-api.ts",
   "tests/farm-map-coconut-trees.mjs",
+  "tests/tree-view-totals.mjs",
+  "tests/tree-wise-table-query.mjs",
   "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

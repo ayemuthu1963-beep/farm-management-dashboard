@@ -84,6 +84,30 @@ const DEFAULT_TREE_LABEL_COLOUR = {
   shadow: "#ffffff",
 }
 
+const TREE_CLASSIFICATION_LEGENDS = [
+  {
+    title: "Plot 1: Tree numbers 1 to 999",
+    rows: [
+      { badge: "💯", category: "Century Maker", criteria: "Over 400 nuts in last 10 harvests" },
+      { badge: "🔥", category: "Match Winner", criteria: "300 to 399 nuts in last 10 harvests" },
+      { badge: "👍", category: "Reliable Batter", criteria: "225 to 299 nuts in last 10 harvests" },
+      { badge: "😬", category: "Tail Ender", criteria: "175 to 224 nuts in last 10 harvests" },
+      { badge: "🪑", category: "Bench Player", criteria: "Less than 175 nuts in last 10 harvests" },
+      { badge: "🌱", category: "Future Better", criteria: "Saplings under 36 completed months" },
+    ],
+  },
+  {
+    title: "Plot 2: Tree numbers above 1000",
+    rows: [
+      { badge: "🔥", category: "Match Winner", criteria: "200 to 299 nuts in last 10 harvests" },
+      { badge: "👍", category: "Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests" },
+      { badge: "😬", category: "Tail Ender", criteria: "100 to 149 nuts in last 10 harvests" },
+      { badge: "🪑", category: "Bench Player", criteria: "Less than 100 nuts in last 10 harvests" },
+      { badge: "🌱", category: "Future Better", criteria: "Saplings under 36 completed months" },
+    ],
+  },
+] as const
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -109,6 +133,56 @@ function treeLabelIcon(
     html: `<span style="display:inline-block;transform:translate(-50%,-130%);padding:1px 3px;border-radius:3px;background:${colour.background};color:${colour.text};font:700 10px/1.2 sans-serif;text-shadow:0 0 2px ${colour.shadow};white-space:nowrap">${escapeHtml(treeNo)}</span>`,
     iconSize: [1, 1],
   })
+}
+
+function TreeClassificationLegend() {
+  return (
+    <Panel title="Tree Classification Colour Legend" icon={Trees}>
+      <div className="grid gap-5 xl:grid-cols-2">
+        {TREE_CLASSIFICATION_LEGENDS.map((legend) => (
+          <section key={legend.title} className="min-w-0">
+            <h3 className="mb-2 text-sm font-bold text-foreground">{legend.title}</h3>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[540px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
+                    <th className="border-r border-border px-3 py-2">Category</th>
+                    <th className="border-r border-border px-3 py-2 text-center">Colour Code</th>
+                    <th className="px-3 py-2">Criteria</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {legend.rows.map((row) => {
+                    const colour = TREE_LABEL_COLOURS[row.category]
+                    return (
+                      <tr key={row.category} className="border-t border-border">
+                        <td className="whitespace-nowrap border-r border-border px-3 py-2 font-semibold text-foreground">
+                          <span aria-hidden="true">{row.badge}</span> {row.category}
+                        </td>
+                        <td className="border-r border-border px-3 py-2 text-center">
+                          <span
+                            className="inline-flex min-w-12 items-center justify-center rounded px-2 py-1 text-xs font-bold"
+                            style={{
+                              backgroundColor: colour.background,
+                              color: colour.text,
+                              textShadow: `0 0 2px ${colour.shadow}`,
+                            }}
+                          >
+                            1234
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{row.criteria}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
+      </div>
+    </Panel>
+  )
 }
 
 async function fetchTreeClassifications(): Promise<Map<string, string | null> | null> {
@@ -514,19 +588,23 @@ export function FarmMapClient() {
   )
 
   return (
-    <FarmOrthomosaicMap
-      mapTitle={
-        <>
-          <span>Drone Orthomosaic Map</span>
-          <span className="ml-2 normal-case tracking-normal text-red-600">
-            Zoom in to see tree numbers. Click a tree to view its data.
-          </span>
-        </>
-      }
-      onMapReady={handleMapReady}
-      note="Coconut tree points are a separate vector overlay. Harvest information is loaded only when a tree is selected."
-    >
-      {treeControls}
-    </FarmOrthomosaicMap>
+    <div className="flex flex-col gap-5">
+      <FarmOrthomosaicMap
+        mapTitle={
+          <>
+            <span>Drone Orthomosaic Map</span>
+            <span className="ml-2 normal-case tracking-normal text-red-600">
+              Zoom in to see tree numbers. Click a tree to view its data.
+            </span>
+          </>
+        }
+        onMapReady={handleMapReady}
+        note="Coconut tree points are a separate vector overlay. Harvest information is loaded only when a tree is selected."
+      >
+        {treeControls}
+      </FarmOrthomosaicMap>
+
+      <TreeClassificationLegend />
+    </div>
   )
 }

@@ -52,6 +52,10 @@ assert.match(page, /disabled=\{Boolean\(requiredMeasure && !measures\.includes\(
 assert.match(page, /data\.rows, cycles: data\.cycles, measures, metadata, totals/)
 assert.match(page, /measures\.length > 0 \? data\.cycles\.map/)
 assert.match(page, /disabled=\{exporting \|\| measures\.length === 0\}/)
+assert.match(page, /bg-emerald-100\/90/, "Tree Number header must have a distinct background")
+assert.match(page, /bg-sky-100\/90/, "cycle headers must have a distinct background")
+assert.match(page, /bg-amber-100\/90/, "Totals header must have a distinct background")
+assert.match(page, /bg-rose-100\/90/, "Missed Harvest header must have a distinct background")
 
 assert.match(apiClient, /performance\.details\.map/)
 assert.match(apiClient, /\.\.\.matrixRows\.map/)
