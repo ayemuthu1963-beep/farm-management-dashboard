@@ -228,7 +228,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "2ed7fea862f37a47ae7fb20ce6bfa860b0f90095")
+assert.equal(manifest.base_commit, "6e2773d32b160c4d3c622b798aa0f3ce0f54541c")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -238,21 +238,18 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/admin/page.tsx",
-  "app/admin/tree-lifecycle/page.tsx",
-  "app/api/admin/tree-lifecycle/import/apply/route.ts",
-  "app/api/admin/tree-lifecycle/import/validate/route.ts",
-  "app/api/admin/tree-lifecycle/route.ts",
-  "app/coconut-harvest/tree-performance/page.tsx",
-  "components/admin/tree-lifecycle-admin-client.tsx",
+  "CODEX_HANDOFF.md",
+  "README.md",
+  "app/api/coconut-harvest/tree-wise-query/route.ts",
+  "app/coconut-harvest/page.tsx",
+  "app/coconut-harvest/tree-wise-query/page.tsx",
   "deploy/preview-release-manifest.json",
   "lib/coconut-harvest-api.ts",
-  "lib/coconut-harvest-data.ts",
-  "lib/tree-lifecycle.ts",
+  "lib/tree-wise-query-excel.ts",
   "package.json",
   "scripts/test-preview-release.sh",
   "tests/preview-deployment-workflow.mjs",
-  "tests/tree-lifecycle-sapling.mjs"
+  "tests/tree-wise-table-query.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

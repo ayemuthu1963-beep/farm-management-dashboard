@@ -59,6 +59,21 @@ interface ApiTreePerformanceDetail {
   lifecycle_status: string | null
 }
 
+interface ApiDetailedQueryRow {
+  tree_no: string
+  harvest_cycle: string
+  harvest_date: string
+  bunch1_nuts: number | null
+  bunch2_nuts: number | null
+  bunch3_nuts: number | null
+  total_bunches: number | null
+  total_nuts: number | null
+  total_sale: string | number | null
+  missed_harvests: number | null
+  plot: string
+  category: string
+}
+
 export interface TreePerformanceCategoryRow {
   treeNo: string
   plantationDate: string | null
@@ -156,6 +171,41 @@ export interface DetailedQueryRow {
 export interface DetailedQueryData {
   rows: DetailedQueryRow[]
   usedMockFallback: boolean
+}
+
+export interface TreeWiseQueryCycle {
+  cycle: string
+  startDate: string
+  endDate: string
+}
+
+export interface TreeWiseQueryCycleValue {
+  bunches: number
+  nuts: number
+  sale: number
+  hasRecord: boolean
+}
+
+export interface TreeWiseQueryRow {
+  treeNo: string
+  plot: string
+  classification: string
+  reason: string
+  cycles: Record<string, TreeWiseQueryCycleValue>
+  totalBunches: number
+  totalNuts: number
+  totalSale: number
+  totalMissed: number
+}
+
+export interface TreeWiseQueryData {
+  cycles: TreeWiseQueryCycle[]
+  rows: TreeWiseQueryRow[]
+  usedMockFallback: boolean
+}
+
+export interface TreeWiseQueryFilters extends DetailedQueryFilters {
+  includeNoRecord?: boolean
 }
 
 export class HarvestApiError extends Error {
@@ -853,37 +903,35 @@ function detailMatchesClassification(detail: ApiTreePerformanceDetail, filters: 
   return false
 }
 
-export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Promise<DetailedQueryData> {
-  const authHeader = getBasicAuthHeader()
+const detailedQueryParameterNames: Record<keyof DetailedQueryFilters, string> = {
+  treeFrom: "tree_from",
+  treeTo: "tree_to",
+  cycleFrom: "cycle_from",
+  cycleTo: "cycle_to",
+  dateFrom: "date_from",
+  dateTo: "date_to",
+  nutsFrom: "nuts_from",
+  nutsTo: "nuts_to",
+  saleFrom: "sale_from",
+  saleTo: "sale_to",
+  missedFrom: "missed_from",
+  missedTo: "missed_to",
+  plot1Classification: "plot1_classification",
+  plot2Classification: "plot2_classification",
+}
 
-  if (!authHeader) {
-    throw new Error("Harvest API credentials are not configured")
-  }
-
-  const parameterNames: Record<keyof DetailedQueryFilters, string> = {
-    treeFrom: "tree_from",
-    treeTo: "tree_to",
-    cycleFrom: "cycle_from",
-    cycleTo: "cycle_to",
-    dateFrom: "date_from",
-    dateTo: "date_to",
-    nutsFrom: "nuts_from",
-    nutsTo: "nuts_to",
-    saleFrom: "sale_from",
-    saleTo: "sale_to",
-    missedFrom: "missed_from",
-    missedTo: "missed_to",
-    plot1Classification: "plot1_classification",
-    plot2Classification: "plot2_classification",
-  }
+function detailedQueryParams(filters: DetailedQueryFilters): URLSearchParams {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters) as [keyof DetailedQueryFilters, string | undefined][]) {
     if (!isBlank(value) && value !== "All") {
-      params.set(parameterNames[key], value!.trim())
+      params.set(detailedQueryParameterNames[key], value!.trim())
     }
   }
+  return params
+}
 
-  const response = await fetch(`${getApiBaseUrl()}/api/detailed-query?${params}`, {
+async function fetchApiDetailedQueryRows(filters: DetailedQueryFilters, authHeader: string): Promise<ApiDetailedQueryRow[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/detailed-query?${detailedQueryParams(filters)}`, {
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
@@ -895,38 +943,245 @@ export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Pro
     throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
   }
 
-  const data = (await response.json()) as {
-    rows: Array<{
-      tree_no: string
-      harvest_cycle: string
-      harvest_date: string
-      bunch1_nuts: number
-      bunch2_nuts: number
-      bunch3_nuts: number
-      total_bunches: number
-      total_nuts: number
-      total_sale: string | number | null
-      missed_harvests: number
-      plot: string
-      category: string
-    }>
+  const data = (await response.json()) as { rows: ApiDetailedQueryRow[] }
+  return data.rows
+}
+
+function mapDetailedQueryRow(row: ApiDetailedQueryRow): DetailedQueryRow {
+  return {
+    treeNo: row.tree_no,
+    harvestCycle: row.harvest_cycle,
+    harvestDate: row.harvest_date,
+    nutsB1: row.bunch1_nuts ?? 0,
+    nutsB2: row.bunch2_nuts ?? 0,
+    nutsB3: row.bunch3_nuts ?? 0,
+    totalBunches: row.total_bunches ?? 0,
+    totalNuts: row.total_nuts ?? 0,
+    totalSale: toNumber(row.total_sale),
+    missedHarvests: row.missed_harvests ?? 0,
+    plot: row.plot,
+    classification: row.category,
+  }
+}
+
+export async function fetchDetailedQueryData(filters: DetailedQueryFilters): Promise<DetailedQueryData> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
   }
 
+  const rows = await fetchApiDetailedQueryRows(filters, authHeader)
+
   return {
-    rows: data.rows.map((row) => ({
-      treeNo: row.tree_no,
-      harvestCycle: row.harvest_cycle,
-      harvestDate: row.harvest_date,
-      nutsB1: row.bunch1_nuts ?? 0,
-      nutsB2: row.bunch2_nuts ?? 0,
-      nutsB3: row.bunch3_nuts ?? 0,
-      totalBunches: row.total_bunches ?? 0,
-      totalNuts: row.total_nuts ?? 0,
-      totalSale: toNumber(row.total_sale),
-      missedHarvests: row.missed_harvests ?? 0,
-      plot: row.plot,
-      classification: row.category,
-    })),
+    rows: rows.map(mapDetailedQueryRow),
+    usedMockFallback: false,
+  }
+}
+
+function hasValueRange(from: string | undefined, to: string | undefined): boolean {
+  return !isBlank(from) || !isBlank(to)
+}
+
+function cycleMatchesFilters(row: ApiCycleRow, filters: TreeWiseQueryFilters): boolean {
+  const cycle = toCycleNumber(row.harvest_cycle)
+  if (!inNumberRange(cycle, filters.cycleFrom, filters.cycleTo)) return false
+
+  const startDate = row.harvest_start_date
+  const endDate = row.harvest_end_date ?? row.harvest_start_date
+  if (!isBlank(filters.dateFrom) && endDate < filters.dateFrom!.trim()) return false
+  if (!isBlank(filters.dateTo) && startDate > filters.dateTo!.trim()) return false
+  return true
+}
+
+function classificationReason(
+  plot: string,
+  category: string,
+  performanceRows: ApiTreePerformanceRow[],
+): string {
+  return performanceRows.find((row) => row.plot === plot && row.category === category)?.criteria?.replaceAll("cycles", "harvests") ?? ""
+}
+
+function inferPlotFromTreeNumber(treeNo: string): string {
+  const numericTreeNo = Number.parseFloat(treeNo)
+  if (!Number.isFinite(numericTreeNo)) return ""
+  return numericTreeNo >= 1000 ? "Plot 2" : "Plot 1"
+}
+
+const TREE_WISE_MASTER_CACHE_MS = 15 * 60 * 1000
+let treeWiseMasterCache: { expiresAt: number; values: string[] } | null = null
+let pendingTreeWiseMaster: Promise<string[]> | null = null
+
+async function fetchCachedTreeMaster(): Promise<string[]> {
+  if (treeWiseMasterCache && treeWiseMasterCache.expiresAt > Date.now()) {
+    return treeWiseMasterCache.values
+  }
+  if (!pendingTreeWiseMaster) {
+    pendingTreeWiseMaster = fetchAllTreeNumbers()
+      .then((values) => {
+        treeWiseMasterCache = { expiresAt: Date.now() + TREE_WISE_MASTER_CACHE_MS, values }
+        return values
+      })
+      .finally(() => {
+        pendingTreeWiseMaster = null
+      })
+  }
+  return pendingTreeWiseMaster
+}
+
+export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Promise<TreeWiseQueryData> {
+  const authHeader = getBasicAuthHeader()
+
+  if (!authHeader) {
+    throw new Error("Harvest API credentials are not configured")
+  }
+
+  // Validate the tree range before issuing any upstream requests.
+  parseTreeRangeBoundary(filters.treeFrom)
+  parseTreeRangeBoundary(filters.treeTo)
+  if (!isBlank(filters.treeFrom) && !isBlank(filters.treeTo)) {
+    const from = parseTreeRangeBoundary(filters.treeFrom)!
+    const to = parseTreeRangeBoundary(filters.treeTo)!
+    if (compareNumericTreeIdentifiers(from, to) > 0) {
+      throw new Error("Tree Number From cannot be greater than Tree Number To.")
+    }
+  }
+
+  const baseFilters: DetailedQueryFilters = {
+    treeFrom: filters.treeFrom,
+    treeTo: filters.treeTo,
+    cycleFrom: filters.cycleFrom,
+    cycleTo: filters.cycleTo,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+  }
+  const valueFilters: DetailedQueryFilters = {
+    ...baseFilters,
+    nutsFrom: filters.nutsFrom,
+    nutsTo: filters.nutsTo,
+    saleFrom: filters.saleFrom,
+    saleTo: filters.saleTo,
+  }
+
+  const [cycleResponse, performanceResponse, matrixRows, filteredRows, treeMasterNumbers] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/cycles`, {
+      headers: { Authorization: authHeader, Accept: "application/json" },
+      cache: "no-store",
+    }),
+    fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+      headers: { Authorization: authHeader, Accept: "application/json" },
+      cache: "no-store",
+    }),
+    fetchApiDetailedQueryRows(baseFilters, authHeader),
+    hasValueRange(filters.nutsFrom, filters.nutsTo) || hasValueRange(filters.saleFrom, filters.saleTo)
+      ? fetchApiDetailedQueryRows(valueFilters, authHeader)
+      : Promise.resolve<ApiDetailedQueryRow[]>([]),
+    fetchCachedTreeMaster(),
+  ])
+
+  if (!cycleResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${cycleResponse.status}`, cycleResponse.status)
+  }
+  if (!performanceResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${performanceResponse.status}`, performanceResponse.status)
+  }
+
+  const apiCycles = (await cycleResponse.json()) as ApiCycleRow[]
+  const performance = (await performanceResponse.json()) as {
+    rows: ApiTreePerformanceRow[]
+    details: ApiTreePerformanceDetail[]
+  }
+
+  const explicitCycleWindow = hasValueRange(filters.cycleFrom, filters.cycleTo) || hasValueRange(filters.dateFrom, filters.dateTo)
+  const matchingCycles = apiCycles
+    .filter((cycle) => cycleMatchesFilters(cycle, filters))
+    .sort((left, right) => toCycleNumber(right.harvest_cycle) - toCycleNumber(left.harvest_cycle))
+  const selectedApiCycles = explicitCycleWindow ? matchingCycles : matchingCycles.slice(0, 10)
+  const cycles: TreeWiseQueryCycle[] = selectedApiCycles.map((cycle) => ({
+    cycle: cycle.harvest_cycle,
+    startDate: cycle.harvest_start_date,
+    endDate: cycle.harvest_end_date ?? "",
+  }))
+  const selectedCycleIds = new Set(cycles.map((cycle) => cycle.cycle))
+
+  const recordsByTree = new Map<string, Map<string, TreeWiseQueryCycleValue>>()
+  const rowMetadata = new Map<string, { plot: string; classification: string }>()
+  for (const row of matrixRows) {
+    if (!selectedCycleIds.has(row.harvest_cycle)) continue
+    if (!inDateRange(row.harvest_date, filters.dateFrom, filters.dateTo)) continue
+
+    rowMetadata.set(row.tree_no, { plot: row.plot, classification: row.category })
+    const byCycle = recordsByTree.get(row.tree_no) ?? new Map<string, TreeWiseQueryCycleValue>()
+    const current = byCycle.get(row.harvest_cycle) ?? { bunches: 0, nuts: 0, sale: 0, hasRecord: false }
+    current.bunches += row.total_bunches ?? 0
+    current.nuts += row.total_nuts ?? 0
+    current.sale += toNumber(row.total_sale)
+    current.hasRecord = true
+    byCycle.set(row.harvest_cycle, current)
+    recordsByTree.set(row.tree_no, byCycle)
+  }
+
+  const performanceByTree = new Map(performance.details.map((detail) => [detail.tree_no, detail]))
+  const allTreeNumbers = new Set<string>([
+    ...treeMasterNumbers,
+    ...performance.details.map((detail) => detail.tree_no),
+    ...matrixRows.map((row) => row.tree_no),
+  ])
+  const valueFilterActive = filteredRows.length > 0 || hasValueRange(filters.nutsFrom, filters.nutsTo) || hasValueRange(filters.saleFrom, filters.saleTo)
+  const valueMatchedTrees = new Set(filteredRows.map((row) => row.tree_no))
+
+  const rows: TreeWiseQueryRow[] = []
+  for (const treeNo of allTreeNumbers) {
+    if (!inTreeNumberRange(treeNo, filters.treeFrom, filters.treeTo)) continue
+    if (valueFilterActive && !valueMatchedTrees.has(treeNo)) continue
+
+    const detail = performanceByTree.get(treeNo)
+    const fallbackMetadata = rowMetadata.get(treeNo)
+    const metadata = detail
+      ? { plot: detail.plot, classification: detail.category }
+      : fallbackMetadata ?? { plot: inferPlotFromTreeNumber(treeNo), classification: "" }
+
+    if (detail && !detailMatchesClassification(detail, filters)) continue
+    if (!detail && (!isAll(filters.plot1Classification) || !isAll(filters.plot2Classification))) continue
+
+    const byCycle = recordsByTree.get(treeNo)
+    if (!filters.includeNoRecord && !byCycle) continue
+
+    const cycleValues: Record<string, TreeWiseQueryCycleValue> = {}
+    let totalBunches = 0
+    let totalNuts = 0
+    let totalSale = 0
+    let totalMissed = 0
+
+    for (const cycle of cycles) {
+      const value = byCycle?.get(cycle.cycle) ?? { bunches: 0, nuts: 0, sale: 0, hasRecord: false }
+      cycleValues[cycle.cycle] = value
+      totalBunches += value.bunches
+      totalNuts += value.nuts
+      totalSale += value.sale
+      if (!value.hasRecord) totalMissed += 1
+    }
+
+    if (!inNumberRange(totalMissed, filters.missedFrom, filters.missedTo)) continue
+
+    rows.push({
+      treeNo,
+      plot: metadata.plot,
+      classification: metadata.classification,
+      reason: classificationReason(metadata.plot, metadata.classification, performance.rows),
+      cycles: cycleValues,
+      totalBunches,
+      totalNuts,
+      totalSale,
+      totalMissed,
+    })
+  }
+
+  rows.sort((left, right) => compareTreeNumbers(left.treeNo, right.treeNo))
+
+  return {
+    cycles,
+    rows,
     usedMockFallback: false,
   }
 }

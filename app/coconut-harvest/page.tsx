@@ -1,4 +1,4 @@
-import { Sprout, Trees, CalendarRange, Trophy, Search } from "lucide-react"
+import { Sprout, Trees, CalendarRange, Trophy, Search, TableProperties } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { HarvestHubCard, type HarvestHubCardProps } from "@/components/coconut/harvest-hub-card"
@@ -32,6 +32,13 @@ const hubCards: HarvestHubCardProps[] = [
     icon: Search,
     accent: "bg-chart-4/15 text-chart-4",
   },
+  {
+    title: "Tree-wise Table Query",
+    description: "Compare selected cycle values tree by tree and export them to Excel.",
+    href: "/coconut-harvest/tree-wise-query",
+    icon: TableProperties,
+    accent: "bg-chart-5/15 text-chart-5",
+  },
 ]
 
 export default function CoconutHarvestPage() {
@@ -53,8 +60,8 @@ export default function CoconutHarvestPage() {
           </div>
         </div>
 
-        {/* 4 hub cards */}
-        <section aria-label="Coconut Harvest views" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Coconut Harvest view cards */}
+        <section aria-label="Coconut Harvest views" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {hubCards.map((card) => (
             <HarvestHubCard key={card.title} {...card} />
           ))}

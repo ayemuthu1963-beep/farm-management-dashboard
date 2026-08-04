@@ -36,11 +36,12 @@ Then open http://localhost:3000
 | Route                    | File                                | Status            |
 | ------------------------ | ----------------------------------- | ----------------- |
 | `/`                      | `app/page.tsx`                      | Home (approved)   |
-| `/coconut-harvest`       | `app/coconut-harvest/page.tsx`      | Hub — 4 view cards |
+| `/coconut-harvest`       | `app/coconut-harvest/page.tsx`      | Hub — 5 view cards |
 | `/coconut-harvest/tree-view`        | `app/coconut-harvest/tree-view/page.tsx`        | Per-tree harvest history |
 | `/coconut-harvest/cycle-view`       | `app/coconut-harvest/cycle-view/page.tsx`       | Cycle & date-range summary |
 | `/coconut-harvest/tree-performance` | `app/coconut-harvest/tree-performance/page.tsx` | Plot 1 & Plot 2 classification |
 | `/coconut-harvest/detailed-query`   | `app/coconut-harvest/detailed-query/page.tsx`   | Multi-filter search form |
+| `/coconut-harvest/tree-wise-query`  | `app/coconut-harvest/tree-wise-query/page.tsx`  | Tree-wise cycle table and Excel export |
 | `/jackfruit-monitoring`  | `app/jackfruit-monitoring/page.tsx` | Approved          |
 | `/well-water`            | `app/well-water/page.tsx`           | Approved          |
 | `/motor-runtime`         | `app/motor-runtime/page.tsx`        | Approved          |

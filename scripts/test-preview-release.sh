@@ -30,6 +30,7 @@ check /coconut-harvest/cycle-view "Harvest Cycle"
 check '/api/coconut-harvest/cycle-details?cycle=19' '"cycle":19'
 check /coconut-harvest/tree-performance "Tree Performance"
 check /coconut-harvest/detailed-query "Detailed Search and Filter"
+check /coconut-harvest/tree-wise-query "Tree-wise Table Query"
 check /jackfruit-monitoring "Jackfruit"
 check /well-water "Well Water"
 check /motor-runtime "Motor Runtime"
