@@ -14,6 +14,7 @@ export type AnalysisStatus =
   | "partially_confirmed"
   | "failed"
   | "rejected"
+export type SourceType = "text_paste" | "text_file" | "screenshot"
 
 export interface Motor {
   id: MotorId
@@ -84,10 +85,15 @@ export interface OcrUsageRecord {
 export interface UploadRecord {
   id: number
   motor_id: MotorId
+  source_type: SourceType
   original_filename: string
-  mime_type: string
-  file_size: number
-  sha256: string
+  mime_type: string | null
+  file_size: number | null
+  sha256: string | null
+  text_sha256: string | null
+  raw_text: string | null
+  import_status: string
+  parser_version: string | null
   upload_status: "uploaded" | "deleted"
   analysis_status: AnalysisStatus
   extractor_provider: string
@@ -140,6 +146,7 @@ export interface RunRecord {
   runtimeSeconds: number
   runtimeMinutes: number
   status: RunStatus
+  sourceType: SourceType | null
   screenshotId: number | null
   screenshotName: string
   extractedMessages: ExtractedMessage[]

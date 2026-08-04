@@ -25,7 +25,9 @@ type ApiRecord = {
   status: RunStatus
   review_notes: string | null
   on_screenshot_id: number | null
+  on_source_type: "text_paste" | "text_file" | "screenshot" | null
   off_screenshot_id: number | null
+  off_source_type: "text_paste" | "text_file" | "screenshot" | null
 }
 
 type ApiSummaryMotor = {
@@ -116,6 +118,7 @@ export async function loadRecords(query: RecordsQuery): Promise<RecordsResponse>
       const run = (runs.get(key) ?? 0) + 1
       runs.set(key, run)
       const screenshotId = row.on_screenshot_id ?? row.off_screenshot_id
+      const sourceType = row.on_source_type ?? row.off_source_type
       return {
         id: String(row.id),
         date: row.operation_date,
@@ -130,8 +133,11 @@ export async function loadRecords(query: RecordsQuery): Promise<RecordsResponse>
         runtimeSeconds: row.runtime_seconds ?? 0,
         runtimeMinutes: Math.round((row.runtime_seconds ?? 0) / 60),
         status: row.status,
-        screenshotId,
-        screenshotName: screenshotId ? `Screenshot ${screenshotId}` : "No screenshot available",
+        sourceType,
+        screenshotId: sourceType === "screenshot" ? screenshotId : null,
+        screenshotName: sourceType === "screenshot" && screenshotId
+          ? `Screenshot ${screenshotId}`
+          : screenshotId ? `Text import ${screenshotId}` : "No source available",
         extractedMessages: [],
         matchingNote: row.review_notes ?? (row.status === "complete" ? "Confirmed MOTOR ON/OFF session." : "Owner review required."),
       }
@@ -151,6 +157,7 @@ export async function loadSummary(query: Pick<RecordsQuery, "startDate" | "endDa
     combined_runtime_seconds: number
     complete_runs: number
     unmatched_or_review: number
+    sources_processed?: number
     screenshots_processed: number
   }>(response)
   return {
@@ -168,7 +175,7 @@ export async function loadSummary(query: Pick<RecordsQuery, "startDate" | "endDa
     combinedSeconds: payload.combined_runtime_seconds,
     completeRuns: payload.complete_runs,
     unmatched: payload.unmatched_or_review,
-    screenshotsProcessed: payload.screenshots_processed,
+    screenshotsProcessed: payload.sources_processed ?? payload.screenshots_processed,
   }
 }
 
@@ -177,6 +184,25 @@ export async function uploadScreenshots(motorId: MotorId, files: File[]): Promis
   body.set("motor_id", motorId)
   for (const file of files) body.append("files", file, file.name)
   return jsonResponse(await fetch("/api/motor-screenshot-analysis/uploads", { method: "POST", body }))
+}
+
+export async function createTextImports(
+  motorId: MotorId,
+  input: { rawText?: string; files?: File[] },
+): Promise<{ imports: UploadRecord[]; duplicates: Array<{ original_filename: string; existing_import_id: number | null; message: string }> }> {
+  const body = new FormData()
+  body.set("motor_id", motorId)
+  if (input.rawText?.trim()) body.set("raw_text", input.rawText)
+  for (const file of input.files ?? []) body.append("files", file, file.name)
+  return jsonResponse(await fetch("/api/motor-screenshot-analysis/text-imports", { method: "POST", body }))
+}
+
+export async function parseTextImport(importId: number): Promise<UploadDetail> {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}/parse`, { method: "POST" }))
+}
+
+export async function getTextImport(importId: number): Promise<UploadDetail> {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}`, { cache: "no-store" }))
 }
 
 export async function getUpload(uploadId: number): Promise<UploadDetail> {
@@ -212,4 +238,16 @@ export async function confirmUpload(uploadId: number) {
 
 export async function rejectUpload(uploadId: number) {
   return jsonResponse(await fetch(`/api/motor-screenshot-analysis/uploads/${uploadId}/reject`, { method: "POST" }))
+}
+
+export async function confirmTextImport(importId: number) {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}/confirm`, { method: "POST" }))
+}
+
+export async function rejectTextImport(importId: number) {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}/reject`, { method: "POST" }))
+}
+
+export async function deleteTextImport(importId: number) {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}`, { method: "DELETE" }))
 }

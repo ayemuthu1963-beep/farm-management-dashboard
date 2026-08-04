@@ -1,5 +1,19 @@
 import type { Motor, MotorId } from "./motor-screenshot-analysis-types"
 
+export const SCREENSHOT_OCR_ENABLED = false
+
+export const MOTOR_TEXT_SAMPLE = `30/07/2026 09:14:10 | MOTOR ON BECAUSE OF RTC ON TIME
+30/07/2026 09:35:00 | MOTOR OFF BECAUSE OF RTC PROGRAM
+30/07/2026 11:36:39 | MOTOR ON BECAUSE OF RTC ON TIME
+30/07/2026 12:35:00 | MOTOR OFF BECAUSE OF RTC PROGRAM
+30/07/2026 13:36:39 | MOTOR ON BECAUSE OF RTC ON TIME
+30/07/2026 14:35:00 | MOTOR OFF BECAUSE OF RTC PROGRAM
+30/07/2026 15:12:25 | MTRON,samsung SM-G965F
+30/07/2026 15:14:04 | MOTOR ON III PHASE
+30/07/2026 15:34:53 | MTROF,samsung SM-G965F
+30/07/2026 15:34:53 | MOTOR OFF III PHASE
+30/07/2026 16:35:00 | MOTOR OFF BECAUSE OF RTC PROGRAM`
+
 const STYLES: Record<MotorId, Pick<Motor, "badgeClass" | "dotClass" | "accentTextClass">> = {
   "motor-1": {
     badgeClass: "bg-[color-mix(in_oklab,var(--chart-1)_16%,transparent)] text-[var(--chart-1)]",

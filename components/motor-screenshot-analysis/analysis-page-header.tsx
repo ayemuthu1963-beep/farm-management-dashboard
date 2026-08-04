@@ -22,8 +22,8 @@ export function AnalysisPageHeader() {
             Motor Screenshot Runtime Analysis
           </h1>
           <p className="mt-1 max-w-3xl text-pretty text-sm leading-relaxed text-muted-foreground">
-            Upload Niagara Smart Drip screenshots and review date-wise motor operating times and
-            total runtime.
+            Paste scanned motor notification text, upload a TXT file, or optionally upload a screenshot.
+            The system identifies MOTOR/MTR records, prepares the ON/OFF pairs and calculates date-wise motor runtime.
           </p>
         </div>
       </div>

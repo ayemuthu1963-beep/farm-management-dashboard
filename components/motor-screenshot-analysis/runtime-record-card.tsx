@@ -55,11 +55,12 @@ export function RuntimeRecordCard({
         </div>
         <button
           type="button"
+          disabled={!record.screenshotId}
           onClick={() => onViewScreenshot(record)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40"
         >
           <ImageIcon className="size-3.5" aria-hidden="true" />
-          View Screenshot
+          {record.sourceType === "screenshot" ? "View Screenshot" : "Text import"}
           <ArrowRight className="size-3.5" aria-hidden="true" />
         </button>
       </div>

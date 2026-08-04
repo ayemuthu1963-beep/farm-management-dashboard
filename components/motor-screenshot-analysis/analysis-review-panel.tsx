@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, CheckCircle2, RefreshCw, Save, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, RefreshCw, Save, Trash2, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { formatExactRuntime } from "@/lib/motor-screenshot-analysis-format"
@@ -60,6 +60,7 @@ export function AnalysisReviewPanel({
   onConfirm,
   onReject,
   onReanalyse,
+  onDelete,
 }: {
   detail: UploadDetail
   motors: Motor[]
@@ -68,17 +69,19 @@ export function AnalysisReviewPanel({
   onConfirm: (messages: ReviewMessage[]) => Promise<void>
   onReject: () => Promise<void>
   onReanalyse: () => Promise<void>
+  onDelete: () => Promise<void>
 }) {
   const [messages, setMessages] = useState(detail.messages)
   useEffect(() => setMessages(detail.messages), [detail])
   const motor = motors.find((item) => item.id === detail.upload.motor_id)
+  const isScreenshot = detail.upload.source_type === "screenshot"
   const provisionalSessions = detail.provisional_sessions ?? []
   const provisionalComplete = provisionalSessions.filter((session) => session.status === "complete")
   const provisionalSeconds = provisionalComplete.reduce((sum, session) => sum + (session.runtime_seconds ?? 0), 0)
   const warningCount = messages.filter((message) => message.included && (
     message.event_type === "unknown"
     || !message.event_timestamp
-    || Boolean(message.parser_warning)
+    || (Boolean(message.parser_warning) && !["corrected", "confirmed"].includes(message.review_status))
     || message.review_status === "needs_review"
     || (message.confidence ?? 1) < 0.8
   )).length
@@ -137,17 +140,26 @@ export function AnalysisReviewPanel({
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,2fr)]">
         <div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/motor-screenshot-analysis/uploads/${detail.upload.id}/image`}
-            alt={`Uploaded source ${detail.upload.original_filename}`}
-            className="max-h-[65vh] w-full rounded-lg border border-border bg-muted object-contain"
-          />
+          {isScreenshot ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/motor-screenshot-analysis/uploads/${detail.upload.id}/image`}
+              alt={`Uploaded source ${detail.upload.original_filename}`}
+              className="max-h-[65vh] w-full rounded-lg border border-border bg-muted object-contain"
+            />
+          ) : (
+            <div className="rounded-lg border border-border bg-muted/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Imported source text</p>
+              <pre className="mt-2 max-h-[65vh] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">{detail.upload.raw_text}</pre>
+            </div>
+          )}
           <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
             <div className="flex justify-between gap-3"><dt>Source</dt><dd className="truncate font-medium text-foreground">{detail.upload.original_filename}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Source type</dt><dd className="font-medium text-foreground">{detail.upload.source_type.replaceAll("_", " ")}</dd></div>
             <div className="flex justify-between gap-3"><dt>Provider</dt><dd className="font-medium text-foreground">{detail.upload.extractor_provider}</dd></div>
+            {detail.upload.parser_version && <div className="flex justify-between gap-3"><dt>Parser</dt><dd className="font-medium text-foreground">{detail.upload.parser_version}</dd></div>}
             <div className="flex justify-between gap-3"><dt>Messages</dt><dd className="font-medium text-foreground">{messages.length}</dd></div>
-            <div className="flex justify-between gap-3"><dt>Vision units</dt><dd className="font-medium text-foreground">{detail.usage.reduce((sum, row) => sum + row.unit_count, 0)}</dd></div>
+            {isScreenshot && <div className="flex justify-between gap-3"><dt>Vision units</dt><dd className="font-medium text-foreground">{detail.usage.reduce((sum, row) => sum + row.unit_count, 0)}</dd></div>}
           </dl>
           {detail.usage.length > 0 && (
             <div className="mt-3 rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground">
@@ -165,9 +177,9 @@ export function AnalysisReviewPanel({
         <div className="min-w-0 space-y-3">
           {messages.map((message) => (
             <article key={message.id} className="rounded-xl border border-border bg-background p-3">
-              <TilePreview uploadId={detail.upload.id} box={message.geometry?.tile} tile={message.tile_index + 1} />
+              {isScreenshot && <TilePreview uploadId={detail.upload.id} box={message.geometry?.tile} tile={message.tile_index + 1} />}
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">Tile {message.tile_index + 1}</p>
+                <p className="text-sm font-semibold text-foreground">{isScreenshot ? "Tile" : "Imported record"} {message.tile_index + 1}</p>
                 <label className="flex items-center gap-2 text-xs font-medium text-foreground">
                   <input type="checkbox" checked={message.included} onChange={(event) => update(message.id, { included: event.target.checked })} />
                   Include
@@ -211,7 +223,7 @@ export function AnalysisReviewPanel({
                 </label>
                 <div className="text-xs text-muted-foreground">
                   Confidence: <span className="font-medium text-foreground">{message.confidence == null ? "Not supplied" : `${Math.round(message.confidence * 100)}%`}</span>
-                  <br />Source screenshots: <span className="font-medium text-foreground">{message.source_count}</span>
+                  <br />Source imports: <span className="font-medium text-foreground">{message.source_count}</span>
                 </div>
               </div>
               {(message.event_type === "unknown" || message.review_status === "needs_review") && (
@@ -229,8 +241,9 @@ export function AnalysisReviewPanel({
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
         <Button type="button" variant="outline" disabled={busy || messages.length === 0} onClick={() => onSave(messages)}><Save className="size-4" /> Save Corrections</Button>
         <Button type="button" disabled={busy || messages.length === 0 || warningCount > 0} onClick={() => onConfirm(messages)}><CheckCircle2 className="size-4" /> Confirm and Save</Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={onReanalyse}><RefreshCw className="size-4" /> Reanalyse</Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={onReject}><XCircle className="size-4" /> Reject Analysis</Button>
+        <Button type="button" variant="outline" disabled={busy} onClick={onReanalyse}><RefreshCw className="size-4" /> {isScreenshot ? "Reanalyse" : "Parse Again"}</Button>
+        <Button type="button" variant="outline" disabled={busy} onClick={onReject}><XCircle className="size-4" /> {isScreenshot ? "Reject Analysis" : "Reject Import"}</Button>
+        {!isScreenshot && <Button type="button" variant="outline" disabled={busy} onClick={onDelete}><Trash2 className="size-4" /> Delete Import</Button>}
         {warningCount > 0 && <span className="text-xs text-destructive">{warningCount} included candidate{warningCount === 1 ? "" : "s"} still require review.</span>}
       </div>
     </section>

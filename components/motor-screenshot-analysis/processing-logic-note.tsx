@@ -5,7 +5,8 @@ import { ChevronDown, Info, ListChecks } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const LOGIC_POINTS = [
-  "Each vertically arranged message tile is treated separately.",
+  "Pasted text, TXT files and optional screenshot OCR use the same review and pairing workflow.",
+  "Each structured line or nearby message/date/time group is treated as a separate record.",
   "Only first lines beginning with MOTOR or MTR are considered.",
   "MTRON and MTROF are command messages.",
   "MOTOR ON and MOTOR OFF are actual motor-status messages.",
@@ -24,8 +25,8 @@ export function ProcessingLogicNote() {
       <div className="flex gap-3 p-4">
         <Info className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
         <p className="text-sm leading-relaxed text-foreground">
-          Screenshots are validated, hashed and stored privately by the authenticated MFMS backend.
-          Extracted candidates require owner review before MOTOR ON/OFF sessions affect confirmed totals.
+          Text imports are validated, hashed for duplicate protection and retained in PostgreSQL with their provenance.
+          Parsed candidates require owner review before MOTOR ON/OFF sessions affect confirmed totals.
         </p>
       </div>
 

@@ -44,24 +44,26 @@ export function ScreenshotUploadPanel({
   state,
   message,
   onAnalyse,
+  disabled = false,
 }: {
   motors?: Motor[]
   state: UploadWorkflowState
   message?: string | null
   onAnalyse: (images: SelectedScreenshotInput[]) => Promise<void>
+  disabled?: boolean
 }) {
   const [motorId, setMotorId] = useState<MotorId>(motors[0]?.id ?? "motor-1")
   const [images, setImages] = useState<SelectedScreenshotInput[]>([])
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const imagesRef = useRef<SelectedScreenshotInput[]>([])
-  const busy = state === "uploading" || state === "analysing"
+  const busy = disabled || state === "uploading" || state === "analysing"
 
   imagesRef.current = images
   useEffect(() => () => imagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl)), [])
 
   function addFiles(files: FileList | null) {
-    if (!files) return
+    if (!files || disabled) return
     const motor = motors.find((item) => item.id === motorId) ?? motors[0]
     if (!motor) return
     const next = Array.from(files)
@@ -99,7 +101,9 @@ export function ScreenshotUploadPanel({
         <div>
           <h2 id="upload-heading" className="font-serif text-lg font-bold text-foreground">Upload screenshots</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            PNG, JPG and JPEG only. Images are sent through the authenticated MFMS route to private storage.
+            {disabled
+              ? "PNG, JPG and JPEG support is preserved for optional later activation; uploads are currently disabled."
+              : "PNG, JPG and JPEG only. Images are sent through the authenticated MFMS route to private storage."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -140,6 +144,7 @@ export function ScreenshotUploadPanel({
           type="file"
           accept="image/png,image/jpeg"
           multiple
+          disabled={disabled}
           className="sr-only"
           aria-label="Select screenshot images"
           onChange={(event) => { addFiles(event.target.files); event.target.value = "" }}

@@ -3,7 +3,7 @@ import {
   CalendarRange,
   CheckCircle2,
   Clock,
-  Images,
+  Files,
   Sigma,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -103,9 +103,9 @@ export function AnalysisSummaryCards({
         icon={<Sigma className="size-4" aria-hidden="true" />}
       />
       <Tile
-        label="Screenshots Processed"
+        label="Sources Processed"
         value={String(screenshotsProcessed)}
-        icon={<Images className="size-4" aria-hidden="true" />}
+        icon={<Files className="size-4" aria-hidden="true" />}
       />
       <Tile
         label="Complete Runs"

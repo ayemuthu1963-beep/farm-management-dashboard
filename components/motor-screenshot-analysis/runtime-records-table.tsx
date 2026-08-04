@@ -51,7 +51,7 @@ export function RuntimeRecordsTable({
             <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">OFF Reason / Command</th>
             <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{headerButton("Runtime", runtimeSort)}</th>
             <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
-            <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Screenshot</th>
+            <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Source</th>
           </tr></thead>
           <tbody>
             {records.map((record) => (
@@ -65,7 +65,7 @@ export function RuntimeRecordsTable({
                 <td className="px-3 py-2.5 text-muted-foreground">{record.offReason ?? "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{record.status === "complete" ? formatRuntime(record.runtimeMinutes) : "—"}</td>
                 <td className="px-3 py-2.5"><StatusBadge status={record.status} /></td>
-                <td className="px-3 py-2.5"><button type="button" disabled={!record.screenshotId} onClick={() => onViewScreenshot(record)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium disabled:opacity-40"><ImageIcon className="size-3.5" /> View</button></td>
+                <td className="px-3 py-2.5"><button type="button" disabled={!record.screenshotId} onClick={() => onViewScreenshot(record)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium disabled:opacity-40"><ImageIcon className="size-3.5" /> {record.sourceType === "screenshot" ? "View" : "Text import"}</button></td>
               </tr>
             ))}
             {records.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">No records match the current filters.</td></tr>}

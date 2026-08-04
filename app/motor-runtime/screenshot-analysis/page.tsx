@@ -9,11 +9,17 @@ import { FALLBACK_MOTORS } from "@/lib/motor-screenshot-analysis-config"
 import { groupByDate } from "@/lib/motor-screenshot-analysis-data"
 import {
   analyseUpload,
+  confirmTextImport,
   confirmUpload,
+  createTextImports,
+  deleteTextImport,
   getUpload,
+  getTextImport,
   loadMotors,
   loadRecords,
   loadSummary,
+  parseTextImport,
+  rejectTextImport,
   rejectUpload,
   updateReviewMessage,
   uploadScreenshots,
@@ -22,7 +28,8 @@ import {
 import type { Motor, MotorId, ReviewMessage, RunRecord, UploadDetail } from "@/lib/motor-screenshot-analysis-types"
 import { formatDateRange } from "@/lib/motor-screenshot-analysis-format"
 import { AnalysisPageHeader } from "@/components/motor-screenshot-analysis/analysis-page-header"
-import { ScreenshotUploadPanel, type SelectedScreenshotInput, type UploadWorkflowState } from "@/components/motor-screenshot-analysis/screenshot-upload-panel"
+import type { SelectedScreenshotInput, UploadWorkflowState } from "@/components/motor-screenshot-analysis/screenshot-upload-panel"
+import { SourceInputPanel, type TextImportInput } from "@/components/motor-screenshot-analysis/source-input-panel"
 import { AnalysisReviewPanel } from "@/components/motor-screenshot-analysis/analysis-review-panel"
 import { ProcessingLogicNote } from "@/components/motor-screenshot-analysis/processing-logic-note"
 import { AnalysisSummaryCards } from "@/components/motor-screenshot-analysis/analysis-summary-cards"
@@ -43,6 +50,7 @@ export default function ScreenshotAnalysisPage() {
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof loadSummary>> | null>(null)
   const [activeRecord, setActiveRecord] = useState<RunRecord | null>(null)
   const [activeUpload, setActiveUpload] = useState<UploadDetail | null>(null)
+  const [reviewQueue, setReviewQueue] = useState<UploadDetail[]>([])
   const [workflowState, setWorkflowState] = useState<UploadWorkflowState>("idle")
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -136,6 +144,7 @@ export default function ScreenshotAnalysisPage() {
       }
       if (lastDetail) {
         setActiveUpload(lastDetail)
+        setReviewQueue([lastDetail])
         setWorkflowState(lastDetail.upload.analysis_status)
         if (!lastDetail.upload.error_message) {
           setWorkflowMessage(`${lastDetail.messages.length} candidates are ready for owner review${duplicateCount ? `; ${duplicateCount} duplicate file(s) skipped` : ""}.`)
@@ -150,12 +159,53 @@ export default function ScreenshotAnalysisPage() {
     }
   }
 
+  async function handleTextImport(input: TextImportInput) {
+    setWorkflowState("uploading")
+    setWorkflowMessage("Importing text into the private MFMS review workflow…")
+    let lastDetail: UploadDetail | null = null
+    const parsedDetails: UploadDetail[] = []
+    try {
+      const created = await createTextImports(input.motorId, { rawText: input.rawText, files: input.files })
+      for (const item of created.imports) {
+        setWorkflowState("analysing")
+        setWorkflowMessage(`Parsing ${item.original_filename}…`)
+        lastDetail = await parseTextImport(item.id)
+        parsedDetails.push(lastDetail)
+      }
+      if (lastDetail) {
+        setActiveUpload(parsedDetails[0])
+        setReviewQueue(parsedDetails)
+        setWorkflowState(parsedDetails[0].upload.analysis_status)
+        const recordCount = parsedDetails.reduce((sum, detail) => sum + detail.messages.length, 0)
+        setWorkflowMessage(`${recordCount} MOTOR/MTR records from ${parsedDetails.length} import(s) are ready for owner review${created.duplicates.length ? `; ${created.duplicates.length} duplicate import(s) skipped` : ""}.`)
+      } else {
+        setWorkflowState(created.duplicates.length ? "queued" : "failed")
+        setWorkflowMessage(created.duplicates.length ? `${created.duplicates.length} duplicate import(s) were safely skipped.` : "No text import was created.")
+      }
+    } catch (error) {
+      setWorkflowState("failed")
+      setWorkflowMessage(error instanceof Error ? error.message : "Text import failed.")
+    }
+  }
+
+  async function reloadActive() {
+    if (!activeUpload) throw new Error("No active import is selected.")
+    return activeUpload.upload.source_type === "screenshot"
+      ? getUpload(activeUpload.upload.id)
+      : getTextImport(activeUpload.upload.id)
+  }
+
+  function storeReviewDetail(detail: UploadDetail) {
+    setActiveUpload(detail)
+    setReviewQueue((current) => current.map((item) => item.upload.id === detail.upload.id ? detail : item))
+  }
+
   async function saveMessages(messages: ReviewMessage[]) {
     if (!activeUpload) return
     setBusyReview(true)
     try {
       await Promise.all(messages.map(updateReviewMessage))
-      setActiveUpload(await getUpload(activeUpload.upload.id))
+      storeReviewDetail(await reloadActive())
       setWorkflowMessage("Corrections saved. Review them before confirmation.")
     } catch (error) {
       setWorkflowMessage(error instanceof Error ? error.message : "Corrections could not be saved.")
@@ -169,9 +219,10 @@ export default function ScreenshotAnalysisPage() {
     setBusyReview(true)
     try {
       await Promise.all(messages.map(updateReviewMessage))
-      await confirmUpload(activeUpload.upload.id)
-      const detail = await getUpload(activeUpload.upload.id)
-      setActiveUpload(detail)
+      if (activeUpload.upload.source_type === "screenshot") await confirmUpload(activeUpload.upload.id)
+      else await confirmTextImport(activeUpload.upload.id)
+      const detail = await reloadActive()
+      storeReviewDetail(detail)
       setWorkflowState(detail.upload.analysis_status)
       setWorkflowMessage("Owner-confirmed messages were paired transactionally and saved.")
       await refresh()
@@ -186,10 +237,11 @@ export default function ScreenshotAnalysisPage() {
     if (!activeUpload) return
     setBusyReview(true)
     try {
-      await rejectUpload(activeUpload.upload.id)
-      setActiveUpload(await getUpload(activeUpload.upload.id))
+      if (activeUpload.upload.source_type === "screenshot") await rejectUpload(activeUpload.upload.id)
+      else await rejectTextImport(activeUpload.upload.id)
+      storeReviewDetail(await reloadActive())
       setWorkflowState("rejected")
-      setWorkflowMessage("Analysis rejected. It does not affect runtime totals.")
+      setWorkflowMessage(`${activeUpload.upload.source_type === "screenshot" ? "Analysis" : "Import"} rejected. It does not affect runtime totals.`)
     } catch (error) {
       setWorkflowMessage(error instanceof Error ? error.message : "Analysis could not be rejected.")
     } finally {
@@ -202,13 +254,32 @@ export default function ScreenshotAnalysisPage() {
     setBusyReview(true)
     setWorkflowState("analysing")
     try {
-      setActiveUpload(await analyseUpload(activeUpload.upload.id))
+      storeReviewDetail(activeUpload.upload.source_type === "screenshot"
+        ? await analyseUpload(activeUpload.upload.id)
+        : await parseTextImport(activeUpload.upload.id))
       setWorkflowState("awaiting_review")
       setWorkflowMessage("Reanalysis completed; inspect every candidate again.")
     } catch (error) {
-      setActiveUpload(await getUpload(activeUpload.upload.id))
+      storeReviewDetail(await reloadActive())
       setWorkflowState("failed")
       setWorkflowMessage(error instanceof Error ? error.message : "Reanalysis failed.")
+    } finally {
+      setBusyReview(false)
+    }
+  }
+
+  async function deleteImport() {
+    if (!activeUpload || activeUpload.upload.source_type === "screenshot") return
+    setBusyReview(true)
+    try {
+      await deleteTextImport(activeUpload.upload.id)
+      const remaining = reviewQueue.filter((item) => item.upload.id !== activeUpload.upload.id)
+      setReviewQueue(remaining)
+      setActiveUpload(remaining[0] ?? null)
+      setWorkflowState(remaining[0]?.upload.analysis_status ?? "idle")
+      setWorkflowMessage("Text import deleted. Unconfirmed records do not affect runtime totals.")
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Text import could not be deleted.")
     } finally {
       setBusyReview(false)
     }
@@ -220,11 +291,17 @@ export default function ScreenshotAnalysisPage() {
         <Header />
         <AnalysisPageHeader />
         <div className="flex flex-col gap-4">
-          <ScreenshotUploadPanel motors={motors} state={workflowState} message={workflowMessage} onAnalyse={handleAnalyse} />
+          <SourceInputPanel motors={motors} state={workflowState} message={workflowMessage} onTextImport={handleTextImport} onScreenshotAnalyse={handleAnalyse} />
           <ProcessingLogicNote />
         </div>
+        {reviewQueue.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3" aria-label="Imports awaiting review">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Imports awaiting review</span>
+            {reviewQueue.map((detail) => <button key={detail.upload.id} type="button" onClick={() => setActiveUpload(detail)} className={`rounded-full border px-3 py-1 text-xs ${activeUpload?.upload.id === detail.upload.id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{detail.upload.original_filename} · {detail.messages.length} records</button>)}
+          </div>
+        )}
         {activeUpload && (
-          <AnalysisReviewPanel detail={activeUpload} motors={motors} busy={busyReview} onSave={saveMessages} onConfirm={confirmMessages} onReject={rejectAnalysis} onReanalyse={reanalyse} />
+          <AnalysisReviewPanel detail={activeUpload} motors={motors} busy={busyReview} onSave={saveMessages} onConfirm={confirmMessages} onReject={rejectAnalysis} onReanalyse={reanalyse} onDelete={deleteImport} />
         )}
         {dataError && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{dataError}</div>}
         <Panel title="Runtime summary" icon={CalendarRange} headerRight={<span className="text-xs font-medium normal-case tracking-normal text-muted-foreground">Selected period: {formatDateRange(range.startDate, range.endDate)}</span>}>
@@ -253,7 +330,7 @@ export default function ScreenshotAnalysisPage() {
             onViewScreenshot={setActiveRecord}
           />
         </div>
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4"><Info className="mt-0.5 size-5 shrink-0 text-muted-foreground" /><p className="text-sm leading-relaxed text-muted-foreground">Extraction is available only through an owner-approved backend provider. Uncertain candidates never affect totals until the owner reviews, corrects and confirms them. No OCR credentials or provider responses are exposed to the browser.</p></div>
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4"><Info className="mt-0.5 size-5 shrink-0 text-muted-foreground" /><p className="text-sm leading-relaxed text-muted-foreground">Text imports use deterministic parsing and the same owner review, pairing and runtime logic as optional screenshot OCR. Uncertain candidates never affect totals until the owner reviews, corrects and confirms them. Google Vision remains disabled.</p></div>
       </div>
       <ScreenshotViewer record={activeRecord} onClose={() => setActiveRecord(null)} />
     </DashboardShell>
