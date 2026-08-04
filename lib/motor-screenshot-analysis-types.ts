@@ -37,7 +37,7 @@ export interface ReviewMessage {
   raw_first_line: string
   normalized_line: string
   event_type: EventType
-  event_timestamp: string
+  event_timestamp: string | null
   original_date_text: string
   original_time_text: string
   command_source: CommandSource
@@ -46,7 +46,39 @@ export interface ReviewMessage {
   included: boolean
   review_status: string
   review_notes: string | null
+  raw_tile_text: string | null
+  geometry: {
+    tile?: GeometryBox | null
+    first_line?: GeometryBox | null
+    date?: GeometryBox | null
+    time?: GeometryBox | null
+    words?: Array<GeometryBox & { text: string; confidence: number | null }>
+  } | null
+  parser_warning: string | null
   source_count: number
+}
+
+export interface GeometryBox {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+export interface OcrUsageRecord {
+  id: number
+  provider: string
+  feature: string
+  google_project_id: string
+  requested_at: string
+  image_count: number
+  unit_count: number
+  status: "attempted" | "succeeded" | "failed"
+  attempt_number: number
+  processing_duration_ms: number | null
+  google_request_identifier: string | null
+  error_category: string | null
+  completed_at: string | null
 }
 
 export interface UploadRecord {
@@ -70,6 +102,7 @@ export interface UploadRecord {
 export interface UploadDetail {
   upload: UploadRecord
   messages: ReviewMessage[]
+  usage: OcrUsageRecord[]
 }
 
 export interface RunRecord {

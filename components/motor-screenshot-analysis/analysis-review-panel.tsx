@@ -4,12 +4,13 @@ import { useEffect, useState } from "react"
 import { AlertTriangle, CheckCircle2, RefreshCw, Save, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import type { Motor, ReviewMessage, UploadDetail } from "@/lib/motor-screenshot-analysis-types"
+import type { GeometryBox, Motor, ReviewMessage, UploadDetail } from "@/lib/motor-screenshot-analysis-types"
 import { MotorBadge } from "./motor-badge"
 
 const fieldClass = "w-full rounded-lg border border-input bg-background px-2.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
 
-function localDateTime(value: string): string {
+function localDateTime(value: string | null): string {
+  if (!value) return ""
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
     year: "numeric",
@@ -24,8 +25,19 @@ function localDateTime(value: string): string {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}`
 }
 
-function indiaIso(value: string): string {
-  return new Date(`${value}+05:30`).toISOString()
+function indiaIso(value: string): string | null {
+  return value ? new Date(`${value}+05:30`).toISOString() : null
+}
+
+function TilePreview({ uploadId, box, tile }: { uploadId: number; box?: GeometryBox | null; tile: number }) {
+  if (!box || box.x1 <= box.x0 || box.y1 <= box.y0) return null
+  return (
+    <div className="mb-3 overflow-hidden rounded-lg border border-border bg-muted" role="img" aria-label={`Cropped source preview for tile ${tile}`}>
+      <svg viewBox={`${box.x0} ${box.y0} ${box.x1 - box.x0} ${box.y1 - box.y0}`} className="h-24 w-full" preserveAspectRatio="xMidYMid meet">
+        <image href={`/api/motor-screenshot-analysis/uploads/${uploadId}/image`} x="0" y="0" width="1" height="1" preserveAspectRatio="none" />
+      </svg>
+    </div>
+  )
 }
 
 export function AnalysisReviewPanel({
@@ -48,7 +60,13 @@ export function AnalysisReviewPanel({
   const [messages, setMessages] = useState(detail.messages)
   useEffect(() => setMessages(detail.messages), [detail])
   const motor = motors.find((item) => item.id === detail.upload.motor_id)
-  const warningCount = messages.filter((message) => message.included && (message.event_type === "unknown" || message.review_status === "needs_review" || (message.confidence ?? 1) < 0.8)).length
+  const warningCount = messages.filter((message) => message.included && (
+    message.event_type === "unknown"
+    || !message.event_timestamp
+    || Boolean(message.parser_warning)
+    || message.review_status === "needs_review"
+    || (message.confidence ?? 1) < 0.8
+  )).length
 
   function update(id: number, patch: Partial<ReviewMessage>) {
     setMessages((current) => current.map((message) => message.id === id ? { ...message, ...patch } : message))
@@ -86,12 +104,25 @@ export function AnalysisReviewPanel({
             <div className="flex justify-between gap-3"><dt>Source</dt><dd className="truncate font-medium text-foreground">{detail.upload.original_filename}</dd></div>
             <div className="flex justify-between gap-3"><dt>Provider</dt><dd className="font-medium text-foreground">{detail.upload.extractor_provider}</dd></div>
             <div className="flex justify-between gap-3"><dt>Messages</dt><dd className="font-medium text-foreground">{messages.length}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Vision units</dt><dd className="font-medium text-foreground">{detail.usage.reduce((sum, row) => sum + row.unit_count, 0)}</dd></div>
           </dl>
+          {detail.usage.length > 0 && (
+            <div className="mt-3 rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">OCR audit</p>
+              {detail.usage.map((row) => (
+                <p key={row.id} className="mt-1">
+                  {row.feature} · attempt {row.attempt_number} · {row.status}
+                  {row.processing_duration_ms != null ? ` · ${row.processing_duration_ms} ms` : ""}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="min-w-0 space-y-3">
           {messages.map((message) => (
             <article key={message.id} className="rounded-xl border border-border bg-background p-3">
+              <TilePreview uploadId={detail.upload.id} box={message.geometry?.tile} tile={message.tile_index + 1} />
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">Tile {message.tile_index + 1}</p>
                 <label className="flex items-center gap-2 text-xs font-medium text-foreground">
@@ -102,6 +133,15 @@ export function AnalysisReviewPanel({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="sm:col-span-2 text-xs font-medium text-foreground">Raw first line
                   <input value={message.raw_first_line} onChange={(event) => update(message.id, { raw_first_line: event.target.value })} className={`mt-1 ${fieldClass}`} />
+                </label>
+                <div className="sm:col-span-2 text-xs text-muted-foreground">
+                  Parsed first line: <span className="font-medium text-foreground">{message.normalized_line}</span>
+                </div>
+                <label className="text-xs font-medium text-foreground">Original date text
+                  <input value={message.original_date_text} onChange={(event) => update(message.id, { original_date_text: event.target.value })} className={`mt-1 ${fieldClass}`} />
+                </label>
+                <label className="text-xs font-medium text-foreground">Original time text
+                  <input value={message.original_time_text} onChange={(event) => update(message.id, { original_time_text: event.target.value })} className={`mt-1 ${fieldClass}`} />
                 </label>
                 <label className="text-xs font-medium text-foreground">Parsed date and time (exact)
                   <input type="datetime-local" step="1" value={localDateTime(message.event_timestamp)} onChange={(event) => update(message.id, { event_timestamp: indiaIso(event.target.value) })} className={`mt-1 ${fieldClass}`} />
@@ -133,6 +173,9 @@ export function AnalysisReviewPanel({
               </div>
               {(message.event_type === "unknown" || message.review_status === "needs_review") && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-destructive"><AlertTriangle className="size-3.5" /> Resolve or exclude this uncertain result.</p>
+              )}
+              {message.parser_warning && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{message.parser_warning}</p>
               )}
             </article>
           ))}
