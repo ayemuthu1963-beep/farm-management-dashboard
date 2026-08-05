@@ -1177,27 +1177,6 @@ function inferPlotFromTreeNumber(treeNo: string): string {
   return numericTreeNo >= 1000 ? "Plot 2" : "Plot 1"
 }
 
-const TREE_WISE_MASTER_CACHE_MS = 15 * 60 * 1000
-let treeWiseMasterCache: { expiresAt: number; values: string[] } | null = null
-let pendingTreeWiseMaster: Promise<string[]> | null = null
-
-async function fetchCachedTreeMaster(): Promise<string[]> {
-  if (treeWiseMasterCache && treeWiseMasterCache.expiresAt > Date.now()) {
-    return treeWiseMasterCache.values
-  }
-  if (!pendingTreeWiseMaster) {
-    pendingTreeWiseMaster = fetchAllTreeNumbers()
-      .then((values) => {
-        treeWiseMasterCache = { expiresAt: Date.now() + TREE_WISE_MASTER_CACHE_MS, values }
-        return values
-      })
-      .finally(() => {
-        pendingTreeWiseMaster = null
-      })
-  }
-  return pendingTreeWiseMaster
-}
-
 export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Promise<TreeWiseQueryData> {
   const authHeader = getBasicAuthHeader()
 
@@ -1224,15 +1203,7 @@ export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Pro
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
   }
-  const valueFilters: DetailedQueryFilters = {
-    ...baseFilters,
-    nutsFrom: filters.nutsFrom,
-    nutsTo: filters.nutsTo,
-    saleFrom: filters.saleFrom,
-    saleTo: filters.saleTo,
-  }
-
-  const [cycleResponse, performanceResponse, matrixRows, filteredRows, treeMasterNumbers] = await Promise.all([
+  const [cycleResponse, performanceResponse, matrixRows] = await Promise.all([
     fetch(`${getApiBaseUrl()}/api/cycles`, {
       headers: { Authorization: authHeader, Accept: "application/json" },
       cache: "no-store",
@@ -1242,10 +1213,6 @@ export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Pro
       cache: "no-store",
     }),
     fetchApiDetailedQueryRows(baseFilters, authHeader),
-    hasValueRange(filters.nutsFrom, filters.nutsTo) || hasValueRange(filters.saleFrom, filters.saleTo)
-      ? fetchApiDetailedQueryRows(valueFilters, authHeader)
-      : Promise.resolve<ApiDetailedQueryRow[]>([]),
-    fetchCachedTreeMaster(),
   ])
 
   if (!cycleResponse.ok) {
@@ -1292,12 +1259,18 @@ export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Pro
 
   const performanceByTree = new Map(performance.details.map((detail) => [detail.tree_no, detail]))
   const allTreeNumbers = new Set<string>([
-    ...treeMasterNumbers,
     ...performance.details.map((detail) => detail.tree_no),
     ...matrixRows.map((row) => row.tree_no),
   ])
-  const valueFilterActive = filteredRows.length > 0 || hasValueRange(filters.nutsFrom, filters.nutsTo) || hasValueRange(filters.saleFrom, filters.saleTo)
-  const valueMatchedTrees = new Set(filteredRows.map((row) => row.tree_no))
+  const valueFilterActive = hasValueRange(filters.nutsFrom, filters.nutsTo) || hasValueRange(filters.saleFrom, filters.saleTo)
+  const valueMatchedTrees = new Set(
+    matrixRows
+      .filter((row) => (
+        inNumberRange(row.total_nuts ?? 0, filters.nutsFrom, filters.nutsTo)
+        && inNumberRange(toNumber(row.total_sale), filters.saleFrom, filters.saleTo)
+      ))
+      .map((row) => row.tree_no),
+  )
 
   const rows: TreeWiseQueryRow[] = []
   for (const treeNo of allTreeNumbers) {

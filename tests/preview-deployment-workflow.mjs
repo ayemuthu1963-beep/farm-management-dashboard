@@ -214,8 +214,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Harvest Live Counter view-only MFMS page with inclusive date ranges")
-assert.equal(manifest.base_commit, "f12a8f8022e4caff778699ac0c6be225105577ee")
+assert.equal(manifest.release_note, "Tree-wise Query request-flow repair without UI or data-contract changes")
+assert.equal(manifest.base_commit, "9de484dd65d38e58dd4f5f5f33fb40f8ee4fe733")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -225,16 +225,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/coconut-harvest/live-counter/route.ts",
-  "app/coconut-harvest/live-counter/page.tsx",
-  "app/coconut-harvest/page.tsx",
-  "app/harvest-live-counter/page.tsx",
-  "components/coconut/live-counter-client.tsx",
   "deploy/preview-release-manifest.json",
-  "package.json",
-  "scripts/test-preview-release.sh",
-  "tests/harvest-live-counter.mjs",
-  "tests/preview-deployment-workflow.mjs"
+  "lib/coconut-harvest-api.ts",
+  "tests/preview-deployment-workflow.mjs",
+  "tests/tree-wise-table-query.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

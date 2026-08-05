@@ -59,6 +59,11 @@ assert.match(page, /bg-rose-100\/90/, "Missed Harvest header must have a distinc
 
 assert.match(apiClient, /performance\.details\.map/)
 assert.match(apiClient, /\.\.\.matrixRows\.map/)
+assert.match(apiClient, /const \[cycleResponse, performanceResponse, matrixRows\] = await Promise\.all/)
+assert.doesNotMatch(apiClient, /fetchCachedTreeMaster/)
+assert.doesNotMatch(apiClient, /const valueFilters:/)
+assert.match(apiClient, /inNumberRange\(row\.total_nuts \?\? 0, filters\.nutsFrom, filters\.nutsTo\)/)
+assert.match(apiClient, /inNumberRange\(toNumber\(row\.total_sale\), filters\.saleFrom, filters\.saleTo\)/)
 assert.match(apiClient, /if \(!filters\.includeNoRecord && !byCycle\) continue/)
 assert.match(apiClient, /if \(!value\.hasRecord\) totalMissed \+= 1/)
 assert.match(apiClient, /current\.hasRecord = true/)
