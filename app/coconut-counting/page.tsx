@@ -115,7 +115,7 @@ function pageHref(filters: CoconutCountingFilters, page: number): string {
 
 function SummaryCard({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Database }) {
   return (
-    <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
+    <article className="rounded-xl border border-primary/15 bg-primary/5 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
         <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
