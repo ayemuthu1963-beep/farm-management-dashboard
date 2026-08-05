@@ -8,6 +8,9 @@ export interface CoconutCountingSummary {
   total_grade_a: CoconutNumeric
   total_grade_b: CoconutNumeric
   combined_total: CoconutNumeric
+  a1: CoconutNumeric
+  b1: CoconutNumeric
+  b2: CoconutNumeric
   physical_nuts_counted: CoconutNumeric
   recorded_harvested_nuts: CoconutNumeric
   latest_session_date: string | null
@@ -97,12 +100,25 @@ export interface CoconutCountingResetEvent {
   server_received_at: string
 }
 
+export interface CoconutCountingAdminEdit {
+  edit_uuid: string
+  target_type: "SESSION" | "ENTRY"
+  target_uuid: string
+  session_uuid: string
+  changed_fields: string[]
+  before_values: Record<string, unknown>
+  after_values: Record<string, unknown>
+  admin_username: string
+  edited_at: string
+}
+
 export interface CoconutCountingSessionDetail {
   session: CoconutCountingSession
   entries: CoconutCountingEntry[]
   harvest_date_revisions: CoconutHarvestDateRevision[]
   total_nuts_revisions: CoconutTotalNutsRevision[]
   reset_events: CoconutCountingResetEvent[]
+  admin_edits: CoconutCountingAdminEdit[]
 }
 
 export interface CoconutCountingFilters {

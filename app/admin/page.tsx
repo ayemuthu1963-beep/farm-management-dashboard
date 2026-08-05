@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, ShieldCheck, Sprout } from "lucide-react"
+import { Bug, Calculator, CalendarRange, DatabaseZap, Droplets, Gauge, ShieldCheck, Sprout } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 import { getPreviewDatabaseLabel, getPreviewEnvironmentLabel } from "@/components/admin/preview-admin-notice"
@@ -7,6 +7,12 @@ import { getPreviewDatabaseLabel, getPreviewEnvironmentLabel } from "@/component
 export const dynamic = "force-dynamic"
 
 const adminTiles = [
+  {
+    title: "Coconut Counting Admin Edit",
+    description: "Amend synchronized Coconut Counting session or entry values with a complete before/after audit trail.",
+    href: "/admin/coconut-counting",
+    icon: Calculator,
+  },
   {
     title: "Motor Runtime Entry",
     description: "Add pump runtime records for local testing and irrigation calculation checks.",
