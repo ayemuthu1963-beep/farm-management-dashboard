@@ -108,6 +108,7 @@ assert.match(mapClient, /Over 400 nuts in last 10 harvests/)
 assert.match(mapClient, /200 to 299 nuts in last 10 harvests/)
 assert.match(mapClient, /Saplings under 36 completed months/)
 assert.match(mapClient, />\s*1234\s*</)
+assert.match(mapClient, /contentBelowMap=\{<TreeClassificationLegend \/>\}/)
 
 const orthomosaicMap = await readFile(
   "components/maps/farm-orthomosaic-map.tsx",
@@ -121,6 +122,14 @@ assert.match(
   orthomosaicMap,
   /notePanel \? <div className="xl:col-start-2 xl:self-start">\{notePanel\}<\/div>/,
 )
+const legendPosition = orthomosaicMap.indexOf(
+  '{contentBelowMap ? <div className="xl:col-span-2">',
+)
+const detailsPosition = orthomosaicMap.indexOf(
+  '{detailsPanel ? <div className="xl:col-start-1">',
+)
+assert.ok(legendPosition >= 0)
+assert.ok(detailsPosition > legendPosition)
 
 const route = await readFile(
   "app/api/farm-map/trees/[treeNo]/harvest-summary/route.ts",
