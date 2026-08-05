@@ -109,6 +109,19 @@ assert.match(mapClient, /200 to 299 nuts in last 10 harvests/)
 assert.match(mapClient, /Saplings under 36 completed months/)
 assert.match(mapClient, />\s*1234\s*</)
 
+const orthomosaicMap = await readFile(
+  "components/maps/farm-orthomosaic-map.tsx",
+  "utf8",
+)
+assert.match(
+  orthomosaicMap,
+  /detailsPanel \? <div className="xl:col-start-1">\{detailsPanel\}<\/div>/,
+)
+assert.match(
+  orthomosaicMap,
+  /notePanel \? <div className="xl:col-start-2 xl:self-start">\{notePanel\}<\/div>/,
+)
+
 const route = await readFile(
   "app/api/farm-map/trees/[treeNo]/harvest-summary/route.ts",
   "utf8",

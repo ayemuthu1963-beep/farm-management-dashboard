@@ -273,9 +273,10 @@ export function FarmOrthomosaicMap({
         {layerControls}
         {fitControls}
         {children}
-        {detailsPanel}
-        {notePanel}
       </div>
+
+      {detailsPanel ? <div className="xl:col-start-1">{detailsPanel}</div> : null}
+      {notePanel ? <div className="xl:col-start-2 xl:self-start">{notePanel}</div> : null}
     </div>
   )
 }
