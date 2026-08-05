@@ -214,8 +214,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Tree-wise Query request-flow repair using the existing harvest export")
-assert.equal(manifest.base_commit, "88327c263fca132f38ac66aa554332663e3b99bc")
+assert.equal(manifest.release_note, "Tree-wise Query classification colours and responsive Plot legends")
+assert.equal(manifest.base_commit, "3eeb0c8ac072683a643814e55bb5570171b1d2fa")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -225,8 +225,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/coconut-harvest/tree-wise-query/page.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/coconut-harvest-api.ts",
   "tests/preview-deployment-workflow.mjs",
   "tests/tree-wise-table-query.mjs"
 ]
