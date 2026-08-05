@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Bug,
-  Calculator,
   Citrus,
   CloudSun,
   Droplets,
@@ -72,17 +71,6 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     showInSidebar: true,
     order: 2,
     ctaLabel: "Open Dashboard",
-  },
-  {
-    id: "coconut-counting",
-    label: "Coconut Counting",
-    href: "/coconut-counting",
-    icon: Calculator,
-    description: "Review date-wise coconut counts synchronized from the field APK",
-    status: "active",
-    showOnDashboard: false,
-    showInSidebar: true,
-    order: 2.5,
   },
   {
     id: "jackfruit-monitoring",
