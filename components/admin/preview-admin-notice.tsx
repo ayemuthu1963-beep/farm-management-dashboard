@@ -3,11 +3,27 @@ import { ShieldCheck } from "lucide-react"
 export function getPreviewEnvironmentLabel() {
   const environment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
   if (environment === "preview" || environment === "uat") return "PREVIEW / UAT"
+  if (!environment && process.env.VERCEL_ENV === "preview") return "PREVIEW / UAT"
   return environment ? environment.toUpperCase() : "ENVIRONMENT NOT CONFIGURED"
 }
 
 export function getPreviewDatabaseLabel() {
-  return (process.env.MFMS_TARGET_DATABASE ?? "").trim() || "DATABASE NOT CONFIGURED"
+  const configuredDatabase = (process.env.MFMS_TARGET_DATABASE ?? "").trim()
+  if (configuredDatabase) return configuredDatabase
+
+  const apiBaseUrl = (process.env.HARVEST_API_BASE_URL ?? "").trim()
+  if (process.env.VERCEL_ENV === "preview" && apiBaseUrl) {
+    try {
+      const hostname = new URL(apiBaseUrl).hostname.toLowerCase()
+      if (hostname === "preview.muthufarms.com" || hostname === "harvest-api-pilot") {
+        return "mfms_server_uat"
+      }
+    } catch {
+      // Keep the explicit not-configured warning for malformed or unknown targets.
+    }
+  }
+
+  return "DATABASE NOT CONFIGURED"
 }
 
 export function PreviewAdminNotice() {

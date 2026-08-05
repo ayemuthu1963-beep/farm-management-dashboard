@@ -7,6 +7,7 @@ const refresh = readFileSync(new URL("../components/coconut-counting/refresh-con
 const adminPage = readFileSync(new URL("../app/admin/coconut-counting/page.tsx", import.meta.url), "utf8")
 const adminClient = readFileSync(new URL("../components/admin/coconut-counting-admin-client.tsx", import.meta.url), "utf8")
 const adminProxy = readFileSync(new URL("../lib/coconut-counting-admin-proxy.ts", import.meta.url), "utf8")
+const previewNotice = readFileSync(new URL("../components/admin/preview-admin-notice.tsx", import.meta.url), "utf8")
 
 test("Coconut Counting webpage exposes A1 B1 B2 and the protected Admin Edit tile", () => {
   for (const label of ["A1", "B1", "B2"]) assert.match(page, new RegExp(`label="${label}"`))
@@ -36,4 +37,11 @@ test("Admin write proxy is Preview-only authenticated signed and target-restrict
   assert.match(adminProxy, /timingSafeEqual/)
   assert.match(adminProxy, /PREVIEW_BACKEND_HOSTS/)
   assert.match(adminProxy, /Cross-site admin edits are not allowed/)
+})
+
+test("Preview safety banner recognizes the approved Vercel Preview UAT target", () => {
+  assert.match(previewNotice, /VERCEL_ENV === "preview"/)
+  assert.match(previewNotice, /preview\.muthufarms\.com/)
+  assert.match(previewNotice, /mfms_server_uat/)
+  assert.match(previewNotice, /DATABASE NOT CONFIGURED/)
 })
