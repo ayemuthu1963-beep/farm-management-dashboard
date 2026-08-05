@@ -37,6 +37,14 @@ export function formatRuntimeSeconds(seconds: number): string {
   return formatRuntime(roundedRuntimeMinutes(seconds))
 }
 
+/** Final report format: exact seconds are summed first, then rounded once to HH:MM. */
+export function formatRuntimeHHMM(seconds: number): string {
+  const totalMinutes = roundedRuntimeMinutes(seconds)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+}
+
 /** Detailed owner-review display; normal summaries intentionally omit seconds. */
 export function formatExactRuntime(seconds: number): string {
   const safe = Math.max(0, Math.trunc(seconds))
