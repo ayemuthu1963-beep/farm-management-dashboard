@@ -1,38 +1,24 @@
 import assert from "node:assert/strict"
 import { readFileSync, statSync } from "node:fs"
 
-const preflightWorkflow = readFileSync(
-  ".github/workflows/preview-server-preflight.yml",
-  "utf8",
-)
-const deployWorkflow = readFileSync(
-  ".github/workflows/preview-server-deploy.yml",
-  "utf8",
-)
-const rollbackWorkflow = readFileSync(
-  ".github/workflows/preview-server-rollback.yml",
-  "utf8",
-)
-const releaseSignalWorkflow = readFileSync(
-  ".github/workflows/preview-release-candidate.yml",
-  "utf8",
-)
-const preflightScript = readFileSync(
-  "scripts/preview-server-preflight.sh",
-  "utf8",
-)
-const deployScript = readFileSync(
-  "scripts/preview-server-deploy.sh",
-  "utf8",
-)
+const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
+
+const preflightWorkflow = readText(".github/workflows/preview-server-preflight.yml")
+const deployWorkflow = readText(".github/workflows/preview-server-deploy.yml")
+const rollbackWorkflow = readText(".github/workflows/preview-server-rollback.yml")
+const releaseSignalWorkflow = readText(".github/workflows/preview-release-candidate.yml")
+const preflightScript = readText("scripts/preview-server-preflight.sh")
+const deployScript = readText("scripts/preview-server-deploy.sh")
 const manifest = JSON.parse(
   readFileSync("deploy/preview-release-manifest.json", "utf8"),
 )
 
 const manualWorkflows = [preflightWorkflow, rollbackWorkflow]
 
-assert.equal(statSync("scripts/preview-server-preflight.sh").mode & 0o777, 0o755)
-assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
+if (process.platform !== "win32") {
+  assert.equal(statSync("scripts/preview-server-preflight.sh").mode & 0o777, 0o755)
+  assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
+}
 
 for (const workflow of manualWorkflows) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
@@ -228,8 +214,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Motor Screenshot Runtime Analysis static frontend")
-assert.equal(manifest.base_commit, "83cd7e4de8dff2e2ce4e1d32b5d083066d86c0c6")
+assert.equal(manifest.release_note, "Harvest Live Counter view-only MFMS page with inclusive date ranges")
+assert.equal(manifest.base_commit, "f12a8f8022e4caff778699ac0c6be225105577ee")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -239,31 +225,21 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/motor-runtime/screenshot-analysis/page.tsx",
-  "components/motor-screenshot-analysis/analysis-filters.tsx",
-  "components/motor-screenshot-analysis/analysis-page-header.tsx",
-  "components/motor-screenshot-analysis/analysis-summary-cards.tsx",
-  "components/motor-screenshot-analysis/date-runtime-group.tsx",
-  "components/motor-screenshot-analysis/motor-badge.tsx",
-  "components/motor-screenshot-analysis/motor-summary-card.tsx",
-  "components/motor-screenshot-analysis/processing-logic-note.tsx",
-  "components/motor-screenshot-analysis/runtime-record-card.tsx",
-  "components/motor-screenshot-analysis/runtime-records-table.tsx",
-  "components/motor-screenshot-analysis/screenshot-upload-panel.tsx",
-  "components/motor-screenshot-analysis/screenshot-viewer.tsx",
-  "components/motor-screenshot-analysis/status-badge.tsx",
-  "deploy/approved-change-scope.txt",
+  "app/api/coconut-harvest/live-counter/route.ts",
+  "app/coconut-harvest/live-counter/page.tsx",
+  "app/coconut-harvest/page.tsx",
+  "app/harvest-live-counter/page.tsx",
+  "components/coconut/live-counter-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/mfms-navigation.ts",
-  "lib/motor-screenshot-analysis-format.ts",
-  "lib/motor-screenshot-analysis-mock-data.ts",
-  "lib/motor-screenshot-analysis-types.ts",
-  "tests/navigation-consistency.mjs",
+  "package.json",
+  "scripts/test-preview-release.sh",
+  "tests/harvest-live-counter.mjs",
   "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
-const smokeScript = readFileSync("scripts/test-preview-release.sh", "utf8")
+const smokeScript = readText("scripts/test-preview-release.sh")
 assert.match(smokeScript, /check \/admin\/tree-lifecycle "Tree Lifecycle \/ Sapling Status"/)
+assert.match(smokeScript, /check \/coconut-harvest\/live-counter "Harvest Live Counter"/)
 
 console.log("Preview deployment, rollback, preflight, and automatic trigger tests passed.")
