@@ -214,8 +214,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Move Farm Map orthomosaic details and overlay note to the bottom row")
-assert.equal(manifest.base_commit, "10e289806c33d4a5544879e3b10669d2931bf97f")
+assert.equal(manifest.release_note, "Increase Tree-wise Query classification cell visibility")
+assert.equal(manifest.base_commit, "a40f07efbc23778f6cb55dc17e83ce07f946c47d")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -225,10 +225,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/maps/farm-orthomosaic-map.tsx",
+  "app/coconut-harvest/tree-wise-query/page.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/farm-map-coconut-trees.mjs",
-  "tests/preview-deployment-workflow.mjs"
+  "tests/preview-deployment-workflow.mjs",
+  "tests/tree-wise-table-query.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

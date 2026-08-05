@@ -66,27 +66,27 @@ const totalOrder: TreeWiseTotal[] = ["totalBunches", "totalNuts", "totalSale", "
 
 const classificationTones = {
   "Century Maker": {
-    cell: "border-emerald-400 bg-emerald-50/80",
+    cell: "border-emerald-400 bg-emerald-100/80",
     swatch: "border-emerald-300 bg-emerald-50",
   },
   "Match Winner": {
-    cell: "border-teal-400 bg-teal-50/80",
+    cell: "border-teal-400 bg-teal-100/80",
     swatch: "border-teal-300 bg-teal-50",
   },
   "Reliable Batter": {
-    cell: "border-sky-400 bg-sky-50/80",
+    cell: "border-sky-400 bg-sky-100/80",
     swatch: "border-sky-300 bg-sky-50",
   },
   "Tail Ender": {
-    cell: "border-amber-400 bg-amber-50/80",
+    cell: "border-amber-400 bg-amber-100/80",
     swatch: "border-amber-300 bg-amber-50",
   },
   "Bench Player": {
-    cell: "border-rose-400 bg-rose-50/80",
+    cell: "border-rose-400 bg-rose-100/80",
     swatch: "border-rose-300 bg-rose-50",
   },
   "Future Better": {
-    cell: "border-violet-400 bg-violet-50/80",
+    cell: "border-violet-400 bg-violet-100/80",
     swatch: "border-violet-300 bg-violet-50",
   },
 } as const
@@ -136,7 +136,7 @@ function treeNumberTone(value: string) {
   const classification = classificationName(value)
   return classification
     ? classificationTones[classification].cell
-    : "border-slate-200 bg-slate-50/80"
+    : "border-slate-200 bg-slate-100/80"
 }
 
 function ClassificationLegend() {

@@ -59,6 +59,9 @@ assert.match(page, /bg-amber-100\/90/, "Totals header must have a distinct backg
 assert.match(page, /bg-rose-100\/90/, "Missed Harvest header must have a distinct background")
 assert.match(page, /classificationTones/)
 assert.match(page, /treeNumberTone\(row\.classification\)/)
+for (const colour of ["emerald", "teal", "sky", "amber", "rose", "violet"]) {
+  assert.match(page, new RegExp(`cell: "border-${colour}-400 bg-${colour}-100/80"`))
+}
 assert.match(page, /Tree number colour legend/)
 assert.match(page, /classificationLegendByPlot/)
 assert.match(page, /"Plot 1": \[/)
