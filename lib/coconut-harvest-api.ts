@@ -1177,6 +1177,82 @@ function inferPlotFromTreeNumber(treeNo: string): string {
   return numericTreeNo >= 1000 ? "Plot 2" : "Plot 1"
 }
 
+function parseTreeWiseExportRows(csv: string, salePriceByCycle: Map<string, number>): ApiDetailedQueryRow[] {
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "")
+  if (lines.length <= 1 || lines[0] === "no_records") return []
+
+  const headers = parseCsvLine(lines[0])
+  const column = (name: string) => headers.indexOf(name)
+  const requiredColumns = ["tree_no", "harvest_cycle", "harvest_date", "total_bunches", "total_nuts"]
+  if (requiredColumns.some((name) => column(name) === -1)) {
+    throw new HarvestApiError("Harvest export is missing required columns", 502)
+  }
+
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line)
+    const read = (name: string) => {
+      const index = column(name)
+      return index >= 0 ? cells[index] ?? "" : ""
+    }
+    const treeNo = read("tree_no")
+    const cycle = read("harvest_cycle")
+    const totalNuts = toNumber(read("total_nuts"))
+    const salePrice = salePriceByCycle.get(cycle) ?? 0
+
+    return {
+      tree_no: treeNo,
+      harvest_cycle: cycle,
+      harvest_date: read("harvest_date"),
+      bunch1_nuts: toNumber(read("bunch1_nuts")),
+      bunch2_nuts: toNumber(read("bunch2_nuts")),
+      bunch3_nuts: toNumber(read("bunch3_nuts")),
+      total_bunches: toNumber(read("total_bunches")),
+      total_nuts: totalNuts,
+      total_sale: Math.round(totalNuts * salePrice * 100) / 100,
+      missed_harvests: 0,
+      plot: inferPlotFromTreeNumber(treeNo),
+      category: "",
+    }
+  })
+}
+
+async function fetchTreeWiseExportRows(
+  cycles: ApiCycleRow[],
+  filters: TreeWiseQueryFilters,
+  authHeader: string,
+): Promise<ApiDetailedQueryRow[]> {
+  if (cycles.length === 0) return []
+
+  const today = new Date().toISOString().slice(0, 10)
+  const cycleStart = cycles.reduce(
+    (earliest, cycle) => cycle.harvest_start_date < earliest ? cycle.harvest_start_date : earliest,
+    cycles[0].harvest_start_date,
+  )
+  const cycleEnd = cycles.reduce((latest, cycle) => {
+    const endDate = cycle.harvest_end_date ?? today
+    return endDate > latest ? endDate : latest
+  }, cycles[0].harvest_end_date ?? today)
+  const requestedStart = filters.dateFrom?.trim()
+  const requestedEnd = filters.dateTo?.trim()
+  const startDate = requestedStart && requestedStart > cycleStart ? requestedStart : cycleStart
+  const endDate = requestedEnd && requestedEnd < cycleEnd ? requestedEnd : cycleEnd
+  if (startDate > endDate) return []
+
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  const response = await fetch(`${getApiBaseUrl()}/api/export/csv?${params.toString()}`, {
+    headers: { Authorization: authHeader, Accept: "text/csv" },
+    cache: "no-store",
+  })
+  if (!response.ok) {
+    throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
+  }
+
+  const salePriceByCycle = new Map(
+    cycles.map((cycle) => [cycle.harvest_cycle, toNumber(cycle.sale_price_per_nut)]),
+  )
+  return parseTreeWiseExportRows(await response.text(), salePriceByCycle)
+}
+
 export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Promise<TreeWiseQueryData> {
   const authHeader = getBasicAuthHeader()
 
@@ -1195,44 +1271,38 @@ export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Pro
     }
   }
 
-  const baseFilters: DetailedQueryFilters = {
-    treeFrom: filters.treeFrom,
-    treeTo: filters.treeTo,
-    cycleFrom: filters.cycleFrom,
-    cycleTo: filters.cycleTo,
-    dateFrom: filters.dateFrom,
-    dateTo: filters.dateTo,
-  }
-  const [cycleResponse, performanceResponse, matrixRows] = await Promise.all([
-    fetch(`${getApiBaseUrl()}/api/cycles`, {
-      headers: { Authorization: authHeader, Accept: "application/json" },
-      cache: "no-store",
-    }),
-    fetch(`${getApiBaseUrl()}/api/tree-performance`, {
-      headers: { Authorization: authHeader, Accept: "application/json" },
-      cache: "no-store",
-    }),
-    fetchApiDetailedQueryRows(baseFilters, authHeader),
-  ])
-
+  const cycleResponse = await fetch(`${getApiBaseUrl()}/api/cycles`, {
+    headers: { Authorization: authHeader, Accept: "application/json" },
+    cache: "no-store",
+  })
   if (!cycleResponse.ok) {
     throw new HarvestApiError(`Harvest API returned ${cycleResponse.status}`, cycleResponse.status)
   }
-  if (!performanceResponse.ok) {
-    throw new HarvestApiError(`Harvest API returned ${performanceResponse.status}`, performanceResponse.status)
-  }
 
   const apiCycles = (await cycleResponse.json()) as ApiCycleRow[]
-  const performance = (await performanceResponse.json()) as {
-    rows: ApiTreePerformanceRow[]
-    details: ApiTreePerformanceDetail[]
-  }
-
   const explicitCycleWindow = hasValueRange(filters.cycleFrom, filters.cycleTo) || hasValueRange(filters.dateFrom, filters.dateTo)
   const matchingCycles = apiCycles
     .filter((cycle) => cycleMatchesFilters(cycle, filters))
     .sort((left, right) => toCycleNumber(right.harvest_cycle) - toCycleNumber(left.harvest_cycle))
   const selectedApiCycles = explicitCycleWindow ? matchingCycles : matchingCycles.slice(0, 10)
+
+  const [performanceResponse, matrixRows] = await Promise.all([
+    fetch(`${getApiBaseUrl()}/api/tree-performance`, {
+      headers: { Authorization: authHeader, Accept: "application/json" },
+      cache: "no-store",
+    }),
+    fetchTreeWiseExportRows(selectedApiCycles, filters, authHeader),
+  ])
+
+  if (!performanceResponse.ok) {
+    throw new HarvestApiError(`Harvest API returned ${performanceResponse.status}`, performanceResponse.status)
+  }
+
+  const performance = (await performanceResponse.json()) as {
+    rows: ApiTreePerformanceRow[]
+    details: ApiTreePerformanceDetail[]
+  }
+
   const cycles: TreeWiseQueryCycle[] = selectedApiCycles.map((cycle) => ({
     cycle: cycle.harvest_cycle,
     startDate: cycle.harvest_start_date,
