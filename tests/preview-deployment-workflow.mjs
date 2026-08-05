@@ -215,7 +215,7 @@ assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(manifest.release_note, "Tree-wise Query request-flow repair using the existing harvest export")
-assert.equal(manifest.base_commit, "9de484dd65d38e58dd4f5f5f33fb40f8ee4fe733")
+assert.equal(manifest.base_commit, "88327c263fca132f38ac66aa554332663e3b99bc")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
