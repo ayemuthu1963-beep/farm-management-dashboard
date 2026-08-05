@@ -3,13 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Tree-wise Query classification colours and responsive Plot legends",
-  "base_commit": "3eeb0c8ac072683a643814e55bb5570171b1d2fa",
+  "release_note": "Move Farm Map orthomosaic details and overlay note to the bottom row",
+  "base_commit": "10e289806c33d4a5544879e3b10669d2931bf97f",
   "allowed_paths": [
-    "app/coconut-harvest/tree-wise-query/page.tsx",
+    "components/maps/farm-orthomosaic-map.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/tree-wise-table-query.mjs"
+    "tests/farm-map-coconut-trees.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
