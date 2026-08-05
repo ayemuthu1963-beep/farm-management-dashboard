@@ -9,10 +9,12 @@ import {
   MapPin,
   RefreshCw,
   Scale,
+  ShieldCheck,
   Sprout,
 } from "lucide-react"
 
 import { CoconutCountingPageHeader } from "@/components/coconut-counting/page-header"
+import { CoconutCountingRefreshControls } from "@/components/coconut-counting/refresh-controls"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import {
@@ -154,6 +156,7 @@ function FilterForm({ filters }: { filters: CoconutCountingFilters }) {
       <Link href="/coconut-counting" className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-semibold text-foreground hover:bg-accent">
         Reset
       </Link>
+      <p className="text-xs font-medium text-muted-foreground sm:col-span-2 xl:col-span-5">Choose the same From and To date to show one day. Both dates are included in a range.</p>
     </form>
   )
 }
@@ -464,6 +467,8 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
   const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const filters: CoconutCountingFilters = { fromDate, toDate, status, limit: 50, offset: (page - 1) * 50 }
   const selectedSession = single(params.session)
+  const adminParams = new URLSearchParams({ from: fromDate, to: toDate })
+  if (selectedSession) adminParams.set("session", selectedSession)
 
   let dashboard: CoconutCountingDashboardData | null = null
   let detail: CoconutCountingSessionDetail | null = null
@@ -493,18 +498,31 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
       <div className="mx-auto flex min-w-0 max-w-[1600px] flex-col gap-5 overflow-x-hidden p-3 sm:p-5">
         <Header />
         <CoconutCountingPageHeader />
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-stretch">
+          <CoconutCountingRefreshControls />
+          <Link
+            href={`/admin/coconut-counting?${adminParams.toString()}`}
+            className="flex min-h-16 items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 font-black uppercase text-amber-950 shadow-sm transition hover:border-amber-500 hover:bg-amber-100"
+          >
+            <ShieldCheck className="size-5" aria-hidden="true" />
+            Admin Edit
+          </Link>
+        </div>
         <FilterForm filters={filters} />
 
         {errorMessage ? <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"><CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{errorMessage}</div> : null}
 
         {dashboard ? (
           <>
-            <section aria-label="Coconut Counting summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+            <section aria-label="Coconut Counting summary" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <SummaryCard label="Sessions" value={formatNumber(dashboard.summary.session_count)} icon={CalendarDays} />
               <SummaryCard label="Entries" value={formatNumber(dashboard.summary.entry_count)} icon={Hash} />
               <SummaryCard label="Grade A" value={formatNumber(dashboard.summary.total_grade_a)} icon={Sprout} />
               <SummaryCard label="Grade B" value={formatNumber(dashboard.summary.total_grade_b)} icon={Sprout} />
               <SummaryCard label="Combined" value={formatNumber(dashboard.summary.combined_total)} icon={Scale} />
+              <SummaryCard label="A1" value={formatNumber(dashboard.summary.a1)} icon={Sprout} />
+              <SummaryCard label="B1" value={formatNumber(dashboard.summary.b1)} icon={Hash} />
+              <SummaryCard label="B2" value={formatNumber(dashboard.summary.b2)} icon={Hash} />
               <SummaryCard label="Physical counted" value={formatNumber(dashboard.summary.physical_nuts_counted)} icon={Scale} />
               <SummaryCard label="Total harvested" value={formatNumber(dashboard.summary.recorded_harvested_nuts)} icon={Database} />
             </section>
