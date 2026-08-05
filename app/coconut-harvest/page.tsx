@@ -1,9 +1,16 @@
-import { Sprout, Trees, CalendarRange, Trophy, Search, TableProperties } from "lucide-react"
+import { Sprout, Trees, CalendarRange, Trophy, Search, TableProperties, Activity } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { HarvestHubCard, type HarvestHubCardProps } from "@/components/coconut/harvest-hub-card"
 
 const hubCards: HarvestHubCardProps[] = [
+  {
+    title: "Live Harvest Monitor",
+    description: "View ODK harvest totals for a date or inclusive date range.",
+    href: "/coconut-harvest/live-counter",
+    icon: Activity,
+    accent: "bg-primary/10 text-primary",
+  },
   {
     title: "Tree View",
     description: "Select a tree and view its full harvest history cycle by cycle.",
@@ -61,7 +68,7 @@ export default function CoconutHarvestPage() {
         </div>
 
         {/* Coconut Harvest view cards */}
-        <section aria-label="Coconut Harvest views" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <section aria-label="Coconut Harvest views" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
           {hubCards.map((card) => (
             <HarvestHubCard key={card.title} {...card} />
           ))}
