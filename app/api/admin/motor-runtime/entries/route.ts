@@ -186,7 +186,7 @@ export async function POST(request: Request) {
   })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const targetErrors = getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl())
   if (targetErrors.length > 0) {
     return NextResponse.json({ ok: false, errors: targetErrors, entries: [] }, { status: 403 })
@@ -204,7 +204,10 @@ export async function GET() {
     )
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${BACKEND_ENTRIES_PATH}?limit=20`, {
+  const incoming = new URL(request.url)
+  const query = new URLSearchParams(incoming.searchParams)
+  query.set("limit", "1000")
+  const response = await fetch(`${getApiBaseUrl()}${BACKEND_ENTRIES_PATH}?${query}`, {
     headers: {
       Authorization: authHeader,
       Accept: "application/json",

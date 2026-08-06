@@ -111,7 +111,24 @@ export interface UploadDetail {
   messages: ReviewMessage[]
   usage: OcrUsageRecord[]
   source_rows: ExcelSourceRow[]
+  workbook_runs: WorkbookRun[]
   provisional_sessions: ProvisionalSession[]
+}
+
+export interface WorkbookRun {
+  id: number
+  import_id: number
+  run_no: number
+  operation_date: string | null
+  original_on_date_text: string
+  original_on_time_text: string
+  original_off_date_text: string
+  original_off_time_text: string
+  motor_on_at: string | null
+  motor_off_at: string | null
+  source_runtime_seconds: number | null
+  remarks: string
+  parser_warning: string | null
 }
 
 export interface ExcelSourceRow {
