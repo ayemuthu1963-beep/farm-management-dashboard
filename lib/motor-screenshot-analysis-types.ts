@@ -5,7 +5,7 @@ export type CommandSource = "rtc" | "phone" | "unknown"
 export type RunStatus = "complete" | "unmatched_on" | "unmatched_off" | "needs_review" | "rejected"
 
 export type MessageKind = "command" | "status" | "other"
-export type EventType = "mtr_on_command" | "mtr_off_command" | "motor_on" | "motor_off" | "unknown"
+export type EventType = "mtr_on_command" | "mtr_off_command" | "motor_on" | "motor_off" | "power_off" | "power_restore" | "unknown"
 export type AnalysisStatus =
   | "queued"
   | "analysing"
@@ -14,7 +14,7 @@ export type AnalysisStatus =
   | "partially_confirmed"
   | "failed"
   | "rejected"
-export type SourceType = "text_paste" | "text_file" | "screenshot"
+export type SourceType = "text_paste" | "text_file" | "excel_file" | "screenshot"
 
 export interface Motor {
   id: MotorId
@@ -94,6 +94,7 @@ export interface UploadRecord {
   raw_text: string | null
   import_status: string
   parser_version: string | null
+  worksheet_name: string | null
   upload_status: "uploaded" | "deleted"
   analysis_status: AnalysisStatus
   extractor_provider: string
@@ -109,7 +110,24 @@ export interface UploadDetail {
   upload: UploadRecord
   messages: ReviewMessage[]
   usage: OcrUsageRecord[]
+  source_rows: ExcelSourceRow[]
   provisional_sessions: ProvisionalSession[]
+}
+
+export interface ExcelSourceRow {
+  id: number
+  worksheet_name: string
+  row_number: number
+  tile_no: number | null
+  raw_first_line: string
+  normalized_line: string
+  original_date_text: string
+  original_time_text: string
+  event_timestamp: string | null
+  timestamp_precision: "second" | "minute" | "unknown"
+  remarks: string
+  row_event_type: string
+  parser_warning: string | null
 }
 
 export interface ProvisionalSession {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Activity, AlertTriangle, CalendarDays, RefreshCw, Trees, Wifi, WifiOff } from "lucide-react"
+import { Activity, AlertTriangle, CalendarDays, Layers3, RefreshCw, Trees, Wifi, WifiOff } from "lucide-react"
 
 type SelectionMode = "date" | "range"
 
@@ -10,6 +10,7 @@ interface CounterTotals {
   toDate: string
   totalNuts: number
   treesHarvested: number
+  totalBunches: number
   duplicateSubmissionCount: number
   lastUpdated: string
   lastUpdatedFull: string
@@ -71,6 +72,7 @@ function normalizedTotals(raw: unknown, fromDate: string, toDate: string): Count
     toDate: String(value.toDate || value.selectedDate || toDate),
     totalNuts: numberValue("totalNuts", "todayNuts"),
     treesHarvested: numberValue("treesHarvested", "treeCount"),
+    totalBunches: numberValue("totalBunches", "bunches"),
     duplicateSubmissionCount: numberValue("duplicateSubmissionCount", "possibleDuplicateCount"),
     lastUpdated: String(value.lastUpdated || "No data"),
     lastUpdatedFull: String(value.lastUpdatedFull || new Date().toISOString()),
@@ -126,10 +128,11 @@ export function LiveCounterClient() {
   }
 
   const metrics = [
-    { label: "Total Nuts", value: data?.totalNuts ?? 0, icon: Activity, tone: "bg-primary/5 text-primary" },
     { label: "Trees Harvested", value: data?.treesHarvested ?? 0, icon: Trees, tone: "bg-chart-2/10 text-chart-2" },
+    { label: "Total Bunches", value: data?.totalBunches ?? 0, icon: Layers3, tone: "bg-lime-50 text-lime-700" },
+    { label: "Total Nuts", value: data?.totalNuts ?? 0, icon: Activity, tone: "bg-primary/5 text-primary" },
     {
-      label: "Duplicate Submissions",
+      label: "Duplicate Submission",
       value: data?.duplicateSubmissionCount ?? 0,
       icon: AlertTriangle,
       tone:
@@ -229,7 +232,7 @@ export function LiveCounterClient() {
         </p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-3" aria-label="Harvest totals">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Harvest totals">
         {metrics.map((metric) => {
           const Icon = metric.icon
           return (

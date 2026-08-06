@@ -126,6 +126,13 @@ async function proxy(request: NextRequest, context: RouteContext, method: "GET" 
   })
   const contentType = response.headers.get("content-type") ?? ""
   if (!contentType.includes("application/json")) {
+    if (method === "GET" && rawSuffix === "status") {
+      const message = (await response.text()).trim()
+      return NextResponse.json(
+        { ok: false, error: message || `Harvest API returned ${response.status}` },
+        { status: response.status },
+      )
+    }
     return new NextResponse(await response.arrayBuffer(), {
       status: response.status,
       headers: {

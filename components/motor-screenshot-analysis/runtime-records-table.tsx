@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ChevronsUpDown, ImageIcon } from "lucide-rea
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { RunRecord } from "@/lib/motor-screenshot-analysis-types"
-import { formatDate, formatRuntime, formatTime } from "@/lib/motor-screenshot-analysis-format"
+import { formatDate, formatRuntimeHHMM, formatTime } from "@/lib/motor-screenshot-analysis-format"
 import { MotorBadge } from "./motor-badge"
 import { StatusBadge } from "./status-badge"
 import { RuntimeRecordCard } from "./runtime-record-card"
@@ -63,9 +63,9 @@ export function RuntimeRecordsTable({
                 <td className="px-3 py-2.5 text-muted-foreground">{record.onReason ?? "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{formatTime(record.offTime)}</td>
                 <td className="px-3 py-2.5 text-muted-foreground">{record.offReason ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{record.status === "complete" ? formatRuntime(record.runtimeMinutes) : "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{record.status === "complete" ? formatRuntimeHHMM(record.runtimeSeconds) : "—"}</td>
                 <td className="px-3 py-2.5"><StatusBadge status={record.status} /></td>
-                <td className="px-3 py-2.5"><button type="button" disabled={!record.screenshotId} onClick={() => onViewScreenshot(record)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium disabled:opacity-40"><ImageIcon className="size-3.5" /> {record.sourceType === "screenshot" ? "View" : "Text import"}</button></td>
+                <td className="px-3 py-2.5"><button type="button" disabled={!record.screenshotId} onClick={() => onViewScreenshot(record)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium disabled:opacity-40"><ImageIcon className="size-3.5" /> {record.sourceType === "screenshot" ? "View" : record.sourceType === "excel_file" ? "Excel import" : "Text import"}</button></td>
               </tr>
             ))}
             {records.length === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">No records match the current filters.</td></tr>}

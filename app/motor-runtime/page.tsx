@@ -99,7 +99,7 @@ export default function MotorRuntimePage() {
 
         <div className="flex items-center gap-2 rounded-xl border border-chart-1/30 bg-chart-1/10 px-4 py-3 text-sm text-foreground">
           <Info className="size-4 shrink-0 text-chart-1" aria-hidden="true" />
-          <span>Runtime hours are calculated from stored hours and minutes: total minutes ÷ 60.</span>
+          <span>Runtime hours use stored minutes. Water pumped uses 36,000 L/hour for Jackfruit and Nutmeg, and 50,000 L/hour for all other zones.</span>
         </div>
       </div>
     </DashboardShell>

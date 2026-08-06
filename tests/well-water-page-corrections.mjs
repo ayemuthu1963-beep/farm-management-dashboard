@@ -21,6 +21,12 @@ const wellChart = read("components/farm/well-chart.tsx")
 const wellData = read("lib/well-data.ts")
 const syncProxy = read("app/api/admin/well-water/sync/route.ts")
 
+// Default to the same six completed farm dates as Motor Runtime so a populated
+// final day cannot disappear behind an incomplete current-day window.
+assert.match(dateRangeSelector, /getDefaultWellDateRange\(days = 6/)
+assert.match(dateRangeSelector, /shiftIsoDate\(farmIsoDate\(now\), -1\)/)
+assert.match(page, /days=6/)
+
 // Remarks remain in the data contract and CSV, but are not rendered in either shared table.
 assert.doesNotMatch(wellTable, />Remarks</)
 assert.doesNotMatch(wellTable, /record\.remarks/)

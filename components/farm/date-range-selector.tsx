@@ -4,7 +4,7 @@ import { type FormEvent, type KeyboardEvent, useState } from "react"
 import { CalendarRange, RefreshCw } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
 
-const dayOptions = ["5 Days", "7 Days", "15 Days", "30 Days"]
+const dayOptions = ["6 Days", "7 Days", "15 Days", "30 Days"]
 const FARM_TIME_ZONE = "Asia/Kolkata"
 
 function farmIsoDate(now = new Date()) {
@@ -24,8 +24,8 @@ function shiftIsoDate(isoDate: string, offsetDays: number) {
   return shifted.toISOString().slice(0, 10)
 }
 
-export function getDefaultWellDateRange(days = 5, now = new Date()) {
-  const endDate = farmIsoDate(now)
+export function getDefaultWellDateRange(days = 6, now = new Date()) {
+  const endDate = shiftIsoDate(farmIsoDate(now), -1)
   return {
     startDate: shiftIsoDate(endDate, -(days - 1)),
     endDate,
@@ -49,10 +49,10 @@ export function DateRangeSelector({ onChange }: DateRangeSelectorProps) {
   const [initialRange] = useState(() => getDefaultWellDateRange())
   const [startDate, setStartDate] = useState(initialRange.startDate)
   const [endDate, setEndDate] = useState(initialRange.endDate)
-  const [days, setDays] = useState("5 Days")
+  const [days, setDays] = useState("6 Days")
 
   function applyDateRange() {
-    const daysValue = Number.parseInt(days, 10) || 5
+    const daysValue = Number.parseInt(days, 10) || 6
     onChange?.(
       `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&days=${encodeURIComponent(daysValue)}`,
     )
@@ -105,7 +105,7 @@ export function DateRangeSelector({ onChange }: DateRangeSelectorProps) {
             value={days}
             onChange={(e) => {
               const nextDays = e.target.value
-              const count = Number.parseInt(nextDays, 10) || 5
+              const count = Number.parseInt(nextDays, 10) || 6
               setDays(nextDays)
               setStartDate(shiftIsoDate(endDate, -(count - 1)))
             }}

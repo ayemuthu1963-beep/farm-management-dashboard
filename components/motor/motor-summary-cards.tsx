@@ -12,6 +12,9 @@ const accentMap: Record<MotorSummaryStat["icon"], string> = {
 
 function StatCard({ stat }: { stat: MotorSummaryStat }) {
   const Icon = iconMap[stat.icon]
+  const displayValue = stat.unit === "Litres"
+    ? Math.round(stat.value).toLocaleString("en-IN")
+    : stat.value.toFixed(stat.unit === "Cycles" ? 0 : 2)
   return (
     <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
       <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", accentMap[stat.icon])}>
@@ -20,7 +23,7 @@ function StatCard({ stat }: { stat: MotorSummaryStat }) {
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-primary">{stat.motor}</p>
         <p className="text-[11px] leading-tight text-muted-foreground">{stat.label}</p>
-        <p className="mt-1 text-2xl font-bold text-foreground">{stat.value.toFixed(stat.unit === "Cycles" ? 0 : 2)}</p>
+        <p className="mt-1 text-2xl font-bold text-foreground">{displayValue}</p>
         <p className="text-[11px] text-muted-foreground">{stat.unit}</p>
       </div>
     </div>

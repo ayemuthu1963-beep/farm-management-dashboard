@@ -38,6 +38,7 @@ export interface WellDashboardResponse {
     selected_start_date?: string
     selected_end_date?: string
     calendar_days?: number
+    pumped_out_totals_liters?: Partial<Record<WellId | "both", NumericApiValue>>
   }
   daily_rows?: WellDailyApiRow[]
   north_rows: WellDailyApiRow[]
@@ -173,12 +174,6 @@ function waterDisplay(value: number | null): string {
   return formatNumberIN(Math.round(value))
 }
 
-function sumAvailable(values: Array<number | null>): number | null {
-  const validValues = values.filter((value): value is number => value !== null)
-  if (validValues.length === 0) return null
-  return validValues.reduce((sum, value) => sum + value, 0)
-}
-
 function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
   const configurationWarning =
     row.remarks === SOUTH_WELL_CONFIGURATION_WARNING
@@ -209,15 +204,14 @@ function capacityFromRows(rows: WellDailyApiRow[]): string {
 }
 
 function buildPumpedOutStats(
-  northRecords: WellDailyRecord[],
-  southRecords: WellDailyRecord[],
+  totals: WellDashboardResponse["summary"]["pumped_out_totals_liters"] | undefined,
 ): SummaryStat[] {
   return [
     {
       well: "North Well",
       wellId: "north",
       label: "Total Pumped Out",
-      value: sumAvailable(northRecords.map((record) => record.waterPumpedOut)),
+      value: toNullableFiniteNumber(totals?.north),
       icon: "pump",
       warning: "Unavailable",
     },
@@ -225,7 +219,7 @@ function buildPumpedOutStats(
       well: "South Well",
       wellId: "south",
       label: "Total Pumped Out",
-      value: sumAvailable(southRecords.map((record) => record.waterPumpedOut)),
+      value: toNullableFiniteNumber(totals?.south),
       icon: "pump",
       warning: "Unavailable",
     },
@@ -233,9 +227,7 @@ function buildPumpedOutStats(
       well: "Both Wells",
       wellId: "both",
       label: "Total Pumped Out",
-      value: sumAvailable(
-        [...northRecords, ...southRecords].map((record) => record.waterPumpedOut),
-      ),
+      value: toNullableFiniteNumber(totals?.both),
       icon: "pump",
       warning: "Unavailable",
     },
@@ -256,7 +248,7 @@ export function buildWellDashboardData(payload: WellDashboardResponse): WellDash
       north: capacityFromRows(northRows),
       south: capacityFromRows(southRows),
     },
-    summaryStats: buildPumpedOutStats(northWellRecords, southWellRecords),
+    summaryStats: buildPumpedOutStats(payload.summary?.pumped_out_totals_liters),
     totalReadings: payload.summary?.total_readings ?? 0,
     latestReadingDate: formatDate(payload.summary?.latest_reading_date),
   }

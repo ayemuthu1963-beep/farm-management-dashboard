@@ -5,7 +5,7 @@ import { CalendarDays, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FALLBACK_MOTORS } from "@/lib/motor-screenshot-analysis-config"
 import type { DateSummary, Motor, RunRecord } from "@/lib/motor-screenshot-analysis-types"
-import { formatDate, formatRuntime } from "@/lib/motor-screenshot-analysis-format"
+import { formatDate, formatRuntimeHHMM } from "@/lib/motor-screenshot-analysis-format"
 import { RuntimeRecordCard } from "./runtime-record-card"
 
 export function DateRuntimeGroup({
@@ -56,14 +56,14 @@ export function DateRuntimeGroup({
                 {m.name}
               </span>
               <span className="text-sm font-medium text-foreground">
-                {formatRuntime(summary.perMotorMinutes[m.id])}
+                {formatRuntimeHHMM(summary.perMotorSeconds[m.id])}
               </span>
             </div>
           ))}
           <div className="border-l border-border pl-4 sm:pl-5">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">Combined</span>
             <span className="block font-serif text-base font-bold text-primary">
-              {formatRuntime(summary.combinedMinutes)}
+              {formatRuntimeHHMM(summary.combinedSeconds)}
             </span>
           </div>
           <ChevronDown

@@ -4,11 +4,13 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { formatExactRuntime, formatRuntimeSeconds, roundedRuntimeMinutes } from "../lib/motor-screenshot-analysis-format.ts"
+import { formatExactRuntime, formatRuntimeHHMM, formatRuntimeSeconds, roundedRuntimeMinutes } from "../lib/motor-screenshot-analysis-format.ts"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const text = (path) => readFileSync(join(root, path), "utf8")
-const sha256 = (path) => createHash("sha256").update(readFileSync(join(root, path))).digest("hex")
+const sha256 = (path) => createHash("sha256")
+  .update(readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n"))
+  .digest("hex")
 const record = (id, onTime, offTime, runtimeSeconds, status = "complete") => ({
   id,
   date: "2026-07-30",
@@ -42,6 +44,7 @@ assert.equal(roundedRuntimeMinutes(combinedSeconds), 158, "The final 9501-second
 assert.deepEqual(approved.slice(0, 4).map((row) => row.runtimeMinutes), [21, 58, 58, 21])
 assert.equal(formatRuntimeSeconds(9501), "2 hr 38 min")
 assert.equal(formatExactRuntime(9501), "2 hr 38 min 21 sec")
+assert.equal(formatRuntimeHHMM(9501), "02:38")
 assert.equal(approved.filter((row) => row.status !== "complete").length, 1)
 
 const page = text("app/motor-runtime/screenshot-analysis/page.tsx")
@@ -59,6 +62,8 @@ assert.doesNotMatch(page, /motor-screenshot-analysis-mock-data|RUN_RECORDS|setTi
 assert.equal(existsSync(join(root, "lib/motor-screenshot-analysis-mock-data.ts")), false)
 assert.match(page, /uploadScreenshots/)
 assert.match(page, /createTextImports/)
+assert.match(page, /createExcelImports/)
+assert.match(page, /parseExcelImport/)
 assert.match(page, /parseTextImport/)
 assert.match(page, /loadRecords/)
 assert.match(page, /loadSummary/)
@@ -87,6 +92,8 @@ assert.match(review, /do not affect confirmed database totals/)
 assert.match(review, /formatExactRuntime\(provisionalSeconds\)/)
 assert.match(review, /Owner confirmation required/)
 assert.match(review, /Imported source text/)
+assert.match(review, /Stored Excel source rows/)
+assert.match(review, /Power loss is evidence/)
 assert.match(review, /Reject Import/)
 assert.match(review, /Delete Import/)
 assert.match(types, /provisional_sessions: ProvisionalSession\[\]/)
@@ -97,6 +104,9 @@ assert.match(upload, /authenticated MFMS route/)
 assert.match(sourceInput, /Paste Full Text/)
 assert.match(sourceInput, /Upload Screenshot — Optional/)
 assert.match(sourceInput, /Upload TXT File/)
+assert.match(sourceInput, /Upload Excel/)
+assert.match(sourceInput, /Import Excel and Review/)
+assert.match(sourceInput, /accept="\.xlsx,application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet"/)
 assert.match(sourceInput, /Screenshot OCR/)
 assert.match(sourceInput, /Screenshot OCR is not currently enabled/)
 assert.match(sourceInput, /Paste Motor Notification Text/)
@@ -110,8 +120,9 @@ assert.equal((config.match(/\| MOTOR|\| MTR/g) ?? []).length, 11, "Approved samp
 assert.match(table, /Sorting and pagination are applied by the backend/)
 assert.match(table, /md:hidden/)
 assert.match(table, /overflow-x-auto/)
+assert.match(table, /formatRuntimeHHMM\(record\.runtimeSeconds\)/)
 
-assert.equal(sha256("app/page.tsx"), "fcc828abdfe3228f3c5b29378e4e254dbd0fa99c4f939ca3549bc25b83eab2be", "MFMS home page changed")
-assert.equal(sha256("app/motor-runtime/page.tsx"), "e702c72259c236bb9151783b1f0dddd7fe90be24b4fddf53decfd078a1cd31fb", "Existing Motor Runtime page changed")
+assert.equal(sha256("app/page.tsx"), "7ca89f8f35a0b896e838a36bf230e04b6b19e0cd9ac6929ff1e2210d11d922c6", "MFMS home page changed")
+assert.equal(sha256("app/motor-runtime/page.tsx"), "4ce6008ab6680365685c5cbe9fc9471bb7c396e04397ad1f950ec1335382cb63", "Existing Motor Runtime page changed")
 
 console.log("Motor Screenshot Analysis real workflow, exact-second totals, review, API, responsive and regression invariants: PASS")

@@ -33,6 +33,19 @@ const perTreeSeries = [
   { key: "NM", name: "Nutmeg", color: "#0891b2" },
 ] as const
 
+function PerTreeLegend() {
+  return (
+    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-foreground">
+      {perTreeSeries.map((series) => (
+        <li key={series.key} className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-4 border-t-2" style={{ borderColor: series.color }} aria-hidden="true" />
+          <span>{series.name}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function ChartState({ label, wide = false }: { label: string; wide?: boolean }) {
   return (
     <Panel title="Irrigation Charts" className={wide ? "lg:col-span-2" : undefined}>
@@ -79,7 +92,7 @@ export function IrrigationChartsHybrid({ zones, trend, isLoading = false, errorM
             <XAxis dataKey="displayDate" />
             <YAxis tickFormatter={(value: number) => formatNumberIN(value)} label={{ value: "Total water per tree (L)", angle: -90, position: "insideLeft" }} width={80} />
             <Tooltip formatter={(value, name) => fmtPerTree(value, name)} labelFormatter={(label) => `Date: ${label}`} />
-            <Legend />
+            <Legend content={<PerTreeLegend />} />
             {perTreeSeries.map((series) => (
               <Line key={series.key} type="monotone" dataKey={series.key} stroke={series.color} name={series.name} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
             ))}
