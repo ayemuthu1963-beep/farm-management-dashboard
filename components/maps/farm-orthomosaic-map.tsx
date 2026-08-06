@@ -77,6 +77,7 @@ interface FarmOrthomosaicMapProps {
   controlsPlacement?: "side" | "below"
   onMapReady?: (map: LeafletMap, leaflet: LeafletApi) => void | (() => void)
   children?: ReactNode
+  contentBelowMap?: ReactNode
 }
 
 const LEAFLET_CSS_ID = "mfms-leaflet-css"
@@ -127,6 +128,7 @@ export function FarmOrthomosaicMap({
   controlsPlacement = "side",
   onMapReady,
   children,
+  contentBelowMap,
 }: FarmOrthomosaicMapProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
@@ -256,6 +258,7 @@ export function FarmOrthomosaicMap({
     return (
       <div className={`flex flex-col gap-4 ${className}`}>
         {mapPanel}
+        {contentBelowMap}
         {fitControls}
         {layerControls}
         {children}
@@ -273,9 +276,11 @@ export function FarmOrthomosaicMap({
         {layerControls}
         {fitControls}
         {children}
-        {detailsPanel}
-        {notePanel}
       </div>
+
+      {contentBelowMap ? <div className="xl:col-span-2">{contentBelowMap}</div> : null}
+      {detailsPanel ? <div className="xl:col-start-1">{detailsPanel}</div> : null}
+      {notePanel ? <div className="xl:col-start-2 xl:self-start">{notePanel}</div> : null}
     </div>
   )
 }

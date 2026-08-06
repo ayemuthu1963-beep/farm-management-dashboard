@@ -64,12 +64,104 @@ const measureOrder: TreeWiseMeasure[] = ["bunches", "nuts", "sale"]
 const metadataOrder: TreeWiseMetadata[] = ["plot", "classification", "reason"]
 const totalOrder: TreeWiseTotal[] = ["totalBunches", "totalNuts", "totalSale", "totalMissed"]
 
+const classificationTones = {
+  "Century Maker": {
+    cell: "border-emerald-400 bg-emerald-100/80",
+    swatch: "border-emerald-300 bg-emerald-50",
+  },
+  "Match Winner": {
+    cell: "border-teal-400 bg-teal-100/80",
+    swatch: "border-teal-300 bg-teal-50",
+  },
+  "Reliable Batter": {
+    cell: "border-sky-400 bg-sky-100/80",
+    swatch: "border-sky-300 bg-sky-50",
+  },
+  "Tail Ender": {
+    cell: "border-amber-400 bg-amber-100/80",
+    swatch: "border-amber-300 bg-amber-50",
+  },
+  "Bench Player": {
+    cell: "border-rose-400 bg-rose-100/80",
+    swatch: "border-rose-300 bg-rose-50",
+  },
+  "Future Better": {
+    cell: "border-violet-400 bg-violet-100/80",
+    swatch: "border-violet-300 bg-violet-50",
+  },
+} as const
+
+type ClassificationName = keyof typeof classificationTones
+
+interface ClassificationLegendItem {
+  classification: ClassificationName
+  criteria: string
+}
+
+const classificationLegendByPlot: Record<"Plot 1" | "Plot 2", ClassificationLegendItem[]> = {
+  "Plot 1": [
+    { classification: "Century Maker", criteria: "Over 400 nuts in last 10 harvests" },
+    { classification: "Match Winner", criteria: "300 to 399 nuts in last 10 harvests" },
+    { classification: "Reliable Batter", criteria: "225 to 299 nuts in last 10 harvests" },
+    { classification: "Tail Ender", criteria: "175 to 224 nuts in last 10 harvests" },
+    { classification: "Bench Player", criteria: "Less than 175 nuts in last 10 harvests" },
+    { classification: "Future Better", criteria: "Saplings under 36 completed months" },
+  ],
+  "Plot 2": [
+    { classification: "Match Winner", criteria: "200 to 299 nuts in last 10 harvests" },
+    { classification: "Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests" },
+    { classification: "Tail Ender", criteria: "100 to 149 nuts in last 10 harvests" },
+    { classification: "Bench Player", criteria: "Less than 100 nuts in last 10 harvests" },
+    { classification: "Future Better", criteria: "Saplings under 36 completed months" },
+  ],
+}
+
 type QueryStatus = "idle" | "loading" | "real" | "empty" | "error"
 type SortDirection = "asc" | "desc"
 
 interface SortConfig {
   key: string
   direction: SortDirection
+}
+
+function classificationName(value: string): ClassificationName | null {
+  const normalized = value === "Sapling"
+    ? "Future Better"
+    : value.replace(/^[^\p{L}\p{N}]+/u, "").trim()
+
+  return normalized in classificationTones ? normalized as ClassificationName : null
+}
+
+function treeNumberTone(value: string) {
+  const classification = classificationName(value)
+  return classification
+    ? classificationTones[classification].cell
+    : "border-slate-200 bg-slate-100/80"
+}
+
+function ClassificationLegend() {
+  return (
+    <aside className="min-w-0 rounded-xl border border-border bg-muted/20 p-3" aria-label="Tree number classification colour legend">
+      <p className="text-xs font-bold uppercase tracking-wide text-foreground">Tree number colour legend</p>
+      <div className="mt-2 grid gap-4 sm:grid-cols-2">
+        {(Object.entries(classificationLegendByPlot) as [keyof typeof classificationLegendByPlot, ClassificationLegendItem[]][]).map(([plot, items]) => (
+          <section key={plot} aria-labelledby={`${plot.replace(" ", "-").toLowerCase()}-colour-legend`}>
+            <h3 id={`${plot.replace(" ", "-").toLowerCase()}-colour-legend`} className="mb-1.5 text-xs font-bold text-primary">{plot}</h3>
+            <ul className="space-y-1.5">
+              {items.map((item) => (
+                <li key={item.classification} className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2 text-xs text-muted-foreground">
+                  <span className={`inline-flex min-h-7 items-center justify-center rounded-md border px-2 font-bold text-slate-950 ${classificationTones[item.classification].swatch}`}>
+                    1234
+                  </span>
+                  <span><strong className="font-semibold text-foreground">{item.classification}</strong> — {item.criteria}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </aside>
+  )
 }
 
 function RangeField({ label, id, type = "number" }: { label: string; id: string; type?: string }) {
@@ -296,7 +388,7 @@ function TreeWiseTable({
               <tbody>
                 {pageRows.map((row) => (
                   <tr key={row.treeNo} className="h-[42px] border-b border-border last:border-0 hover:bg-muted/50">
-                    <td className="whitespace-nowrap bg-emerald-50/70 px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
+                    <td className={`whitespace-nowrap border-l-4 px-3 py-2.5 font-semibold text-slate-950 ${treeNumberTone(row.classification)}`}>{row.treeNo}</td>
                     {metadata.map((field) => <td key={field} className="whitespace-nowrap border-l border-border px-3 py-2.5 text-muted-foreground">{row[field] || "—"}</td>)}
                   </tr>
                 ))}
@@ -592,14 +684,17 @@ export default function TreeWiseQueryPage() {
 
             {selectionError ? <p className="mt-3 text-sm font-medium text-destructive" role="alert">{selectionError}</p> : null}
 
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <button type="submit" disabled={status === "loading"} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-70">
-                {status === "loading" ? <HarvestButtonSpinner /> : <Search className="size-4" />}
-                {status === "loading" ? "Building table…" : "Show Table"}
-              </button>
-              <button type="reset" onClick={() => { setData(null); setStatus("idle"); setErrorMessage(""); standardPreset() }} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-2 text-sm font-medium hover:bg-accent">
-                <RotateCcw className="size-4" />Reset Query
-              </button>
+            <div className="mt-5 grid gap-4 xl:grid-cols-[max-content_minmax(0,1fr)] xl:items-start">
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="submit" disabled={status === "loading"} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-70">
+                  {status === "loading" ? <HarvestButtonSpinner /> : <Search className="size-4" />}
+                  {status === "loading" ? "Building table…" : "Show Table"}
+                </button>
+                <button type="reset" onClick={() => { setData(null); setStatus("idle"); setErrorMessage(""); standardPreset() }} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-2 text-sm font-medium hover:bg-accent">
+                  <RotateCcw className="size-4" />Reset Query
+                </button>
+              </div>
+              <ClassificationLegend />
             </div>
           </form>
         </Panel>

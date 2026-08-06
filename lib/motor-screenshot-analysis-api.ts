@@ -25,9 +25,9 @@ type ApiRecord = {
   status: RunStatus
   review_notes: string | null
   on_screenshot_id: number | null
-  on_source_type: "text_paste" | "text_file" | "screenshot" | null
+  on_source_type: "text_paste" | "text_file" | "excel_file" | "screenshot" | null
   off_screenshot_id: number | null
-  off_source_type: "text_paste" | "text_file" | "screenshot" | null
+  off_source_type: "text_paste" | "text_file" | "excel_file" | "screenshot" | null
 }
 
 type ApiSummaryMotor = {
@@ -137,7 +137,7 @@ export async function loadRecords(query: RecordsQuery): Promise<RecordsResponse>
         screenshotId: sourceType === "screenshot" ? screenshotId : null,
         screenshotName: sourceType === "screenshot" && screenshotId
           ? `Screenshot ${screenshotId}`
-          : screenshotId ? `Text import ${screenshotId}` : "No source available",
+          : screenshotId ? `${sourceType === "excel_file" ? "Excel" : "Text"} import ${screenshotId}` : "No source available",
         extractedMessages: [],
         matchingNote: row.review_notes ?? (row.status === "complete" ? "Confirmed MOTOR ON/OFF session." : "Owner review required."),
       }
@@ -197,12 +197,30 @@ export async function createTextImports(
   return jsonResponse(await fetch("/api/motor-screenshot-analysis/text-imports", { method: "POST", body }))
 }
 
+export async function createExcelImports(
+  motorId: MotorId,
+  files: File[],
+): Promise<{ imports: UploadRecord[]; duplicates: Array<{ original_filename: string; existing_import_id: number | null; message: string }> }> {
+  const body = new FormData()
+  body.set("motor_id", motorId)
+  for (const file of files) body.append("files", file, file.name)
+  return jsonResponse(await fetch("/api/motor-screenshot-analysis/excel-imports", { method: "POST", body }))
+}
+
 export async function parseTextImport(importId: number): Promise<UploadDetail> {
   return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}/parse`, { method: "POST" }))
 }
 
 export async function getTextImport(importId: number): Promise<UploadDetail> {
   return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}`, { cache: "no-store" }))
+}
+
+export async function parseExcelImport(importId: number): Promise<UploadDetail> {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/excel-imports/${importId}/parse`, { method: "POST" }))
+}
+
+export async function getExcelImport(importId: number): Promise<UploadDetail> {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/excel-imports/${importId}`, { cache: "no-store" }))
 }
 
 export async function getUpload(uploadId: number): Promise<UploadDetail> {
@@ -244,10 +262,22 @@ export async function confirmTextImport(importId: number) {
   return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}/confirm`, { method: "POST" }))
 }
 
+export async function confirmExcelImport(importId: number) {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/excel-imports/${importId}/confirm`, { method: "POST" }))
+}
+
 export async function rejectTextImport(importId: number) {
   return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}/reject`, { method: "POST" }))
 }
 
+export async function rejectExcelImport(importId: number) {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/excel-imports/${importId}/reject`, { method: "POST" }))
+}
+
 export async function deleteTextImport(importId: number) {
   return jsonResponse(await fetch(`/api/motor-screenshot-analysis/text-imports/${importId}`, { method: "DELETE" }))
+}
+
+export async function deleteExcelImport(importId: number) {
+  return jsonResponse(await fetch(`/api/motor-screenshot-analysis/excel-imports/${importId}`, { method: "DELETE" }))
 }

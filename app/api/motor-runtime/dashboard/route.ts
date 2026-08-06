@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -7,7 +8,7 @@ export const runtime = "nodejs"
 type MotorId = "M1" | "M2" | "M3"
 
 type RuntimeEntry = {
-  id: number
+  id: string
   entry_date: string
   plot: string
   motor_no: number
@@ -18,6 +19,11 @@ type RuntimeEntry = {
   remarks: string | null
   source: string
   created_at: string
+  record_type?: "legacy" | "managed"
+  session_id?: number | null
+  motor_on_at?: string | null
+  motor_off_at?: string | null
+  run_no?: number | null
 }
 
 const motorIds: MotorId[] = ["M1", "M2", "M3"]
@@ -90,7 +96,7 @@ export async function GET(request: Request) {
 
   try {
     const backendQuery = new URLSearchParams({
-      limit: "100",
+      limit: "1000",
       start_date: startDate ?? "",
       end_date: endDate ?? "",
     })
@@ -112,35 +118,52 @@ export async function GET(request: Request) {
         a.valve_no - b.valve_no ||
         (plotLabels[a.plot] ?? a.plot).localeCompare(plotLabels[b.plot] ?? b.plot) ||
         a.created_at.localeCompare(b.created_at) ||
-        a.id - b.id,
+        a.id.localeCompare(b.id),
     )
     const entriesByMotor = new Map<MotorId, RuntimeEntry[]>()
     for (const id of motorIds) entriesByMotor.set(id, [])
     for (const entry of sortedEntries) entriesByMotor.get(motorId(entry.motor_no))?.push(entry)
 
+    const countedSessions = new Set<number>()
     const recordsByMotor = Object.fromEntries(
       motorIds.map((id) => [
         id,
-        (entriesByMotor.get(id) ?? []).map((entry) => ({
-          date: displayDate(entry.entry_date),
-          runHours: runtimeHours(entry.total_minutes),
-          starts: 1,
-          energyUnits: 0,
-          waterLifted: 0,
-          remarks: entry.remarks ?? "",
-          plot: plotLabels[entry.plot] ?? entry.plot,
-          valve: `Valve${entry.valve_no}`,
-          source: entry.source,
-        })),
+        (entriesByMotor.get(id) ?? []).map((entry) => {
+          const firstAllocation = entry.session_id == null || !countedSessions.has(entry.session_id)
+          if (entry.session_id != null) countedSessions.add(entry.session_id)
+          return {
+            date: displayDate(entry.entry_date),
+            runHours: runtimeHours(entry.total_minutes),
+            starts: firstAllocation ? 1 : 0,
+            energyUnits: 0,
+            waterLifted: pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
+            remarks: entry.remarks ?? "",
+            plot: plotLabels[entry.plot] ?? entry.plot,
+            valve: `Valve${entry.valve_no}`,
+            source: entry.source,
+          }
+        }),
       ]),
     )
 
     const summaryStats = motorIds.flatMap((id) => {
       const rows = entriesByMotor.get(id) ?? []
       const totalMinutes = rows.reduce((sum, entry) => sum + entry.total_minutes, 0)
+      const totalWaterPumped = rows.reduce(
+        (sum, entry) => sum + pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
+        0,
+      )
       return [
         { motor: `Motor ${id.slice(1)}`, motorId: id, label: "Total Run Hours", value: runtimeHours(totalMinutes), unit: "Hours", icon: "clock" },
-        { motor: `Motor ${id.slice(1)}`, motorId: id, label: "Total Starts", value: rows.length, unit: "Cycles", icon: "starts" },
+        {
+          motor: `Motor ${id.slice(1)}`,
+          motorId: id,
+          label: "Total Starts",
+          value: new Set(rows.map((entry) => entry.session_id == null ? `legacy-${entry.id}` : `session-${entry.session_id}`)).size,
+          unit: "Cycles",
+          icon: "starts",
+        },
+        { motor: `Motor ${id.slice(1)}`, motorId: id, label: "Total Water Pumped", value: totalWaterPumped, unit: "Litres", icon: "water" },
       ]
     })
 

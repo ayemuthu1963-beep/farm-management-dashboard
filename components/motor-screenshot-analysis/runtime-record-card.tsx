@@ -1,7 +1,7 @@
 import { ArrowRight, ImageIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RunRecord } from "@/lib/motor-screenshot-analysis-types"
-import { formatDate, formatRuntime, formatTime } from "@/lib/motor-screenshot-analysis-format"
+import { formatDate, formatRuntimeHHMM, formatTime } from "@/lib/motor-screenshot-analysis-format"
 import { MotorBadge } from "./motor-badge"
 import { StatusBadge } from "./status-badge"
 
@@ -50,7 +50,7 @@ export function RuntimeRecordCard({
               record.status !== "complete" ? "text-muted-foreground" : "text-foreground",
             )}
           >
-            {record.status !== "complete" ? "\u2014" : formatRuntime(record.runtimeMinutes)}
+            {record.status !== "complete" ? "\u2014" : formatRuntimeHHMM(record.runtimeSeconds)}
           </p>
         </div>
         <button
@@ -60,7 +60,7 @@ export function RuntimeRecordCard({
           className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40"
         >
           <ImageIcon className="size-3.5" aria-hidden="true" />
-          {record.sourceType === "screenshot" ? "View Screenshot" : "Text import"}
+          {record.sourceType === "screenshot" ? "View Screenshot" : record.sourceType === "excel_file" ? "Excel import" : "Text import"}
           <ArrowRight className="size-3.5" aria-hidden="true" />
         </button>
       </div>

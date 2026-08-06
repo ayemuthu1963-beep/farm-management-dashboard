@@ -5,7 +5,7 @@ export type CommandSource = "rtc" | "phone" | "unknown"
 export type RunStatus = "complete" | "unmatched_on" | "unmatched_off" | "needs_review" | "rejected"
 
 export type MessageKind = "command" | "status" | "other"
-export type EventType = "mtr_on_command" | "mtr_off_command" | "motor_on" | "motor_off" | "unknown"
+export type EventType = "mtr_on_command" | "mtr_off_command" | "motor_on" | "motor_off" | "power_off" | "power_restore" | "unknown"
 export type AnalysisStatus =
   | "queued"
   | "analysing"
@@ -14,7 +14,7 @@ export type AnalysisStatus =
   | "partially_confirmed"
   | "failed"
   | "rejected"
-export type SourceType = "text_paste" | "text_file" | "screenshot"
+export type SourceType = "text_paste" | "text_file" | "excel_file" | "screenshot"
 
 export interface Motor {
   id: MotorId
@@ -94,6 +94,7 @@ export interface UploadRecord {
   raw_text: string | null
   import_status: string
   parser_version: string | null
+  worksheet_name: string | null
   upload_status: "uploaded" | "deleted"
   analysis_status: AnalysisStatus
   extractor_provider: string
@@ -109,7 +110,41 @@ export interface UploadDetail {
   upload: UploadRecord
   messages: ReviewMessage[]
   usage: OcrUsageRecord[]
+  source_rows: ExcelSourceRow[]
+  workbook_runs: WorkbookRun[]
   provisional_sessions: ProvisionalSession[]
+}
+
+export interface WorkbookRun {
+  id: number
+  import_id: number
+  run_no: number
+  operation_date: string | null
+  original_on_date_text: string
+  original_on_time_text: string
+  original_off_date_text: string
+  original_off_time_text: string
+  motor_on_at: string | null
+  motor_off_at: string | null
+  source_runtime_seconds: number | null
+  remarks: string
+  parser_warning: string | null
+}
+
+export interface ExcelSourceRow {
+  id: number
+  worksheet_name: string
+  row_number: number
+  tile_no: number | null
+  raw_first_line: string
+  normalized_line: string
+  original_date_text: string
+  original_time_text: string
+  event_timestamp: string | null
+  timestamp_precision: "second" | "minute" | "unknown"
+  remarks: string
+  row_event_type: string
+  parser_warning: string | null
 }
 
 export interface ProvisionalSession {

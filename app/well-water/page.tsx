@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Download, Droplet, Info, RefreshCw } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
-import { DateRangeSelector } from "@/components/farm/date-range-selector"
+import { DateRangeSelector, getDefaultWellDateRange } from "@/components/farm/date-range-selector"
 import { WellSection } from "@/components/farm/well-section"
 import { SummaryCards } from "@/components/farm/summary-cards"
 import {
@@ -27,7 +27,10 @@ type SyncNotice = {
 }
 
 export default function WellWaterPage() {
-  const [query, setQuery] = useState("days=5")
+  const [query, setQuery] = useState(() => {
+    const { startDate, endDate } = getDefaultWellDateRange()
+    return `start_date=${startDate}&end_date=${endDate}&days=6`
+  })
   const [data, setData] = useState<WellDashboardData>(emptyWellDashboardData)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -56,10 +59,13 @@ export default function WellWaterPage() {
 
       try {
         const response = await fetch(`/api/well-water/dashboard?${query}`, { cache: "no-store" })
-        const payload = (await response.json()) as WellDashboardResponse & { error?: string }
+        const payload = (await response.json()) as WellDashboardResponse & {
+          error?: string
+          detail?: string
+        }
 
         if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to load Well Water data")
+          throw new Error(payload.error ?? payload.detail ?? "Unable to load Well Water data")
         }
 
         if (isActive) {

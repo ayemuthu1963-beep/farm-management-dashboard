@@ -9,6 +9,7 @@ const [page, apiRoute, apiClient, workbook, hub] = await Promise.all([
   readFile(new URL("../lib/tree-wise-query-excel.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/coconut-harvest/page.tsx", import.meta.url), "utf8"),
 ])
+const treeWiseClient = apiClient.slice(apiClient.indexOf("export async function fetchTreeWiseQueryData"))
 
 assert.match(hub, /Tree-wise Table Query/)
 assert.match(hub, /\/coconut-harvest\/tree-wise-query/)
@@ -56,9 +57,31 @@ assert.match(page, /bg-emerald-100\/90/, "Tree Number header must have a distinc
 assert.match(page, /bg-sky-100\/90/, "cycle headers must have a distinct background")
 assert.match(page, /bg-amber-100\/90/, "Totals header must have a distinct background")
 assert.match(page, /bg-rose-100\/90/, "Missed Harvest header must have a distinct background")
+assert.match(page, /classificationTones/)
+assert.match(page, /treeNumberTone\(row\.classification\)/)
+for (const colour of ["emerald", "teal", "sky", "amber", "rose", "violet"]) {
+  assert.match(page, new RegExp(`cell: "border-${colour}-400 bg-${colour}-100/80"`))
+}
+assert.match(page, /Tree number colour legend/)
+assert.match(page, /classificationLegendByPlot/)
+assert.match(page, /"Plot 1": \[/)
+assert.match(page, /"Plot 2": \[/)
+assert.match(page, /sm:grid-cols-2/)
+assert.match(page, /xl:grid-cols-\[max-content_minmax\(0,1fr\)\]/)
+assert.match(page, /Saplings under 36 completed months/)
 
 assert.match(apiClient, /performance\.details\.map/)
 assert.match(apiClient, /\.\.\.matrixRows\.map/)
+assert.match(treeWiseClient, /const cycleResponse = await fetch\(`\$\{getApiBaseUrl\(\)\}\/api\/cycles`/)
+assert.match(treeWiseClient, /const \[performanceResponse, matrixRows\] = await Promise\.all/)
+assert.match(treeWiseClient, /fetchTreeWiseExportRows\(selectedApiCycles, filters, authHeader\)/)
+assert.doesNotMatch(treeWiseClient, /fetchApiDetailedQueryRows/)
+assert.doesNotMatch(apiClient, /fetchCachedTreeMaster/)
+assert.doesNotMatch(apiClient, /const valueFilters:/)
+assert.match(apiClient, /\/api\/export\/csv\?\$\{params\.toString\(\)\}/)
+assert.match(apiClient, /salePriceByCycle/)
+assert.match(apiClient, /inNumberRange\(row\.total_nuts \?\? 0, filters\.nutsFrom, filters\.nutsTo\)/)
+assert.match(apiClient, /inNumberRange\(toNumber\(row\.total_sale\), filters\.saleFrom, filters\.saleTo\)/)
 assert.match(apiClient, /if \(!filters\.includeNoRecord && !byCycle\) continue/)
 assert.match(apiClient, /if \(!value\.hasRecord\) totalMissed \+= 1/)
 assert.match(apiClient, /current\.hasRecord = true/)

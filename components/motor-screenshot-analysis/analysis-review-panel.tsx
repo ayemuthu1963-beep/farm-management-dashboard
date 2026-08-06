@@ -52,6 +52,35 @@ function TilePreview({ uploadId, box, tile }: { uploadId: number; box?: Geometry
   )
 }
 
+function ExcelSourceRows({ detail }: { detail: UploadDetail }) {
+  const rows = detail.source_rows ?? []
+  return (
+    <div className="rounded-lg border border-border bg-muted/30">
+      <div className="border-b border-border p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stored Excel source rows</p>
+        <p className="mt-1 text-xs text-muted-foreground">{rows.length} rows from {detail.upload.worksheet_name ?? "the selected worksheet"}; retained for authenticated history and review.</p>
+      </div>
+      <div className="max-h-[65vh] overflow-auto">
+        <table className="w-full min-w-[760px] border-collapse text-xs">
+          <thead className="sticky top-0 bg-muted"><tr className="border-b border-border text-left text-muted-foreground">
+            <th className="px-2 py-2">Tile</th><th className="px-2 py-2">First line</th><th className="px-2 py-2">Date</th><th className="px-2 py-2">Time</th><th className="px-2 py-2">Remarks</th><th className="px-2 py-2">Class</th>
+          </tr></thead>
+          <tbody>{rows.map((row) => (
+            <tr key={row.id} className={row.parser_warning ? "border-b border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/10" : "border-b border-border/60"}>
+              <td className="whitespace-nowrap px-2 py-2">{row.tile_no ?? row.row_number - 1}</td>
+              <td className="px-2 py-2 font-medium text-foreground">{row.raw_first_line || "—"}</td>
+              <td className="whitespace-nowrap px-2 py-2">{row.original_date_text || "—"}</td>
+              <td className="whitespace-nowrap px-2 py-2">{row.original_time_text || "—"}</td>
+              <td className="px-2 py-2 text-muted-foreground">{row.remarks || "—"}</td>
+              <td className="whitespace-nowrap px-2 py-2">{row.row_event_type.replaceAll("_", " ")}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export function AnalysisReviewPanel({
   detail,
   motors,
@@ -75,6 +104,7 @@ export function AnalysisReviewPanel({
   useEffect(() => setMessages(detail.messages), [detail])
   const motor = motors.find((item) => item.id === detail.upload.motor_id)
   const isScreenshot = detail.upload.source_type === "screenshot"
+  const isExcel = detail.upload.source_type === "excel_file"
   const provisionalSessions = detail.provisional_sessions ?? []
   const provisionalComplete = provisionalSessions.filter((session) => session.status === "complete")
   const provisionalSeconds = provisionalComplete.reduce((sum, session) => sum + (session.runtime_seconds ?? 0), 0)
@@ -132,6 +162,7 @@ export function AnalysisReviewPanel({
                 <p className="mt-1 text-muted-foreground">ON <span className="font-medium text-foreground">{exactClock(session.motor_on_at)}</span> · OFF <span className="font-medium text-foreground">{exactClock(session.motor_off_at)}</span></p>
                 <p className="text-muted-foreground">Exact runtime <span className="font-medium text-foreground">{session.runtime_seconds == null ? "—" : formatExactRuntime(session.runtime_seconds)}</span></p>
                 {session.requires_owner_confirmation && <p className="mt-1 text-amber-700 dark:text-amber-300">Owner confirmation required</p>}
+                {session.status === "needs_review" && session.review_notes && <p className="mt-1 text-amber-700 dark:text-amber-300">{session.review_notes}</p>}
               </div>
             ))}
           </div>
@@ -147,6 +178,8 @@ export function AnalysisReviewPanel({
               alt={`Uploaded source ${detail.upload.original_filename}`}
               className="max-h-[65vh] w-full rounded-lg border border-border bg-muted object-contain"
             />
+          ) : isExcel ? (
+            <ExcelSourceRows detail={detail} />
           ) : (
             <div className="rounded-lg border border-border bg-muted/40 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Imported source text</p>
@@ -207,6 +240,8 @@ export function AnalysisReviewPanel({
                     <option value="mtr_off_command">MTROF command</option>
                     <option value="motor_on">MOTOR ON</option>
                     <option value="motor_off">MOTOR OFF</option>
+                    <option value="power_off">POWER OFF evidence</option>
+                    <option value="power_restore">POWER restored</option>
                     <option value="unknown">Unknown</option>
                   </select>
                 </label>
@@ -228,6 +263,9 @@ export function AnalysisReviewPanel({
               </div>
               {(message.event_type === "unknown" || message.review_status === "needs_review") && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-destructive"><AlertTriangle className="size-3.5" /> Resolve or exclude this uncertain result.</p>
+              )}
+              {message.event_type === "power_off" && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />Power loss is evidence, not automatically a confirmed MOTOR OFF. If it ended an open run, change this event to MOTOR OFF to accept that stop time; otherwise correct or exclude it.</p>
               )}
               {message.parser_warning && (
                 <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{message.parser_warning}</p>

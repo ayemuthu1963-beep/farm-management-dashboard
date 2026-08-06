@@ -10,15 +10,21 @@ import { groupByDate } from "@/lib/motor-screenshot-analysis-data"
 import {
   analyseUpload,
   confirmTextImport,
+  confirmExcelImport,
   confirmUpload,
+  createExcelImports,
   createTextImports,
+  deleteExcelImport,
   deleteTextImport,
+  getExcelImport,
   getUpload,
   getTextImport,
   loadMotors,
   loadRecords,
   loadSummary,
   parseTextImport,
+  parseExcelImport,
+  rejectExcelImport,
   rejectTextImport,
   rejectUpload,
   updateReviewMessage,
@@ -29,7 +35,7 @@ import type { Motor, MotorId, ReviewMessage, RunRecord, UploadDetail } from "@/l
 import { formatDateRange } from "@/lib/motor-screenshot-analysis-format"
 import { AnalysisPageHeader } from "@/components/motor-screenshot-analysis/analysis-page-header"
 import type { SelectedScreenshotInput, UploadWorkflowState } from "@/components/motor-screenshot-analysis/screenshot-upload-panel"
-import { SourceInputPanel, type TextImportInput } from "@/components/motor-screenshot-analysis/source-input-panel"
+import { SourceInputPanel, type ExcelImportInput, type TextImportInput } from "@/components/motor-screenshot-analysis/source-input-panel"
 import { AnalysisReviewPanel } from "@/components/motor-screenshot-analysis/analysis-review-panel"
 import { ProcessingLogicNote } from "@/components/motor-screenshot-analysis/processing-logic-note"
 import { AnalysisSummaryCards } from "@/components/motor-screenshot-analysis/analysis-summary-cards"
@@ -188,11 +194,41 @@ export default function ScreenshotAnalysisPage() {
     }
   }
 
+  async function handleExcelImport(input: ExcelImportInput) {
+    setWorkflowState("uploading")
+    setWorkflowMessage("Validating and storing Excel rows in the MFMS review workflow…")
+    let lastDetail: UploadDetail | null = null
+    const parsedDetails: UploadDetail[] = []
+    try {
+      const created = await createExcelImports(input.motorId, input.files)
+      for (const item of created.imports) {
+        setWorkflowState("analysing")
+        setWorkflowMessage(`Deriving motor and power evidence from ${item.original_filename}…`)
+        lastDetail = await parseExcelImport(item.id)
+        parsedDetails.push(lastDetail)
+      }
+      if (lastDetail) {
+        setActiveUpload(parsedDetails[0])
+        setReviewQueue(parsedDetails)
+        setWorkflowState(parsedDetails[0].upload.analysis_status)
+        const rowCount = parsedDetails.reduce((sum, detail) => sum + detail.source_rows.length, 0)
+        const evidenceCount = parsedDetails.reduce((sum, detail) => sum + detail.messages.length, 0)
+        setWorkflowMessage(`${rowCount} Excel rows stored; ${evidenceCount} motor/power evidence records are ready for operator review${created.duplicates.length ? `; ${created.duplicates.length} duplicate workbook(s) skipped` : ""}.`)
+      } else {
+        setWorkflowState(created.duplicates.length ? "queued" : "failed")
+        setWorkflowMessage(created.duplicates.length ? `${created.duplicates.length} duplicate workbook(s) were safely skipped.` : "No Excel import was created.")
+      }
+    } catch (error) {
+      setWorkflowState("failed")
+      setWorkflowMessage(error instanceof Error ? error.message : "Excel import failed.")
+    }
+  }
+
   async function reloadActive() {
     if (!activeUpload) throw new Error("No active import is selected.")
-    return activeUpload.upload.source_type === "screenshot"
-      ? getUpload(activeUpload.upload.id)
-      : getTextImport(activeUpload.upload.id)
+    if (activeUpload.upload.source_type === "screenshot") return getUpload(activeUpload.upload.id)
+    if (activeUpload.upload.source_type === "excel_file") return getExcelImport(activeUpload.upload.id)
+    return getTextImport(activeUpload.upload.id)
   }
 
   function storeReviewDetail(detail: UploadDetail) {
@@ -220,6 +256,7 @@ export default function ScreenshotAnalysisPage() {
     try {
       await Promise.all(messages.map(updateReviewMessage))
       if (activeUpload.upload.source_type === "screenshot") await confirmUpload(activeUpload.upload.id)
+      else if (activeUpload.upload.source_type === "excel_file") await confirmExcelImport(activeUpload.upload.id)
       else await confirmTextImport(activeUpload.upload.id)
       const detail = await reloadActive()
       storeReviewDetail(detail)
@@ -238,6 +275,7 @@ export default function ScreenshotAnalysisPage() {
     setBusyReview(true)
     try {
       if (activeUpload.upload.source_type === "screenshot") await rejectUpload(activeUpload.upload.id)
+      else if (activeUpload.upload.source_type === "excel_file") await rejectExcelImport(activeUpload.upload.id)
       else await rejectTextImport(activeUpload.upload.id)
       storeReviewDetail(await reloadActive())
       setWorkflowState("rejected")
@@ -256,7 +294,9 @@ export default function ScreenshotAnalysisPage() {
     try {
       storeReviewDetail(activeUpload.upload.source_type === "screenshot"
         ? await analyseUpload(activeUpload.upload.id)
-        : await parseTextImport(activeUpload.upload.id))
+        : activeUpload.upload.source_type === "excel_file"
+          ? await parseExcelImport(activeUpload.upload.id)
+          : await parseTextImport(activeUpload.upload.id))
       setWorkflowState("awaiting_review")
       setWorkflowMessage("Reanalysis completed; inspect every candidate again.")
     } catch (error) {
@@ -272,12 +312,13 @@ export default function ScreenshotAnalysisPage() {
     if (!activeUpload || activeUpload.upload.source_type === "screenshot") return
     setBusyReview(true)
     try {
-      await deleteTextImport(activeUpload.upload.id)
+      if (activeUpload.upload.source_type === "excel_file") await deleteExcelImport(activeUpload.upload.id)
+      else await deleteTextImport(activeUpload.upload.id)
       const remaining = reviewQueue.filter((item) => item.upload.id !== activeUpload.upload.id)
       setReviewQueue(remaining)
       setActiveUpload(remaining[0] ?? null)
       setWorkflowState(remaining[0]?.upload.analysis_status ?? "idle")
-      setWorkflowMessage("Text import deleted. Unconfirmed records do not affect runtime totals.")
+      setWorkflowMessage("Import deleted. Unconfirmed records do not affect runtime totals.")
     } catch (error) {
       setWorkflowMessage(error instanceof Error ? error.message : "Text import could not be deleted.")
     } finally {
@@ -291,7 +332,7 @@ export default function ScreenshotAnalysisPage() {
         <Header />
         <AnalysisPageHeader />
         <div className="flex flex-col gap-4">
-          <SourceInputPanel motors={motors} state={workflowState} message={workflowMessage} onTextImport={handleTextImport} onScreenshotAnalyse={handleAnalyse} />
+          <SourceInputPanel motors={motors} state={workflowState} message={workflowMessage} onTextImport={handleTextImport} onExcelImport={handleExcelImport} onScreenshotAnalyse={handleAnalyse} />
           <ProcessingLogicNote />
         </div>
         {reviewQueue.length > 1 && (
@@ -330,7 +371,7 @@ export default function ScreenshotAnalysisPage() {
             onViewScreenshot={setActiveRecord}
           />
         </div>
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4"><Info className="mt-0.5 size-5 shrink-0 text-muted-foreground" /><p className="text-sm leading-relaxed text-muted-foreground">Text imports use deterministic parsing and the same owner review, pairing and runtime logic as optional screenshot OCR. Uncertain candidates never affect totals until the owner reviews, corrects and confirms them. Google Vision remains disabled.</p></div>
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4"><Info className="mt-0.5 size-5 shrink-0 text-muted-foreground" /><p className="text-sm leading-relaxed text-muted-foreground">Excel and text imports use deterministic parsing and the same operator review, pairing and runtime logic. Power-loss cutoffs and uncertain candidates remain discrepancies until the operator resolves them. Google Vision remains disabled.</p></div>
       </div>
       <ScreenshotViewer record={activeRecord} onClose={() => setActiveRecord(null)} />
     </DashboardShell>

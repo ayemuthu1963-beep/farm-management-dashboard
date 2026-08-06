@@ -588,23 +588,20 @@ export function FarmMapClient() {
   )
 
   return (
-    <div className="flex flex-col gap-5">
-      <FarmOrthomosaicMap
-        mapTitle={
-          <>
-            <span>Drone Orthomosaic Map</span>
-            <span className="ml-2 normal-case tracking-normal text-red-600">
-              Zoom in to see tree numbers. Click a tree to view its data.
-            </span>
-          </>
-        }
-        onMapReady={handleMapReady}
-        note="Coconut tree points are a separate vector overlay. Harvest information is loaded only when a tree is selected."
-      >
-        {treeControls}
-      </FarmOrthomosaicMap>
-
-      <TreeClassificationLegend />
-    </div>
+    <FarmOrthomosaicMap
+      mapTitle={
+        <>
+          <span>Drone Orthomosaic Map</span>
+          <span className="ml-2 normal-case tracking-normal text-red-600">
+            Zoom in to see tree numbers. Click a tree to view its data.
+          </span>
+        </>
+      }
+      onMapReady={handleMapReady}
+      note="Coconut tree points are a separate vector overlay. Harvest information is loaded only when a tree is selected."
+      contentBelowMap={<TreeClassificationLegend />}
+    >
+      {treeControls}
+    </FarmOrthomosaicMap>
   )
 }

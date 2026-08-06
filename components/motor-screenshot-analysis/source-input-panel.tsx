@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { Clipboard, FileText, ImageIcon, Trash2, Upload, X } from "lucide-react"
+import { Clipboard, FileSpreadsheet, FileText, ImageIcon, Trash2, Upload, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { FALLBACK_MOTORS, MOTOR_TEXT_SAMPLE, SCREENSHOT_OCR_ENABLED } from "@/lib/motor-screenshot-analysis-config"
@@ -9,9 +9,10 @@ import type { Motor, MotorId } from "@/lib/motor-screenshot-analysis-types"
 import { cn } from "@/lib/utils"
 import { ScreenshotUploadPanel, type SelectedScreenshotInput, type UploadWorkflowState } from "./screenshot-upload-panel"
 
-type InputMethod = "paste" | "txt" | "screenshot"
+type InputMethod = "paste" | "txt" | "excel" | "screenshot"
 
 export type TextImportInput = { motorId: MotorId; rawText?: string; files?: File[] }
+export type ExcelImportInput = { motorId: MotorId; files: File[] }
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -31,21 +32,25 @@ export function SourceInputPanel({
   state,
   message,
   onTextImport,
+  onExcelImport,
   onScreenshotAnalyse,
 }: {
   motors?: Motor[]
   state: UploadWorkflowState
   message?: string | null
   onTextImport: (input: TextImportInput) => Promise<void>
+  onExcelImport: (input: ExcelImportInput) => Promise<void>
   onScreenshotAnalyse: (images: SelectedScreenshotInput[]) => Promise<void>
 }) {
   const [method, setMethod] = useState<InputMethod>("paste")
   const [motorId, setMotorId] = useState<MotorId>(motors[0]?.id ?? "motor-1")
   const [text, setText] = useState("")
   const [files, setFiles] = useState<File[]>([])
+  const [excelFiles, setExcelFiles] = useState<File[]>([])
   const [previewFile, setPreviewFile] = useState<{ name: string; text: string } | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const excelInputRef = useRef<HTMLInputElement>(null)
   const busy = state === "uploading" || state === "analysing"
   const motorName = motors.find((motor) => motor.id === motorId)?.name ?? motorId
   const count = useMemo(() => detectedRecordCount(text), [text])
@@ -63,6 +68,19 @@ export function SourceInputPanel({
     setFiles((current) => [...current, ...accepted].slice(0, 10))
   }
 
+  function addExcelFiles(list: FileList | null) {
+    if (!list) return
+    const selected = Array.from(list)
+    const invalidType = selected.find((file) => !file.name.toLowerCase().endsWith(".xlsx"))
+    const oversized = selected.find((file) => file.size > 5 * 1024 * 1024)
+    if (invalidType) setFileError(`${invalidType.name} is not a macro-free .xlsx file.`)
+    else if (oversized) setFileError(`${oversized.name} exceeds the 5 MiB limit.`)
+    else if (excelFiles.length + selected.length > 10) setFileError("No more than 10 Excel files may be imported at once.")
+    else setFileError(null)
+    const accepted = selected.filter((file) => file.name.toLowerCase().endsWith(".xlsx") && file.size <= 5 * 1024 * 1024)
+    setExcelFiles((current) => [...current, ...accepted].slice(0, 10))
+  }
+
   async function preview(file: File) {
     setPreviewFile({ name: file.name, text: await file.text() })
   }
@@ -75,13 +93,14 @@ export function SourceInputPanel({
     <section aria-labelledby="input-method-heading" className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div>
         <h2 id="input-method-heading" className="font-serif text-lg font-bold text-foreground">Import motor notifications</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Recommended: Use Paste Full Text or Upload TXT File for faster and more reliable processing.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Import an Excel history, paste full text, or upload TXT. Every result is reviewed before it affects runtime totals.</p>
       </div>
 
-      <div role="tablist" aria-label="Input method" className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div role="tablist" aria-label="Input method" className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {([
           ["paste", "Paste Full Text", Clipboard],
           ["txt", "Upload TXT File", FileText],
+          ["excel", "Upload Excel", FileSpreadsheet],
           ["screenshot", "Upload Screenshot — Optional", ImageIcon],
         ] as const).map(([value, label, Icon]) => (
           <button key={value} type="button" role="tab" aria-selected={method === value} onClick={() => setMethod(value)} className={cn("flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium", method === value ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
@@ -97,7 +116,7 @@ export function SourceInputPanel({
               {motors.map((motor) => <option key={motor.id} value={motor.id}>{motor.name}</option>)}
             </select>
           </label>
-          <Button type="button" variant="outline" size="sm" onClick={copySample}>Copy Sample Format</Button>
+          {method !== "excel" && <Button type="button" variant="outline" size="sm" onClick={copySample}>Copy Sample Format</Button>}
         </div>
       )}
 
@@ -138,6 +157,28 @@ export function SourceInputPanel({
           ))}</ul>}
           {previewFile && <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3"><div className="flex justify-between gap-2"><p className="text-sm font-medium">{previewFile.name}</p><Button type="button" size="sm" variant="ghost" onClick={() => setPreviewFile(null)}>Close</Button></div><pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs">{previewFile.text}</pre></div>}
           <Button type="button" className="mt-4" disabled={busy || files.length === 0} onClick={() => onTextImport({ motorId, files })}><Upload className="size-4" /> Import and Review</Button>
+        </div>
+      )}
+
+      {method === "excel" && (
+        <div className="mt-4">
+          <div className="rounded-xl border-2 border-dashed border-border bg-muted/40 p-6 text-center">
+            <FileSpreadsheet className="mx-auto size-8 text-primary" />
+            <p className="mt-2 text-sm font-medium text-foreground">Motor notification .xlsx workbooks</p>
+            <p className="text-xs text-muted-foreground">Maximum 10 files, 5 MiB each. Macros and formulas are rejected. All rows are assigned to {motorName}.</p>
+            <Button type="button" variant="outline" size="sm" className="mt-3" disabled={busy || excelFiles.length >= 10} onClick={() => excelInputRef.current?.click()}>Select Excel Files</Button>
+            <input ref={excelInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple className="sr-only" onChange={(event) => { addExcelFiles(event.target.files); event.target.value = "" }} />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Required columns: Tile No, First Line of Tile, Date, Time (HH:MM), and Remarks. Every row is stored in PostgreSQL; only MOTOR/MTR and relevant power evidence enter runtime pairing.</p>
+          {fileError && <p role="alert" className="mt-2 text-sm text-destructive">{fileError}</p>}
+          {excelFiles.length > 0 && <ul className="mt-3 space-y-2">{excelFiles.map((file, index) => (
+            <li key={`${file.name}-${file.lastModified}-${index}`} className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-3">
+              <FileSpreadsheet className="size-5 text-muted-foreground" />
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{formatBytes(file.size)} · {motorName}</p></div>
+              <Button type="button" size="icon" variant="ghost" aria-label={`Remove ${file.name}`} onClick={() => setExcelFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X className="size-4" /></Button>
+            </li>
+          ))}</ul>}
+          <Button type="button" className="mt-4" disabled={busy || excelFiles.length === 0} onClick={() => onExcelImport({ motorId, files: excelFiles })}><Upload className="size-4" /> Import Excel and Review</Button>
         </div>
       )}
 
