@@ -214,8 +214,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Correct Preview harvest lock state and restore complete Well Water contracts")
-assert.equal(manifest.base_commit, "bdcd9c73946c5d498d29ed2a68beefebfa17ac90")
+assert.equal(manifest.release_note, "Restore the five-item Harvest Live Counter regression contract")
+assert.equal(manifest.base_commit, "0d8e79c3d3ed9e757e8abe6dc0f6a006952ea5ec")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -225,11 +225,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/admin/harvest-cycle-admin-client.tsx",
+  "components/coconut/live-counter-client.tsx",
   "deploy/preview-release-manifest.json",
-  "package.json",
-  "tests/preview-deployment-workflow.mjs",
-  "tests/preview-state-corrections.mjs"
+  "tests/harvest-live-counter.mjs",
+  "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

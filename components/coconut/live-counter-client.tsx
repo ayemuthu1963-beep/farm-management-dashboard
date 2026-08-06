@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Activity, AlertTriangle, CalendarDays, Layers3, RefreshCw, Trees, Wifi, WifiOff } from "lucide-react"
+import { Activity, AlertTriangle, CalendarDays, Clock3, Layers3, RefreshCw, Trees, Wifi, WifiOff } from "lucide-react"
 
 type SelectionMode = "date" | "range"
 
@@ -140,6 +140,12 @@ export function LiveCounterClient() {
           ? "bg-amber-50 text-amber-700"
           : "bg-muted text-muted-foreground",
     },
+    {
+      label: "Last Synced",
+      value: data?.lastUpdated ?? "No data",
+      icon: Clock3,
+      tone: "bg-sky-50 text-sky-700",
+    },
   ]
 
   return (
@@ -232,14 +238,14 @@ export function LiveCounterClient() {
         </p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Harvest totals">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Harvest totals">
         {metrics.map((metric) => {
           const Icon = metric.icon
           return (
             <article key={metric.label} className={`rounded-xl border border-border p-5 text-center shadow-sm ${metric.tone}`}>
               <Icon className="mx-auto size-7" aria-hidden="true" />
               <p className="mt-3 text-4xl font-extrabold tracking-tight text-foreground">
-                {metric.value.toLocaleString("en-IN")}
+                {typeof metric.value === "number" ? metric.value.toLocaleString("en-IN") : metric.value}
               </p>
               <p className="mt-1 text-xs font-bold uppercase tracking-wide">{metric.label}</p>
             </article>
