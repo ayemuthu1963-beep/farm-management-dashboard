@@ -70,10 +70,13 @@ export const emptyMotorDashboardData: MotorDashboardData = {
   summaryStats: [
     { motor: "Motor 1", motorId: "M1", label: "Total Run Hours", value: 0, unit: "Hours", icon: "clock" },
     { motor: "Motor 1", motorId: "M1", label: "Total Starts", value: 0, unit: "Cycles", icon: "starts" },
+    { motor: "Motor 1", motorId: "M1", label: "Total Water Pumped", value: 0, unit: "Litres", icon: "water" },
     { motor: "Motor 2", motorId: "M2", label: "Total Run Hours", value: 0, unit: "Hours", icon: "clock" },
     { motor: "Motor 2", motorId: "M2", label: "Total Starts", value: 0, unit: "Cycles", icon: "starts" },
+    { motor: "Motor 2", motorId: "M2", label: "Total Water Pumped", value: 0, unit: "Litres", icon: "water" },
     { motor: "Motor 3", motorId: "M3", label: "Total Run Hours", value: 0, unit: "Hours", icon: "clock" },
     { motor: "Motor 3", motorId: "M3", label: "Total Starts", value: 0, unit: "Cycles", icon: "starts" },
+    { motor: "Motor 3", motorId: "M3", label: "Total Water Pumped", value: 0, unit: "Litres", icon: "water" },
   ],
   statusCards: [
     { id: "M1", name: "Motor 1", well: "Well 1 - North", status: "Idle", runHoursToday: 0, lastStart: "--" },

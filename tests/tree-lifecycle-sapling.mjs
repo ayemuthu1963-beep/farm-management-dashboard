@@ -25,7 +25,7 @@ assert.equal(resolveTreeLifecycleStatus(null, "2026-08-03"), "Harvest Tree")
 
 const classifications = read("lib/coconut-harvest-data.ts")
 assert.match(classifications, /"Future Better"/)
-assert.match(classifications, /"Bench Player",\n\s*"Future Better"/)
+assert.match(classifications, /"Bench Player",\r?\n\s*"Future Better"/)
 
 const performancePage = read("app/coconut-harvest/tree-performance/page.tsx")
 assert.match(performancePage, /Plantation Date/)

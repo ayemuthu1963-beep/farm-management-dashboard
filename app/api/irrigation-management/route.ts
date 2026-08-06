@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { PUMP_LITRES_PER_HOUR, cropLitresPerTreePerHour, formatRuntimeMinutes, statusColors, zoneConfigs, zoneOrder, type CropWaterFigure, type IrrigationData, type IrrigationRecord, type IrrigationStatus, type TrendPoint, type Zone, type ZoneFiveDayHistory, type ZoneId } from "@/lib/irrigation-data"
+import { cropLitresPerTreePerHour, formatRuntimeMinutes, statusColors, zoneConfigs, zoneOrder, type CropWaterFigure, type IrrigationData, type IrrigationRecord, type IrrigationStatus, type TrendPoint, type Zone, type ZoneFiveDayHistory, type ZoneId } from "@/lib/irrigation-data"
 import { buildRecentIrrigationHistory } from "@/lib/irrigation-history"
 import {
   getIrrigationDateBounds,
@@ -9,6 +9,7 @@ import {
   resolveIrrigationDateBounds,
 } from "@/lib/irrigation-period"
 import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
+import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
 interface MotorRuntimeEntry {
   entry_id?: number
@@ -57,7 +58,9 @@ function isWithinRange(entryDate: string, startDate?: string, endDate?: string):
   return true
 }
 
-function runtimeWater(totalMinutes: number): number { return Math.round((totalMinutes / 60) * PUMP_LITRES_PER_HOUR) }
+function runtimeWater(totalMinutes: number, zoneId: ZoneId): number {
+  return pumpedLitresForRuntimeMinutes(totalMinutes, zoneConfigs[zoneId].plot)
+}
 
 function cropWaterFigure(zoneId: ZoneId, totalMinutes: number): CropWaterFigure {
   const crop = zoneConfigs[zoneId].crop
@@ -144,7 +147,7 @@ function buildRecord(entry: MergedMotorRuntimeEntry, zoneId: ZoneId): Irrigation
     valve: `Valve ${entry.valve_no}`,
     runtimeMinutes: entry.total_minutes,
     runtimeDisplay: formatRuntimeMinutes(entry.total_minutes),
-    totalWaterLitres: runtimeWater(entry.total_minutes),
+    totalWaterLitres: runtimeWater(entry.total_minutes, zoneId),
     waterPerTreeLitres: cropWater.litresPerTree,
     source: entry.source ?? "Motor Runtime",
     remarks: entry.remarks ?? "",
@@ -180,7 +183,7 @@ function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: 
     const config = zoneConfigs[zoneId]
     const zoneEntries = byZone.get(zoneId) ?? []
     const zoneMinutes = zoneEntries.reduce((sum, entry) => sum + entry.total_minutes, 0)
-    const totalWater = runtimeWater(zoneMinutes)
+    const totalWater = runtimeWater(zoneMinutes, zoneId)
     const motors = Array.from(new Set(zoneEntries.map((entry) => `Motor ${entry.motor_no} Valve ${entry.valve_no}`))).sort()
     const lastEntryDate = zoneEntries.map((entry) => entry.entry_date).sort().at(-1)
     const cropWater = cropWaterFigure(zoneId, zoneMinutes)
@@ -196,7 +199,7 @@ function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: 
     for (const zoneId of zoneOrder) {
       const minutes = dateMinutes.get(zoneId) ?? 0
       point[zoneId] = cropWaterFigure(zoneId, minutes).litresPerTree
-      point.totalWaterLitres += runtimeWater(minutes)
+      point.totalWaterLitres += runtimeWater(minutes, zoneId)
       point.totalRuntimeHours += minutes / 60
     }
     point.totalRuntimeHours = Number(point.totalRuntimeHours.toFixed(2))

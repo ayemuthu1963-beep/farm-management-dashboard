@@ -8,7 +8,9 @@ import { formatExactRuntime, formatRuntimeHHMM, formatRuntimeSeconds, roundedRun
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const text = (path) => readFileSync(join(root, path), "utf8")
-const sha256 = (path) => createHash("sha256").update(readFileSync(join(root, path))).digest("hex")
+const sha256 = (path) => createHash("sha256")
+  .update(readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n"))
+  .digest("hex")
 const record = (id, onTime, offTime, runtimeSeconds, status = "complete") => ({
   id,
   date: "2026-07-30",
@@ -121,6 +123,6 @@ assert.match(table, /overflow-x-auto/)
 assert.match(table, /formatRuntimeHHMM\(record\.runtimeSeconds\)/)
 
 assert.equal(sha256("app/page.tsx"), "7ca89f8f35a0b896e838a36bf230e04b6b19e0cd9ac6929ff1e2210d11d922c6", "MFMS home page changed")
-assert.equal(sha256("app/motor-runtime/page.tsx"), "e702c72259c236bb9151783b1f0dddd7fe90be24b4fddf53decfd078a1cd31fb", "Existing Motor Runtime page changed")
+assert.equal(sha256("app/motor-runtime/page.tsx"), "4ce6008ab6680365685c5cbe9fc9471bb7c396e04397ad1f950ec1335382cb63", "Existing Motor Runtime page changed")
 
 console.log("Motor Screenshot Analysis real workflow, exact-second totals, review, API, responsive and regression invariants: PASS")

@@ -214,8 +214,8 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Place the Farm Map classification legend immediately below the map")
-assert.equal(manifest.base_commit, "1505a3ecd8a10dcf4a8401eff8d5d50199626bcf")
+assert.equal(manifest.release_note, "Recover Live Counter, authoritative pump totals, irrigation legend order and Harvest status errors")
+assert.equal(manifest.base_commit, "014bb9197cb1ed3202bc871f5f9d6a1fbb51588b")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -225,11 +225,29 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/maps/farm-map-client.tsx",
-  "components/maps/farm-orthomosaic-map.tsx",
+  "app/api/admin/harvest-sync/[[...path]]/route.ts",
+  "app/api/irrigation-management/route.ts",
+  "app/api/motor-runtime/dashboard/route.ts",
+  "app/motor-runtime/page.tsx",
+  "app/well-water/page.tsx",
+  "components/coconut/live-counter-client.tsx",
+  "components/farm/date-range-selector.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/motor/motor-summary-cards.tsx",
+  "components/motor/motor-table.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/farm-map-coconut-trees.mjs",
-  "tests/preview-deployment-workflow.mjs"
+  "lib/motor-data.ts",
+  "lib/water-pump-rates.ts",
+  "lib/well-data.ts",
+  "package.json",
+  "tests/harvest-live-counter.mjs",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/motor-screenshot-analysis-real-workflow.mjs",
+  "tests/preview-deployment-workflow.mjs",
+  "tests/tree-lifecycle-sapling.mjs",
+  "tests/well-water-authoritative-daily-values.mjs",
+  "tests/well-water-page-corrections.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

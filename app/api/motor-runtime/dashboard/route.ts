@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -126,7 +127,7 @@ export async function GET(request: Request) {
           runHours: runtimeHours(entry.total_minutes),
           starts: 1,
           energyUnits: 0,
-          waterLifted: 0,
+          waterLifted: pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
           remarks: entry.remarks ?? "",
           plot: plotLabels[entry.plot] ?? entry.plot,
           valve: `Valve${entry.valve_no}`,
@@ -138,9 +139,14 @@ export async function GET(request: Request) {
     const summaryStats = motorIds.flatMap((id) => {
       const rows = entriesByMotor.get(id) ?? []
       const totalMinutes = rows.reduce((sum, entry) => sum + entry.total_minutes, 0)
+      const totalWaterPumped = rows.reduce(
+        (sum, entry) => sum + pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
+        0,
+      )
       return [
         { motor: `Motor ${id.slice(1)}`, motorId: id, label: "Total Run Hours", value: runtimeHours(totalMinutes), unit: "Hours", icon: "clock" },
         { motor: `Motor ${id.slice(1)}`, motorId: id, label: "Total Starts", value: rows.length, unit: "Cycles", icon: "starts" },
+        { motor: `Motor ${id.slice(1)}`, motorId: id, label: "Total Water Pumped", value: totalWaterPumped, unit: "Litres", icon: "water" },
       ]
     })
 
