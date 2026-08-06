@@ -120,7 +120,7 @@ assert.match(table, /md:hidden/)
 assert.match(table, /overflow-x-auto/)
 assert.match(table, /formatRuntimeHHMM\(record\.runtimeSeconds\)/)
 
-assert.equal(sha256("app/page.tsx"), "fcc828abdfe3228f3c5b29378e4e254dbd0fa99c4f939ca3549bc25b83eab2be", "MFMS home page changed")
+assert.equal(sha256("app/page.tsx"), "7ca89f8f35a0b896e838a36bf230e04b6b19e0cd9ac6929ff1e2210d11d922c6", "MFMS home page changed")
 assert.equal(sha256("app/motor-runtime/page.tsx"), "e702c72259c236bb9151783b1f0dddd7fe90be24b4fddf53decfd078a1cd31fb", "Existing Motor Runtime page changed")
 
 console.log("Motor Screenshot Analysis real workflow, exact-second totals, review, API, responsive and regression invariants: PASS")

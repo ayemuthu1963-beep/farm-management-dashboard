@@ -56,10 +56,13 @@ export default function WellWaterPage() {
 
       try {
         const response = await fetch(`/api/well-water/dashboard?${query}`, { cache: "no-store" })
-        const payload = (await response.json()) as WellDashboardResponse & { error?: string }
+        const payload = (await response.json()) as WellDashboardResponse & {
+          error?: string
+          detail?: string
+        }
 
         if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to load Well Water data")
+          throw new Error(payload.error ?? payload.detail ?? "Unable to load Well Water data")
         }
 
         if (isActive) {

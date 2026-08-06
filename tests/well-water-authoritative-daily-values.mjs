@@ -19,7 +19,7 @@ const northDays = [
     morning_water_liters: 448470,
     evening_water_liters: 446820,
     motor_runtime_minutes: 74,
-    water_pumped_out_liters: 61666.666666666664,
+    water_pumped_out_liters: 44400,
     observed_storage_change_liters: -1650,
     difference_in_morning_readings_litres: 25000,
     remarks: "Live Data",
@@ -100,6 +100,11 @@ const payload = {
     selected_start_date: "2026-07-25",
     selected_end_date: "2026-07-26",
     calendar_days: 2,
+    pumped_out_totals_liters: {
+      north: 44400,
+      south: 150000,
+      both: 194400,
+    },
   },
   daily_rows: [...northDays, ...southDays],
   north_rows: northDays,
@@ -110,7 +115,7 @@ const dashboard = buildWellDashboardData(payload)
 const [northRecord, northSingleReading] = dashboard.northWellRecords
 const [southRecord, southEveningOnly] = dashboard.southWellRecords
 
-assert.equal(Math.round(northRecord.waterPumpedOut), 61667)
+assert.equal(Math.round(northRecord.waterPumpedOut), 44400)
 assert.equal(Math.round(southRecord.waterPumpedOut), 150000)
 assert.equal(northRecord.motorRuntimeMinutes, 74)
 assert.equal(northRecord.morningWater, 448470)
@@ -132,7 +137,7 @@ assert.equal(formatSignedLitres(0, true), "0 L")
 assert.equal(formatSignedLitres(null, true), "—")
 
 const northStats = dashboard.summaryStats.filter((stat) => stat.wellId === "north")
-assert.equal(Math.round(northStats.find((stat) => stat.label === "Total Pumped Out").value), 61667)
+assert.equal(Math.round(northStats.find((stat) => stat.label === "Total Pumped Out").value), 44400)
 assert.equal(dashboard.summaryStats.length, 3)
 assert.deepEqual(
   dashboard.summaryStats.map((stat) => stat.well),
@@ -140,7 +145,7 @@ assert.deepEqual(
 )
 assert.equal(
   Math.round(dashboard.summaryStats.find((stat) => stat.wellId === "both").value),
-  211667,
+  194400,
 )
 
 const northChart = toChartData(dashboard.northWellRecords)
@@ -155,7 +160,7 @@ const dashboardWithNumericStrings = buildWellDashboardData({
       morning_water_liters: "448470",
       evening_water_liters: "446820",
       motor_runtime_minutes: "74",
-      water_pumped_out_liters: "61666.666666666664",
+      water_pumped_out_liters: "44400",
       observed_storage_change_liters: "-1650",
       difference_in_morning_readings_litres: "25000",
       capacity_liters: "1128270",
@@ -171,7 +176,7 @@ assert.equal(typeof numericStringChartPoint.eveningWater, "number")
 assert.equal(typeof numericStringChartPoint.pumpedOut, "number")
 assert.equal("morningDifference" in numericStringChartPoint, false)
 assert.equal(numericStringChartPoint.morningWater, 448470)
-assert.equal(numericStringChartPoint.pumpedOut, 61666.666666666664)
+assert.equal(numericStringChartPoint.pumpedOut, 44400)
 
 assert.equal(formatLitresAxisTick(0), "0")
 assert.equal(formatLitresAxisTick(200000), "2,00,000 L")
@@ -183,6 +188,7 @@ const csv = buildWellWaterCsv(dashboard)
 assert.match(csv, /Difference in Morning Readings \(Litres\)/)
 assert.match(csv, /"25000"/)
 assert.match(csv, /"-1300"/)
+assert.match(csv, /"44400"/)
 assert.ok(
   csv.includes(
     '"South Well","25/07/2026","","390000","0","","Morning reading unavailable"',
@@ -198,6 +204,9 @@ assert.doesNotMatch(source, /morningWater\s*-\s*eveningWater/)
 assert.doesNotMatch(source, /eveningWater\s*-\s*morningWater/)
 assert.doesNotMatch(source, /50_?000/)
 assert.match(source, /row\.water_pumped_out_liters/)
+assert.match(source, /pumped_out_totals_liters/)
+assert.doesNotMatch(source, /sumAvailable\(northRecords/)
+assert.doesNotMatch(source, /sumAvailable\(southRecords/)
 assert.match(source, /row\.difference_in_morning_readings_litres/)
 assert.doesNotMatch(source, /estimated.?recharge/i)
 assert.equal(source.includes('label: "Morning Difference"'), false)
