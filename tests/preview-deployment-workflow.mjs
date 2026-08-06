@@ -214,7 +214,7 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Recover Live Counter, authoritative pump totals, irrigation legend order and Harvest status errors")
+assert.equal(manifest.release_note, "Correct Preview harvest lock state and restore complete Well Water contracts")
 assert.equal(manifest.base_commit, "014bb9197cb1ed3202bc871f5f9d6a1fbb51588b")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -231,6 +231,7 @@ const expectedReleasePaths = [
   "app/motor-runtime/page.tsx",
   "app/well-water/page.tsx",
   "components/coconut/live-counter-client.tsx",
+  "components/admin/harvest-cycle-admin-client.tsx",
   "components/farm/date-range-selector.tsx",
   "components/irrigation/irrigation-charts-hybrid.tsx",
   "components/motor/motor-summary-cards.tsx",
@@ -245,6 +246,7 @@ const expectedReleasePaths = [
   "tests/motor-runtime-water-pumped.mjs",
   "tests/motor-screenshot-analysis-real-workflow.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/preview-state-corrections.mjs",
   "tests/tree-lifecycle-sapling.mjs",
   "tests/well-water-authoritative-daily-values.mjs",
   "tests/well-water-page-corrections.mjs"

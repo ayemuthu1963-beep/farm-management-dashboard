@@ -3,7 +3,7 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Recover Live Counter, authoritative pump totals, irrigation legend order and Harvest status errors",
+  "release_note": "Correct Preview harvest lock state and restore complete Well Water contracts",
   "base_commit": "014bb9197cb1ed3202bc871f5f9d6a1fbb51588b",
   "allowed_paths": [
     "app/api/admin/harvest-sync/[[...path]]/route.ts",
@@ -12,6 +12,7 @@
     "app/motor-runtime/page.tsx",
     "app/well-water/page.tsx",
     "components/coconut/live-counter-client.tsx",
+    "components/admin/harvest-cycle-admin-client.tsx",
     "components/farm/date-range-selector.tsx",
     "components/irrigation/irrigation-charts-hybrid.tsx",
     "components/motor/motor-summary-cards.tsx",
@@ -26,6 +27,7 @@
     "tests/motor-runtime-water-pumped.mjs",
     "tests/motor-screenshot-analysis-real-workflow.mjs",
     "tests/preview-deployment-workflow.mjs",
+    "tests/preview-state-corrections.mjs",
     "tests/tree-lifecycle-sapling.mjs",
     "tests/well-water-authoritative-daily-values.mjs",
     "tests/well-water-page-corrections.mjs"

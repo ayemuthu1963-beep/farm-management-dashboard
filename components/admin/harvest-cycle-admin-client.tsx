@@ -62,6 +62,21 @@ function latestCycleEndDate(cycles: HarvestCycleSummary[]): string | null {
   return endDates.length > 0 ? endDates.sort().at(-1) ?? null : null
 }
 
+function nextCycleNumber(cycles: HarvestCycleSummary[]): string {
+  const numericCycles = cycles
+    .map((cycle) => Number(cycle.harvestCycle))
+    .filter((cycle) => Number.isInteger(cycle) && cycle > 0)
+  return String((numericCycles.length > 0 ? Math.max(...numericCycles) : 0) + 1)
+}
+
+function nextCycleStartDate(cycles: HarvestCycleSummary[]): string {
+  const latestEnd = latestCycleEndDate(cycles)
+  if (!latestEnd) return ""
+  const nextDay = new Date(`${latestEnd}T00:00:00Z`)
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+  return nextDay.toISOString().slice(0, 10)
+}
+
 function StatusCard({ title, cycle, icon: Icon }: { title: string; cycle: HarvestCycleSummary | null; icon: typeof CalendarRange }) {
   return (
     <div className="rounded-2xl border border-border bg-[#fffdf2] p-4 shadow-sm">
@@ -121,8 +136,8 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
   const [openResult, setOpenResult] = useState<ValidationResult | null>(null)
   const [closeResult, setCloseResult] = useState<ValidationResult | null>(null)
   const [saleResult, setSaleResult] = useState<ValidationResult | null>(null)
-  const [cycleNo, setCycleNo] = useState("19")
-  const [startDate, setStartDate] = useState("2026-07-25")
+  const [cycleNo, setCycleNo] = useState(() => nextCycleNumber(cycles))
+  const [startDate, setStartDate] = useState(() => nextCycleStartDate(cycles))
   const [openRemarks, setOpenRemarks] = useState("")
   const [isSavingOpen, setIsSavingOpen] = useState(false)
   const [isSavingClose, setIsSavingClose] = useState(false)
@@ -254,7 +269,7 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
       setCloseResult({
         ok: true,
         message: "Close Current Harvest Cycle saved.",
-        details: [`Cycle ${closeCycleNo} was marked Completed.`, "Preview database was updated."],
+        details: [`Cycle ${closeCycleNo} was marked Locked.`, "Preview database was updated."],
       })
       startRefresh(() => window.location.reload())
     } catch (error) {
@@ -384,25 +399,30 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
 
       <Panel title="Close Current Harvest Cycle" icon={LockKeyhole}>
         <form action={saveCloseCycle} className="space-y-4">
+          {!openCycle ? (
+            <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm font-semibold text-muted-foreground">
+              No Harvest Cycle is currently Open. Open the next cycle before using this form.
+            </p>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-3">
             <label className="text-sm font-bold text-foreground">
               Harvest Cycle No *
-              <input name="close_cycle_no" inputMode="numeric" defaultValue={openCycle?.harvestCycle ?? ""} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input name="close_cycle_no" inputMode="numeric" defaultValue={openCycle?.harvestCycle ?? ""} disabled={!openCycle} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60" />
             </label>
             <label className="text-sm font-bold text-foreground">
               Harvest End Date *
-              <input name="close_end_date" type="date" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input name="close_end_date" type="date" disabled={!openCycle} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60" />
             </label>
             <label className="text-sm font-bold text-foreground">
               Total Sale Value
-              <input name="close_sale_value" inputMode="decimal" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input name="close_sale_value" inputMode="decimal" disabled={!openCycle} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60" />
             </label>
             <label className="text-sm font-bold text-foreground md:col-span-2">
               Remarks
-              <input name="close_remarks" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input name="close_remarks" disabled={!openCycle} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60" />
             </label>
           </div>
-          <button type="submit" disabled={isSavingClose || isRefreshing} className="rounded-lg bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70">
+          <button type="submit" disabled={!openCycle || isSavingClose || isRefreshing} className="rounded-lg bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70">
             {isSavingClose ? "Closing Cycle..." : "Close Current Cycle"}
           </button>
           <ResultBox result={closeResult} />
