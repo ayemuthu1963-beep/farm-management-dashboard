@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { createExcelImports, parseExcelImport } from "@/lib/motor-screenshot-analysis-api"
+import { createExcelImports, getExcelImport, parseExcelImport } from "@/lib/motor-screenshot-analysis-api"
 import type { MotorId, ProvisionalSession, UploadDetail, WorkbookRun } from "@/lib/motor-screenshot-analysis-types"
 import {
   loadAllEvents,
@@ -263,6 +263,7 @@ export function MotorRuntimeManagementClient() {
   const [files, setFiles] = useState<ImportFile[]>([])
   const [imports, setImports] = useState<UploadDetail[]>([])
   const [runs, setRuns] = useState<EditableRun[]>([])
+  const [importDiscrepancyCount, setImportDiscrepancyCount] = useState(0)
   const [events, setEvents] = useState<AllEvent[]>([])
   const [sessions, setSessions] = useState<ManagedSession[]>([])
   const [legacyEntries, setLegacyEntries] = useState<LegacyEntry[]>([])
@@ -346,21 +347,28 @@ export function MotorRuntimeManagementClient() {
     if (!files.length) return
     setBusy(true)
     setMessage("Validating workbooks and storing All Events...")
-    const details: UploadDetail[] = []
+    const detailById = new Map<number, UploadDetail>()
+    let reopenedCount = 0
     try {
       for (const item of files) {
         const created = await createExcelImports(item.motorId, [item.file])
-        for (const imported of created.imports) details.push(await parseExcelImport(imported.id))
+        for (const imported of created.imports) {
+          detailById.set(imported.id, await parseExcelImport(imported.id))
+        }
+        for (const duplicate of created.duplicates) {
+          if (duplicate.existing_import_id && !detailById.has(duplicate.existing_import_id)) {
+            detailById.set(duplicate.existing_import_id, await getExcelImport(duplicate.existing_import_id))
+            reopenedCount += 1
+          }
+        }
       }
+      const details = [...detailById.values()]
       const nextRuns: EditableRun[] = []
+      let discrepancyCount = 0
       for (const detail of details) {
         if (detail.workbook_runs?.length) {
           nextRuns.push(...detail.workbook_runs.map((run) => editableFromWorkbookRun(detail, run)))
-          let discrepancyRun = Math.max(0, ...detail.workbook_runs.map((run) => run.run_no))
-          for (const session of detail.provisional_sessions.filter((value) => value.status !== "complete")) {
-            discrepancyRun += 1
-            nextRuns.push(editableFromProvisional(detail, session, discrepancyRun))
-          }
+          discrepancyCount += detail.provisional_sessions.filter((value) => value.status !== "complete").length
         } else {
           const perDate = new Map<string, number>()
           for (const session of detail.provisional_sessions) {
@@ -373,8 +381,9 @@ export function MotorRuntimeManagementClient() {
       }
       setImports(details)
       setRuns((current) => [...current, ...nextRuns])
+      setImportDiscrepancyCount(discrepancyCount)
       setFiles([])
-      setMessage(`${details.reduce((sum, detail) => sum + detail.source_rows.length, 0)} All Events rows stored; ${nextRuns.length} candidate runs are ready for operator review.`)
+      setMessage(`${details.reduce((sum, detail) => sum + detail.source_rows.length, 0)} All Events rows available; ${nextRuns.length} workbook runs are ready for operator review${reopenedCount ? `; ${reopenedCount} existing import reopened` : ""}${discrepancyCount ? `; ${discrepancyCount} unresolved notification-event discrepancies kept out of Review Runs` : ""}.`)
       setTab("review")
       setError(null)
     } catch (value) {
@@ -498,7 +507,7 @@ export function MotorRuntimeManagementClient() {
             </div>
           ))}</div>}
           <Button type="button" className="mt-4" disabled={busy || files.length === 0} onClick={() => void importExcel()}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Upload className="size-4" />} Import and Review</Button>
-          {imports.length > 0 && <p className="mt-3 text-xs text-muted-foreground">This session imported {imports.length} workbook(s). Source seconds are retained for audit even though operator fields display HH:MM.</p>}
+          {imports.length > 0 && <p className="mt-3 text-xs text-muted-foreground">This review session loaded {imports.length} workbook(s). Source seconds are retained for audit even though operator fields display HH:MM.</p>}
         </section>
       )}
 
@@ -517,7 +526,10 @@ export function MotorRuntimeManagementClient() {
       )}
 
       {tab === "events" && <AllEventsTable events={events} busy={busy} />}
-      {tab === "review" && <ReviewRuns runs={runs} plotOptions={plotOptions} onPatch={patchRun} onPatchAllocation={patchAllocation} onSave={saveRun} />}
+      {tab === "review" && <>
+        {importDiscrepancyCount > 0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p className="flex items-center gap-2 font-bold"><AlertTriangle className="size-4" /> {importDiscrepancyCount} notification-event discrepancies require separate review</p><p className="mt-1">They remain visible in All Events and Motor Screenshot Analysis, but are not treated as additional workbook runs.</p></div>}
+        <ReviewRuns runs={runs} plotOptions={plotOptions} onPatch={patchRun} onPatchAllocation={patchAllocation} onSave={saveRun} />
+      </>}
       {tab === "history" && <><LegacyEditor entries={legacyEntries} plotOptions={plotOptions} onChanged={refreshSessions} /><RuntimeHistory sessions={sessions} legacyEntries={legacyEntries} busy={busy} onEdit={editHistory} onVoid={voidHistory} /></>}
       {tab === "summary" && <DailySummary rows={daily} busy={busy} />}
     </div>
