@@ -3,6 +3,7 @@ import { ArrowLeft, DatabaseZap } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { HarvestManualReviewWorkspace } from "@/components/admin/harvest-manual-review-workspace"
 import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
+import { PreviewOdkSourceCard } from "@/components/odk/preview-odk-source-card"
 
 export const dynamic = "force-dynamic"
 
@@ -32,6 +33,7 @@ export default function HarvestSyncAdminPage() {
             <p><span className="font-extrabold">Form:</span> mfms_preview_harvest_test_v1</p>
           </div>
         </section>
+        <PreviewOdkSourceCard form="harvest" />
         <HarvestManualReviewWorkspace />
       </div>
     </DashboardShell>

@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
+import { OdkCentralLink } from "@/components/odk/odk-central-link"
 import {
   BEETLE_TRAP_DATA_UPDATED_EVENT,
   beetleTrapSyncErrorMessage,
@@ -65,6 +66,7 @@ export function BeetleTrapHeaderActions() {
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        <OdkCentralLink form="beetleTrap" />
         <button
           type="button"
           onClick={syncOdkNow}
