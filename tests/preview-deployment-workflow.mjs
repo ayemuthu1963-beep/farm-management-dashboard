@@ -214,8 +214,11 @@ assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.release_note, "Restore the five-item Harvest Live Counter regression contract")
-assert.equal(manifest.base_commit, "0d8e79c3d3ed9e757e8abe6dc0f6a006952ea5ec")
+assert.equal(
+  manifest.release_note,
+  "Connect Preview Well Water and Beetle pages to Muthu Field Collector ODK Project 22",
+)
+assert.equal(manifest.base_commit, "c6e38b83af41ffe43c397f90d9f2b2185a0caf37")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -225,10 +228,20 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/coconut/live-counter-client.tsx",
+  ".env.example",
+  "app/admin/beetle-trap/page.tsx",
+  "app/admin/harvest-sync/page.tsx",
+  "app/admin/well-water/page.tsx",
+  "app/map-tiles/farm-combined-png/[z]/[x]/[y]/route.ts",
+  "app/well-water/page.tsx",
+  "components/beetle/beetle-trap-header-actions.tsx",
+  "components/odk/odk-central-link.tsx",
+  "components/odk/preview-odk-source-card.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/harvest-live-counter.mjs",
-  "tests/preview-deployment-workflow.mjs"
+  "lib/odk-preview.ts",
+  "package.json",
+  "tests/odk-preview-links.mjs",
+  "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
