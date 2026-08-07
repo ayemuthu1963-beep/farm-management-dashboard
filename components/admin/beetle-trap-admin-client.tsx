@@ -15,6 +15,7 @@ interface AdminSummary {
     createdAt: string | null
     updatedAt: string | null
   }
+  latestWaterChange?: string | null
   trapSummary: {
     totalTraps: number
     redPalmWeevilTraps: number
@@ -116,8 +117,10 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
   const router = useRouter()
   const [adminAction, setAdminAction] = useState("new-trap")
   const [pheromoneResult, setPheromoneResult] = useState<ValidationResult | null>(null)
+  const [waterChangeResult, setWaterChangeResult] = useState<ValidationResult | null>(null)
   const [trapResult, setTrapResult] = useState<ValidationResult | null>(null)
   const [isPheromoneChecking, setIsPheromoneChecking] = useState(false)
+  const [isWaterChangeChecking, setIsWaterChangeChecking] = useState(false)
   const [isTrapChecking, setIsTrapChecking] = useState(false)
 
   async function onPheromoneSubmit(form: HTMLFormElement) {
@@ -138,6 +141,26 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
       setPheromoneResult(requestFailure(error))
     } finally {
       setIsPheromoneChecking(false)
+    }
+  }
+
+  async function onWaterChangeSubmit(form: HTMLFormElement) {
+    const formData = new FormData(form)
+    setIsWaterChangeChecking(true)
+    setWaterChangeResult(null)
+    try {
+      const result = await validateForm("/api/admin/beetle-trap/water-changes", {
+        water_changed_on: String(formData.get("water_changed_on") ?? ""),
+      })
+      setWaterChangeResult(result)
+      if (result.ok) {
+        form.reset()
+        router.refresh()
+      }
+    } catch (error) {
+      setWaterChangeResult(requestFailure(error))
+    } finally {
+      setIsWaterChangeChecking(false)
     }
   }
 
@@ -172,13 +195,13 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-bold">Admin save enabled for pheromone reset, trap type, trap location, and new trap</p>
-            <p>Pheromone reset, Change Trap Type Only, Amend Trap Location, and New Trap save directly to the MFMS database. ODK Central is not modified.</p>
+            <p className="font-bold">Admin save enabled for pheromone reset, water change, trap type, trap location, and new trap</p>
+            <p>Pheromone reset, water change, Change Trap Type Only, Amend Trap Location, and New Trap save directly to the MFMS database. ODK Central is not modified.</p>
           </div>
         </div>
       </div>
 
-      <Panel title="Beetle Trap Admin / Pheromone Reset" icon={CalendarDays}>
+      <Panel title="Beetle Trap Admin / Pheromone and Water" icon={CalendarDays}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
             <h3 className="text-sm font-extrabold uppercase tracking-wide text-primary">Current Latest Reset Setting</h3>
@@ -190,6 +213,10 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
               <div>
                 <dt className="font-semibold text-muted-foreground">Cumulative Count Start Date</dt>
                 <dd className="text-lg font-extrabold text-foreground">{formatDate(summary.latestReset.cumulativeCountStartDate)}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-muted-foreground">Water Changed</dt>
+                <dd className="text-lg font-extrabold text-foreground">{formatDate(summary.latestWaterChange ?? null)}</dd>
               </div>
               <div>
                 <dt className="font-semibold text-muted-foreground">Remarks</dt>
@@ -212,6 +239,7 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
             </dl>
           </div>
 
+          <div className="space-y-4">
           <form
             onSubmit={(event) => {
               event.preventDefault()
@@ -237,6 +265,24 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
             </button>
             <ResultBox result={pheromoneResult} />
           </form>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void onWaterChangeSubmit(event.currentTarget)
+            }}
+            className="space-y-4 rounded-xl border border-chart-2/25 bg-chart-2/5 p-4"
+          >
+            <label className="block text-sm font-semibold text-foreground">
+              Water Changed
+              <input name="water_changed_on" type="date" className="mt-1 w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" />
+            </label>
+            <p className="text-sm text-muted-foreground">Record one date for the water changed in all active beetle traps. This does not reset cumulative beetle counts.</p>
+            <button type="submit" className="rounded-lg bg-chart-2 px-4 py-2 text-sm font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-60" disabled={isWaterChangeChecking}>
+              {isWaterChangeChecking ? "Saving..." : "Save Water Change"}
+            </button>
+            <ResultBox result={waterChangeResult} />
+          </form>
+          </div>
         </div>
       </Panel>
 
@@ -350,7 +396,7 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
       <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
         <div className="flex items-start gap-3">
           <Database className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-          <p>Pheromone reset, Change Trap Type Only, Amend Trap Location, and New Trap save are enabled. No ODK Central change is made.</p>
+          <p>Pheromone reset, water change, Change Trap Type Only, Amend Trap Location, and New Trap save are enabled. No ODK Central change is made.</p>
         </div>
       </div>
     </div>
