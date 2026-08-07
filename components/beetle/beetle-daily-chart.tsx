@@ -4,6 +4,7 @@ import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Responsi
 
 export interface BeetleDailyCountRow {
   date: string
+  sourceDate?: string
   rhinoceros: number
   redPalmWeevil: number
   plot1Rhinoceros: number
@@ -28,8 +29,10 @@ export function BeetleDailyChart({ counts }: BeetleDailyChartProps) {
           <YAxis width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", backgroundColor: "var(--card)", color: "var(--card-foreground)", fontSize: 12 }} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="rhinoceros" name="Rhinoceros" stroke="var(--foreground)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="redPalmWeevil" name="Red Palm Weevil" stroke="var(--destructive)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot1RedPalmWeevil" name="Plot 1 — Red Palm Weevil" stroke="var(--destructive)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot1Rhinoceros" name="Plot 1 — Rhinoceros Beetle" stroke="var(--foreground)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot2RedPalmWeevil" name="Plot 2 — Red Palm Weevil" stroke="var(--chart-1)" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot2Rhinoceros" name="Plot 2 — Rhinoceros Beetle" stroke="var(--chart-2)" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
