@@ -6,6 +6,7 @@ import { BeetleTrapAdminClient } from "@/components/admin/beetle-trap-admin-clie
 import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
+import { PreviewOdkSourceCard } from "@/components/odk/preview-odk-source-card"
 
 export const dynamic = "force-dynamic"
 
@@ -188,6 +189,7 @@ export default async function AdminBeetleTrapPage() {
           Back to Admin Console
         </Link>
         <PreviewAdminNotice />
+        <PreviewOdkSourceCard form="beetleTrap" />
         {error || !summary ? (
           <Panel title="Beetle Trap Status" icon={Bug}>
             <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">

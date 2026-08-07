@@ -15,6 +15,7 @@ import {
   type WellDashboardResponse,
 } from "@/lib/well-data"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
+import { OdkCentralLink } from "@/components/odk/odk-central-link"
 import {
   formatWellWaterSyncSuccess,
   getWellWaterSyncErrorMessage,
@@ -147,6 +148,7 @@ export default function WellWaterPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <OdkCentralLink form="wellWater" />
             <button
               type="button"
               onClick={syncWellWaterNow}
