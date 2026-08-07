@@ -369,6 +369,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
   const cards = summaryCards(data)
   const rows = dailyRows(data)
   const tableRows = dailyTableRows(data, rows)
+  const waterChangeDates = (data?.water_changes ?? []).map((entry) => entry.water_changed_on)
   const latest = data?.summary.latest_inspection
   const manualSyncAvailable = isBeetleTrapManualSyncAvailable()
   const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
@@ -414,7 +415,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           headerRight={<span className="text-xs font-medium text-muted-foreground">Current cumulative period</span>}
           className="border-chart-2/30 bg-chart-2/5"
         >
-          <BeetleDailyChart counts={rows} />
+          <BeetleDailyChart counts={rows} waterChangeDates={waterChangeDates} />
         </Panel>
 
         <Panel
