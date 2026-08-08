@@ -19,10 +19,13 @@ const titleSync = read("components/farm/page-title-sync.tsx")
 const detailedQuery = read("app/coconut-harvest/detailed-query/page.tsx")
 const motorManagement = read("components/admin/motor-runtime-management-client.tsx")
 const navigation = read("lib/mfms-navigation.ts")
+const weatherPage = read("app/weather/page.tsx")
 
 assert.match(layout, /icon: '\/muthu-farms-logo\.png'/)
 assert.match(layout, /<PageTitleSync \/>/)
 assert.match(titleSync, /document\.title = pageTitleForPathname\(pathname\)/)
+assert.match(weatherPage, /title: "MFMS-Weather"/)
+assert.doesNotMatch(weatherPage, /Live Weather \| Muthu Farms/)
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
 const appRoot = path.join(repositoryRoot, "app")
