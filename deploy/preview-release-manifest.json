@@ -3,11 +3,15 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Link the Muthu Farms weather tile to the public Weather Underground station dashboard",
+  "release_note": "Preserve the live Project 23 frontend configuration and link the weather tile to the public Weather Underground station dashboard",
   "base_commit": "d88565139668cb37ee4212ab60bbc39d1c81f6a2",
   "allowed_paths": [
+    "app/api/admin/harvest-sync/[[...path]]/route.ts",
     "deploy/preview-release-manifest.json",
     "lib/mfms-navigation.ts",
+    "lib/odk-preview.ts",
+    "scripts/test-preview-live-contracts.sh",
+    "tests/odk-preview-links.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {

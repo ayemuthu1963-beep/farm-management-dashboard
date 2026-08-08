@@ -20,7 +20,7 @@ function isManualCorrectionRuntimeEnabled(): boolean {
   return (process.env.HARVEST_MANUAL_CORRECTION_ENABLED ?? "").trim().toLowerCase() === "true"
 }
 
-type RouteContext = { params: Promise<{ path?: string[] }> | { path?: string[] } }
+type RouteContext = { params: Promise<{ path?: string[] }> }
 
 const AUTHENTICATED_USER_HEADER = "X-MFMS-Authenticated-User"
 const AUTHENTICATED_USER_TIMESTAMP_HEADER = "X-MFMS-Authenticated-User-Timestamp"
