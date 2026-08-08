@@ -36,8 +36,17 @@ for (const tile of homepageNavigationItems.filter((item) => !item.external)) {
 
 const motorRuntime = sidebarById.get("motor-runtime")
 const motorScreenshotAnalysis = sidebarById.get("motor-screenshot-analysis")
+const liveHarvestCounter = sidebarById.get("live-harvest-counter")
 assert.ok(motorRuntime)
 assert.ok(motorScreenshotAnalysis)
+assert.ok(liveHarvestCounter)
+assert.equal(liveHarvestCounter.label, "Live Harvest Counter")
+assert.equal(liveHarvestCounter.href, "/live-harvest-counter")
+assert.deepEqual(liveHarvestCounter.activeHrefs, [
+  "/coconut-harvest/live-counter",
+  "/coconut-counting",
+])
+assert.equal(sidebarById.has("coconut-counting"), false)
 assert.equal(motorScreenshotAnalysis.href, "/motor-runtime/screenshot-analysis")
 assert.equal(motorScreenshotAnalysis.showOnDashboard, false)
 assert.equal(motorScreenshotAnalysis.showInSidebar, true)
@@ -93,6 +102,13 @@ assert.equal(
     sidebarById.get("coconut-harvest"),
   ),
   true,
+)
+assert.equal(isNavigationItemActive("/live-harvest-counter", liveHarvestCounter), true)
+assert.equal(isNavigationItemActive("/coconut-counting", liveHarvestCounter), true)
+assert.equal(isNavigationItemActive("/coconut-harvest/live-counter", liveHarvestCounter), true)
+assert.equal(
+  isNavigationItemActive("/coconut-harvest/live-counter", sidebarById.get("coconut-harvest")),
+  false,
 )
 assert.equal(isNavigationItemActive("/well-water", sidebarById.get("coconut-harvest")), false)
 assert.equal(isNavigationItemActive("/under-construction", reports), false)

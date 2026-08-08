@@ -1,17 +1,25 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 
-const [hub, page, client, route, legacyRoute] = await Promise.all([
+const [coconutHub, liveCounterHub, page, countingPage, client, route, legacyRoute] = await Promise.all([
   readFile(new URL("../app/coconut-harvest/page.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../app/live-harvest-counter/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/coconut-harvest/live-counter/page.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../app/coconut-counting/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../components/coconut/live-counter-client.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/api/coconut-harvest/live-counter/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/harvest-live-counter/page.tsx", import.meta.url), "utf8"),
 ])
 
-assert.match(hub, /Live Harvest Monitor/)
-assert.match(hub, /\/coconut-harvest\/live-counter/)
+assert.doesNotMatch(coconutHub, /Live Harvest Monitor/)
+assert.doesNotMatch(coconutHub, /\/coconut-harvest\/live-counter/)
+assert.match(liveCounterHub, /Live Harvest Counter/)
+assert.match(liveCounterHub, /Harvest Live Counter/)
+assert.match(liveCounterHub, /\/coconut-harvest\/live-counter/)
+assert.match(liveCounterHub, /Coconut Counting/)
+assert.match(liveCounterHub, /\/coconut-counting/)
 assert.match(page, /Harvest Live Counter/)
+assert.match(countingPage, /CoconutCountingPageHeader/)
 assert.match(client, /const REFRESH_MS = 5 \* 60_000/)
 assert.match(client, /Single Date/)
 assert.match(client, /Date Range/)

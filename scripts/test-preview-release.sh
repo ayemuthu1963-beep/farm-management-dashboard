@@ -26,6 +26,7 @@ check() {
 check / "DIGITAL FARM MANAGEMENT SYSTEM"
 check /coconut-harvest "Coconut Harvest"
 check /coconut-harvest/live-counter "Harvest Live Counter"
+check /live-harvest-counter "Live Harvest Counter"
 check /coconut-harvest/tree-view "Tree View"
 check /coconut-harvest/cycle-view "Harvest Cycle"
 check '/api/coconut-harvest/cycle-details?cycle=19' '"cycle":19'

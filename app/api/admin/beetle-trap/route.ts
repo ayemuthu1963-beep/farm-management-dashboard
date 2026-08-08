@@ -19,6 +19,9 @@ interface BeetleDashboardResponse {
     created_at?: string | null
     updated_at?: string | null
   } | null
+  latest_water_change?: {
+    water_changed_on?: string | null
+  } | null
 }
 
 interface BeetleLocationResponse {
@@ -127,6 +130,7 @@ export async function GET() {
         createdAt: dashboard.admin_settings?.created_at ?? null,
         updatedAt: dashboard.admin_settings?.updated_at ?? null,
       },
+      latestWaterChange: dashboard.latest_water_change?.water_changed_on ?? null,
       trapSummary: {
         totalTraps: dashboard.summary.total_traps,
         redPalmWeevilTraps: dashboard.summary.red_palm_weevil_traps,

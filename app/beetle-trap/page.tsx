@@ -58,6 +58,7 @@ interface BeetleDashboardData {
   }
   admin_settings: { cumulative_count_start_date: string | null; pheromone_lure_installed_date: string | null } | null
   daily_counts: LiveDailyCount[]
+  water_changes: Array<{ water_changed_on: string }>
   top_traps: LiveTopTrap[]
   selected_period?: { start_date: string | null; end_date: string | null; label: string }
   cumulative_start_date: string | null
@@ -207,6 +208,7 @@ function summaryCards(data: BeetleDashboardData | null): SummaryCardItem[] {
 function dailyRows(data: BeetleDashboardData | null): BeetleDailyCountRow[] {
   return (data?.daily_counts ?? []).map((d) => ({
     date: formatDisplayDate(d.inspection_date),
+    sourceDate: d.inspection_date,
     rhinoceros: d.rhinoceros,
     redPalmWeevil: d.red_palm_weevil,
     plot1Rhinoceros: d.plot_1_rhinoceros,
@@ -214,6 +216,25 @@ function dailyRows(data: BeetleDashboardData | null): BeetleDailyCountRow[] {
     plot2Rhinoceros: d.plot_2_rhinoceros,
     plot2RedPalmWeevil: d.plot_2_red_palm_weevil,
   }))
+}
+
+type DailyTableRow =
+  | { kind: "count"; sourceDate: string; row: BeetleDailyCountRow }
+  | { kind: "water-change"; sourceDate: string }
+
+function dailyTableRows(data: BeetleDashboardData | null, rows: BeetleDailyCountRow[]): DailyTableRow[] {
+  const waterChanges = (data?.water_changes ?? [])
+    .map((entry) => entry.water_changed_on)
+    .filter((date): date is string => /^\d{4}-\d{2}-\d{2}$/.test(date))
+  const entries: DailyTableRow[] = [
+    ...rows.map((row) => ({ kind: "count" as const, sourceDate: row.sourceDate ?? "", row })),
+    ...waterChanges.map((sourceDate) => ({ kind: "water-change" as const, sourceDate })),
+  ]
+  return entries.sort((left, right) => {
+    const dateOrder = right.sourceDate.localeCompare(left.sourceDate)
+    if (dateOrder !== 0) return dateOrder
+    return left.kind === "water-change" ? -1 : 1
+  })
 }
 
 function NoticePanel({ title, message, icon: Icon }: { title: string; message: string; icon: LucideIcon }) {
@@ -347,6 +368,8 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
   const data = await getBeetleDashboardData(resolvedSearchParams)
   const cards = summaryCards(data)
   const rows = dailyRows(data)
+  const tableRows = dailyTableRows(data, rows)
+  const waterChangeDates = (data?.water_changes ?? []).map((entry) => entry.water_changed_on)
   const latest = data?.summary.latest_inspection
   const manualSyncAvailable = isBeetleTrapManualSyncAvailable()
   const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
@@ -392,7 +415,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           headerRight={<span className="text-xs font-medium text-muted-foreground">Current cumulative period</span>}
           className="border-chart-2/30 bg-chart-2/5"
         >
-          <BeetleDailyChart counts={rows} />
+          <BeetleDailyChart counts={rows} waterChangeDates={waterChangeDates} />
         </Panel>
 
         <Panel
@@ -418,16 +441,21 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
                 </tr>
               </thead>
               <tbody>
-                {rows.map((d) => (
-                  <tr key={d.date} className="border-b border-border last:border-0 hover:bg-muted/50">
-                    <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{d.date}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot1Rhinoceros}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot1RedPalmWeevil}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot2Rhinoceros}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{d.plot2RedPalmWeevil}</td>
+                {tableRows.map((entry) => entry.kind === "water-change" ? (
+                  <tr key={`water-change-${entry.sourceDate}`} className="border-b border-chart-2/30 bg-chart-2/15 text-chart-2">
+                    <td className="whitespace-nowrap px-3 py-2.5 font-bold">{formatDisplayDate(entry.sourceDate)}</td>
+                    <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={4}>Water changed — all active traps</td>
+                  </tr>
+                ) : (
+                  <tr key={`count-${entry.sourceDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
+                    <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{entry.row.date}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot1Rhinoceros}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot1RedPalmWeevil}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot2Rhinoceros}</td>
+                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot2RedPalmWeevil}</td>
                   </tr>
                 ))}
-                {rows.length === 0 && (
+                {tableRows.length === 0 && (
                   <tr>
                     <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={5}>No Beetle Count records are available yet.</td>
                   </tr>

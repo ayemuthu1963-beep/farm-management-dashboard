@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   Bug,
   Citrus,
@@ -32,6 +33,7 @@ export type MfmsNavigationItem = {
   order: number
   external?: boolean
   ctaLabel?: string
+  activeHrefs?: readonly string[]
 }
 
 export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
@@ -48,7 +50,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
   {
     id: "todays-weather",
     label: "Today's Weather",
-    href: "https://ambientweather.net/dashboard/3c60e933cba3de37fedd489ab60dd376",
+    href: "https://preview.wunderground.com/dashboard/pws/IUDUMA3",
     icon: CloudSun,
     dashboardIcon: "/mfms/icons/todays-weather.png",
     description: "Live weather conditions at Muthu Farms",
@@ -71,6 +73,18 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     showInSidebar: true,
     order: 2,
     ctaLabel: "Open Dashboard",
+  },
+  {
+    id: "live-harvest-counter",
+    label: "Live Harvest Counter",
+    href: "/live-harvest-counter",
+    icon: Activity,
+    description: "Open live harvest and coconut counting dashboards",
+    status: "active",
+    showOnDashboard: false,
+    showInSidebar: true,
+    order: 2.5,
+    activeHrefs: ["/coconut-harvest/live-counter", "/coconut-counting"],
   },
   {
     id: "jackfruit-monitoring",
@@ -270,16 +284,24 @@ export function isNavigationItemActive(
   if (item.href === "/") {
     return pathname === "/"
   }
-  const hasMoreSpecificMatch = mfmsNavigationItems.some(
-    (candidate) =>
-      candidate.status === "active" &&
-      !candidate.external &&
-      candidate.href !== item.href &&
-      candidate.href.startsWith(`${item.href}/`) &&
-      (pathname === candidate.href || pathname.startsWith(`${candidate.href}/`)),
-  )
-  if (hasMoreSpecificMatch) {
-    return false
+
+  const matchingRootLength = (candidate: MfmsNavigationItem): number => {
+    const roots = [candidate.href, ...(candidate.activeHrefs ?? [])]
+    return Math.max(
+      -1,
+      ...roots.map((root) =>
+        pathname === root || pathname.startsWith(`${root}/`) ? root.length : -1,
+      ),
+    )
   }
-  return pathname === item.href || pathname.startsWith(`${item.href}/`)
+
+  const itemMatchLength = matchingRootLength(item)
+  if (itemMatchLength < 0) return false
+
+  const mostSpecificMatch = Math.max(
+    ...mfmsNavigationItems
+      .filter((candidate) => candidate.status === "active" && !candidate.external)
+      .map(matchingRootLength),
+  )
+  return itemMatchLength === mostSpecificMatch
 }

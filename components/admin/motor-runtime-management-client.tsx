@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { createExcelImports, parseExcelImport } from "@/lib/motor-screenshot-analysis-api"
+import { createExcelImports, getExcelImport, parseExcelImport } from "@/lib/motor-screenshot-analysis-api"
 import type { MotorId, ProvisionalSession, UploadDetail, WorkbookRun } from "@/lib/motor-screenshot-analysis-types"
 import {
   loadAllEvents,
@@ -82,6 +82,8 @@ type LegacyEntry = {
   record_type: "legacy" | "managed"
 }
 
+const OBSOLETE_MINUTE_PRECISION_WARNING = "The workbook supplies HH:MM only. :00 seconds are provisional and require operator acceptance or correction."
+
 const TABS: Array<{ id: Tab; label: string; icon: typeof Upload }> = [
   { id: "import", label: "Import Excel", icon: Upload },
   { id: "events", label: "All Events", icon: ListChecks },
@@ -139,6 +141,11 @@ function newAllocation(startTime = "", endTime = ""): EditableAllocation {
   return { id: crypto.randomUUID(), plot: "", valveNo: 0, startTime, endTime, startNextDay: false, endNextDay: false }
 }
 
+function workbookRunWarnings(parserWarning: string | null): string[] {
+  const remaining = parserWarning?.replaceAll(OBSOLETE_MINUTE_PRECISION_WARNING, "").trim()
+  return remaining ? [remaining] : []
+}
+
 function reasonFor(session: ProvisionalSession): string {
   return [session.on_reason, session.off_reason].filter(Boolean).join(" / ")
 }
@@ -187,7 +194,7 @@ function editableFromWorkbookRun(detail: UploadDetail, run: WorkbookRun): Editab
     offNextDay: Boolean(on.date && off.date && off.date > on.date),
     reason: run.remarks,
     allocations: [newAllocation(on.time, off.time)],
-    warnings: run.parser_warning ? [run.parser_warning] : [],
+    warnings: workbookRunWarnings(run.parser_warning),
     conflicts: [],
     saving: false,
     saved: false,
@@ -263,6 +270,7 @@ export function MotorRuntimeManagementClient() {
   const [files, setFiles] = useState<ImportFile[]>([])
   const [imports, setImports] = useState<UploadDetail[]>([])
   const [runs, setRuns] = useState<EditableRun[]>([])
+  const [importDiscrepancyCount, setImportDiscrepancyCount] = useState(0)
   const [events, setEvents] = useState<AllEvent[]>([])
   const [sessions, setSessions] = useState<ManagedSession[]>([])
   const [legacyEntries, setLegacyEntries] = useState<LegacyEntry[]>([])
@@ -346,21 +354,28 @@ export function MotorRuntimeManagementClient() {
     if (!files.length) return
     setBusy(true)
     setMessage("Validating workbooks and storing All Events...")
-    const details: UploadDetail[] = []
+    const detailById = new Map<number, UploadDetail>()
+    let reopenedCount = 0
     try {
       for (const item of files) {
         const created = await createExcelImports(item.motorId, [item.file])
-        for (const imported of created.imports) details.push(await parseExcelImport(imported.id))
+        for (const imported of created.imports) {
+          detailById.set(imported.id, await parseExcelImport(imported.id))
+        }
+        for (const duplicate of created.duplicates) {
+          if (duplicate.existing_import_id && !detailById.has(duplicate.existing_import_id)) {
+            detailById.set(duplicate.existing_import_id, await getExcelImport(duplicate.existing_import_id))
+            reopenedCount += 1
+          }
+        }
       }
+      const details = [...detailById.values()]
       const nextRuns: EditableRun[] = []
+      let discrepancyCount = 0
       for (const detail of details) {
         if (detail.workbook_runs?.length) {
           nextRuns.push(...detail.workbook_runs.map((run) => editableFromWorkbookRun(detail, run)))
-          let discrepancyRun = Math.max(0, ...detail.workbook_runs.map((run) => run.run_no))
-          for (const session of detail.provisional_sessions.filter((value) => value.status !== "complete")) {
-            discrepancyRun += 1
-            nextRuns.push(editableFromProvisional(detail, session, discrepancyRun))
-          }
+          discrepancyCount += detail.provisional_sessions.filter((value) => value.status !== "complete").length
         } else {
           const perDate = new Map<string, number>()
           for (const session of detail.provisional_sessions) {
@@ -373,8 +388,9 @@ export function MotorRuntimeManagementClient() {
       }
       setImports(details)
       setRuns((current) => [...current, ...nextRuns])
+      setImportDiscrepancyCount(discrepancyCount)
       setFiles([])
-      setMessage(`${details.reduce((sum, detail) => sum + detail.source_rows.length, 0)} All Events rows stored; ${nextRuns.length} candidate runs are ready for operator review.`)
+      setMessage(`${details.reduce((sum, detail) => sum + detail.source_rows.length, 0)} All Events rows available; ${nextRuns.length} workbook runs are ready for operator review${reopenedCount ? `; ${reopenedCount} existing import reopened` : ""}${discrepancyCount ? `; ${discrepancyCount} unresolved notification-event discrepancies kept out of Review Runs` : ""}.`)
       setTab("review")
       setError(null)
     } catch (value) {
@@ -498,7 +514,7 @@ export function MotorRuntimeManagementClient() {
             </div>
           ))}</div>}
           <Button type="button" className="mt-4" disabled={busy || files.length === 0} onClick={() => void importExcel()}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Upload className="size-4" />} Import and Review</Button>
-          {imports.length > 0 && <p className="mt-3 text-xs text-muted-foreground">This session imported {imports.length} workbook(s). Source seconds are retained for audit even though operator fields display HH:MM.</p>}
+          {imports.length > 0 && <p className="mt-3 text-xs text-muted-foreground">This review session loaded {imports.length} workbook(s). Calculations use the displayed HH:MM values exactly; seconds are ignored without rounding and retained only in the source audit.</p>}
         </section>
       )}
 
@@ -517,7 +533,10 @@ export function MotorRuntimeManagementClient() {
       )}
 
       {tab === "events" && <AllEventsTable events={events} busy={busy} />}
-      {tab === "review" && <ReviewRuns runs={runs} plotOptions={plotOptions} onPatch={patchRun} onPatchAllocation={patchAllocation} onSave={saveRun} />}
+      {tab === "review" && <>
+        {importDiscrepancyCount > 0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p className="flex items-center gap-2 font-bold"><AlertTriangle className="size-4" /> {importDiscrepancyCount} notification-event discrepancies require separate review</p><p className="mt-1">They remain visible in All Events and Motor Screenshot Analysis, but are not treated as additional workbook runs.</p></div>}
+        <ReviewRuns runs={runs} plotOptions={plotOptions} onPatch={patchRun} onPatchAllocation={patchAllocation} onSave={saveRun} />
+      </>}
       {tab === "history" && <><LegacyEditor entries={legacyEntries} plotOptions={plotOptions} onChanged={refreshSessions} /><RuntimeHistory sessions={sessions} legacyEntries={legacyEntries} busy={busy} onEdit={editHistory} onVoid={voidHistory} /></>}
       {tab === "summary" && <DailySummary rows={daily} busy={busy} />}
     </div>
@@ -533,7 +552,7 @@ function ReviewRuns({ runs, plotOptions, onPatch, onPatchAllocation, onSave }: {
   return <div className="space-y-4">{runs.map((run) => {
     const options = plotOptions.filter((option) => option.motor_id === run.motorId)
     const minutes = runtimeMinutes(run.onTime, run.offTime, run.offNextDay)
-    return <section key={run.key} className="rounded-xl border border-border bg-card p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-serif text-lg font-bold">Motor {run.motorId.slice(-1)} · {formatDate(run.operationDate)} · Run {run.runNo}</h2><p className="text-xs text-muted-foreground">Imported seconds retained: {run.sourceOnAt ? indiaParts(run.sourceOnAt).time : "-"} to {run.sourceOffAt ? indiaParts(run.sourceOffAt).time : "-"}</p></div><span className={cn("rounded-full px-3 py-1 text-xs font-semibold", run.originalStatus === "published" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{run.originalStatus ?? "new draft"}</span></div>
+    return <section key={run.key} className="rounded-xl border border-border bg-card p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-serif text-lg font-bold">Motor {run.motorId.slice(-1)} · {formatDate(run.operationDate)} · Run {run.runNo}</h2><p className="text-xs text-muted-foreground">Calculation basis: displayed HH:MM only; seconds are ignored without rounding.</p></div><span className={cn("rounded-full px-3 py-1 text-xs font-semibold", run.originalStatus === "published" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{run.originalStatus ?? "new draft"}</span></div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6"><label className="text-xs font-semibold">Motor<select value={run.motorId} onChange={(event) => onPatch(run.key, { motorId: event.target.value as MotorId, allocations: [] })} className={`${fieldClass} mt-1`}>{MOTORS.map((motor) => <option key={motor.id} value={motor.id}>{motor.name}</option>)}</select></label><label className="text-xs font-semibold">Date<input type="date" value={run.operationDate} onChange={(event) => onPatch(run.key, { operationDate: event.target.value })} className={`${fieldClass} mt-1`} /></label><label className="text-xs font-semibold">Actual ON<input type="time" value={run.onTime} onChange={(event) => onPatch(run.key, { onTime: event.target.value })} className={`${fieldClass} mt-1`} /></label><label className="text-xs font-semibold">Actual OFF/cutoff<input type="time" value={run.offTime} onChange={(event) => onPatch(run.key, { offTime: event.target.value })} className={`${fieldClass} mt-1`} /></label><label className="flex items-center gap-2 self-end rounded-lg border border-border px-3 py-2 text-xs font-semibold"><input type="checkbox" checked={run.offNextDay} onChange={(event) => onPatch(run.key, { offNextDay: event.target.checked })} /> OFF next day</label><div className="self-end rounded-lg bg-primary/10 px-3 py-2"><p className="text-xs text-muted-foreground">Runtime</p><p className="font-mono text-lg font-bold text-primary">{hhmm(minutes)}</p></div></div>
       <label className="mt-3 block text-xs font-semibold">Reason<input value={run.reason} onChange={(event) => onPatch(run.key, { reason: event.target.value })} className={`${fieldClass} mt-1`} /></label>
       <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead><tr className="bg-muted text-left"><th className="p-2">Sequence</th><th className="p-2">Plot Irrigated</th><th className="p-2">Valve</th><th className="p-2">From</th><th className="p-2">To</th><th className="p-2">Next day</th><th className="p-2">Runtime</th><th className="p-2"></th></tr></thead><tbody>{run.allocations.map((allocation, index) => <tr key={allocation.id} className="border-t border-border"><td className="p-2 font-semibold">{index + 1}</td><td className="p-2"><select value={allocation.plot} onChange={(event) => { const option = options.find((value) => value.plot === event.target.value); onPatchAllocation(run.key, allocation.id, { plot: event.target.value, valveNo: option?.valve_no ?? 0 }) }} className={fieldClass}><option value="">Select plot</option>{options.map((option) => <option key={option.plot} value={option.plot}>{option.plot_label}</option>)}</select></td><td className="p-2">{allocation.valveNo ? `Valve${allocation.valveNo}` : "-"}</td><td className="p-2"><input type="time" value={allocation.startTime} onChange={(event) => onPatchAllocation(run.key, allocation.id, { startTime: event.target.value })} className={fieldClass} /></td><td className="p-2"><input type="time" value={allocation.endTime} onChange={(event) => onPatchAllocation(run.key, allocation.id, { endTime: event.target.value })} className={fieldClass} /></td><td className="p-2"><label className="mr-2 text-xs"><input type="checkbox" checked={allocation.startNextDay} onChange={(event) => onPatchAllocation(run.key, allocation.id, { startNextDay: event.target.checked })} /> Start</label><label className="text-xs"><input type="checkbox" checked={allocation.endNextDay} onChange={(event) => onPatchAllocation(run.key, allocation.id, { endNextDay: event.target.checked })} /> End</label></td><td className="p-2 font-mono">{hhmm(runtimeMinutes(allocation.startTime, allocation.endTime, allocation.endNextDay && !allocation.startNextDay))}</td><td className="p-2"><Button type="button" variant="ghost" size="icon" onClick={() => onPatch(run.key, { allocations: run.allocations.filter((value) => value.id !== allocation.id) })}><Trash2 className="size-4" /></Button></td></tr>)}</tbody></table></div>
