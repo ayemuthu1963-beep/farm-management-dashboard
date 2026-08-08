@@ -415,7 +415,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           headerRight={<span className="text-xs font-medium text-muted-foreground">Current cumulative period</span>}
           className="border-chart-2/30 bg-chart-2/5"
         >
-          <BeetleDailyChart counts={rows} waterChangeDates={waterChangeDates} />
+          <BeetleDailyChart counts={rows} waterChangeDates={waterChangeDates} pheromoneChangeDate={cumulativeStartDate} />
         </Panel>
 
         <Panel
