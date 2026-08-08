@@ -1,0 +1,30 @@
+import assert from "node:assert/strict"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
+
+const page = read("app/fertiliser-management/page.tsx")
+const api = read("lib/fertiliser-api.ts")
+
+assert.doesNotMatch(page, /Read-only in FERT-04|validateDisabledMasterForm|Validate Disabled Form/)
+assert.match(page, /createFertiliserProduct/)
+assert.match(page, /createFertiliserCategory/)
+assert.match(page, /deactivateFertiliserProduct/)
+assert.match(page, /restoreFertiliserProduct/)
+assert.match(page, /deactivateFertiliserCategory/)
+assert.match(page, /restoreFertiliserCategory/)
+assert.match(page, /function ProductMasterTable/)
+assert.match(page, /function CategoryMasterTable/)
+assert.match(page, /Products with stock or open requirements cannot be deactivated/)
+assert.match(page, /masterStatusFilter/)
+
+assert.match(api, /masterProducts/)
+assert.match(api, /masterCategories/)
+assert.match(api, /active_only=false/)
+assert.match(api, /\/api\/fertiliser\/products\/\$\{productId\}\/deactivate/)
+assert.match(api, /\/api\/fertiliser\/categories\/\$\{categoryId\}\/restore/)
+
+console.log("Fertiliser Product and Category Master management invariants: PASS")
