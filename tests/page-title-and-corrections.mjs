@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { pageTitleForPathname } from "../lib/page-titles.ts"
 
@@ -21,6 +23,22 @@ const navigation = read("lib/mfms-navigation.ts")
 assert.match(layout, /icon: '\/muthu-farms-logo\.png'/)
 assert.match(layout, /<PageTitleSync \/>/)
 assert.match(titleSync, /document\.title = pageTitleForPathname\(pathname\)/)
+
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
+const appRoot = path.join(repositoryRoot, "app")
+const pageFiles = readdirSync(appRoot, { recursive: true })
+  .map((entry) => String(entry).replaceAll("\\", "/"))
+  .filter((entry) => entry.endsWith("/page.tsx"))
+for (const pageFile of pageFiles) {
+  const route = `/${pageFile.slice(0, -"/page.tsx".length)}`
+  const layoutPath = path.join(appRoot, path.dirname(pageFile), "layout.tsx")
+  assert.equal(existsSync(layoutPath), true, `${route} must have server-rendered route metadata`)
+  assert.match(
+    readFileSync(layoutPath, "utf8"),
+    new RegExp(`title: ${JSON.stringify(pageTitleForPathname(route))}`),
+    `${route} metadata title must match the client-side title`,
+  )
+}
 assert.match(detailedQuery, /DETAILED_QUERY_PAGE_SIZE = 100/)
 assert.match(detailedQuery, /sortedRows\.slice\(firstRowIndex, firstRowIndex \+ DETAILED_QUERY_PAGE_SIZE\)/)
 assert.match(detailedQuery, /Page \{page\} of \{totalPages\}/)
