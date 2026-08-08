@@ -1,7 +1,7 @@
 "use client"
 
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, ChevronUp, ChevronsUpDown, Download, Search, RotateCcw, SlidersHorizontal } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, Download, Search, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
@@ -76,6 +76,7 @@ interface DetailedSortConfig {
 }
 
 const numericTextCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
+const DETAILED_QUERY_PAGE_SIZE = 100
 
 function compareDetailedRows(a: DetailedQueryRow, b: DetailedQueryRow, key: DetailedSortKey) {
   if (key === "treeNo" || key === "plot" || key === "classification") {
@@ -145,7 +146,18 @@ function SortableHeader({
 
 function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
   const [sortConfig, setSortConfig] = useState<DetailedSortConfig | null>(null)
+  const [page, setPage] = useState(1)
   const sortedRows = useMemo(() => sortDetailedRows(rows, sortConfig), [rows, sortConfig])
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / DETAILED_QUERY_PAGE_SIZE))
+  const firstRowIndex = (page - 1) * DETAILED_QUERY_PAGE_SIZE
+  const pageRows = useMemo(
+    () => sortedRows.slice(firstRowIndex, firstRowIndex + DETAILED_QUERY_PAGE_SIZE),
+    [firstRowIndex, sortedRows],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [rows, sortConfig])
 
   function handleSort(key: DetailedSortKey) {
     setSortConfig((current) => {
@@ -158,8 +170,9 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] border-collapse text-sm">
+    <div className="space-y-3">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1100px] border-collapse text-sm">
         <thead>
           <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
             <SortableHeader label="Tree No" sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
@@ -177,7 +190,7 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {sortedRows.map((row) => (
+          {pageRows.map((row) => (
             <tr key={`${row.treeNo}-${row.harvestCycle}-${row.harvestDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
               <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{row.treeNo}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.harvestCycle}</td>
@@ -194,7 +207,32 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
+      <div className="flex flex-col gap-2 border-t border-border pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-muted-foreground" aria-live="polite">
+          Showing {firstRowIndex + 1}–{Math.min(firstRowIndex + DETAILED_QUERY_PAGE_SIZE, sortedRows.length)} of {sortedRows.length.toLocaleString("en-IN")} records
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page === 1}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-2 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" /> Previous
+          </button>
+          <span className="min-w-24 text-center font-medium text-foreground">Page {page} of {totalPages}</span>
+          <button
+            type="button"
+            disabled={page === totalPages}
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-2 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next <ChevronRight className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

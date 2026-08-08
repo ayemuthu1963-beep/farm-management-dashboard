@@ -337,6 +337,11 @@ export function MotorRuntimeManagementClient() {
   function selectFiles(list: FileList | null) {
     if (!list) return
     const selected = Array.from(list)
+    const empty = selected.find((file) => file.size === 0)
+    if (empty) {
+      setError(`${empty.name} is empty (0 bytes). Download or copy the complete .xlsx workbook, then select it again.`)
+      return
+    }
     const invalid = selected.find((file) => !file.name.toLowerCase().endsWith(".xlsx") || file.size > 5 * 1024 * 1024)
     if (invalid) {
       setError(`${invalid.name} must be a macro-free .xlsx file no larger than 5 MiB.`)
