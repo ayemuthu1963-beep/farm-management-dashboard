@@ -218,7 +218,7 @@ assert.equal(
   manifest.release_note,
   "Enable database-backed Product and Category Master management for Fertiliser",
 )
-assert.equal(manifest.base_commit, "0c657dd5ce208587223a4328553e49f5d5c270a6")
+assert.equal(manifest.base_commit, "fe79770ee93033466485c08898befd5068db9b44")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
