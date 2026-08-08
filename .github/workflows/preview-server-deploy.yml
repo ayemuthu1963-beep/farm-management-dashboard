@@ -164,6 +164,7 @@ jobs:
         id: live
         shell: bash
         env:
+          CANDIDATE_REVISION: ${{ needs.authorize.outputs.candidate_revision }}
           PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
           PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
           IDENTITY_FILE: ${{ steps.preflight_ssh.outputs.identity_file }}
@@ -188,6 +189,28 @@ jobs:
           grep -Fqx 'READ_ONLY_PREFLIGHT=PASS' "$report"
           grep -Fqx 'production_containers_touched=0' "$report"
           current_revision=$(awk -F= '$1 == "frontend_image_revision" {print $2}' "$report")
+
+          if [[ "$current_revision" =~ ^[0-9a-f]{7,39}$ ]]; then
+            resolve_dir=$(mktemp -d "$RUNNER_TEMP/mfms-preview-live-revision.XXXXXX")
+            repo_url="https://github.com/$GITHUB_REPOSITORY.git"
+            git -C "$resolve_dir" init --quiet
+            git -C "$resolve_dir" remote add origin "$repo_url"
+            git -C "$resolve_dir" fetch --quiet --no-tags --filter=blob:none \
+              origin "$CANDIDATE_REVISION"
+            resolved_revision=$(git -C "$resolve_dir" rev-parse --verify "${current_revision}^{commit}")
+            [[ "$resolved_revision" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Short live Preview revision did not resolve uniquely" >&2
+              exit 1
+            }
+            git -C "$resolve_dir" merge-base --is-ancestor \
+              "$resolved_revision" "$CANDIDATE_REVISION" || {
+              echo "Resolved live Preview revision is not an ancestor of the candidate" >&2
+              exit 1
+            }
+            current_revision=$resolved_revision
+            rm -rf "$resolve_dir"
+          fi
+
           [[ "$current_revision" =~ ^[0-9a-f]{40}$ ]] || {
             echo "Live Preview revision is not an exact lowercase commit SHA" >&2
             exit 1

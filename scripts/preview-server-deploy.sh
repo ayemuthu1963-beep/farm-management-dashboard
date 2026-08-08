@@ -74,6 +74,7 @@ replacement_origin=""
 original_container_id=""
 original_image_id=""
 original_image_tag=""
+original_reported_revision=""
 original_revision=""
 original_network_ip=""
 transaction_active=0
@@ -328,7 +329,7 @@ restore_original_frontend() {
     ensure_preview_network_ip "$live_container" "$original_network_ip" \
       >/dev/null 2>&1 || return 1
     docker start "$live_container" >/dev/null 2>&1 || return 1
-    if wait_for_version "http://127.0.0.1:$live_port" "$original_revision" \
+    if wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" \
       && smoke_routes "http://127.0.0.1:$live_port" \
       && wait_for_public_preview_guard; then
       automatic_restore_result="pass"
@@ -388,9 +389,18 @@ validate_common_live_state() {
   original_container_id=$(docker inspect --format '{{.Id}}' "$live_container")
   original_image_id=$(docker inspect --format '{{.Image}}' "$live_container")
   original_image_tag=$(docker inspect --format '{{.Config.Image}}' "$live_container")
-  original_revision=$(image_revision_for_container "$live_container")
+  original_reported_revision=$(image_revision_for_container "$live_container")
+  original_revision=$original_reported_revision
   original_network_ip=$(network_ip_for_container "$live_container")
-  [[ "$original_revision" =~ ^[0-9a-f]{40}$ ]] || blocked "live Preview revision is invalid"
+  if [[ "$original_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    [[ "$original_revision" == "$expected_current_revision" ]] \
+      || blocked "live Preview revision differs from the approved current revision"
+  elif [[ "$original_revision" =~ ^[0-9a-f]{7,39}$ ]] \
+    && [[ "${expected_current_revision:0:${#original_revision}}" == "$original_revision" ]]; then
+    original_revision=$expected_current_revision
+  else
+    blocked "live Preview revision is invalid or does not match the approved current revision"
+  fi
   python3 - "$original_network_ip" <<'PY' \
     || blocked "live Preview network address is invalid"
 import ipaddress
@@ -399,8 +409,6 @@ import sys
 address = ipaddress.ip_address(sys.argv[1])
 raise SystemExit(0 if address.version == 4 and not address.is_unspecified else 1)
 PY
-  [[ "$original_revision" == "$expected_current_revision" ]] \
-    || blocked "live Preview revision differs from the approved current revision"
 
   backend_id_before=$(docker inspect --format '{{.Id}}' "$backend_container")
   backend_image_before=$(docker inspect --format '{{.Image}}' "$backend_container")
@@ -589,7 +597,7 @@ deploy_preview() {
 rollback_preview() {
   local deployed_revision deployed_image_id deployed_image_tag
   local rollback_container rollback_revision rollback_image_id rollback_image_tag
-  local replacement_id
+  local replacement_id rollback_reported_revision
   [[ -f "$state_file" ]] || blocked "no successful GitHub Preview deployment is recorded"
   validate_common_live_state
 
@@ -615,11 +623,19 @@ rollback_preview() {
   ! container_running "$rollback_container" || blocked "recorded rollback container is unexpectedly running"
   [[ "$(docker inspect --format '{{.Image}}' "$rollback_container")" == "$rollback_image_id" ]] \
     || blocked "rollback container image ID changed"
-  [[ "$(image_revision_for_container "$rollback_container")" == "$rollback_revision" ]] \
-    || blocked "rollback container revision changed"
+  rollback_reported_revision=$(image_revision_for_container "$rollback_container")
+  if [[ "$rollback_reported_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    [[ "$rollback_reported_revision" == "$rollback_revision" ]] \
+      || blocked "rollback container revision changed"
+  elif [[ "$rollback_reported_revision" =~ ^[0-9a-f]{7,39}$ ]] \
+    && [[ "${rollback_revision:0:${#rollback_reported_revision}}" == "$rollback_reported_revision" ]]; then
+    :
+  else
+    blocked "rollback container revision is invalid"
+  fi
 
   write_environment_file "$rollback_container"
-  start_candidate "$rollback_image_id" "$rollback_revision"
+  start_candidate "$rollback_image_id" "$rollback_reported_revision"
   remove_candidate
 
   transaction_backup="$live_container-pre-rollback-$run_id-$timestamp"
@@ -634,11 +650,11 @@ rollback_preview() {
   docker start "$live_container" >/dev/null
   replacement_id=$(docker inspect --format '{{.Image}}' "$live_container")
 
-  wait_for_version "http://127.0.0.1:$live_port" "$rollback_revision" \
+  wait_for_version "http://127.0.0.1:$live_port" "$rollback_reported_revision" \
     || blocked "rollback replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "rollback local smoke test failed"
   wait_for_public_preview_guard || blocked "public Preview rollback authentication guard failed"
-  assert_live_contract "$rollback_revision" "$replacement_id" "$before_unrelated"
+  assert_live_contract "$rollback_reported_revision" "$replacement_id" "$before_unrelated"
 
   trap '' HUP INT TERM
   write_state \
