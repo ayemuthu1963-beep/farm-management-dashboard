@@ -289,8 +289,8 @@ export function MotorRuntimeManagementClient() {
 
   useEffect(() => { loadPlotOptions().then(setPlotOptions).catch(() => setPlotOptions([])) }, [])
 
-  const query = useCallback(() => {
-    const params = new URLSearchParams({ page_size: "500" })
+  const query = useCallback((pageSize: 200 | 500) => {
+    const params = new URLSearchParams({ page_size: String(pageSize) })
     if (filterMode === "day" && singleDay) {
       params.set("start_date", singleDay)
       params.set("end_date", singleDay)
@@ -306,7 +306,7 @@ export function MotorRuntimeManagementClient() {
 
   const refreshEvents = useCallback(async () => {
     setBusy(true)
-    try { setEvents((await loadAllEvents(query())).items); setError(null) }
+    try { setEvents((await loadAllEvents(query(500))).items); setError(null) }
     catch (value) { setError(value instanceof Error ? value.message : "Unable to load events.") }
     finally { setBusy(false) }
   }, [query])
@@ -314,7 +314,7 @@ export function MotorRuntimeManagementClient() {
   const refreshSessions = useCallback(async () => {
     setBusy(true)
     try {
-      const params = query()
+      const params = query(200)
       const [managed, legacyResponse] = await Promise.all([
         loadManagedSessions(params),
         fetch(`/api/admin/motor-runtime/entries?${params}`, { cache: "no-store" }),
@@ -337,6 +337,11 @@ export function MotorRuntimeManagementClient() {
   function selectFiles(list: FileList | null) {
     if (!list) return
     const selected = Array.from(list)
+    const empty = selected.find((file) => file.size === 0)
+    if (empty) {
+      setError(`${empty.name} is empty (0 bytes). Download or copy the complete .xlsx workbook, then select it again.`)
+      return
+    }
     const invalid = selected.find((file) => !file.name.toLowerCase().endsWith(".xlsx") || file.size > 5 * 1024 * 1024)
     if (invalid) {
       setError(`${invalid.name} must be a macro-free .xlsx file no larger than 5 MiB.`)
@@ -353,6 +358,7 @@ export function MotorRuntimeManagementClient() {
   async function importExcel() {
     if (!files.length) return
     setBusy(true)
+    setError(null)
     setMessage("Validating workbooks and storing All Events...")
     const detailById = new Map<number, UploadDetail>()
     let reopenedCount = 0
@@ -387,7 +393,7 @@ export function MotorRuntimeManagementClient() {
         }
       }
       setImports(details)
-      setRuns((current) => [...current, ...nextRuns])
+      setRuns(nextRuns)
       setImportDiscrepancyCount(discrepancyCount)
       setFiles([])
       setMessage(`${details.reduce((sum, detail) => sum + detail.source_rows.length, 0)} All Events rows available; ${nextRuns.length} workbook runs are ready for operator review${reopenedCount ? `; ${reopenedCount} existing import reopened` : ""}${discrepancyCount ? `; ${discrepancyCount} unresolved notification-event discrepancies kept out of Review Runs` : ""}.`)
@@ -398,8 +404,20 @@ export function MotorRuntimeManagementClient() {
     } finally { setBusy(false) }
   }
 
+  function startNewImport() {
+    if ((imports.length > 0 || runs.length > 0) && !window.confirm("Start a new import? This clears the current review screen only. Records already saved to History will remain.")) return
+    setFiles([])
+    setImports([])
+    setRuns([])
+    setImportDiscrepancyCount(0)
+    setMessage(null)
+    setError(null)
+    setTab("import")
+    if (fileInput.current) fileInput.current.value = ""
+  }
+
   function patchRun(key: string, patch: Partial<EditableRun>) {
-    setRuns((current) => current.map((run) => run.key === key ? { ...run, ...patch, saved: false } : run))
+    setRuns((current) => current.map((run) => run.key === key ? { ...run, ...patch, saved: patch.saved ?? false } : run))
   }
 
   function patchAllocation(runKey: string, allocationId: string, patch: Partial<EditableAllocation>) {
@@ -411,6 +429,7 @@ export function MotorRuntimeManagementClient() {
   }
 
   async function saveRun(run: EditableRun, publish: boolean) {
+    setError(null)
     patchRun(run.key, { saving: true, warnings: [], conflicts: [] })
     try {
       const saved = await saveManagedSession(sessionPayload(run), run.sessionId)
@@ -493,6 +512,14 @@ export function MotorRuntimeManagementClient() {
           </button>
         ))}
       </div>
+
+      {(files.length > 0 || imports.length > 0 || runs.length > 0) && (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={startNewImport} disabled={busy}>
+            <RefreshCw className="size-4" /> Start New Import
+          </Button>
+        </div>
+      )}
 
       {error && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
       {message && <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-primary">{message}</div>}

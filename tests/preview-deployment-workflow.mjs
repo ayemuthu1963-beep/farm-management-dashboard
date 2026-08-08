@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Enable database-backed Product and Category Master management for Fertiliser",
+  "Rearrange the Motor Runtime history and trend tiles",
 )
-assert.equal(manifest.base_commit, "fe79770ee93033466485c08898befd5068db9b44")
+assert.equal(manifest.base_commit, "12627b4f0da750dbff5aca9db5cc7105ec26adf0")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,11 +228,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/fertiliser-management/page.tsx",
+  "app/motor-runtime/page.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/fertiliser-api.ts",
-  "package.json",
-  "tests/fertiliser-master-management.mjs",
+  "tests/motor-screenshot-analysis-real-workflow.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

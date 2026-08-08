@@ -35,10 +35,8 @@ for (const tile of homepageNavigationItems.filter((item) => item.showInSidebar))
 }
 
 const motorRuntime = sidebarById.get("motor-runtime")
-const motorScreenshotAnalysis = sidebarById.get("motor-screenshot-analysis")
 const liveHarvestCounter = sidebarById.get("live-harvest-counter")
 assert.ok(motorRuntime)
-assert.ok(motorScreenshotAnalysis)
 assert.ok(liveHarvestCounter)
 assert.equal(liveHarvestCounter.label, "Live Harvest Counter")
 assert.equal(liveHarvestCounter.href, "/live-harvest-counter")
@@ -47,14 +45,13 @@ assert.deepEqual(liveHarvestCounter.activeHrefs, [
   "/coconut-counting",
 ])
 assert.equal(sidebarById.has("coconut-counting"), false)
-assert.equal(motorScreenshotAnalysis.href, "/motor-runtime/screenshot-analysis")
-assert.equal(motorScreenshotAnalysis.showOnDashboard, false)
-assert.equal(motorScreenshotAnalysis.showInSidebar, true)
 assert.equal(
   homepageNavigationItems.some((item) => item.id === "motor-screenshot-analysis"),
   false,
   "Screenshot analysis must not alter the approved homepage card grid",
 )
+assert.equal(sidebarById.has("motor-screenshot-analysis"), false)
+assert.equal(existsSync(join(repoRoot, "app", "motor-runtime", "screenshot-analysis", "page.tsx")), false)
 
 const reports = mfmsNavigationItems.find((item) => item.id === "farm-reports")
 assert.ok(reports)
@@ -87,14 +84,6 @@ for (const item of mfmsNavigationItems) {
 
 assert.equal(isNavigationItemActive("/", dashboard), true)
 assert.equal(isNavigationItemActive("/motor-runtime", motorRuntime), true)
-assert.equal(
-  isNavigationItemActive("/motor-runtime/screenshot-analysis", motorRuntime),
-  false,
-)
-assert.equal(
-  isNavigationItemActive("/motor-runtime/screenshot-analysis", motorScreenshotAnalysis),
-  true,
-)
 assert.equal(isNavigationItemActive("/well-water", sidebarById.get("well-water-level")), true)
 assert.equal(
   isNavigationItemActive(
