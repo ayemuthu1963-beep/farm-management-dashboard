@@ -3,14 +3,12 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Enable database-backed Product and Category Master management for Fertiliser",
-  "base_commit": "fe79770ee93033466485c08898befd5068db9b44",
+  "release_note": "Rearrange the Motor Runtime history and trend tiles",
+  "base_commit": "12627b4f0da750dbff5aca9db5cc7105ec26adf0",
   "allowed_paths": [
-    "app/fertiliser-management/page.tsx",
+    "app/motor-runtime/page.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/fertiliser-api.ts",
-    "package.json",
-    "tests/fertiliser-master-management.mjs",
+    "tests/motor-screenshot-analysis-real-workflow.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
