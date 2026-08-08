@@ -220,20 +220,23 @@ function dailyRows(data: BeetleDashboardData | null): BeetleDailyCountRow[] {
 
 type DailyTableRow =
   | { kind: "count"; sourceDate: string; row: BeetleDailyCountRow }
+  | { kind: "pheromone-change"; sourceDate: string }
   | { kind: "water-change"; sourceDate: string }
 
-function dailyTableRows(data: BeetleDashboardData | null, rows: BeetleDailyCountRow[]): DailyTableRow[] {
+function dailyTableRows(data: BeetleDashboardData | null, rows: BeetleDailyCountRow[], cumulativeStartDate: string | null): DailyTableRow[] {
   const waterChanges = (data?.water_changes ?? [])
     .map((entry) => entry.water_changed_on)
     .filter((date): date is string => /^\d{4}-\d{2}-\d{2}$/.test(date))
   const entries: DailyTableRow[] = [
     ...rows.map((row) => ({ kind: "count" as const, sourceDate: row.sourceDate ?? "", row })),
+    ...(cumulativeStartDate ? [{ kind: "pheromone-change" as const, sourceDate: cumulativeStartDate }] : []),
     ...waterChanges.map((sourceDate) => ({ kind: "water-change" as const, sourceDate })),
   ]
   return entries.sort((left, right) => {
     const dateOrder = right.sourceDate.localeCompare(left.sourceDate)
     if (dateOrder !== 0) return dateOrder
-    return left.kind === "water-change" ? -1 : 1
+    const eventOrder: Record<DailyTableRow["kind"], number> = { "pheromone-change": 0, "water-change": 1, count: 2 }
+    return eventOrder[left.kind] - eventOrder[right.kind]
   })
 }
 
@@ -368,11 +371,11 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
   const data = await getBeetleDashboardData(resolvedSearchParams)
   const cards = summaryCards(data)
   const rows = dailyRows(data)
-  const tableRows = dailyTableRows(data, rows)
+  const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
+  const tableRows = dailyTableRows(data, rows, cumulativeStartDate)
   const waterChangeDates = (data?.water_changes ?? []).map((entry) => entry.water_changed_on)
   const latest = data?.summary.latest_inspection
   const manualSyncAvailable = isBeetleTrapManualSyncAvailable()
-  const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
   const dailyCountTitle = `Daily Beetle Count (Start Date: ${formatDisplayDate(cumulativeStartDate)})`
 
   return (
@@ -441,7 +444,12 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
                 </tr>
               </thead>
               <tbody>
-                {tableRows.map((entry) => entry.kind === "water-change" ? (
+                {tableRows.map((entry) => entry.kind === "pheromone-change" ? (
+                  <tr key={`pheromone-change-${entry.sourceDate}`} className="border-b border-destructive/30 bg-destructive/15 text-destructive">
+                    <td className="whitespace-nowrap px-3 py-2.5 font-bold">{formatDisplayDate(entry.sourceDate)}</td>
+                    <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={4}>Pheromone Change Date (Cumulative Count Start Date)</td>
+                  </tr>
+                ) : entry.kind === "water-change" ? (
                   <tr key={`water-change-${entry.sourceDate}`} className="border-b border-chart-2/30 bg-chart-2/15 text-chart-2">
                     <td className="whitespace-nowrap px-3 py-2.5 font-bold">{formatDisplayDate(entry.sourceDate)}</td>
                     <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={4}>Water changed — all active traps</td>

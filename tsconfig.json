@@ -37,6 +37,7 @@
   ],
   "exclude": [
     "node_modules",
+    "frontend-motor-irrigation-trend/**",
     "frontend-well-water-rates/**",
     "frontend-well-water-rates-current/**"
   ]
