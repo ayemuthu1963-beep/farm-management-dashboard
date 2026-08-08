@@ -16,6 +16,7 @@ export interface BeetleDailyCountRow {
 interface BeetleDailyChartProps {
   counts: BeetleDailyCountRow[]
   waterChangeDates: string[]
+  pheromoneChangeDate: string | null
 }
 
 function chartDate(value: unknown): string {
@@ -26,12 +27,17 @@ function chartDate(value: unknown): string {
     : new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(parsed)
 }
 
-export function BeetleDailyChart({ counts, waterChangeDates }: BeetleDailyChartProps) {
+export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate }: BeetleDailyChartProps) {
   const countDates = new Set(counts.map((count) => count.sourceDate).filter((date): date is string => Boolean(date)))
-  // Include a no-inspection water-change date in the category axis so its marker is never omitted.
+  const eventDates = new Set([
+    ...waterChangeDates,
+    ...(pheromoneChangeDate ? [pheromoneChangeDate] : []),
+  ])
+  // Add event-only dates to the categorical axis, so neither marker disappears
+  // when water or pheromone was changed on a day without an inspection.
   const data = [
     ...counts,
-    ...waterChangeDates
+    ...[...eventDates]
       .filter((date) => !countDates.has(date))
       .map((date) => ({ date: chartDate(date), sourceDate: date })),
   ].sort((left, right) => (left.sourceDate ?? "").localeCompare(right.sourceDate ?? ""))
@@ -45,13 +51,16 @@ export function BeetleDailyChart({ counts, waterChangeDates }: BeetleDailyChartP
           <YAxis width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip labelFormatter={chartDate} contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", backgroundColor: "var(--card)", color: "var(--card-foreground)", fontSize: 12 }} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Line type="monotone" dataKey="plot1RedPalmWeevil" name="Plot 1 — Red Palm Weevil (solid)" stroke="var(--destructive)" strokeWidth={2} connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot1Rhinoceros" name="Plot 1 — Rhinoceros Beetle (solid)" stroke="var(--foreground)" strokeWidth={2} connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot2RedPalmWeevil" name="Plot 2 — Red Palm Weevil (dashed)" stroke="var(--destructive)" strokeWidth={2} strokeDasharray="5 3" connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="plot2Rhinoceros" name="Plot 2 — Rhinoceros Beetle (dashed)" stroke="var(--foreground)" strokeWidth={2} strokeDasharray="5 3" connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          {pheromoneChangeDate ? (
+            <ReferenceLine x={pheromoneChangeDate} stroke="#dc2626" strokeWidth={3} label={{ value: "Pheromone change / reset", position: "insideTopLeft", fill: "#b91c1c", fontSize: 12, fontWeight: 700 }} />
+          ) : null}
           {waterChangeDates.map((date) => (
-            <ReferenceLine key={`water-change-${date}`} x={date} stroke="var(--chart-2)" strokeWidth={2} label={{ value: "Water changed", position: "top", fill: "var(--chart-2)", fontSize: 10 }} />
+            <ReferenceLine key={`water-change-${date}`} x={date} stroke="#047857" strokeWidth={3} label={{ value: "Water changed", position: "insideTopRight", fill: "#065f46", fontSize: 12, fontWeight: 700 }} />
           ))}
-          <Line type="monotone" dataKey="plot1RedPalmWeevil" name="Plot 1 — Red Palm Weevil" stroke="var(--destructive)" strokeWidth={2} connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="plot1Rhinoceros" name="Plot 1 — Rhinoceros Beetle" stroke="var(--foreground)" strokeWidth={2} connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="plot2RedPalmWeevil" name="Plot 2 — Red Palm Weevil" stroke="var(--destructive)" strokeWidth={2} strokeDasharray="5 3" connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="plot2Rhinoceros" name="Plot 2 — Rhinoceros Beetle" stroke="var(--foreground)" strokeWidth={2} strokeDasharray="5 3" connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
