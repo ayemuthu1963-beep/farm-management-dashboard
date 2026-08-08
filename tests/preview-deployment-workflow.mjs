@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Connect Preview Well Water and Beetle pages to Muthu Field Collector ODK Project 22",
+  "Link the Muthu Farms weather tile to the public Weather Underground station dashboard",
 )
-assert.equal(manifest.base_commit, "c6e38b83af41ffe43c397f90d9f2b2185a0caf37")
+assert.equal(manifest.base_commit, "d88565139668cb37ee4212ab60bbc39d1c81f6a2")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,19 +228,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  ".env.example",
-  "app/admin/beetle-trap/page.tsx",
-  "app/admin/harvest-sync/page.tsx",
-  "app/admin/well-water/page.tsx",
-  "app/map-tiles/farm-combined-png/[z]/[x]/[y]/route.ts",
-  "app/well-water/page.tsx",
-  "components/beetle/beetle-trap-header-actions.tsx",
-  "components/odk/odk-central-link.tsx",
-  "components/odk/preview-odk-source-card.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/odk-preview.ts",
-  "package.json",
-  "tests/odk-preview-links.mjs",
+  "lib/mfms-navigation.ts",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

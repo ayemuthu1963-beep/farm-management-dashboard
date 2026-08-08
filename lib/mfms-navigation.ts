@@ -50,7 +50,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
   {
     id: "todays-weather",
     label: "Today's Weather",
-    href: "https://ambientweather.net/dashboard/3c60e933cba3de37fedd489ab60dd376",
+    href: "https://preview.wunderground.com/dashboard/pws/IUDUMA3",
     icon: CloudSun,
     dashboardIcon: "/mfms/icons/todays-weather.png",
     description: "Live weather conditions at Muthu Farms",
