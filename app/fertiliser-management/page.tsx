@@ -14,10 +14,12 @@ import {
   Leaf,
   PackagePlus,
   PlusCircle,
+  RotateCcw,
   Search,
   Send,
   ShoppingCart,
   Tags,
+  Trash2,
   X,
   type LucideIcon,
 } from "lucide-react"
@@ -44,7 +46,11 @@ import {
   adjustFertiliserStock,
   approveFertiliserRequirement,
   cancelFertiliserRequirement,
+  createFertiliserCategory,
+  createFertiliserProduct,
   createFertiliserRequirement,
+  deactivateFertiliserCategory,
+  deactivateFertiliserProduct,
   downloadFertiliserExport,
   fetchFertiliserLiveData,
   fetchFertiliserTransactionAllocations,
@@ -53,9 +59,12 @@ import {
   markFertiliserRequirementOrdered,
   receiveFertiliserRequirement,
   receiveFertiliserStock,
+  restoreFertiliserCategory,
+  restoreFertiliserProduct,
   updateFertiliserRequirement,
   type FertiliserAdjustStockResponse,
   type FertiliserAllocationApiRow,
+  type FertiliserCategoryApiRow,
   type FertiliserExportKind,
   type FertiliserIssueStockResponse,
   type FertiliserLiveData,
@@ -79,6 +88,13 @@ type ActiveTab = "overview" | "incoming" | "outgoing" | "adjustment" | "requirem
 type ModalName = "product" | "category" | null
 type FormErrors = Record<string, string>
 type DecimalInputMode = "decimal" | "numeric" | "text" | "search" | "email" | "tel" | "url" | "none"
+type MasterStatusFilter = "active" | "inactive" | "all"
+type MasterActionTarget = {
+  entityType: "product" | "category"
+  id: number
+  name: string
+  action: "deactivate" | "restore"
+}
 
 const QUANTITY_PRECISION_ERROR = "Quantity must be greater than zero and may contain up to 3 decimal places."
 
@@ -474,7 +490,15 @@ function ProductRegister({
   )
 }
 
-function ProductMasterReadOnlyTable({ products }: { products: FertiliserProductApiRow[] }) {
+function ProductMasterTable({
+  products,
+  actionId,
+  onAction,
+}: {
+  products: FertiliserProductApiRow[]
+  actionId: string | null
+  onAction: (target: MasterActionTarget) => void
+}) {
   if (products.length === 0) {
     return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No Product Master rows are available.</div>
   }
@@ -491,6 +515,7 @@ function ProductMasterReadOnlyTable({ products }: { products: FertiliserProductA
             <th className="px-3 py-2.5">Expiry Required</th>
             <th className="px-3 py-2.5">Status</th>
             <th className="px-3 py-2.5">Source Row</th>
+            <th className="px-3 py-2.5 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -502,7 +527,75 @@ function ProductMasterReadOnlyTable({ products }: { products: FertiliserProductA
               <td className="px-3 py-2.5 text-muted-foreground">{Number(product.minimum_stock).toLocaleString("en-IN", { maximumFractionDigits: 3 })}</td>
               <td className="px-3 py-2.5 text-muted-foreground">{product.expiry_required ? "Yes" : "No"}</td>
               <td className="px-3 py-2.5"><Badge className={product.is_active ? "bg-chart-2/15 text-chart-2" : "bg-muted text-muted-foreground"}>{product.is_active ? "Active" : "Inactive"}</Badge></td>
-              <td className="px-3 py-2.5 text-muted-foreground">{product.source_row_number ?? "—"}</td>
+              <td className="px-3 py-2.5 text-muted-foreground">{product.source_row_number ?? "Manual"}</td>
+              <td className="px-3 py-2.5 text-right">
+                <button
+                  type="button"
+                  disabled={actionId === `product:${product.product_id}`}
+                  onClick={() => onAction({ entityType: "product", id: product.product_id, name: product.product_name, action: product.is_active ? "deactivate" : "restore" })}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60",
+                    product.is_active ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-primary/10 text-primary hover:bg-primary/15",
+                  )}
+                >
+                  {product.is_active ? <Trash2 className="size-3.5" aria-hidden="true" /> : <RotateCcw className="size-3.5" aria-hidden="true" />}
+                  {product.is_active ? "Deactivate" : "Restore"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function CategoryMasterTable({
+  categories,
+  actionId,
+  onAction,
+}: {
+  categories: FertiliserCategoryApiRow[]
+  actionId: string | null
+  onAction: (target: MasterActionTarget) => void
+}) {
+  if (categories.length === 0) {
+    return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No Category Master rows are available.</div>
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] border-collapse text-sm">
+        <thead>
+          <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
+            <th className="px-3 py-2.5">Category</th>
+            <th className="px-3 py-2.5">Display Order</th>
+            <th className="px-3 py-2.5">Active Products</th>
+            <th className="px-3 py-2.5">Status</th>
+            <th className="px-3 py-2.5 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {categories.map((category) => (
+            <tr key={category.category_id} className="border-b border-border last:border-0 hover:bg-muted/35">
+              <td className="px-3 py-2.5 font-semibold text-foreground">{category.category_name}</td>
+              <td className="px-3 py-2.5 text-muted-foreground">{category.display_order}</td>
+              <td className="px-3 py-2.5 text-muted-foreground">{category.product_count}</td>
+              <td className="px-3 py-2.5"><Badge className={category.is_active ? "bg-chart-2/15 text-chart-2" : "bg-muted text-muted-foreground"}>{category.is_active ? "Active" : "Inactive"}</Badge></td>
+              <td className="px-3 py-2.5 text-right">
+                <button
+                  type="button"
+                  disabled={actionId === `category:${category.category_id}`}
+                  onClick={() => onAction({ entityType: "category", id: category.category_id, name: category.category_name, action: category.is_active ? "deactivate" : "restore" })}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60",
+                    category.is_active ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-primary/10 text-primary hover:bg-primary/15",
+                  )}
+                >
+                  {category.is_active ? <Trash2 className="size-3.5" aria-hidden="true" /> : <RotateCcw className="size-3.5" aria-hidden="true" />}
+                  {category.is_active ? "Deactivate" : "Restore"}
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -621,6 +714,11 @@ export default function FertiliserManagementPage() {
   const [stockAdjustmentErrors, setStockAdjustmentErrors] = useState<FormErrors>({})
   const [futureRequirementErrors, setFutureRequirementErrors] = useState<FormErrors>({})
   const [masterFormErrors, setMasterFormErrors] = useState<FormErrors>({})
+  const [masterActionErrors, setMasterActionErrors] = useState<FormErrors>({})
+  const [masterSubmitting, setMasterSubmitting] = useState(false)
+  const [masterActionId, setMasterActionId] = useState<string | null>(null)
+  const [masterActionTarget, setMasterActionTarget] = useState<MasterActionTarget | null>(null)
+  const [masterStatusFilter, setMasterStatusFilter] = useState<MasterStatusFilter>("active")
   const [exportingKind, setExportingKind] = useState<FertiliserExportKind | null>(null)
   const [exportMessage, setExportMessage] = useState("")
   const [activeModal, setActiveModal] = useState<ModalName>(null)
@@ -718,14 +816,24 @@ export default function FertiliserManagementPage() {
   const productCount = liveData?.summary.total_products ?? stockProducts.length
   const categoryCount = liveData?.summary.total_categories ?? categoriesForUi.length
   const productMasterRows = useMemo(() => {
-    const sourceRows = liveData?.products ?? []
+    const sourceRows = liveData?.masterProducts ?? []
     const term = search.trim().toLowerCase()
     return sourceRows.filter((product) => {
       const matchesSearch = !term || product.product_name.toLowerCase().includes(term) || product.category_name.toLowerCase().includes(term) || String(product.source_row_number ?? "").includes(term)
       const matchesCategory = categoryFilter === "all" || product.category_name === categoryFilter
-      return matchesSearch && matchesCategory
+      const matchesStatus = masterStatusFilter === "all" || (masterStatusFilter === "active" ? product.is_active : !product.is_active)
+      return matchesSearch && matchesCategory && matchesStatus
     })
-  }, [categoryFilter, liveData, search])
+  }, [categoryFilter, liveData, masterStatusFilter, search])
+
+  const categoryMasterRows = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return (liveData?.masterCategories ?? []).filter((category) => {
+      const matchesSearch = !term || category.category_name.toLowerCase().includes(term)
+      const matchesStatus = masterStatusFilter === "all" || (masterStatusFilter === "active" ? category.is_active : !category.is_active)
+      return matchesSearch && matchesStatus
+    })
+  }, [liveData, masterStatusFilter, search])
 
   const resetMessage = (text: string) => {
     setMessage(text)
@@ -1311,22 +1419,24 @@ export default function FertiliserManagementPage() {
     }
   }
 
-  const validateDisabledMasterForm = (event: FormEvent<HTMLFormElement>, kind: "Product" | "Category") => {
+  const submitMasterCreate = async (event: FormEvent<HTMLFormElement>, kind: "Product" | "Category") => {
     event.preventDefault()
-    const formData = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const formData = new FormData(form)
     const errors: FormErrors = {}
 
     if (kind === "Category") {
-      if (!String(formData.get("categoryName") ?? "").trim()) errors.categoryName = "Category name is required"
-    } else if (kind === "Product") {
-      if (!String(formData.get("productName") ?? "").trim()) errors.productName = "Product name is required"
-      if (!formData.get("category")) errors.category = "Category is required"
+      if (!String(formData.get("category_name") ?? "").trim()) errors.category_name = "Category name is required"
     } else {
-      if (!formData.get("product")) errors.product = "Product is required"
-      if (!validatePositiveNumber(formData.get(kind === "Future Requirement" ? "requiredQuantity" : "quantity"))) errors.quantity = "Quantity must be greater than zero"
-      if (kind === "Outgoing" && !formData.get("purpose")) errors.purpose = "Purpose is required"
-      if (kind === "Future Requirement" && !formData.get("requiredByDate")) errors.requiredByDate = "Required date is required"
+      const minimumStock = String(formData.get("minimum_stock") ?? "0").trim()
+      if (!String(formData.get("product_name") ?? "").trim()) errors.product_name = "Product name is required"
+      if (Number(formData.get("category_id")) <= 0) errors.category_id = "Category is required"
+      if (!String(formData.get("default_unit") ?? "").trim()) errors.default_unit = "Default unit is required"
+      if (!/^\d+(\.\d{1,3})?$/.test(minimumStock)) errors.minimum_stock = "Minimum stock must be zero or greater with up to 3 decimal places"
     }
+
+    const displayOrder = String(formData.get("display_order") ?? "").trim()
+    if (displayOrder && (!/^\d+$/.test(displayOrder) || Number(displayOrder) < 0)) errors.display_order = "Display order must be zero or greater"
 
     if (Object.keys(errors).length > 0) {
       setMasterFormErrors(errors)
@@ -1334,9 +1444,78 @@ export default function FertiliserManagementPage() {
     }
 
     setMasterFormErrors({})
-    resetMessage(`${kind} form validated. Product/category writes are disabled for this Preview workflow, so no database write occurred.`)
-    event.currentTarget.reset()
-    if (kind === "Product" || kind === "Category") setActiveModal(null)
+    setMasterSubmitting(true)
+    try {
+      if (kind === "Category") {
+        const result = await createFertiliserCategory({
+          category_name: String(formData.get("category_name") ?? "").trim(),
+          display_order: displayOrder ? Number(displayOrder) : null,
+        })
+        await refreshLiveData()
+        resetMessage(`Category ${result.category.category_name} added to Category Master.`)
+      } else {
+        const result = await createFertiliserProduct({
+          category_id: Number(formData.get("category_id")),
+          product_name: String(formData.get("product_name") ?? "").trim(),
+          default_unit: String(formData.get("default_unit") ?? "").trim(),
+          minimum_stock: String(formData.get("minimum_stock") ?? "0").trim(),
+          expiry_required: formData.get("expiry_required") === "on",
+          display_order: displayOrder ? Number(displayOrder) : null,
+        })
+        await refreshLiveData()
+        resetMessage(`Product ${result.product.product_name} added to Product Master.`)
+      }
+      form.reset()
+      setActiveModal(null)
+    } catch (error) {
+      const apiError = error as Error & { fieldErrors?: unknown }
+      const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
+      setMasterFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+    } finally {
+      setMasterSubmitting(false)
+    }
+  }
+
+  const openMasterAction = (target: MasterActionTarget) => {
+    setMasterActionErrors({})
+    setMasterActionTarget(target)
+  }
+
+  const submitMasterStatusChange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!masterActionTarget) return
+    const formData = new FormData(event.currentTarget)
+    const reason = String(formData.get("reason") ?? "").trim()
+    if (!reason) {
+      setMasterActionErrors({ reason: "Reason is required" })
+      return
+    }
+
+    const actionKey = `${masterActionTarget.entityType}:${masterActionTarget.id}`
+    setMasterActionErrors({})
+    setMasterActionId(actionKey)
+    try {
+      if (masterActionTarget.entityType === "product") {
+        if (masterActionTarget.action === "deactivate") {
+          await deactivateFertiliserProduct(masterActionTarget.id, { reason })
+        } else {
+          await restoreFertiliserProduct(masterActionTarget.id, { reason })
+        }
+      } else if (masterActionTarget.action === "deactivate") {
+        await deactivateFertiliserCategory(masterActionTarget.id, { reason })
+      } else {
+        await restoreFertiliserCategory(masterActionTarget.id, { reason })
+      }
+      await refreshLiveData()
+      resetMessage(`${masterActionTarget.name} ${masterActionTarget.action === "deactivate" ? "deactivated" : "restored"}.`)
+      setMasterActionTarget(null)
+    } catch (error) {
+      const apiError = error as Error & { fieldErrors?: unknown }
+      const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
+      setMasterActionErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+    } finally {
+      setMasterActionId(null)
+    }
   }
 
   const productOptions = stockProducts.map((product) => (
@@ -1762,14 +1941,29 @@ export default function FertiliserManagementPage() {
         {activeTab === "master" ? (
           <div className="space-y-5">
             <div className="flex flex-wrap justify-end gap-2">
+              <label className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground">
+                Status
+                <select value={masterStatusFilter} onChange={(event) => setMasterStatusFilter(event.target.value as MasterStatusFilter)} className="rounded-md border border-border bg-background px-2 py-1 text-sm font-normal">
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
               <button type="button" disabled={exportingKind === "products" || dataMode !== "live"} onClick={() => exportFertiliserData("products")} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">{exportingKind === "products" ? "Exporting Product Master..." : "Export Product Master"}</button>
-              <button type="button" disabled title="Coming in a later batch" className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground"><PlusCircle className="size-4" aria-hidden="true" /> Add Product — Read-only in FERT-04</button>
-              <button type="button" disabled title="Coming in a later batch" className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground"><PlusCircle className="size-4" aria-hidden="true" /> Add Category — Read-only in FERT-04</button>
+              <button type="button" disabled={dataMode !== "live" || masterSubmitting} onClick={() => { setMasterFormErrors({}); setActiveModal("product") }} className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"><PlusCircle className="size-4" aria-hidden="true" /> Add Product</button>
+              <button type="button" disabled={dataMode !== "live" || masterSubmitting} onClick={() => { setMasterFormErrors({}); setActiveModal("category") }} className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"><PlusCircle className="size-4" aria-hidden="true" /> Add Category</button>
             </div>
             <FilterControls search={search} setSearch={setSearch} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} stockFilter={stockFilter} setStockFilter={setStockFilter} expiryFilter={expiryFilter} setExpiryFilter={setExpiryFilter} categories={categoriesForUi} />
+            <Panel title="Category Master" icon={Layers}>
+              {dataMode === "live" ? (
+                <CategoryMasterTable categories={categoryMasterRows} actionId={masterActionId} onAction={openMasterAction} />
+              ) : (
+                <div className="rounded-xl border border-dashed border-destructive/30 bg-destructive/5 p-6 text-sm font-semibold text-destructive">LIVE FERTILISER DATA UNAVAILABLE. Category Master rows are not shown.</div>
+              )}
+            </Panel>
             <Panel title="Product Master" icon={Tags}>
               {dataMode === "live" ? (
-                <ProductMasterReadOnlyTable products={productMasterRows} />
+                <ProductMasterTable products={productMasterRows} actionId={masterActionId} onAction={openMasterAction} />
               ) : (
                 <div className="rounded-xl border border-dashed border-destructive/30 bg-destructive/5 p-6 text-sm font-semibold text-destructive">
                   LIVE FERTILISER DATA UNAVAILABLE. Product Master rows are not shown from mock data.
@@ -1783,21 +1977,52 @@ export default function FertiliserManagementPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
             <div className="w-full max-w-xl rounded-xl border border-border bg-card p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-bold text-foreground">Add {activeModal === "product" ? "Product" : "Category"} — Disabled</h2>
-                <button type="button" onClick={() => setActiveModal(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-5" aria-hidden="true" /><span className="sr-only">Close</span></button>
+                <h2 className="text-lg font-bold text-foreground">Add {activeModal === "product" ? "Product" : "Category"}</h2>
+                <button type="button" disabled={masterSubmitting} onClick={() => setActiveModal(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"><X className="size-5" aria-hidden="true" /><span className="sr-only">Close</span></button>
               </div>
-              <form onSubmit={(event) => validateDisabledMasterForm(event, activeModal === "product" ? "Product" : "Category")} className="space-y-4">
+              <form onSubmit={(event) => submitMasterCreate(event, activeModal === "product" ? "Product" : "Category")} className="space-y-4">
                 {activeModal === "product" ? (
                   <>
-                    <InputField label="Product name" name="productName" error={masterFormErrors.productName} />
-                    <SelectField label="Category" name="category" error={masterFormErrors.category}><option value="">Select category</option>{fertiliserCategories.map((category) => <option key={category} value={category}>{category}</option>)}</SelectField>
-                    <SelectField label="Unit" name="unit"><option value="">Select unit</option>{fertiliserUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</SelectField>
+                    <InputField label="Product name" name="product_name" error={masterFormErrors.product_name} />
+                    <SelectField label="Category" name="category_id" error={masterFormErrors.category_id}><option value="">Select category</option>{(liveData?.categories ?? []).map((category) => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}</SelectField>
+                    <SelectField label="Default unit" name="default_unit" error={masterFormErrors.default_unit}><option value="">Select unit</option>{fertiliserUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</SelectField>
+                    <InputField label="Minimum stock" name="minimum_stock" type="number" min="0" step="0.001" inputMode="decimal" defaultValue="0" error={masterFormErrors.minimum_stock} />
+                    <InputField label="Display order (optional)" name="display_order" type="number" min="0" step="1" inputMode="numeric" error={masterFormErrors.display_order} />
+                    <label className="flex items-center gap-2 text-sm font-semibold text-foreground"><input type="checkbox" name="expiry_required" className="size-4 rounded border-border" /> Expiry date is required for stock receipts</label>
                   </>
                 ) : (
-                  <InputField label="Category name" name="categoryName" error={masterFormErrors.categoryName} />
+                  <>
+                    <InputField label="Category name" name="category_name" error={masterFormErrors.category_name} />
+                    <InputField label="Display order (optional)" name="display_order" type="number" min="0" step="1" inputMode="numeric" error={masterFormErrors.display_order} />
+                  </>
                 )}
-                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">This modal validates only. It will not create a product/category until a later database-backed batch is approved.</div>
-                <SubmitRow />
+                {masterFormErrors.form ? <div className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{masterFormErrors.form}</div> : null}
+                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the guarded Preview/UAT database and will appear in the master tables immediately.</div>
+                <SubmitRow label={activeModal === "product" ? "Save Product" : "Save Category"} submitting={masterSubmitting} />
+              </form>
+            </div>
+          </div>
+        ) : null}
+
+        {masterActionTarget ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+            <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-foreground">{masterActionTarget.action === "deactivate" ? "Deactivate" : "Restore"} {masterActionTarget.entityType === "product" ? "Product" : "Category"}</h2>
+                <button type="button" disabled={masterActionId !== null} onClick={() => setMasterActionTarget(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"><X className="size-5" aria-hidden="true" /><span className="sr-only">Close</span></button>
+              </div>
+              <p className="mb-4 text-sm text-muted-foreground">
+                {masterActionTarget.action === "deactivate"
+                  ? `${masterActionTarget.name} will become inactive but its history will be preserved. Products with stock or open requirements cannot be deactivated.`
+                  : `${masterActionTarget.name} will be restored to active use after duplicate and category checks.`}
+              </p>
+              <form onSubmit={submitMasterStatusChange} className="space-y-4">
+                <InputField label="Reason" name="reason" error={masterActionErrors.reason} />
+                {Object.entries(masterActionErrors).filter(([field]) => field !== "reason").map(([field, error]) => <div key={field} className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{error}</div>)}
+                <div className="flex justify-end gap-2">
+                  <button type="button" disabled={masterActionId !== null} onClick={() => setMasterActionTarget(null)} className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60">Cancel</button>
+                  <button type="submit" disabled={masterActionId !== null} className={cn("inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60", masterActionTarget.action === "deactivate" ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground")}>{masterActionTarget.action === "deactivate" ? <Trash2 className="size-4" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}{masterActionId ? "Saving..." : masterActionTarget.action === "deactivate" ? "Confirm Deactivation" : "Confirm Restore"}</button>
+                </div>
               </form>
             </div>
           </div>
@@ -1849,12 +2074,12 @@ function SelectField({ label, name, defaultValue, error, children }: { label: st
   )
 }
 
-function SubmitRow() {
+function SubmitRow({ label, submitting }: { label: string; submitting: boolean }) {
   return (
     <div className="md:col-span-2">
-      <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+      <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
         <ShoppingCart className="size-4" aria-hidden="true" />
-        Validate Disabled Form
+        {submitting ? "Saving..." : label}
       </button>
     </div>
   )
