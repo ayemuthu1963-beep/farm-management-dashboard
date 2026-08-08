@@ -181,17 +181,38 @@ export async function GET(request: Request) {
       }
     })
 
-    const dateKeys = Array.from(new Set(sortedEntries.map((entry) => entry.entry_date))).sort()
+    const entriesByDate = new Map<string, RuntimeEntry[]>()
+    for (const entry of sortedEntries) {
+      const rows = entriesByDate.get(entry.entry_date) ?? []
+      rows.push(entry)
+      entriesByDate.set(entry.entry_date, rows)
+    }
+
+    const dateKeys = Array.from(entriesByDate.keys()).sort()
     const chartData = dateKeys.map((date) => {
       const point: Record<string, string | number> = { date: displayDate(date) }
+      const dayEntries = entriesByDate.get(date) ?? []
       for (const id of motorIds) {
         const motorNo = Number(id.slice(1))
-        const totalMinutes = sortedEntries
-          .filter((entry) => entry.entry_date === date && entry.motor_no === motorNo)
+        const totalMinutes = dayEntries
+          .filter((entry) => entry.motor_no === motorNo)
           .reduce((sum, entry) => sum + entry.total_minutes, 0)
         point[id] = runtimeHours(totalMinutes)
       }
       return point
+    })
+
+    const irrigationTrend = dateKeys.map((date) => {
+      const dayEntries = entriesByDate.get(date) ?? []
+      const totalMinutes = dayEntries.reduce((sum, entry) => sum + entry.total_minutes, 0)
+      return {
+        date: displayDate(date),
+        totalRuntimeHours: runtimeHours(totalMinutes),
+        totalWaterLitres: dayEntries.reduce(
+          (sum, entry) => sum + pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
+          0,
+        ),
+      }
     })
 
     const valveGroups = [
@@ -220,6 +241,7 @@ export async function GET(request: Request) {
       summaryStats,
       statusCards,
       chartData,
+      irrigationTrend,
       valveGroups,
       entries: sortedEntries,
     }, { headers: { "Cache-Control": "no-store" } })

@@ -9,6 +9,7 @@ import { getMotorDefaultDateRange, MotorDateRangeSelector, validateMotorDateRang
 import { MotorStatusCards } from "@/components/motor/motor-status-cards"
 import { MotorLogSection } from "@/components/motor/motor-log-section"
 import { MotorChart } from "@/components/motor/motor-chart"
+import { MotorIrrigationTrend } from "@/components/motor/motor-irrigation-trend"
 import { MotorValvesSection } from "@/components/motor/motor-valves-section"
 import { MotorSummaryCards } from "@/components/motor/motor-summary-cards"
 import { emptyMotorDashboardData, type MotorDashboardData } from "@/lib/motor-data"
@@ -89,9 +90,12 @@ export default function MotorRuntimePage() {
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <MotorLogSection recordsByMotor={data.recordsByMotor} />
-          <Panel title="Runtime Trend" icon={TrendingUp} iconClassName="text-emerald-700" className="border-emerald-200/80 bg-emerald-50/55">
-            <MotorChart data={data.chartData} />
-          </Panel>
+          <div className="flex flex-col gap-5">
+            <Panel title="Runtime Trend" icon={TrendingUp} iconClassName="text-emerald-700" className="border-emerald-200/80 bg-emerald-50/55">
+              <MotorChart data={data.chartData} />
+            </Panel>
+            <MotorIrrigationTrend data={data.irrigationTrend} />
+          </div>
         </div>
 
         <MotorValvesSection valveGroups={data.valveGroups} />

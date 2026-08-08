@@ -37,6 +37,12 @@ export interface MotorChartPoint {
   M3: number
 }
 
+export interface MotorIrrigationTrendPoint {
+  date: string
+  totalRuntimeHours: number
+  totalWaterLitres: number
+}
+
 export interface ValveRecord {
   date: string
   motorNo: string
@@ -61,6 +67,7 @@ export interface MotorDashboardData {
   summaryStats: MotorSummaryStat[]
   statusCards: MotorStatus[]
   chartData: MotorChartPoint[]
+  irrigationTrend: MotorIrrigationTrendPoint[]
   valveGroups: ValveGroup[]
 }
 
@@ -84,6 +91,7 @@ export const emptyMotorDashboardData: MotorDashboardData = {
     { id: "M3", name: "Motor 3", well: "Well 2 - South", status: "Idle", runHoursToday: 0, lastStart: "--" },
   ],
   chartData: [],
+  irrigationTrend: [],
   valveGroups: [{ motors: "Recorded Motor Runtime Entries", valves: [] }],
 }
 
