@@ -1,0 +1,139 @@
+name: Repair Preview deploy guard
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type REPAIR PREVIEW DEPLOY GUARD to install the reviewed guard correction
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-preview-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the exact Preview-only repair confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Preview deploy guard repair must execute from trusted main" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "REPAIR PREVIEW DEPLOY GUARD" ]] || {
+            echo "Confirmation did not match REPAIR PREVIEW DEPLOY GUARD" >&2
+            exit 1
+          }
+
+  repair:
+    needs: authorize
+    environment:
+      name: Preview
+      url: https://preview.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted repair source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate and install the dedicated Preview repair identity
+        id: ssh
+        shell: bash
+        env:
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+          PREVIEW_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_SSH_PRIVATE_KEY }}
+          PREVIEW_SSH_KNOWN_HOSTS: ${{ secrets.PREVIEW_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for required_name in \
+            PREVIEW_SSH_HOST \
+            PREVIEW_SSH_USER \
+            PREVIEW_SSH_PRIVATE_KEY \
+            PREVIEW_SSH_KNOWN_HOSTS
+          do
+            [[ -n "${!required_name:-}" ]] || {
+              echo "Missing required Preview environment setting: $required_name" >&2
+              exit 1
+            }
+          done
+          [[ "$PREVIEW_SSH_HOST" == "168.144.179.221" ]]
+          [[ "$PREVIEW_SSH_USER" == "muthu" ]]
+
+          ssh_dir="$RUNNER_TEMP/mfms-preview-repair-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PREVIEW_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PREVIEW_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$PREVIEW_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Install the reviewed Preview deploy guard correction
+        shell: bash
+        env:
+          PREVIEW_SSH_HOST: ${{ vars.PREVIEW_SSH_HOST }}
+          PREVIEW_SSH_USER: ${{ vars.PREVIEW_SSH_USER }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+        run: |
+          set -euo pipefail
+          readonly expected_old_sha="182eac0d4cd79fe8fedff4e7ea9a77aee3836e009418f069f575d15c9eaffcec"
+          expected_new_sha=$(sha256sum scripts/preview-server-deploy.sh | awk '{print $1}')
+          program_base64=$(base64 -w 0 scripts/preview-server-deploy.sh)
+          report="$RUNNER_TEMP/preview-deploy-program-repair.txt"
+
+          {
+            printf "EXPECTED_OLD_SHA='%s'\n" "$expected_old_sha"
+            printf "EXPECTED_NEW_SHA='%s'\n" "$expected_new_sha"
+            printf "PROGRAM_BASE64='%s'\n" "$program_base64"
+            cat scripts/repair-preview-deploy-program.sh
+          } | ssh \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PREVIEW_SSH_USER@$PREVIEW_SSH_HOST" \
+            'bash -s --' \
+            | tee "$report"
+
+          grep -Fqx 'PREVIEW_DEPLOY_PROGRAM_REPAIR=PASS' "$report"
+          grep -Fqx 'production_touched=0' "$report"
+          grep -Fqx 'backend_containers_changed=0' "$report"
+          grep -Fqx 'database_operations=0' "$report"
+          grep -Fqx 'odk_operations=0' "$report"
+          grep -Fqx 'scheduler_operations=0' "$report"
+          grep -Fqx 'proxy_configuration_operations=0' "$report"
+
+      - name: Upload sanitized repair report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: preview-deploy-program-repair-${{ github.run_id }}
+          path: ${{ runner.temp }}/preview-deploy-program-repair.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-preview-repair-ssh"
