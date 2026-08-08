@@ -61,6 +61,20 @@ assert.deepEqual(
   [],
 )
 
+const testEnv = {
+  ...livePreviewEnv,
+  MFMS_ENV: "test",
+  NEXT_PUBLIC_MFMS_ENV: "test",
+  MFMS_TARGET_DATABASE: "mfms_server_test",
+  MFMS_LOCAL_WRITE_DATABASE: "mfms_server_test",
+  MFMS_LOCAL_WRITE_BACKEND_HOST: "harvest-api-test",
+  MFMS_ALLOWED_BACKEND_HOSTS: "harvest-api-test",
+}
+assert.deepEqual(
+  getPreviewAdminWriteSafetyErrors(testEnv, "http://harvest-api-test:8000"),
+  [],
+)
+
 for (const [label, env, url] of [
   ["guard disabled", { ...livePreviewEnv, MFMS_ENABLE_LOCAL_WRITE_GUARD: "false" }, "http://harvest-api-pilot:8000"],
   ["cross-environment database", { ...livePreviewEnv, MFMS_ENV: "production" }, "http://harvest-api-pilot:8000"],

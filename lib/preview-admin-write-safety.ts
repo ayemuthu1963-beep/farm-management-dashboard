@@ -7,6 +7,7 @@ type ApprovedTarget = {
 }
 
 const APPROVED_TARGETS: Record<string, ApprovedTarget> = {
+  test: { database: "mfms_server_test", backendHost: "harvest-api-test", backendPort: "8000" },
   preview: { database: "mfms_server_uat", backendHost: "harvest-api-pilot", backendPort: "8000" },
   uat: { database: "mfms_server_uat", backendHost: "harvest-api-pilot", backendPort: "8000" },
   "production-candidate": {
