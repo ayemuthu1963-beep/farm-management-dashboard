@@ -4,18 +4,21 @@ import { readFileSync } from "node:fs"
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const config = read("lib/odk-preview.ts")
 
-assert.match(config, /defaultProjectId = \["production", "production-candidate"\]\.includes\(mfmsEnvironment\) \? "22" : "23"/)
+assert.match(config, /defaultProjectId = isProduction \? "22" : isTest \? "24" : "23"/)
 assert.match(config, /NEXT_PUBLIC_ODK_PROJECT_ID/)
 assert.match(config, /FIELD_COLLECTOR_PROJECT_NAME/)
+assert.match(config, /MFMS Test Field Collector/)
+assert.match(config, /isTest \? "24"/)
+assert.match(config, /productionOrTestFormVersion = isProduction \|\| isTest \? "20260808\.1"/)
 assert.match(config, /"Muthu Field Collector"/)
 assert.match(config, /"MFMS Preview Field Collector"/)
 assert.match(config, /formId: "mfms_preview_well_water_test_v1"/)
-assert.match(config, /publishedVersion: "20260723\.2"/)
+assert.match(config, /publishedVersion: productionOrTestFormVersion \?\? "20260723\.2"/)
 assert.match(config, /formId: "mfms_preview_beetle_test_v1"/)
-assert.match(config, /publishedVersion: "20260723\.1"/)
+assert.match(config, /publishedVersion: productionOrTestFormVersion \?\? "20260723\.1"/)
 assert.match(config, /projectId: PREVIEW_FIELD_COLLECTOR_PROJECT_ID/)
 assert.match(config, /formId: "mfms_preview_harvest_test_v1"/)
-assert.match(config, /publishedVersion: "20260827\.2"/)
+assert.match(config, /publishedVersion: productionOrTestFormVersion \?\? "20260827\.2"/)
 
 const expectedPlacements = [
   ["app/well-water/page.tsx", 'form="wellWater"'],
