@@ -287,7 +287,7 @@ export function WeatherDashboard() {
                 href={AMBIENT_WEATHER_DASHBOARD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#176b35] px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#0f572a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b35] focus-visible:ring-offset-2"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#b42318] px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#8f1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b42318] focus-visible:ring-offset-2"
               >
                 <ExternalLink className="size-4" aria-hidden="true" />
                 Open Detailed Weather Station Dashboard

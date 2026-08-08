@@ -3,8 +3,8 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Add a clearly labeled Ambient Weather detailed dashboard link to the Muthu Farms weather page",
-  "base_commit": "6886c25bb5358bb681d86a6162681d4ef3df490e",
+  "release_note": "Change the detailed Ambient Weather dashboard button to a red background",
+  "base_commit": "f63e70e16466a1063b94f89511a1e08332408914",
   "allowed_paths": [
     "components/weather/weather-dashboard.tsx",
     "deploy/preview-release-manifest.json",
