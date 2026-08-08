@@ -3,13 +3,15 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Change the detailed Ambient Weather dashboard button to a red background",
-  "base_commit": "f63e70e16466a1063b94f89511a1e08332408914",
+  "release_note": "Enable database-backed Product and Category Master management for Fertiliser",
+  "base_commit": "0c657dd5ce208587223a4328553e49f5d5c270a6",
   "allowed_paths": [
-    "components/weather/weather-dashboard.tsx",
+    "app/fertiliser-management/page.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/weather-underground-api.mjs"
+    "lib/fertiliser-api.ts",
+    "package.json",
+    "tests/fertiliser-master-management.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

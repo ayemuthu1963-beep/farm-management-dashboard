@@ -24,6 +24,40 @@ export interface FertiliserProductApiRow {
   updated_at: string
 }
 
+export interface FertiliserCategoryCreatePayload {
+  category_name: string
+  display_order?: number | null
+}
+
+export interface FertiliserProductCreatePayload {
+  category_id: number
+  product_name: string
+  default_unit: string
+  minimum_stock: string
+  expiry_required: boolean
+  display_order?: number | null
+}
+
+export interface FertiliserMasterStatusPayload {
+  reason: string
+}
+
+export interface FertiliserCategoryMutationResponse {
+  ok: boolean
+  category: FertiliserCategoryApiRow
+  action: "CREATED" | "DEACTIVATED" | "RESTORED"
+  changed?: boolean
+  write_scope: string
+}
+
+export interface FertiliserProductMutationResponse {
+  ok: boolean
+  product: FertiliserProductApiRow
+  action: "CREATED" | "DEACTIVATED" | "RESTORED"
+  changed?: boolean
+  write_scope: string
+}
+
 export interface FertiliserStockApiRow {
   product_id: number
   category_id: number
@@ -271,6 +305,8 @@ export interface FertiliserRequirementReceiptResponse extends FertiliserRequirem
 export interface FertiliserLiveData {
   categories: FertiliserCategoryApiRow[]
   products: FertiliserProductApiRow[]
+  masterCategories: FertiliserCategoryApiRow[]
+  masterProducts: FertiliserProductApiRow[]
   stock: FertiliserStockApiRow[]
   summary: FertiliserSummaryApi
   transactions: FertiliserTransactionApiRow[]
@@ -292,16 +328,18 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 export async function fetchFertiliserLiveData(): Promise<FertiliserLiveData> {
-  const [categories, products, stock, summary, transactions, requirements] = await Promise.all([
+  const [categories, products, masterCategories, masterProducts, stock, summary, transactions, requirements] = await Promise.all([
     fetchJson<FertiliserCategoryApiRow[]>("/api/fertiliser/categories"),
     fetchJson<FertiliserProductApiRow[]>("/api/fertiliser/products"),
+    fetchJson<FertiliserCategoryApiRow[]>("/api/fertiliser/categories?active_only=false"),
+    fetchJson<FertiliserProductApiRow[]>("/api/fertiliser/products?active_only=false"),
     fetchJson<FertiliserStockApiRow[]>("/api/fertiliser/stock"),
     fetchJson<FertiliserSummaryApi>("/api/fertiliser/summary"),
     fetchJson<FertiliserTransactionApiRow[]>("/api/fertiliser/transactions"),
     fetchJson<FertiliserRequirementApiRow[]>("/api/fertiliser/requirements"),
   ])
 
-  return { categories, products, stock, summary, transactions, requirements }
+  return { categories, products, masterCategories, masterProducts, stock, summary, transactions, requirements }
 }
 
 export async function fetchFertiliserTransactions(filters: FertiliserTransactionFilters = {}): Promise<FertiliserTransactionApiRow[]> {
@@ -380,6 +418,52 @@ export async function adjustFertiliserStock(payload: FertiliserStockAdjustmentPa
   }
 
   return body as FertiliserAdjustStockResponse
+}
+
+async function sendMasterRequest<T>(
+  path: string,
+  method: "POST" | "PATCH",
+  payload: unknown,
+  failurePrefix: string,
+): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw fertiliserWriteError(body, failurePrefix)
+  }
+
+  return body as T
+}
+
+export function createFertiliserCategory(payload: FertiliserCategoryCreatePayload): Promise<FertiliserCategoryMutationResponse> {
+  return sendMasterRequest("/api/fertiliser/categories", "POST", payload, "Category save failed")
+}
+
+export function createFertiliserProduct(payload: FertiliserProductCreatePayload): Promise<FertiliserProductMutationResponse> {
+  return sendMasterRequest("/api/fertiliser/products", "POST", payload, "Product save failed")
+}
+
+export function deactivateFertiliserCategory(categoryId: number, payload: FertiliserMasterStatusPayload): Promise<FertiliserCategoryMutationResponse> {
+  return sendMasterRequest(`/api/fertiliser/categories/${categoryId}/deactivate`, "PATCH", payload, "Category deactivation failed")
+}
+
+export function restoreFertiliserCategory(categoryId: number, payload: FertiliserMasterStatusPayload): Promise<FertiliserCategoryMutationResponse> {
+  return sendMasterRequest(`/api/fertiliser/categories/${categoryId}/restore`, "PATCH", payload, "Category restore failed")
+}
+
+export function deactivateFertiliserProduct(productId: number, payload: FertiliserMasterStatusPayload): Promise<FertiliserProductMutationResponse> {
+  return sendMasterRequest(`/api/fertiliser/products/${productId}/deactivate`, "PATCH", payload, "Product deactivation failed")
+}
+
+export function restoreFertiliserProduct(productId: number, payload: FertiliserMasterStatusPayload): Promise<FertiliserProductMutationResponse> {
+  return sendMasterRequest(`/api/fertiliser/products/${productId}/restore`, "PATCH", payload, "Product restore failed")
 }
 
 export async function fetchFertiliserTransactionAllocations(transactionId: number): Promise<FertiliserAllocationApiRow[]> {

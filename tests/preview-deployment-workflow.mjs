@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Change the detailed Ambient Weather dashboard button to a red background",
+  "Enable database-backed Product and Category Master management for Fertiliser",
 )
-assert.equal(manifest.base_commit, "f63e70e16466a1063b94f89511a1e08332408914")
+assert.equal(manifest.base_commit, "0c657dd5ce208587223a4328553e49f5d5c270a6")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,10 +228,12 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/weather/weather-dashboard.tsx",
+  "app/fertiliser-management/page.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/fertiliser-api.ts",
+  "package.json",
+  "tests/fertiliser-master-management.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/weather-underground-api.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
