@@ -52,6 +52,8 @@ assert.match(
   /https:\/\/ambientweather\.net\/dashboard\/3c60e933cba3de37fedd489ab60dd376/,
 )
 assert.match(weatherDashboard, /Open Detailed Weather Station Dashboard/)
+assert.match(weatherDashboard, /bg-\[#b42318\]/)
+assert.match(weatherDashboard, /hover:bg-\[#8f1d14\]/)
 assert.match(weatherDashboard, /target="_blank"/)
 assert.match(weatherDashboard, /rel="noopener noreferrer"/)
 assert.match(weatherDashboard, /External Ambient Weather page/)

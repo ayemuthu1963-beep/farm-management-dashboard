@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add a clearly labeled Ambient Weather detailed dashboard link to the Muthu Farms weather page",
+  "Change the detailed Ambient Weather dashboard button to a red background",
 )
-assert.equal(manifest.base_commit, "6886c25bb5358bb681d86a6162681d4ef3df490e")
+assert.equal(manifest.base_commit, "f63e70e16466a1063b94f89511a1e08332408914")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
