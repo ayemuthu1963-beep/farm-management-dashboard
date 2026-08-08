@@ -47,6 +47,14 @@ assert.match(weatherCard, /window\.setInterval\(loadCurrentWeather, 5 \* 60 \* 1
 assert.doesNotMatch(weatherCard, /wunderground\.com|api\.weather\.com/)
 assert.match(weatherDashboard, /\/api\/weather\/history\?days=7/)
 assert.match(weatherDashboard, /without external advertisements/)
+assert.match(
+  weatherDashboard,
+  /https:\/\/ambientweather\.net\/dashboard\/3c60e933cba3de37fedd489ab60dd376/,
+)
+assert.match(weatherDashboard, /Open Detailed Weather Station Dashboard/)
+assert.match(weatherDashboard, /target="_blank"/)
+assert.match(weatherDashboard, /rel="noopener noreferrer"/)
+assert.match(weatherDashboard, /External Ambient Weather page/)
 
 const weatherNavigation = mfmsNavigationItems.find((item) => item.id === "todays-weather")
 assert.ok(weatherNavigation)

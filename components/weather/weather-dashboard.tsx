@@ -6,6 +6,7 @@ import {
   CloudSun,
   Compass,
   Droplet,
+  ExternalLink,
   Gauge,
   RefreshCw,
   Sun,
@@ -27,6 +28,9 @@ import type {
 } from "@/lib/weather-types"
 
 type LoadState = "loading" | "ready" | "error"
+
+const AMBIENT_WEATHER_DASHBOARD_URL =
+  "https://ambientweather.net/dashboard/3c60e933cba3de37fedd489ab60dd376"
 
 async function readWeatherResponse<T extends object>(url: string, field: keyof T): Promise<T> {
   const response = await fetch(url, {
@@ -277,15 +281,29 @@ export function WeatherDashboard() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={refreshAll}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#bfd8c3] bg-white px-4 py-2 text-sm font-bold text-[#176b35] shadow-sm hover:bg-[#f5faf4] disabled:cursor-wait disabled:opacity-60"
-          >
-            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-            Refresh
-          </button>
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={AMBIENT_WEATHER_DASHBOARD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#176b35] px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#0f572a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b35] focus-visible:ring-offset-2"
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Open Detailed Weather Station Dashboard
+              </a>
+              <button
+                type="button"
+                onClick={refreshAll}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#bfd8c3] bg-white px-4 py-2 text-sm font-bold text-[#176b35] shadow-sm hover:bg-[#f5faf4] disabled:cursor-wait disabled:opacity-60"
+              >
+                <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+                Refresh
+              </button>
+            </div>
+            <p className="text-xs text-[#5f7464]">External Ambient Weather page · opens in a new tab</p>
+          </div>
         </div>
 
         {currentState === "loading" ? (
