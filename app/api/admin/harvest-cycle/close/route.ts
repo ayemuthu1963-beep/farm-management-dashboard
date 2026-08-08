@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 function isPreviewWriteEnabled(): boolean {
-  const publicEnv = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "").toLowerCase()
-  const appEnv = (process.env.MFMS_ENV ?? "").toLowerCase()
   const explicitFlag = (process.env.MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES ?? "").toLowerCase()
 
-  if (publicEnv === "production" || appEnv === "production") return false
-  if (explicitFlag === "true") return true
-  return publicEnv === "preview" || publicEnv === "uat" || appEnv === "preview" || appEnv === "uat"
+  if (explicitFlag === "false") return false
+  return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
 }
 
 function isValidDate(value: string): boolean {
@@ -22,7 +20,7 @@ function isValidDate(value: string): boolean {
 
 export async function POST(request: Request) {
   if (!isPreviewWriteEnabled()) {
-    return NextResponse.json({ ok: false, errors: ["Harvest Cycle Admin writes are enabled only for Preview."], message: "Harvest cycle was not closed." }, { status: 403 })
+    return NextResponse.json({ ok: false, errors: ["Harvest Cycle Admin writes are not enabled for this MFMS environment."], message: "Harvest cycle was not closed." }, { status: 403 })
   }
 
   const body = (await request.json().catch(() => ({}))) as {

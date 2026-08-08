@@ -113,12 +113,10 @@ assert.equal(
 assert.equal(getWellWaterSyncErrorMessage({ detail: "Not authenticated" }), "Not authenticated")
 assert.equal(getWellWaterSyncErrorMessage(null), WELL_WATER_SYNC_FAILURE_MESSAGE)
 
-// The browser calls only a same-origin, Preview/UAT-gated proxy with server-side credentials.
+// The browser calls only a same-origin, exact-target-gated proxy with server-side credentials.
 assert.match(syncProxy, /export async function POST\(request: NextRequest\)/)
 assert.doesNotMatch(syncProxy, /export async function GET/)
-assert.match(syncProxy, /MFMS_ENV/)
-assert.match(syncProxy, /NEXT_PUBLIC_MFMS_ENV/)
-assert.match(syncProxy, /production/)
+assert.match(syncProxy, /getPreviewAdminTargetSafetyErrors\(process\.env, getApiBaseUrl\(\)\)/)
 assert.match(syncProxy, /api\/admin\/well-water\/sync/)
 assert.match(syncProxy, /getBasicAuthHeader\(\)/)
 assert.match(syncProxy, /request\.headers\.get\("authorization"\)/)

@@ -2,7 +2,15 @@ export const ODK_CENTRAL_BASE_URL = (
   process.env.NEXT_PUBLIC_ODK_CENTRAL_URL ?? "https://odk.muthufarms.com"
 ).replace(/\/$/, "")
 
-export const PREVIEW_FIELD_COLLECTOR_PROJECT_ID = "23"
+const mfmsEnvironment = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "preview").trim().toLowerCase()
+const defaultProjectId = ["production", "production-candidate"].includes(mfmsEnvironment) ? "22" : "23"
+
+export const PREVIEW_FIELD_COLLECTOR_PROJECT_ID =
+  process.env.NEXT_PUBLIC_ODK_PROJECT_ID?.trim() || defaultProjectId
+
+export const FIELD_COLLECTOR_PROJECT_NAME = ["production", "production-candidate"].includes(mfmsEnvironment)
+  ? "Muthu Field Collector"
+  : "MFMS Preview Field Collector"
 
 export const previewOdkForms = {
   wellWater: {

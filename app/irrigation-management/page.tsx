@@ -18,7 +18,11 @@ import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
 const environmentBanner = process.env.NEXT_PUBLIC_MFMS_ENV_BANNER?.trim()
 const environmentDatabaseLabel = process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL?.trim()
 const environmentDataScope =
-  environmentDatabaseLabel === "mfms_server_uat" || environmentBanner?.toLowerCase().includes("pilot")
+  environmentDatabaseLabel === "mfms_server_prod" || environmentBanner?.toLowerCase() === "production"
+    ? "PRODUCTION"
+    : environmentDatabaseLabel === "mfms_server_prod_candidate" || environmentBanner?.toLowerCase().includes("candidate")
+      ? "PRODUCTION CANDIDATE"
+      : environmentDatabaseLabel === "mfms_server_uat" || environmentBanner?.toLowerCase().includes("pilot")
     ? "PREVIEW"
     : environmentDatabaseLabel === "mfms_local_uat_v1_2" || environmentBanner?.toLowerCase().includes("uat")
       ? "LOCAL UAT"

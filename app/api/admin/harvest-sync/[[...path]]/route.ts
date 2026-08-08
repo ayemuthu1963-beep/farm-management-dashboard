@@ -1,15 +1,13 @@
 import { createHmac } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 function isPreviewWriteEnabled(): boolean {
-  const publicEnv = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "").toLowerCase()
-  const appEnv = (process.env.MFMS_ENV ?? "").toLowerCase()
-  if (publicEnv === "production" || appEnv === "production") return false
-  return publicEnv === "preview" || publicEnv === "uat" || appEnv === "preview" || appEnv === "uat"
+  return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
 }
 
 function isManualImportRuntimeEnabled(): boolean {
@@ -77,7 +75,7 @@ function getAuthenticatedUserAssertionHeaders(
 
 async function proxy(request: NextRequest, context: RouteContext, method: "GET" | "POST") {
   if (!isPreviewWriteEnabled()) {
-    return NextResponse.json({ ok: false, error: "Harvest manual review is available only for Preview." }, { status: 403 })
+    return NextResponse.json({ ok: false, error: "Harvest manual review is not enabled for this MFMS environment." }, { status: 403 })
   }
   const params = await context.params
   const rawSuffix = (params.path ?? []).join("/")

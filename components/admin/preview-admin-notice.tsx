@@ -3,6 +3,8 @@ import { ShieldCheck } from "lucide-react"
 export function getPreviewEnvironmentLabel() {
   const environment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
   if (environment === "preview" || environment === "uat") return "PREVIEW / UAT"
+  if (environment === "production-candidate") return "PRODUCTION CANDIDATE"
+  if (environment === "production") return "PRODUCTION"
   return environment ? environment.toUpperCase() : "ENVIRONMENT NOT CONFIGURED"
 }
 
@@ -11,11 +13,13 @@ export function getPreviewDatabaseLabel() {
 }
 
 export function PreviewAdminNotice() {
+  const environment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
+  const isProduction = environment === "production"
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-chart-2/25 bg-chart-2/10 px-4 py-3 text-sm font-bold text-chart-2">
       <span className="inline-flex items-center gap-2">
         <ShieldCheck className="size-5" />
-        {getPreviewEnvironmentLabel()} — DO NOT USE FOR PRODUCTION DATA
+        {getPreviewEnvironmentLabel()} — {isProduction ? "LIVE DATA" : "ISOLATED VALIDATION DATA"}
       </span>
       <span>Database: {getPreviewDatabaseLabel()}</span>
     </div>

@@ -84,6 +84,9 @@ import {
   type FertiliserTransactionFilters,
 } from "@/lib/fertiliser-api"
 
+const mfmsEnvironmentLabel = process.env.NEXT_PUBLIC_MFMS_ENV_BANNER?.trim() || "MFMS"
+const mfmsDatabaseLabel = process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL?.trim() || "configured database"
+
 type ActiveTab = "overview" | "incoming" | "outgoing" | "adjustment" | "requirements" | "history" | "master"
 type ModalName = "product" | "category" | null
 type FormErrors = Record<string, string>
@@ -202,7 +205,7 @@ function mapStockRowsToProducts(rows: FertiliserStockApiRow[]): FertiliserProduc
     unit: row.unit ?? "",
     quantityText: formatApiQuantity(row.quantity, row.unit),
     expiryDate: row.nearest_expiry_date,
-    source: "mfms_server_uat",
+    source: mfmsDatabaseLabel,
     minimumStock: numberFromApi(row.minimum_stock) ?? 0,
     stockStatus: displayStockStatus(row.stock_status),
     expiryStatus: displayExpiryStatus(row.expiry_status),
@@ -238,7 +241,7 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-bold uppercase tracking-wide">LOADING LIVE FERTILISER DATA</p>
-            <p className="text-primary/85">Reading Fertiliser product master, stock, transactions, and requirements from the MFMS Preview database.</p>
+            <p className="text-primary/85">Reading Fertiliser product master, stock, transactions, and requirements from the configured MFMS database.</p>
           </div>
         </div>
       </div>
@@ -251,8 +254,8 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
         <div className="flex items-start gap-2">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-bold uppercase tracking-wide">LIVE PREVIEW DATABASE DATA</p>
-            <p className="text-chart-2/85">Stock Overview, Product Master, Transaction History, and Future Requirements are read from `mfms_server_uat`. Writes remain guarded to Preview only.</p>
+            <p className="font-bold uppercase tracking-wide">LIVE {mfmsEnvironmentLabel} DATABASE DATA</p>
+            <p className="text-chart-2/85">Stock Overview, Product Master, Transaction History, and Future Requirements are read from {mfmsDatabaseLabel}. Writes remain bound to the verified environment/database target.</p>
           </div>
         </div>
       </div>
@@ -1997,7 +2000,7 @@ export default function FertiliserManagementPage() {
                   </>
                 )}
                 {masterFormErrors.form ? <div className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{masterFormErrors.form}</div> : null}
-                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the guarded Preview/UAT database and will appear in the master tables immediately.</div>
+                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the guarded {mfmsEnvironmentLabel} database and will appear in the master tables immediately.</div>
                 <SubmitRow label={activeModal === "product" ? "Save Product" : "Save Category"} submitting={masterSubmitting} />
               </form>
             </div>

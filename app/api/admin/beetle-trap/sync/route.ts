@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
 import { beetleTrapSyncErrorMessage } from "@/lib/beetle-sync"
+import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -45,9 +46,12 @@ function getAuthenticatedUserAssertionHeaders(username: string, target: URL): Re
 }
 
 export async function POST(request: NextRequest) {
-  if (!isBeetleTrapManualSyncAvailable()) {
+  if (
+    !isBeetleTrapManualSyncAvailable() ||
+    getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length > 0
+  ) {
     return NextResponse.json(
-      { status: "failed", message: "Beetle Trap ODK sync is available only in Preview/UAT." },
+      { status: "failed", message: "Beetle Trap ODK sync is not enabled for this MFMS environment." },
       { status: 403, headers: NO_STORE_HEADERS },
     )
   }
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
   const authenticatedUsername = getAuthenticatedPreviewUsername(request)
   if (!authenticatedUsername) {
     return NextResponse.json(
-      { status: "failed", message: "Preview authentication is required." },
+      { status: "failed", message: "MFMS administrator authentication is required." },
       { status: 401, headers: NO_STORE_HEADERS },
     )
   }

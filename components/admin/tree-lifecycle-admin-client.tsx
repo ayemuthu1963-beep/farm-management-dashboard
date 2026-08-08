@@ -311,7 +311,7 @@ export function TreeLifecycleAdminClient() {
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-bold">Tree Lifecycle controls apply to Preview / UAT only.</p>
+            <p className="font-bold">Tree Lifecycle controls apply only to the verified MFMS environment/database target.</p>
             <p className="mt-1">A replacement records a new plantation date and becomes <strong>Future Better</strong> until 36 completed months. An early-bearing tree can be promoted to normal Harvest Tree performance. Previous harvest history is retained but excluded before the current planting date.</p>
           </div>
         </div>

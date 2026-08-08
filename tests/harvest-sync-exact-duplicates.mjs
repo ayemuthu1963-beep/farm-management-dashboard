@@ -406,8 +406,11 @@ assert.match(
   /Review ODK Harvest submissions, resolve discrepancies, run a safety dry run and manually import the approved date-specific batch\./,
 )
 assert.match(syncPage, /<span className="font-extrabold">Mode:<\/span> Manual Review &amp; Import/)
-assert.match(syncPage, /Database:<\/span> mfms_server_uat/)
-assert.match(syncPage, /ODK Project:<\/span> 17/)
+assert.match(syncPage, /Database:<\/span> \{databaseLabel\}/)
+assert.match(syncPage, /ODK Project:<\/span> \{projectId\}/)
+assert.match(syncPage, /production-candidate/)
+assert.match(syncPage, /MFMS_TARGET_DATABASE/)
+assert.match(syncPage, /\["production", "production-candidate"\]\.includes\(environment\) \? "22" : "23"/)
 assert.match(syncPage, /Form:<\/span> mfms_preview_harvest_test_v1/)
 assert.match(syncPage, /HarvestManualReviewWorkspace/)
 assert.doesNotMatch(syncPage, /Automatic schedule|Harvest ODK Sync/)

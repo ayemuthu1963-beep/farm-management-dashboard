@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 import { WELL_WATER_SYNC_FAILURE_MESSAGE } from "@/lib/well-water-sync"
 
 export const dynamic = "force-dynamic"
@@ -12,16 +13,8 @@ const AUTHENTICATED_USER_HEADER = "X-MFMS-Authenticated-User"
 const AUTHENTICATED_USER_TIMESTAMP_HEADER = "X-MFMS-Authenticated-User-Timestamp"
 const AUTHENTICATED_USER_SIGNATURE_HEADER = "X-MFMS-Authenticated-User-Signature"
 
-function isPreviewWriteEnabled(): boolean {
-  const publicEnvironment = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
-  const serverEnvironment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
-  if (publicEnvironment === "production" || serverEnvironment === "production") return false
-  return (
-    publicEnvironment === "preview" ||
-    publicEnvironment === "uat" ||
-    serverEnvironment === "preview" ||
-    serverEnvironment === "uat"
-  )
+function isManualSyncEnabled(): boolean {
+  return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
 }
 
 function getAuthenticatedPreviewUsername(request: NextRequest): string | null {
@@ -60,9 +53,9 @@ function getAuthenticatedUserAssertionHeaders(
 }
 
 export async function POST(request: NextRequest) {
-  if (!isPreviewWriteEnabled()) {
+  if (!isManualSyncEnabled()) {
     return NextResponse.json(
-      { status: "failed", message: "Well Water ODK sync is available only in Preview/UAT." },
+      { status: "failed", message: "Well Water ODK sync is not enabled for this MFMS environment." },
       { status: 403, headers: NO_STORE_HEADERS },
     )
   }
@@ -70,7 +63,7 @@ export async function POST(request: NextRequest) {
   const authenticatedUsername = getAuthenticatedPreviewUsername(request)
   if (!authenticatedUsername) {
     return NextResponse.json(
-      { status: "failed", message: "Preview authentication is required." },
+      { status: "failed", message: "MFMS administrator authentication is required." },
       { status: 401, headers: NO_STORE_HEADERS },
     )
   }
