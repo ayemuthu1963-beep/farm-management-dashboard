@@ -9,7 +9,13 @@ export const dynamic = "force-dynamic"
 
 export default function HarvestSyncAdminPage() {
   const environment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
-  const environmentLabel = environment === "production" ? "Production" : environment === "production-candidate" ? "Production Candidate" : "Preview / UAT"
+  const environmentLabel = environment === "production"
+    ? "Production"
+    : environment === "production-candidate"
+      ? "Production Candidate"
+      : environment === "test"
+        ? "Test"
+        : "Preview / UAT"
   const databaseLabel = (process.env.MFMS_TARGET_DATABASE ?? "").trim() || "Not configured"
   const projectId = process.env.NEXT_PUBLIC_ODK_PROJECT_ID?.trim() || (["production", "production-candidate"].includes(environment) ? "22" : "23")
   return (

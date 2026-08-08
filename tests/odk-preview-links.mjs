@@ -32,6 +32,10 @@ for (const [path, marker] of expectedPlacements) {
   assert.ok(read(path).includes(marker), `${path} must use the central ODK source configuration`)
 }
 
+const harvestSyncPage = read("app/admin/harvest-sync/page.tsx")
+assert.match(harvestSyncPage, /environment === "test"/)
+assert.match(harvestSyncPage, /\? "Test"/)
+
 const link = read("components/odk/odk-central-link.tsx")
 const card = read("components/odk/preview-odk-source-card.tsx")
 assert.match(link, /target="_blank"/)
