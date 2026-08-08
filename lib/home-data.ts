@@ -11,14 +11,14 @@ export interface WeatherData {
 }
 
 export const weatherData: WeatherData = {
-  temperature: "32°C",
-  condition: "Partly Cloudy",
-  humidity: "62%",
-  wind: "12 km/h",
-  rainfall: "0.0 mm",
+  temperature: "—",
+  condition: "Connecting to station…",
+  humidity: "—",
+  wind: "—",
+  rainfall: "—",
   detailUrl:
     homepageNavigationItems.find((item) => item.id === "todays-weather")?.href ??
-    "https://ambientweather.net/",
+    "/weather",
   ctaLabel:
     homepageNavigationItems.find((item) => item.id === "todays-weather")?.ctaLabel ??
     "View Detailed Weather",

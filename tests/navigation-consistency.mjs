@@ -26,7 +26,7 @@ assert.equal(dashboard.showOnDashboard, false)
 assert.equal(dashboard.showInSidebar, true)
 
 const sidebarById = new Map(sidebarNavigationItems.map((item) => [item.id, item]))
-for (const tile of homepageNavigationItems.filter((item) => !item.external)) {
+for (const tile of homepageNavigationItems.filter((item) => item.showInSidebar)) {
   const sidebarItem = sidebarById.get(tile.id)
   assert.ok(sidebarItem, `${tile.label} must appear in the sidebar`)
   assert.equal(sidebarItem.label, tile.label)
