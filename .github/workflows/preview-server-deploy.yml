@@ -190,6 +190,10 @@ jobs:
           grep -Fqx 'production_containers_touched=0' "$report"
           current_revision=$(awk -F= '$1 == "frontend_image_revision" {print $2}' "$report")
 
+          if [[ "$current_revision" =~ ^([0-9a-f]{7,39})-project23$ ]]; then
+            current_revision=${BASH_REMATCH[1]}
+          fi
+
           if [[ "$current_revision" =~ ^[0-9a-f]{7,39}$ ]]; then
             resolve_dir=$(mktemp -d "$RUNNER_TEMP/mfms-preview-live-revision.XXXXXX")
             repo_url="https://github.com/$GITHUB_REPOSITORY.git"

@@ -2,43 +2,19 @@ import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 
-const preflightWorkflow = readFileSync(
-  ".github/workflows/preview-server-preflight.yml",
-  "utf8",
-)
-const deployWorkflow = readFileSync(
-  ".github/workflows/preview-server-deploy.yml",
-  "utf8",
-)
-const rollbackWorkflow = readFileSync(
-  ".github/workflows/preview-server-rollback.yml",
-  "utf8",
-)
-const repairWorkflow = readFileSync(
-  ".github/workflows/preview-deploy-program-repair.yml",
-  "utf8",
-)
-const releaseSignalWorkflow = readFileSync(
-  ".github/workflows/preview-release-candidate.yml",
-  "utf8",
-)
-const preflightScript = readFileSync(
-  "scripts/preview-server-preflight.sh",
-  "utf8",
-)
-const deployScript = readFileSync(
-  "scripts/preview-server-deploy.sh",
-  "utf8",
-)
-const repairScript = readFileSync(
-  "scripts/repair-preview-deploy-program.sh",
-  "utf8",
-)
+const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
+
+const preflightWorkflow = readText(".github/workflows/preview-server-preflight.yml")
+const deployWorkflow = readText(".github/workflows/preview-server-deploy.yml")
+const rollbackWorkflow = readText(".github/workflows/preview-server-rollback.yml")
+const releaseSignalWorkflow = readText(".github/workflows/preview-release-candidate.yml")
+const preflightScript = readText("scripts/preview-server-preflight.sh")
+const deployScript = readText("scripts/preview-server-deploy.sh")
 const manifest = JSON.parse(
-  readFileSync("deploy/preview-release-manifest.json", "utf8"),
+  readText("deploy/preview-release-manifest.json"),
 )
 
-const manualWorkflows = [preflightWorkflow, rollbackWorkflow, repairWorkflow]
+const manualWorkflows = [preflightWorkflow, rollbackWorkflow]
 
 const gitFileMode = (path) =>
   execFileSync("git", ["ls-files", "-s", "--", path], { encoding: "utf8" })
@@ -47,7 +23,6 @@ const gitFileMode = (path) =>
 
 assert.equal(gitFileMode("scripts/preview-server-preflight.sh"), "100755")
 assert.equal(gitFileMode("scripts/preview-server-deploy.sh"), "100755")
-assert.equal(gitFileMode("scripts/repair-preview-deploy-program.sh"), "100755")
 
 for (const workflow of manualWorkflows) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
@@ -163,6 +138,7 @@ assert.match(
 assert.match(deployWorkflow, /name: Discover the exact live Preview revision/)
 assert.match(deployWorkflow, /READ_ONLY_PREFLIGHT=PASS/)
 assert.match(deployWorkflow, /frontend_image_revision/)
+assert.match(deployWorkflow, /\^\(\[0-9a-f\]\{7,39\}\)-project23\$/)
 assert.match(deployWorkflow, /\[\[ "\$current_revision" =~ \^\[0-9a-f\]\{7,39\}\$ \]\]/)
 assert.match(deployWorkflow, /rev-parse --verify "\$\{current_revision\}\^\{commit\}"/)
 assert.match(deployWorkflow, /Resolved live Preview revision is not an ancestor of the candidate/)
@@ -193,20 +169,6 @@ assert.match(preflightScript, /odk_operations=0/)
 assert.match(preflightScript, /scheduler_operations=0/)
 assert.match(preflightScript, /proxy_configuration_operations=0/)
 
-assert.match(repairWorkflow, /\[\[ "\$CONFIRMATION" == "REPAIR PREVIEW DEPLOY GUARD" \]\]/)
-assert.match(repairWorkflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/)
-assert.match(repairWorkflow, /persist-credentials: false/)
-assert.match(repairWorkflow, /PREVIEW_SSH_PRIVATE_KEY: \$\{\{ secrets\.PREVIEW_SSH_PRIVATE_KEY \}\}/)
-assert.match(repairWorkflow, /expected_old_sha="182eac0d4cd79fe8fedff4e7ea9a77aee3836e009418f069f575d15c9eaffcec"/)
-assert.match(repairWorkflow, /PREVIEW_DEPLOY_PROGRAM_REPAIR=PASS/)
-assert.doesNotMatch(repairWorkflow, /PREVIEW_DEPLOY_SSH_PRIVATE_KEY/)
-
-assert.match(repairScript, /exactly one trusted installed deploy program must match/)
-assert.match(repairScript, /before-short-revision-guard-/)
-assert.match(repairScript, /PREVIEW_DEPLOY_PROGRAM_REPAIR=PASS/)
-assert.doesNotMatch(repairScript, /\bdocker\b/)
-assert.doesNotMatch(repairScript, /https?:\/\//)
-
 for (const prohibited of [
   /docker\s+(rm|stop|kill|restart|run|create|rename|update)\b/,
   /docker\s+compose\s+(up|down|restart)\b/,
@@ -230,6 +192,7 @@ assert.match(deployScript, /rollback_command_pattern='\^rollback-preview /)
 assert.match(deployScript, /candidate is not the exact preview-release head/)
 assert.match(deployScript, /candidate does not contain the live Preview baseline/)
 assert.match(deployScript, /original_reported_revision=/)
+assert.match(deployScript, /\^\(\[0-9a-f\]\{7,39\}\)-project23\$/)
 assert.match(deployScript, /\[\[ "\$original_revision" =~ \^\[0-9a-f\]\{7,39\}\$ \]\]/)
 assert.match(deployScript, /original_revision=\$expected_current_revision/)
 assert.match(deployScript, /rollback_reported_revision=/)
