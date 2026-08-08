@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add a server-side Weather Underground live and seven-day history dashboard for Muthu Farms",
+  "Add a clearly labeled Ambient Weather detailed dashboard link to the Muthu Farms weather page",
 )
-assert.equal(manifest.base_commit, "7db6069cac363f9ae9b6b1e827108d1830b0a60a")
+assert.equal(manifest.base_commit, "6ea9de61b9d84980640e7b545e18ac67be05132b")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,22 +228,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  ".env.example",
-  "app/api/weather/current/route.ts",
-  "app/api/weather/history/route.ts",
-  "app/weather/page.tsx",
-  "components/home/weather-card.tsx",
   "components/weather/weather-dashboard.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/home-data.ts",
-  "lib/mfms-navigation.ts",
-  "lib/weather-format.ts",
-  "lib/weather-history-range.ts",
-  "lib/weather-types.ts",
-  "lib/weather-underground.ts",
-  "lib/weather-underground-data.ts",
-  "package.json",
-  "tests/navigation-consistency.mjs",
   "tests/preview-deployment-workflow.mjs",
   "tests/weather-underground-api.mjs",
 ]
