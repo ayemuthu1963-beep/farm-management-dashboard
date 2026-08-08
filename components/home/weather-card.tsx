@@ -1,23 +1,99 @@
+"use client"
+
 import Image from "next/image"
+import Link from "next/link"
+import { useEffect, useState } from "react"
 import { Droplet, Wind, CloudRain, ArrowRight } from "lucide-react"
 import type { WeatherData } from "@/lib/home-data"
+import type {
+  WeatherApiErrorResponse,
+  WeatherCurrentResponse,
+} from "@/lib/weather-types"
+import {
+  formatObservationTime,
+  formatWeatherValue,
+} from "@/lib/weather-format"
 
 interface WeatherCardProps {
   data: WeatherData
 }
 
 export function WeatherCard({ data }: WeatherCardProps) {
+  const [weather, setWeather] = useState<WeatherCurrentResponse | null>(null)
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadCurrentWeather() {
+      try {
+        const response = await fetch("/api/weather/current", {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        })
+        const payload = (await response.json()) as
+          | WeatherCurrentResponse
+          | WeatherApiErrorResponse
+
+        if (!response.ok || !("current" in payload)) {
+          throw new Error("Weather data unavailable")
+        }
+
+        if (isActive) {
+          setWeather(payload)
+          setStatus("ready")
+        }
+      } catch {
+        if (isActive) setStatus("error")
+      }
+    }
+
+    loadCurrentWeather()
+    const refreshTimer = window.setInterval(loadCurrentWeather, 5 * 60 * 1000)
+
+    return () => {
+      isActive = false
+      window.clearInterval(refreshTimer)
+    }
+  }, [])
+
+  const current = weather?.current
+  const temperature = current
+    ? formatWeatherValue(current.temperatureC, "", 1)
+    : data.temperature
   const stats = [
-    { label: "Humidity", value: data.humidity, icon: Droplet },
-    { label: "Wind", value: data.wind, icon: Wind },
-    { label: "Rainfall", value: data.rainfall, icon: CloudRain },
+    {
+      label: "Humidity",
+      value: current
+        ? formatWeatherValue(current.humidityPct, "%", 0)
+        : data.humidity,
+      icon: Droplet,
+    },
+    {
+      label: "Wind",
+      value: current
+        ? formatWeatherValue(current.windSpeedKph, " km/h", 1)
+        : data.wind,
+      icon: Wind,
+    },
+    {
+      label: "Rain today",
+      value: current
+        ? formatWeatherValue(current.rainfallTodayMm, " mm", 1)
+        : data.rainfall,
+      icon: CloudRain,
+    },
   ]
 
+  const condition = current
+    ? `Updated ${formatObservationTime(current.observedAt)}`
+    : status === "error"
+      ? "Live station temporarily unavailable"
+      : data.condition
+
   return (
-    <a
+    <Link
       href={data.detailUrl}
-      target="_blank"
-      rel="noopener noreferrer"
       className="flex min-h-[280px] flex-col rounded-xl border border-[#dce9dc] bg-white/95 p-6 text-[#071f13] shadow-[0_8px_22px_rgba(0,0,0,0.09)] transition-shadow hover:shadow-[0_12px_28px_rgba(0,0,0,0.14)]"
     >
       <div className="flex flex-1 gap-4">
@@ -33,10 +109,12 @@ export function WeatherCard({ data }: WeatherCardProps) {
           <div className="mt-2 flex flex-1 items-start justify-between gap-3">
             <div>
               <p className="text-4xl font-black leading-none">
-                {data.temperature.replace("°C", "")}
+                {temperature}
                 <span className="align-top text-xl font-bold">°C</span>
               </p>
-              <p className="mt-2 text-sm text-[#4a5d4f]">{data.condition}</p>
+              <p className="mt-2 text-sm text-[#4a5d4f]" aria-live="polite">
+                {condition}
+              </p>
             </div>
             <ul className="space-y-2 text-right">
               {stats.map((stat) => {
@@ -60,6 +138,6 @@ export function WeatherCard({ data }: WeatherCardProps) {
         {data.ctaLabel}
         <ArrowRight className="size-4" aria-hidden="true" />
       </span>
-    </a>
+    </Link>
   )
 }
