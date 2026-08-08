@@ -392,6 +392,9 @@ validate_common_live_state() {
   original_reported_revision=$(image_revision_for_container "$live_container")
   original_revision=$original_reported_revision
   original_network_ip=$(network_ip_for_container "$live_container")
+  if [[ "$original_revision" =~ ^([0-9a-f]{7,39})-project23$ ]]; then
+    original_revision=${BASH_REMATCH[1]}
+  fi
   if [[ "$original_revision" =~ ^[0-9a-f]{40}$ ]]; then
     [[ "$original_revision" == "$expected_current_revision" ]] \
       || blocked "live Preview revision differs from the approved current revision"
@@ -597,7 +600,7 @@ deploy_preview() {
 rollback_preview() {
   local deployed_revision deployed_image_id deployed_image_tag
   local rollback_container rollback_revision rollback_image_id rollback_image_tag
-  local replacement_id rollback_reported_revision
+  local replacement_id rollback_reported_revision rollback_revision_for_match
   [[ -f "$state_file" ]] || blocked "no successful GitHub Preview deployment is recorded"
   validate_common_live_state
 
@@ -624,11 +627,15 @@ rollback_preview() {
   [[ "$(docker inspect --format '{{.Image}}' "$rollback_container")" == "$rollback_image_id" ]] \
     || blocked "rollback container image ID changed"
   rollback_reported_revision=$(image_revision_for_container "$rollback_container")
-  if [[ "$rollback_reported_revision" =~ ^[0-9a-f]{40}$ ]]; then
-    [[ "$rollback_reported_revision" == "$rollback_revision" ]] \
+  rollback_revision_for_match=$rollback_reported_revision
+  if [[ "$rollback_revision_for_match" =~ ^([0-9a-f]{7,39})-project23$ ]]; then
+    rollback_revision_for_match=${BASH_REMATCH[1]}
+  fi
+  if [[ "$rollback_revision_for_match" =~ ^[0-9a-f]{40}$ ]]; then
+    [[ "$rollback_revision_for_match" == "$rollback_revision" ]] \
       || blocked "rollback container revision changed"
-  elif [[ "$rollback_reported_revision" =~ ^[0-9a-f]{7,39}$ ]] \
-    && [[ "${rollback_revision:0:${#rollback_reported_revision}}" == "$rollback_reported_revision" ]]; then
+  elif [[ "$rollback_revision_for_match" =~ ^[0-9a-f]{7,39}$ ]] \
+    && [[ "${rollback_revision:0:${#rollback_revision_for_match}}" == "$rollback_revision_for_match" ]]; then
     :
   else
     blocked "rollback container revision is invalid"
