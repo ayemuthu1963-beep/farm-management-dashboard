@@ -216,7 +216,7 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Link the Muthu Farms weather tile to the public Weather Underground station dashboard",
+  "Preserve the live Project 23 frontend configuration and link the weather tile to the public Weather Underground station dashboard",
 )
 assert.equal(manifest.base_commit, "d88565139668cb37ee4212ab60bbc39d1c81f6a2")
 assert.deepEqual(manifest.protected_invariants, {
@@ -228,8 +228,12 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/api/admin/harvest-sync/[[...path]]/route.ts",
   "deploy/preview-release-manifest.json",
   "lib/mfms-navigation.ts",
+  "lib/odk-preview.ts",
+  "scripts/test-preview-live-contracts.sh",
+  "tests/odk-preview-links.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

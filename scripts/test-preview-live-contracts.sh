@@ -19,11 +19,11 @@ cron=$(remote "crontab -l")
 [[ $(grep -Fxc '30 3,13 * * * /home/muthu/muthu-harvest-dashboard/scripts/run_preview_well_water_sync.sh >> /home/muthu/mfms_logs/preview_well_water_sync.log 2>&1' <<<"$cron" || true) -eq 1 ]] && pass well_water_cron twice_daily || fail well_water_cron drift
 [[ $(grep -Fxc '30 6 * * * /home/muthu/muthu-harvest-dashboard/scripts/run_preview_beetle_sync.sh >> /home/muthu/mfms_logs/preview_beetle_sync.log 2>&1' <<<"$cron" || true) -eq 1 ]] && pass beetle_cron daily || fail beetle_cron drift
 
-assert_file harvest_project "$backend_repo/api/app/routers/harvest_sync_admin.py" '^PROJECT_ID = 17$'
+assert_file harvest_project "$backend_repo/api/app/routers/harvest_sync_admin.py" '^PROJECT_ID = 23$'
 assert_file harvest_form "$backend_repo/api/app/routers/harvest_sync_admin.py" 'FORM_ID = "mfms_preview_harvest_test_v1"'
 live_well_project=$(remote "docker exec harvest-api-pilot python -c 'from app.config import get_settings; print(get_settings().odk_well_water_project_id)'")
-[[ "$live_well_project" == 15 ]] && pass well_water_project "$live_well_project" || fail well_water_project "$live_well_project"
-remote "grep -Eq '^PROJECT_ID=.16.$' /home/muthu/muthu-harvest-dashboard/scripts/run_preview_beetle_sync.sh" && pass beetle_project 16 || fail beetle_project unverified
+[[ "$live_well_project" == 23 ]] && pass well_water_project "$live_well_project" || fail well_water_project "$live_well_project"
+remote "grep -Eq '^PROJECT_ID=.23.$' /home/muthu/muthu-harvest-dashboard/scripts/run_preview_beetle_sync.sh" && pass beetle_project 23 || fail beetle_project unverified
 assert_file detailed_endpoint "$backend_repo/api/app/routers/dashboard.py" 'detailed-query'
 assert_file detailed_no_n_plus_one "$frontend_repo/lib/coconut-harvest-api.ts" '/api/detailed-query'
 assert_file century_maker "$frontend_repo/lib/coconut-harvest-data.ts" 'Century Maker'

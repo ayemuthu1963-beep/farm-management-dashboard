@@ -4,13 +4,14 @@ import { readFileSync } from "node:fs"
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const config = read("lib/odk-preview.ts")
 
-assert.match(config, /MUTHU_FIELD_COLLECTOR_PROJECT_ID = "22"/)
+assert.match(config, /PREVIEW_FIELD_COLLECTOR_PROJECT_ID = "23"/)
 assert.match(config, /formId: "mfms_preview_well_water_test_v1"/)
 assert.match(config, /publishedVersion: "20260723\.2"/)
 assert.match(config, /formId: "mfms_preview_beetle_test_v1"/)
 assert.match(config, /publishedVersion: "20260723\.1"/)
-assert.match(config, /projectId: "17"/)
+assert.match(config, /projectId: PREVIEW_FIELD_COLLECTOR_PROJECT_ID/)
 assert.match(config, /formId: "mfms_preview_harvest_test_v1"/)
+assert.match(config, /publishedVersion: "20260827\.2"/)
 
 const expectedPlacements = [
   ["app/well-water/page.tsx", 'form="wellWater"'],
