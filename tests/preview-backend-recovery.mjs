@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process"
 import { readFileSync, statSync } from "node:fs"
 
 const scriptPath = "scripts/preview-server-backend-recovery.sh"
-const source = readFileSync(scriptPath, "utf8")
+const source = readFileSync(scriptPath, "utf8").replaceAll("\r\n", "\n")
 const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash"
 
 function bashFunction(command, env = {}) {

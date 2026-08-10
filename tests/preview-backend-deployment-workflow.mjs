@@ -5,20 +5,23 @@ import { readFileSync, statSync } from "node:fs"
 const deployWorkflow = readFileSync(
   ".github/workflows/preview-backend-deploy.yml",
   "utf8",
-)
+).replaceAll("\r\n", "\n")
 const rollbackWorkflow = readFileSync(
   ".github/workflows/preview-backend-rollback.yml",
   "utf8",
-)
+).replaceAll("\r\n", "\n")
 const deployScript = readFileSync(
   "scripts/preview-server-backend-deploy.sh",
   "utf8",
-)
+).replaceAll("\r\n", "\n")
 const bootstrapScript = readFileSync(
   "scripts/bootstrap-preview-backend-state.sh",
   "utf8",
-)
-const setupGuide = readFileSync("docs/PREVIEW_BACKEND_RELEASE_SETUP.md", "utf8")
+).replaceAll("\r\n", "\n")
+const setupGuide = readFileSync(
+  "docs/PREVIEW_BACKEND_RELEASE_SETUP.md",
+  "utf8",
+).replaceAll("\r\n", "\n")
 
 function pythonFullmatch(pattern, value) {
   const result = spawnSync(
@@ -126,11 +129,13 @@ assertPythonPlanLines(
 )
 
 
-for (const file of [
-  "scripts/preview-server-backend-deploy.sh",
-  "scripts/bootstrap-preview-backend-state.sh",
-]) {
-  assert.equal(statSync(file).mode & 0o777, 0o755, `${file} must be executable`)
+if (process.platform !== "win32") {
+  for (const file of [
+    "scripts/preview-server-backend-deploy.sh",
+    "scripts/bootstrap-preview-backend-state.sh",
+  ]) {
+    assert.equal(statSync(file).mode & 0o777, 0o755, `${file} must be executable`)
+  }
 }
 
 for (const workflow of [deployWorkflow, rollbackWorkflow]) {
