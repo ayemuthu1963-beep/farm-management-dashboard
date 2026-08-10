@@ -180,6 +180,7 @@ for (const prohibited of [
 }
 
 assert.match(deployScript, /readonly preview_url="https:\/\/preview\.muthufarms\.com"/)
+assert.match(deployScript, /readonly central_login_url="https:\/\/admin\.muthufarms\.com\/login"/)
 assert.doesNotMatch(deployScript, /https:\/\/muthufarms\.com(?:\/|['"])/)
 assert.match(deployScript, /readonly release_ref="refs\/heads\/preview-release"/)
 assert.match(deployScript, /readonly live_container="mfms-pilot-web"/)
@@ -210,7 +211,12 @@ assert.match(deployScript, /wait_for_public_preview_guard/)
 assert.match(deployScript, /public Preview authentication guard is unavailable/)
 assert.match(deployScript, /public Preview authentication guard failed/)
 assert.match(deployScript, /public Preview rollback authentication guard failed/)
-assert.match(deployScript, /public_preview_guard=401/)
+assert.match(deployScript, /\[\[ "\$status" == "401" \]\]/)
+assert.match(deployScript, /\[\[ "\$status" == "303" \]\]/)
+assert.match(deployScript, /parsed\.netloc == login\.netloc == "admin\.muthufarms\.com"/)
+assert.match(deployScript, /parse_qsl\(parsed\.query, keep_blank_values=True\) == \[\("next", expected_return\)\]/)
+assert.match(deployScript, /public_guard_result="303-central-login"/)
+assert.match(deployScript, /public_preview_guard=\$public_guard_result/)
 assert.doesNotMatch(deployScript, /wait_for_version "\$preview_url"/)
 assert.doesNotMatch(deployScript, /smoke_routes "\$preview_url"/)
 assert.doesNotMatch(

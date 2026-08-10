@@ -27,6 +27,7 @@ readonly backend_container="harvest-api-pilot"
 readonly proxy_container="central-nginx-1"
 readonly preview_network="harvest-net"
 readonly preview_url="https://preview.muthufarms.com"
+readonly central_login_url="https://admin.muthufarms.com/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
@@ -86,6 +87,7 @@ proxy_target_count_before=""
 worker_secret_loaded=0
 transaction_active=0
 automatic_restore_result="not-required"
+public_guard_result=""
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -189,13 +191,51 @@ wait_for_version() {
 }
 
 wait_for_public_preview_guard() {
-  local status attempt
+  local headers status location attempt
+  headers=$(mktemp "$work_dir/public-preview-guard.XXXXXX")
   for attempt in $(seq 1 30); do
-    status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+    : > "$headers"
+    status=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' --max-time 10 \
       "$preview_url/api/version" 2>/dev/null || true)
-    [[ "$status" == "401" ]] && return 0
+    if [[ "$status" == "401" ]]; then
+      public_guard_result="401"
+      rm -f "$headers"
+      return 0
+    fi
+    if [[ "$status" == "303" ]]; then
+      location=$(awk '
+        tolower(substr($0, 1, 9)) == "location:" {
+          sub(/^[^:]*:[[:space:]]*/, "")
+          sub(/\r$/, "")
+          print
+          exit
+        }
+      ' "$headers")
+      if python3 - "$location" "$central_login_url" "$preview_url/api/version" <<'PY'
+import sys
+from urllib.parse import parse_qsl, urlsplit
+
+location, expected_login, expected_return = sys.argv[1:]
+parsed = urlsplit(location)
+login = urlsplit(expected_login)
+valid = (
+    parsed.scheme == login.scheme == "https"
+    and parsed.netloc == login.netloc == "admin.muthufarms.com"
+    and parsed.path == login.path == "/login"
+    and parsed.fragment == ""
+    and parse_qsl(parsed.query, keep_blank_values=True) == [("next", expected_return)]
+)
+raise SystemExit(0 if valid else 1)
+PY
+      then
+        public_guard_result="303-central-login"
+        rm -f "$headers"
+        return 0
+      fi
+    fi
     sleep 2
   done
+  rm -f "$headers"
   return 1
 }
 
@@ -626,7 +666,7 @@ deploy_preview() {
 
   echo "deployment_environment=Preview"
   echo "deployment_url=$preview_url"
-  echo "public_preview_guard=401"
+  echo "public_preview_guard=$public_guard_result"
   echo "previous_revision=$original_revision"
   echo "deployed_revision=$candidate_revision"
   echo "deployed_image=$new_image"
@@ -721,7 +761,7 @@ rollback_preview() {
 
   echo "rollback_environment=Preview"
   echo "rollback_url=$preview_url"
-  echo "public_preview_guard=401"
+  echo "public_preview_guard=$public_guard_result"
   echo "previous_revision=$deployed_revision"
   echo "restored_revision=$rollback_revision"
   echo "rollback_container_retained=$transaction_backup"
