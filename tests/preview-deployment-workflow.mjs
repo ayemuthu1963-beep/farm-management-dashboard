@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Rearrange the Motor Runtime history and trend tiles",
+  "Add the approved Worker Management Preview/UAT interface and offline entry support",
 )
-assert.equal(manifest.base_commit, "12627b4f0da750dbff5aca9db5cc7105ec26adf0")
+assert.equal(manifest.base_commit, "96e24c9d8687858ae48c033edcd436ebef3d698b")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,10 +228,40 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/motor-runtime/page.tsx",
+  "app/api/worker-management/[[...path]]/route.ts",
+  "app/globals.css",
+  "app/worker-management/dashboard/page.tsx",
+  "app/worker-management/layout.tsx",
+  "app/worker-management/loan-register/page.tsx",
+  "app/worker-management/page.tsx",
+  "app/worker-management/query/page.tsx",
+  "app/worker-management/weekly-settlement/page.tsx",
+  "app/worker-management/workers/page.tsx",
+  "components/worker-management/daily-wage-entry.tsx",
+  "components/worker-management/loan-register.tsx",
+  "components/worker-management/weekly-settlement.tsx",
+  "components/worker-management/worker-dashboard.tsx",
+  "components/worker-management/worker-directory.tsx",
+  "components/worker-management/worker-module-shell.tsx",
+  "components/worker-management/worker-offline-provider.tsx",
+  "components/worker-management/worker-query.tsx",
+  "components/worker-management/worker-ui.tsx",
+  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "tests/motor-screenshot-analysis-real-workflow.mjs",
+  "lib/mfms-navigation.ts",
+  "lib/worker-management-api.ts",
+  "lib/worker-management-format.ts",
+  "lib/worker-management-offline.ts",
+  "lib/worker-management-signing.ts",
+  "lib/worker-management-types.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "public/worker-management-sw.js",
+  "public/worker-management.webmanifest",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management-offline.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

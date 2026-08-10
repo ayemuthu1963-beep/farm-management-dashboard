@@ -37,6 +37,7 @@
     "pnpm-workspace.yaml",
     "public/worker-management-sw.js",
     "public/worker-management.webmanifest",
+    "tests/preview-deployment-workflow.mjs",
     "tests/worker-management-offline.mjs",
     "tests/worker-management.mjs"
   ],
