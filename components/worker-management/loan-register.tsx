@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Plus } from "lucide-react"
 import {
-  createLedgerTransaction,
   fetchAccounts,
   fetchCurrentWeek,
   fetchLedger,
@@ -15,6 +14,14 @@ import {
   money,
   toDateInput,
 } from "@/lib/worker-management-format"
+import {
+  cacheWorkerAccounts,
+  discardWorkerOperation,
+  getPendingLedgerOperations,
+  queueLedgerOperation,
+  readCachedWorkerAccounts,
+  type WorkerLocalOperation,
+} from "@/lib/worker-management-offline"
 import type {
   LedgerTransaction,
   ManualTransactionType,
@@ -32,6 +39,7 @@ import {
   WorkerInput,
   WorkerSelect,
 } from "./worker-ui"
+import { useWorkerOffline } from "./worker-offline-provider"
 
 const transactionOptions: Array<{ value: ManualTransactionType; label: string; sign: "negative" | "positive" }> = [
   { value: "CASH_ADVANCE", label: "Cash advance / loan received", sign: "negative" },
@@ -40,6 +48,12 @@ const transactionOptions: Array<{ value: ManualTransactionType; label: string; s
   { value: "CASH_REPAYMENT", label: "Cash loan repayment", sign: "positive" },
   { value: "DEPOSIT_CONTRIBUTION", label: "Deposit contribution", sign: "positive" },
 ]
+
+const negativeTransactionTypes = new Set<ManualTransactionType>([
+  "CASH_ADVANCE",
+  "EXTRA_WAGE_CASH",
+  "DEPOSIT_WITHDRAWAL",
+])
 
 function transactionLabel(value: string): string {
   if (value === "SETTLEMENT_TRANSFER") return "Loan received from wages"
@@ -56,6 +70,7 @@ type LedgerForm = {
 }
 
 export function LoanRegister() {
+  const { online, lastSync, syncNow, refreshStatus } = useWorkerOffline()
   const [accounts, setAccounts] = useState<WorkerAccount[]>([])
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([])
   const [week, setWeek] = useState<WorkWeek | null>(null)
@@ -64,6 +79,7 @@ export function LoanRegister() {
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [formOpen, setFormOpen] = useState(false)
+  const [pendingOperations, setPendingOperations] = useState<WorkerLocalOperation[]>([])
   const [form, setForm] = useState<LedgerForm>({
     date: toDateInput(),
     accountId: "",
@@ -85,15 +101,31 @@ export function LoanRegister() {
         weekId: currentWeek.week_id ?? undefined,
         pageSize: 200,
       })
+      await cacheWorkerAccounts(accountResult.items)
       setAccounts(accountResult.items)
       setWeek(currentWeek)
       setTransactions(ledgerResult.items)
+      setPendingOperations(await getPendingLedgerOperations())
       setForm((current) => ({
         ...current,
         accountId: current.accountId || String(accountResult.items.find((account) => account.is_active)?.account_id ?? ""),
       }))
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load the Loan Register.")
+      const cachedAccounts = await readCachedWorkerAccounts()
+      const localOperations = await getPendingLedgerOperations()
+      if (cachedAccounts.length) {
+        setAccounts(cachedAccounts)
+        setPendingOperations(localOperations)
+        setTransactions([])
+        setWeek(null)
+        setNotice("Offline account list loaded. New transactions will be saved on this device.")
+        setForm((current) => ({
+          ...current,
+          accountId: current.accountId || String(cachedAccounts.find((account) => account.is_active)?.account_id ?? ""),
+        }))
+      } else {
+        setError(loadError instanceof Error ? loadError.message : "Unable to load the Loan Register.")
+      }
     } finally {
       setLoading(false)
     }
@@ -101,7 +133,7 @@ export function LoanRegister() {
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [lastSync, load])
 
   const summaries = useMemo(
     () =>
@@ -141,9 +173,9 @@ export function LoanRegister() {
     setSaving(true)
     setError("")
     setNotice("")
+    let queued = false
     try {
-      await createLedgerTransaction({
-        client_operation_id: crypto.randomUUID(),
+      await queueLedgerOperation({
         account_id: Number(form.accountId),
         transaction_date: form.date,
         transaction_type: form.type,
@@ -151,14 +183,46 @@ export function LoanRegister() {
         reference: form.reference.trim() || null,
         notes: form.notes.trim() || null,
       })
-      setNotice("Loan Register transaction saved.")
+      queued = true
+      setNotice("Loan Register transaction saved on this device.")
       setForm((current) => ({ ...current, amount: "", reference: "", notes: "" }))
       setFormOpen(false)
+      await refreshStatus()
+      if (online) {
+        const result = await syncNow()
+        setNotice(
+          result.conflicts
+            ? "The transaction needs conflict review. It remains saved on this device."
+            : "Loan Register transaction synced online.",
+        )
+      }
       await load()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save this transaction.")
+      if (queued) {
+        setNotice("Transaction remains saved on this device and will sync when possible.")
+        setPendingOperations(await getPendingLedgerOperations())
+        await refreshStatus()
+      } else {
+        setError(saveError instanceof Error ? saveError.message : "Unable to save this transaction.")
+      }
     } finally {
       setSaving(false)
+    }
+  }
+
+  const dismissConflict = async (operationId: string) => {
+    setError("")
+    try {
+      await discardWorkerOperation(operationId)
+      setPendingOperations(await getPendingLedgerOperations())
+      await refreshStatus()
+      setNotice("Reviewed device transaction removed from the sync queue.")
+    } catch (dismissError) {
+      setError(
+        dismissError instanceof Error
+          ? dismissError.message
+          : "Unable to remove the reviewed transaction.",
+      )
     }
   }
 
@@ -191,6 +255,54 @@ export function LoanRegister() {
             <WorkerInput label="Notes (optional)" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
           </div>
           <div className="mt-4 flex gap-2"><WorkerButton onClick={addTransaction} disabled={saving}>{saving ? "Saving…" : "Save Transaction"}</WorkerButton><WorkerButton variant="ghost" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</WorkerButton></div>
+        </div>
+      ) : null}
+
+      {pendingOperations.length ? (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-amber-950">Device transaction queue</p>
+              <p className="text-xs text-amber-900">Each advance has its own operation ID and can sync only once.</p>
+            </div>
+            <Badge tone="amber">{pendingOperations.length} pending</Badge>
+          </div>
+          <div className="mt-3 space-y-2">
+            {pendingOperations.map((operation) => {
+              if (operation.entity_type !== "LEDGER") return null
+              const account = accounts.find((item) => item.account_id === operation.payload.account_id)
+              const negative = negativeTransactionTypes.has(operation.payload.transaction_type)
+              return (
+                <div key={operation.operation_id} className="rounded-lg border border-amber-200 bg-white p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{account?.display_name ?? `Account ${operation.payload.account_id}`}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(operation.payload.transaction_date)} · {transactionLabel(operation.payload.transaction_type)}
+                      </p>
+                    </div>
+                    <p className={negative ? "font-bold text-red-600" : "font-bold"}>
+                      {negative ? "−" : "+"}{formatSignedINR(operation.payload.amount).replace(/^\+/, "")}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      {operation.state === "CONFLICT"
+                        ? operation.detail || "Conflict review required"
+                        : operation.state === "SAVED_ON_DEVICE"
+                          ? "Saved on Device"
+                          : "Waiting to Sync"}
+                    </p>
+                    {operation.state === "CONFLICT" ? (
+                      <WorkerButton variant="ghost" onClick={() => void dismissConflict(operation.operation_id)}>
+                        Dismiss after review
+                      </WorkerButton>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       ) : null}
 

@@ -5,9 +5,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   CalendarDays,
+  Cloud,
+  CloudOff,
   LayoutDashboard,
   Menu,
+  RefreshCw,
   Search,
+  TriangleAlert,
   Users,
   WalletCards,
   X,
@@ -15,6 +19,7 @@ import {
 } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { cn } from "@/lib/utils"
+import { WorkerOfflineProvider, useWorkerOffline } from "./worker-offline-provider"
 
 const moduleNavigation: ReadonlyArray<{
   href: string
@@ -59,8 +64,19 @@ function ModuleNavigation({ onNavigate }: { onNavigate?: () => void }) {
     </nav>
   )
 }
-export function WorkerModuleShell({ children }: { children: ReactNode }) {
+function WorkerModuleContent({ children }: { children: ReactNode }) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
+  const { online, waiting, conflicts, syncing, lastSync, syncNow } = useWorkerOffline()
+  const statusLabel = !online
+    ? waiting ? `Offline · ${waiting} waiting` : "Offline"
+    : conflicts
+      ? `${conflicts} conflict${conflicts === 1 ? "" : "s"}`
+      : waiting
+        ? `${waiting} waiting`
+        : syncing
+          ? "Syncing"
+          : "Synced"
+  const StatusIcon = !online ? CloudOff : conflicts ? TriangleAlert : syncing ? RefreshCw : Cloud
 
   return (
     <DashboardShell>
@@ -81,10 +97,40 @@ export function WorkerModuleShell({ children }: { children: ReactNode }) {
             <p className="truncate font-bold">Muthu Farms</p>
             <p className="truncate text-xs text-muted-foreground">Worker management</p>
           </div>
-          <span className="ml-auto rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            Online
-          </span>
+          <button
+            type="button"
+            onClick={() => void syncNow().catch(() => undefined)}
+            disabled={!online || syncing}
+            className={cn(
+              "ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+              conflicts ? "bg-red-50 text-red-700" : online ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-900",
+            )}
+            title={lastSync ? `Last sync ${new Date(lastSync).toLocaleString("en-IN")}` : "Not yet synchronised"}
+          >
+            <StatusIcon className={cn("size-3.5", syncing && "animate-spin")} aria-hidden="true" />
+            {statusLabel}
+          </button>
         </header>
+
+        {!online || waiting || conflicts ? (
+          <div
+            role="status"
+            className={cn(
+              "border-b px-4 py-2 text-xs font-semibold sm:px-6",
+              conflicts
+                ? "border-red-200 bg-red-50 text-red-800"
+                : !online
+                  ? "border-amber-200 bg-amber-50 text-amber-900"
+                  : "border-blue-200 bg-blue-50 text-blue-800",
+            )}
+          >
+            {conflicts
+              ? `${conflicts} item${conflicts === 1 ? " requires" : "s require"} review before syncing.`
+              : !online
+                ? `Daily wage and loan entries save on this device. Settlement and worker setup require a connection. ${waiting ? `${waiting} item${waiting === 1 ? " is" : "s are"} waiting to sync.` : "No items are waiting."}`
+                : `${waiting} saved item${waiting === 1 ? " is" : "s are"} waiting to sync.`}
+          </div>
+        ) : null}
 
         <div className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)]">
           <aside className="hidden min-h-[calc(100vh-4rem)] border-r border-border bg-card lg:block">
@@ -129,5 +175,13 @@ export function WorkerModuleShell({ children }: { children: ReactNode }) {
         ) : null}
       </div>
     </DashboardShell>
+  )
+}
+
+export function WorkerModuleShell({ children }: { children: ReactNode }) {
+  return (
+    <WorkerOfflineProvider>
+      <WorkerModuleContent>{children}</WorkerModuleContent>
+    </WorkerOfflineProvider>
   )
 }
