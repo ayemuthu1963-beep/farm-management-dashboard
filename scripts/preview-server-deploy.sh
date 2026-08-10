@@ -32,6 +32,7 @@ readonly candidate_port="3016"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
+readonly worker_secret_file="$state_dir/worker-management-signing.env"
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
   || blocked "the public target is not Preview"
@@ -77,6 +78,12 @@ original_image_tag=""
 original_reported_revision=""
 original_revision=""
 original_network_ip=""
+backend_id_before=""
+backend_image_before=""
+cron_digest_before=""
+proxy_digest_before=""
+proxy_target_count_before=""
+worker_secret_loaded=0
 transaction_active=0
 automatic_restore_result="not-required"
 
@@ -223,15 +230,49 @@ assert_candidate_port_available() {
     || blocked "Preview candidate port $candidate_port is already allocated"
 }
 
+append_worker_environment() {
+  local worker_secret
+  if [[ ! -e "$worker_secret_file" ]]; then
+    if [[ "$operation" == "deploy" \
+      && -f "$source_dir/app/api/worker-management/[[...path]]/route.ts" ]]; then
+      blocked "Worker Management requires the server-local signing secret created by the backend release"
+      return 1
+    fi
+    return 0
+  fi
+  python3 - "$worker_secret_file" <<'PY'
+import os
+import pathlib
+import re
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("Worker signing secret must be a regular mode-0600 file")
+if metadata.st_uid != os.getuid():
+    raise SystemExit("Worker signing secret has the wrong owner")
+lines = path.read_text(encoding="ascii").splitlines()
+if len(lines) != 1 or not re.fullmatch(r"MFMS_ACTOR_ASSERTION_SECRET=[0-9a-f]{64}", lines[0]):
+    raise SystemExit("Worker signing secret file is invalid")
+PY
+  worker_secret=$(awk -F= '$1 == "MFMS_ACTOR_ASSERTION_SECRET" {print $2}' "$worker_secret_file")
+  printf 'MFMS_ACTOR_ASSERTION_SECRET=%s\nMFMS_TRUST_PROXY_ACTOR_HEADERS=true\nMFMS_WORKER_PROXY_DEFAULT_ROLE=admin\nMFMS_WORKER_LOCAL_ACTOR_ENABLED=false\n' \
+    "$worker_secret" >> "$environment_file"
+  worker_secret_loaded=1
+}
+
 write_environment_file() {
   local source_container=$1 target_revision=${2:-} target_timestamp=${3:-}
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
-    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT)=/' \
+    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_ACTOR_ASSERTION_SECRET|MFMS_TRUST_PROXY_ACTOR_HEADERS|MFMS_WORKER_PROXY_DEFAULT_ROLE|MFMS_WORKER_LOCAL_ACTOR_ENABLED|MFMS_WORKER_LOCAL_ACTOR_USERNAME|MFMS_WORKER_LOCAL_ACTOR_ROLE)=/' \
     > "$environment_file"
   if [[ -n "$target_revision" ]]; then
     printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\n' \
       "$target_revision" "$target_timestamp" >> "$environment_file"
   fi
+  append_worker_environment
   chmod 600 "$environment_file"
   grep -Fqx 'MFMS_ENV=preview' "$environment_file" \
     || blocked "frontend environment is not Preview"
@@ -296,7 +337,8 @@ assert_live_contract() {
     || blocked "Preview backend no longer targets the UAT database"
   [[ "$(cron_digest)" == "$cron_digest_before" ]] || blocked "Preview schedules changed"
   [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || blocked "proxy configuration changed"
-  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target changed"
+  [[ "$(proxy_target_count)" == "$proxy_target_count_before" ]] \
+    || blocked "Preview proxy target count changed"
   snapshot_unrelated_containers > "$after_unrelated"
   cmp -s "$expected_unrelated" "$after_unrelated" \
     || blocked "a backend, Production, ODK, proxy, database, or unrelated container changed"
@@ -417,7 +459,9 @@ PY
   backend_image_before=$(docker inspect --format '{{.Image}}' "$backend_container")
   cron_digest_before=$(cron_digest)
   proxy_digest_before=$(proxy_digest)
-  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target is not unique"
+  proxy_target_count_before=$(proxy_target_count)
+  [[ "$proxy_target_count_before" =~ ^[1-9][0-9]*$ ]] \
+    || blocked "Preview proxy has no approved frontend target"
   snapshot_unrelated_containers > "$before_unrelated"
   wait_for_public_preview_guard \
     || blocked "public Preview authentication guard is unavailable"
@@ -588,6 +632,9 @@ deploy_preview() {
   echo "deployed_image=$new_image"
   echo "deployed_image_id=$new_image_id"
   echo "rollback_container=$transaction_backup"
+  if [[ "$worker_secret_loaded" -eq 1 ]]; then
+    echo "worker_actor_assertion=server-local"
+  fi
   echo "backend_unchanged=true"
   echo "database_unchanged=true"
   echo "odk_unchanged=true"

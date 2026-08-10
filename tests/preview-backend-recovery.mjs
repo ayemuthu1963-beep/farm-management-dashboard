@@ -1,12 +1,11 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
-import { readFileSync, statSync } from "node:fs"
 
 const scriptPath = "scripts/preview-server-backend-recovery.sh"
-const source = readFileSync(scriptPath, "utf8")
+const source = readFileSync(scriptPath, "utf8").replace(/\r\n/g, "\n")
 const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash"
 
 function bashFunction(command, env = {}) {
@@ -47,7 +46,12 @@ assert.match(source, /readonly rollback_confirmation="ROLL BACK PREVIEW BACKEND 
 assert.match(source, /\[\[ "\$\(id -un\)" == "muthu" \]\]/)
 assert.match(source, /readonly lock_file="\$state_dir\/deployment\.lock"/)
 if (process.platform !== "win32") {
-  assert.equal(statSync(scriptPath).mode & 0o777, 0o755, "recovery script must be executable")
+  const mode = spawnSync("git", ["ls-files", "-s", "--", scriptPath], {
+    encoding: "utf8",
+  })
+  assert.equal(mode.error, undefined, "git must be available for the mode check")
+  assert.equal(mode.status, 0, mode.stderr)
+  assert.equal(mode.stdout.trim().split(/\s+/, 1)[0], "100755", "recovery script must be executable")
 }
 
 assertPass("exact revision", `require_exact_revision ${revision}`)

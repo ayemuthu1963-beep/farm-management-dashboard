@@ -300,6 +300,8 @@ jobs:
           grep -Fqx 'odk_unchanged=true' "$report"
           grep -Fqx 'schedules_unchanged=true' "$report"
           grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          ! grep -q '^worker_actor_assertion=' "$report" \
+            || grep -Fqx 'worker_actor_assertion=server-local' "$report"
           grep -Fqx 'production_touched=0' "$report"
           grep -Fqx 'PREVIEW_DEPLOYMENT=PASS' "$report"
 

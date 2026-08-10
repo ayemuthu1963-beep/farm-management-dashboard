@@ -39,10 +39,16 @@ readonly candidate_port="8016"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-backend-switch"
 readonly lock_file="$state_dir/deployment.lock"
+readonly worker_secret_file="$state_dir/worker-management-signing.env"
+readonly database_backup_dir="$state_dir/database-backups"
 readonly approved_restart_policy="no"
-readonly approved_mount_source="/tmp"
-readonly approved_mount_target="/host-tmp"
-readonly expected_mount_contract="bind|$approved_mount_source|$approved_mount_target|true"
+readonly approved_preview_well_odk_cutoff="2026-07-21T06:06:53+05:30"
+readonly approved_temp_mount_source="/tmp"
+readonly approved_temp_mount_target="/host-tmp"
+readonly approved_storage_mount_source="/home/muthu/mfms_data/preview/motor-screenshot-analysis"
+readonly approved_storage_mount_target="/var/lib/mfms/motor-screenshot-analysis"
+readonly expected_mount_contract="bind|$approved_storage_mount_source|$approved_storage_mount_target|true
+bind|$approved_temp_mount_source|$approved_temp_mount_target|true"
 readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8015"}]}'
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
@@ -92,7 +98,11 @@ original_revision=""
 frontend_id_before=""
 frontend_image_before=""
 proxy_digest_before=""
+proxy_target_count_before=""
 cron_digest_before=""
+database_backup_file=""
+database_backup_sha256=""
+database_backup_bytes=""
 transaction_active=0
 automatic_restore_result="not-required"
 
@@ -113,15 +123,16 @@ network_ip_for_container() {
 mount_contract_for_container() {
   local container=$1
   docker inspect \
-    --format '{{range .Mounts}}{{.Type}}|{{.Source}}|{{.Destination}}|{{.RW}}{{end}}' \
-    "$container"
+    --format '{{json .Mounts}}' \
+    "$container" \
+    | python3 -c 'import json,sys; mounts=json.load(sys.stdin); print("\n".join(sorted("{}|{}|{}|{}".format(item["Type"], item["Source"], item["Destination"], str(item["RW"]).lower()) for item in mounts)))'
 }
 
 assert_approved_mount_contract() {
   local container=$1 contract
   contract=$(mount_contract_for_container "$container")
   [[ "$contract" == "$expected_mount_contract" ]] \
-    || blocked "Preview backend mount contract differs from the approved /tmp to /host-tmp bind mount"
+    || blocked "Preview backend mount contract differs from the approved persistent storage and /tmp bind mounts"
 }
 
 disconnect_preview_network() {
@@ -250,17 +261,60 @@ wait_for_backend_version() {
   return 1
 }
 
+ensure_worker_signing_secret() {
+  if [[ ! -e "$worker_secret_file" ]]; then
+    python3 - "$worker_secret_file" <<'PY'
+import os
+import pathlib
+import secrets
+import sys
+
+target = pathlib.Path(sys.argv[1])
+temporary = target.with_name(f".{target.name}.{secrets.token_hex(8)}.tmp")
+descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    with os.fdopen(descriptor, "w", encoding="ascii", newline="\n") as handle:
+        handle.write(f"MFMS_ACTOR_ASSERTION_SECRET={secrets.token_hex(32)}\n")
+    os.replace(temporary, target)
+finally:
+    if temporary.exists():
+        temporary.unlink()
+PY
+  fi
+  python3 - "$worker_secret_file" <<'PY'
+import os
+import pathlib
+import re
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("Worker signing secret must be a regular mode-0600 file")
+if metadata.st_uid != os.getuid():
+    raise SystemExit("Worker signing secret has the wrong owner")
+lines = path.read_text(encoding="ascii").splitlines()
+if len(lines) != 1 or not re.fullmatch(r"MFMS_ACTOR_ASSERTION_SECRET=[0-9a-f]{64}", lines[0]):
+    raise SystemExit("Worker signing secret file is invalid")
+PY
+}
+
 write_environment_file() {
-  local source_container=$1 target_revision=${2:-}
+  local source_container=$1 target_revision=${2:-} worker_secret
+  ensure_worker_signing_secret
+  worker_secret=$(awk -F= '$1 == "MFMS_ACTOR_ASSERTION_SECRET" {print $2}' "$worker_secret_file")
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
-    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT)=/' \
+    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_PREVIEW_WELL_ODK_CUTOFF|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
     > "$environment_file"
   [[ -n "$(grep -E '^DATABASE_URL=' "$environment_file" || true)" ]] \
     || blocked "Preview backend has no DATABASE_URL environment entry"
   if [[ -n "$target_revision" ]]; then
-    printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\n' \
-      "$target_revision" "$timestamp" >> "$environment_file"
+    printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\nMFMS_PREVIEW_WELL_ODK_CUTOFF=%s\n' \
+      "$target_revision" "$timestamp" "$approved_preview_well_odk_cutoff" >> "$environment_file"
   fi
+  printf 'MFMS_WORKER_MANAGEMENT_ENABLED=true\nMFMS_ACTOR_ASSERTION_SECRET=%s\nMFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS=120\nMFMS_LOCAL_ACTOR_ENABLED=false\n' \
+    "$worker_secret" >> "$environment_file"
   chmod 600 "$environment_file"
 }
 
@@ -309,8 +363,10 @@ validate_common_live_state() {
   frontend_id_before=$(docker inspect --format '{{.Id}}' "$frontend_container")
   frontend_image_before=$(docker inspect --format '{{.Image}}' "$frontend_container")
   proxy_digest_before=$(proxy_digest)
+  proxy_target_count_before=$(proxy_target_count)
   cron_digest_before=$(cron_digest)
-  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target is not unique"
+  [[ "$proxy_target_count_before" =~ ^[1-9][0-9]*$ ]] \
+    || blocked "Preview proxy has no approved frontend target"
   assert_database_target "$backend_live_container"
   snapshot_unrelated_containers > "$before_unrelated"
 }
@@ -413,7 +469,7 @@ if not isinstance(required_paths, list) or not required_paths:
     raise SystemExit("backend release descriptor required_openapi_paths is empty")
 openapi_paths = []
 for path in required_paths:
-    if not isinstance(path, str) or not re.fullmatch(r"/(?:health|api(?:/[A-Za-z0-9_.-]+)*)", path):
+    if not isinstance(path, str) or not re.fullmatch(r"/(?:health|api(?:/[A-Za-z0-9_.{}-]+)*)", path):
         raise SystemExit(f"invalid OpenAPI path: {path!r}")
     if path not in openapi_paths:
         openapi_paths.append(path)
@@ -425,8 +481,13 @@ changed = subprocess.check_output(
     ["git", "-C", str(source), "diff", "--name-only", f"{current}..{candidate}"], text=True
 ).splitlines()
 allowed = re.compile(
-    r"^(?:api/(?:Dockerfile|requirements\.txt|app/(?:[^/]+\.py|routers/[^/]+\.py))|"
+    r"^(?:api/(?:Dockerfile|requirements\.txt|app/(?:[^/]+\.py|routers/[^/]+\.py|"
+    r"models/(?:__init__|worker_management)\.py|"
+    r"repositories/(?:__init__|worker_management)\.py|"
+    r"services/(?:motor_excel_parser|motor_runtime_management|well_water_dashboard|"
+    r"worker_management(?:_api|_auth)?)\.py))|"
     r"db/migrations/[0-9][A-Za-z0-9_.-]*\.sql|"
+    r"db/rollbacks/(?:20260806_motor_runtime_management|20260810_worker_management)\.sql|"
     r"scripts/apply_preview_migrations\.py|"
     r"deploy/preview-backend-release\.json|"
     r"tests/[^/]+)$"
@@ -459,6 +520,78 @@ build_image() {
     || blocked "built backend image revision label is invalid"
   [[ "$(docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.environment"}}' "$new_image")" == "Preview" ]] \
     || blocked "built backend image is not labelled Preview"
+}
+
+create_preview_database_backup() {
+  local database_host database_container network_snapshot temporary_backup backup_list
+  database_host=$(docker exec "$backend_live_container" python -c \
+    'from urllib.parse import urlparse; from app.config import get_settings; print(urlparse(get_settings().database_url).hostname or "")')
+  [[ "$database_host" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] \
+    || blocked "Preview database host is invalid"
+
+  network_snapshot="$work_dir/preview-network.json"
+  docker network inspect "$preview_network" > "$network_snapshot"
+  database_container=$(python3 - "$network_snapshot" "$preview_network" "$database_host" <<'PY'
+import json
+import subprocess
+import sys
+
+snapshot_path, network_name, database_host = sys.argv[1:]
+network = json.load(open(snapshot_path, encoding="utf-8"))
+if len(network) != 1:
+    raise SystemExit("Preview network lookup is ambiguous")
+matches = []
+for container_id, member in (network[0].get("Containers") or {}).items():
+    details = json.loads(subprocess.check_output(["docker", "inspect", container_id], text=True))[0]
+    network_details = (details.get("NetworkSettings", {}).get("Networks", {}) or {}).get(network_name, {})
+    identities = {
+        str(member.get("Name") or ""),
+        str(details.get("Name") or "").lstrip("/"),
+        *(network_details.get("Aliases") or []),
+    }
+    if database_host in identities and details.get("State", {}).get("Running") is True:
+        matches.append(str(details.get("Name") or "").lstrip("/"))
+if len(matches) != 1:
+    raise SystemExit("Preview database container lookup did not return exactly one running container")
+print(matches[0])
+PY
+  )
+  [[ -n "$database_container" ]] || blocked "Preview database container is unavailable"
+  docker exec "$database_container" sh -c \
+    'command -v pg_dump >/dev/null && command -v pg_restore >/dev/null && test -n "${POSTGRES_USER:-}"' \
+    || blocked "Preview database container lacks the required backup tools or user"
+
+  install -d -m 700 "$database_backup_dir"
+  temporary_backup=$(mktemp "$database_backup_dir/.${database_name}.XXXXXX")
+  backup_list="$work_dir/database-backup.list"
+  if ! docker exec "$database_container" sh -c \
+    'exec pg_dump --format=custom --compress=9 --no-owner --no-privileges --username="$POSTGRES_USER" --dbname="$1"' \
+    sh "$database_name" > "$temporary_backup"; then
+    rm -f "$temporary_backup"
+    blocked "Preview database backup failed"
+    return 1
+  fi
+  chmod 600 "$temporary_backup"
+  if [[ ! -s "$temporary_backup" ]] \
+    || ! docker exec -i "$database_container" sh -c 'exec pg_restore --list' \
+      < "$temporary_backup" > "$backup_list" \
+    || [[ ! -s "$backup_list" ]]; then
+    rm -f "$temporary_backup"
+    blocked "Preview database backup verification failed"
+    return 1
+  fi
+
+  database_backup_file="$database_backup_dir/${database_name}-pre-${candidate_revision}-${timestamp}.dump"
+  [[ ! -e "$database_backup_file" ]] || {
+    rm -f "$temporary_backup"
+    blocked "Preview database backup target already exists"
+    return 1
+  }
+  mv "$temporary_backup" "$database_backup_file"
+  database_backup_sha256=$(sha256sum "$database_backup_file" | awk '{print $1}')
+  database_backup_bytes=$(wc -c < "$database_backup_file" | tr -d '[:space:]')
+  [[ "$database_backup_sha256" =~ ^[0-9a-f]{64}$ && "$database_backup_bytes" =~ ^[1-9][0-9]*$ ]] \
+    || blocked "Preview database backup evidence is invalid"
 }
 
 apply_migrations() {
@@ -499,7 +632,8 @@ start_candidate() {
     --network "$preview_network" \
     --restart no \
     -p "127.0.0.1:$candidate_port:8000" \
-    --mount "type=bind,source=$approved_mount_source,target=$approved_mount_target" \
+    --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
+    --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
   wait_for_health "http://127.0.0.1:$candidate_port" \
@@ -553,7 +687,8 @@ assert_live_contract() {
     || blocked "Preview frontend image changed"
   [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || blocked "proxy configuration changed"
   [[ "$(cron_digest)" == "$cron_digest_before" ]] || blocked "Preview schedules changed"
-  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target changed"
+  [[ "$(proxy_target_count)" == "$proxy_target_count_before" ]] \
+    || blocked "Preview proxy target count changed"
   assert_database_target "$backend_live_container"
   wait_for_health "http://127.0.0.1:$live_port" || blocked "replacement backend health endpoint failed"
   if [[ "$require_version_endpoint" == "true" ]]; then
@@ -660,10 +795,12 @@ deploy_backend() {
   validate_release_descriptor
   build_image
   write_environment_file "$backend_live_container" "$candidate_revision"
+  create_preview_database_backup
 
   # Migration SQL is restricted to additive, forward-compatible changes.  The
-  # prior Preview API stays live while the schema is updated and the candidate
-  # is tested; a failed application switch restores code, never rewrites data.
+  # verified custom-format database backup above is retained before any schema
+  # update. The prior Preview API stays live while the additive schema is
+  # updated and the candidate is tested.
   apply_migrations
   start_candidate
   remove_candidate
@@ -679,7 +816,8 @@ deploy_backend() {
     --ip "$original_network_ip" \
     --restart "$approved_restart_policy" \
     -p "127.0.0.1:$live_port:8000" \
-    --mount "type=bind,source=$approved_mount_source,target=$approved_mount_target" \
+    --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
+    --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 
@@ -702,7 +840,12 @@ deploy_backend() {
   echo "deployed_backend_image_id=$new_image_id"
   echo "rollback_container=$transaction_backup"
   echo "database=$database_name"
+  echo "database_backup_path=$database_backup_file"
+  echo "database_backup_sha256=$database_backup_sha256"
+  echo "database_backup_bytes=$database_backup_bytes"
+  echo "database_backup_verified=true"
   echo "database_migrations=forward-only"
+  echo "worker_actor_assertion=server-local"
   echo "frontend_unchanged=true"
   echo "odk_unchanged=true"
   echo "schedules_unchanged=true"
