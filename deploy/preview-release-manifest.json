@@ -3,12 +3,11 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Complete the operational authenticated-user bridge for Worker Management",
-  "base_commit": "caffb7fbaf4adeebf3a7396104817f75c55e8ea4",
+  "release_note": "Render structured Worker close-readiness errors as actionable text",
+  "base_commit": "3542297bda67831bed48634e2923a5e33125fd7d",
   "allowed_paths": [
-    "app/api/worker-management/[[...path]]/route.ts",
     "deploy/preview-release-manifest.json",
-    "lib/worker-management-signing.ts",
+    "lib/worker-management-api.ts",
     "tests/preview-deployment-workflow.mjs",
     "tests/worker-management.mjs"
   ],
