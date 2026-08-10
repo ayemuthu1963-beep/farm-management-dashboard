@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Check, ChevronLeft, ChevronRight, Minus, Plus, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { fetchDailyWages, saveDailyWageBatch } from "@/lib/worker-management-api"
+import { fetchAccounts, fetchDailyWages } from "@/lib/worker-management-api"
 import {
   addDays,
   calculateDailyWage,
@@ -12,6 +12,16 @@ import {
   money,
   toDateInput,
 } from "@/lib/worker-management-format"
+import {
+  attachAttendanceServerSnapshots,
+  cacheDailyWages,
+  cacheWorkerAccounts,
+  getAttendanceOperations,
+  queueAttendanceOperations,
+  readCachedDailyWages,
+  resolveAttendanceConflict,
+  type WorkerLocalOperation,
+} from "@/lib/worker-management-offline"
 import type {
   AttendanceValue,
   AvailableDailyAccount,
@@ -26,6 +36,7 @@ import {
   SectionTitle,
   WorkerButton,
 } from "./worker-ui"
+import { useWorkerOffline } from "./worker-offline-provider"
 
 const attendanceLabels: Record<AttendanceValue, string> = {
   FULL: "Full",
@@ -72,7 +83,62 @@ function addAvailableAccount(account: AvailableDailyAccount, workDate: string): 
   }
 }
 
+function latestAttendanceStates(operations: WorkerLocalOperation[]): Map<number, WorkerLocalOperation> {
+  const states = new Map<number, WorkerLocalOperation>()
+  operations.forEach((operation) => {
+    if (operation.entity_type !== "ATTENDANCE") return
+    const existing = states.get(operation.payload.account_id)
+    if (!existing || (existing.state === "SYNCED" && operation.state !== "SYNCED")) {
+      states.set(operation.payload.account_id, operation)
+    }
+  })
+  return states
+}
+
+function mergeLocalAttendance(
+  value: DailyWageResponse,
+  operations: WorkerLocalOperation[],
+): DailyWageResponse {
+  const items = value.items.map((item) => ({ ...item }))
+  const available = value.available_accounts.map((account) => ({ ...account }))
+  latestAttendanceStates(operations).forEach((operation, accountId) => {
+    if (operation.state === "SYNCED" || operation.entity_type !== "ATTENDANCE") return
+    let item = items.find((candidate) => candidate.account_id === accountId)
+    if (!item) {
+      const account = available.find((candidate) => candidate.account_id === accountId)
+      if (!account) return
+      item = addAvailableAccount(account, value.work_date)
+      items.push(item)
+    }
+    item.attendance_value = operation.payload.attendance
+    item.group_attendee_count = operation.payload.group_attendee_count
+    item.notes = operation.payload.notes
+    item.daily_wage_amount = calculateDailyWage(
+      item.wage_rate_snapshot,
+      item.attendance_value,
+      item.group_attendee_count,
+      item.account_type,
+    ).toFixed(2)
+    item.is_default = false
+  })
+  const present = new Set(items.map((item) => item.account_id))
+  return {
+    ...value,
+    items,
+    available_accounts: available.filter((account) => !present.has(account.account_id)),
+  }
+}
+
+function attendanceSummary(attendance: AttendanceValue | null, groupCount: number | null): string {
+  return groupCount !== null
+    ? `${groupCount} workers`
+    : attendance
+      ? attendanceLabels[attendance]
+      : "No attendance"
+}
+
 export function DailyWageEntry() {
+  const { online, lastSync, syncNow, refreshStatus } = useWorkerOffline()
   const [workDate, setWorkDate] = useState(toDateInput)
   const [data, setData] = useState<DailyWageResponse | null>(null)
   const [items, setItems] = useState<DailyWageItem[]>([])
@@ -84,20 +150,53 @@ export function DailyWageEntry() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
+  const [syncStates, setSyncStates] = useState<Map<number, WorkerLocalOperation>>(new Map())
 
   const load = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
       const result = await fetchDailyWages(workDate)
-      setData(result)
-      setItems(result.items)
-      setDirtyIds(new Set(result.items.filter((item) => item.is_default).map((item) => item.account_id)))
+      await Promise.all([
+        cacheDailyWages(result),
+        fetchAccounts({ pageSize: 200 })
+          .then((accounts) => cacheWorkerAccounts(accounts.items))
+          .catch(() => undefined),
+      ])
+      await attachAttendanceServerSnapshots(result)
+      const operations = await getAttendanceOperations(workDate)
+      const states = latestAttendanceStates(operations)
+      const merged = mergeLocalAttendance(result, operations)
+      setData(merged)
+      setItems(merged.items)
+      setSyncStates(states)
+      setDirtyIds(new Set(
+        merged.items
+          .filter((item) => item.is_default && !states.has(item.account_id))
+          .map((item) => item.account_id),
+      ))
       setAvailableAccountId("")
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load daily wages.")
-      setData(null)
-      setItems([])
+      const cached = await readCachedDailyWages(workDate)
+      if (cached) {
+        const operations = await getAttendanceOperations(workDate)
+        const states = latestAttendanceStates(operations)
+        const merged = mergeLocalAttendance(cached, operations)
+        setData(merged)
+        setItems(merged.items)
+        setSyncStates(states)
+        setDirtyIds(new Set(
+          merged.items
+            .filter((item) => item.is_default && !states.has(item.account_id))
+            .map((item) => item.account_id),
+        ))
+        setNotice("Offline roster loaded. New entries will be saved on this device.")
+      } else {
+        setError(loadError instanceof Error ? loadError.message : "Unable to load daily wages.")
+        setData(null)
+        setItems([])
+        setSyncStates(new Map())
+      }
     } finally {
       setLoading(false)
     }
@@ -105,7 +204,7 @@ export function DailyWageEntry() {
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [lastSync, load])
 
   const changeItem = useCallback((accountId: number, change: Partial<DailyWageItem>) => {
     setItems((current) =>
@@ -130,10 +229,10 @@ export function DailyWageEntry() {
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase()
     return items.filter((item) => {
-      if (changedOnly && !dirtyIds.has(item.account_id)) return false
+      if (changedOnly && !dirtyIds.has(item.account_id) && !syncStates.has(item.account_id)) return false
       return !query || `${item.account_code} ${item.display_name}`.toLowerCase().includes(query)
     })
-  }, [changedOnly, dirtyIds, items, search])
+  }, [changedOnly, dirtyIds, items, search, syncStates])
 
   const dailyTotal = items.reduce((sum, item) => sum + money(item.daily_wage_amount), 0)
   const canEdit = data?.week.status === "NOT_STARTED" || data?.week.status === "DRAFT" || data?.week.status === "REOPENED"
@@ -149,26 +248,77 @@ export function DailyWageEntry() {
   }
 
   const save = async () => {
-    if (!items.length || !canEdit) return
+    const changedItems = items.filter((item) => dirtyIds.has(item.account_id))
+    if (!changedItems.length || !canEdit) return
     setSaving(true)
     setError("")
     setNotice("")
+    let queued = false
     try {
-      await saveDailyWageBatch(
+      await queueAttendanceOperations(
         workDate,
-        items.map((item) => ({
+        changedItems.map((item) => ({
           account_id: item.account_id,
-          client_operation_id: crypto.randomUUID(),
           attendance: item.account_type === "GROUP" ? null : item.attendance_value,
           group_attendee_count: item.account_type === "GROUP" ? item.group_attendee_count : null,
           notes: item.notes,
           expected_row_version: item.row_version,
         })),
       )
-      setNotice(`${items.length} entr${items.length === 1 ? "y" : "ies"} saved online.`)
+      queued = true
+      if (data) {
+        await cacheDailyWages({
+          ...data,
+          items,
+          available_accounts: data.available_accounts.filter(
+            (account) => !items.some((item) => item.account_id === account.account_id),
+          ),
+        })
+      }
+      setDirtyIds(new Set())
+      setNotice(`${changedItems.length} entr${changedItems.length === 1 ? "y" : "ies"} saved on this device.`)
+      await refreshStatus()
+      if (online) {
+        const result = await syncNow()
+        setNotice(
+          result.conflicts
+            ? `${result.conflicts} item${result.conflicts === 1 ? " needs" : "s need"} conflict review.`
+            : `${result.pushed} entr${result.pushed === 1 ? "y" : "ies"} synced online.`,
+        )
+      }
       await load()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save daily wages.")
+      const message = saveError instanceof Error ? saveError.message : "Unable to save daily wages."
+      if (queued) {
+        setNotice("Entries are saved on this device and will sync when the connection returns.")
+        await refreshStatus()
+      } else {
+        setError(message)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resolveConflict = async (operationId: string, resolution: "SERVER" | "LOCAL") => {
+    setSaving(true)
+    setError("")
+    try {
+      await resolveAttendanceConflict(operationId, resolution)
+      await refreshStatus()
+      if (resolution === "LOCAL" && online) await syncNow()
+      setNotice(
+        resolution === "SERVER"
+          ? "Server entry retained."
+          : "Device entry queued again with the current server version.",
+      )
+      await load()
+    } catch (resolutionError) {
+      setError(
+        resolutionError instanceof Error
+          ? resolutionError.message
+          : "Unable to resolve this conflict.",
+      )
     } finally {
       setSaving(false)
     }
@@ -273,13 +423,21 @@ export function DailyWageEntry() {
         {!loading && !visibleItems.length ? <EmptyState>No workers match this view.</EmptyState> : null}
         {!loading && visibleItems.length ? (
           <div className="space-y-3">
-            {visibleItems.map((item) => (
-              <article key={item.account_id} className="rounded-xl border border-border bg-card p-4 sm:p-5">
+            {visibleItems.map((item) => {
+              const syncState = syncStates.get(item.account_id)
+              const itemCanEdit = canEdit && syncState?.state !== "CONFLICT"
+              return (
+                <article key={item.account_id} className="rounded-xl border border-border bg-card p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-bold">{item.display_name}</h2>
-                      {dirtyIds.has(item.account_id) ? <Badge tone="amber">Unsaved</Badge> : <Badge tone="green">Saved</Badge>}
+                      {dirtyIds.has(item.account_id) ? <Badge tone="amber">Unsaved</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && syncState?.state === "SAVED_ON_DEVICE" ? <Badge tone="amber">Saved on Device</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && syncState?.state === "WAITING_TO_SYNC" ? <Badge tone="amber">Waiting to Sync</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && syncState?.state === "CONFLICT" ? <Badge tone="red">Conflict</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && syncState?.state === "SYNCED" ? <Badge tone="green">Synced</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && !syncState ? <Badge tone="green">Saved</Badge> : null}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {item.account_code} · {formatINR(item.wage_rate_snapshot)}/day
@@ -308,7 +466,7 @@ export function DailyWageEntry() {
                         variant="secondary"
                         className="min-w-11 px-0"
                         aria-label={`Decrease attendance for ${item.display_name}`}
-                        disabled={!canEdit || (item.group_attendee_count ?? 0) <= 0}
+                        disabled={!itemCanEdit || (item.group_attendee_count ?? 0) <= 0}
                         onClick={() => changeItem(item.account_id, { group_attendee_count: Math.max(0, (item.group_attendee_count ?? 0) - 1) })}
                       >
                         <Minus className="size-4" aria-hidden="true" />
@@ -319,7 +477,7 @@ export function DailyWageEntry() {
                         min="0"
                         inputMode="numeric"
                         value={item.group_attendee_count ?? 0}
-                        disabled={!canEdit}
+                        disabled={!itemCanEdit}
                         onChange={(event) => changeItem(item.account_id, { group_attendee_count: Math.max(0, Number(event.target.value) || 0) })}
                         className="h-11 w-16 rounded-lg border border-input bg-background text-center text-lg font-bold"
                       />
@@ -327,7 +485,7 @@ export function DailyWageEntry() {
                         variant="secondary"
                         className="min-w-11 px-0"
                         aria-label={`Increase attendance for ${item.display_name}`}
-                        disabled={!canEdit}
+                        disabled={!itemCanEdit}
                         onClick={() => changeItem(item.account_id, { group_attendee_count: (item.group_attendee_count ?? 0) + 1 })}
                       >
                         <Plus className="size-4" aria-hidden="true" />
@@ -342,7 +500,7 @@ export function DailyWageEntry() {
                         <button
                           key={value}
                           type="button"
-                          disabled={!canEdit}
+                          disabled={!itemCanEdit}
                           aria-pressed={selected}
                           onClick={() => changeItem(item.account_id, { attendance_value: value })}
                           className={cn(
@@ -359,8 +517,49 @@ export function DailyWageEntry() {
                     })}
                   </div>
                 )}
-              </article>
-            ))}
+                {syncState?.state === "CONFLICT" && syncState.entity_type === "ATTENDANCE" ? (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                    <p className="font-bold">Conflict review required</p>
+                    <p className="mt-1 text-xs">
+                      {syncState.detail || "The server entry changed while this device was offline."}
+                    </p>
+                    <dl className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <dt className="text-xs font-semibold">This device</dt>
+                        <dd>{attendanceSummary(syncState.payload.attendance, syncState.payload.group_attendee_count)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold">Current server</dt>
+                        <dd>
+                          {syncState.server_snapshot
+                            ? attendanceSummary(
+                                syncState.server_snapshot.attendance_value,
+                                syncState.server_snapshot.group_attendee_count,
+                              )
+                            : "Load server entry"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <WorkerButton
+                        variant="secondary"
+                        onClick={() => void resolveConflict(syncState.operation_id, "SERVER")}
+                        disabled={saving}
+                      >
+                        Use Server
+                      </WorkerButton>
+                      <WorkerButton
+                        onClick={() => void resolveConflict(syncState.operation_id, "LOCAL")}
+                        disabled={saving || !syncState.server_snapshot?.row_version}
+                      >
+                        Retry Device Entry
+                      </WorkerButton>
+                    </div>
+                  </div>
+                ) : null}
+                </article>
+              )
+            })}
           </div>
         ) : null}
       </div>
@@ -372,9 +571,9 @@ export function DailyWageEntry() {
             <p className="font-bold tabular-nums">{formatINR(dailyTotal)}</p>
             <p className="text-[11px] text-muted-foreground">{dirtyIds.size} unsaved</p>
           </div>
-          <WorkerButton onClick={save} disabled={saving || loading || !items.length || !canEdit}>
+          <WorkerButton onClick={save} disabled={saving || loading || !dirtyIds.size || !canEdit}>
             <Check className="size-4" aria-hidden="true" />
-            {saving ? "Saving…" : "Save Entries"}
+            {saving ? "Saving…" : online ? "Save Entries" : "Save on Device"}
           </WorkerButton>
         </div>
       </div>

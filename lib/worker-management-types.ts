@@ -204,3 +204,69 @@ export type ListResponse<T> = {
   items: T[]
   pagination: Pagination
 }
+
+export type WorkerSyncEntityType = "ATTENDANCE" | "LEDGER"
+export type WorkerSyncServerStatus = "SYNCED" | "CONFLICT" | "REJECTED"
+
+export type AttendanceSyncPayload = {
+  work_date: string
+  account_id: number
+  attendance: AttendanceValue | null
+  group_attendee_count: number | null
+  notes: string | null
+}
+
+export type LedgerSyncPayload = {
+  account_id: number
+  transaction_date: string
+  transaction_type: ManualTransactionType
+  amount: string
+  reference: string | null
+  notes: string | null
+}
+
+export type WorkerSyncOperation =
+  | {
+      operation_id: string
+      device_id: string
+      entity_type: "ATTENDANCE"
+      last_known_server_row_version: number | null
+      client_timestamp: string
+      payload: AttendanceSyncPayload
+    }
+  | {
+      operation_id: string
+      device_id: string
+      entity_type: "LEDGER"
+      last_known_server_row_version: null
+      client_timestamp: string
+      payload: LedgerSyncPayload
+    }
+
+export type WorkerSyncPushResult = {
+  operation_id: string
+  status: WorkerSyncServerStatus
+  result: unknown
+  detail: string | null
+}
+
+export type WorkerSyncPushResponse = {
+  results: WorkerSyncPushResult[]
+  next_cursor: number
+}
+
+export type WorkerSyncChange = {
+  cursor: number
+  entity_type: string
+  entity_id: number
+  action: string
+  previous_data: unknown
+  new_data: unknown
+  created_at: string
+}
+
+export type WorkerSyncPullResponse = {
+  changes: WorkerSyncChange[]
+  next_cursor: number
+  has_more: boolean
+}

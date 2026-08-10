@@ -12,6 +12,9 @@ import type {
   WageRateRecord,
   WorkerAccount,
   WorkerAccountRecord,
+  WorkerSyncOperation,
+  WorkerSyncPullResponse,
+  WorkerSyncPushResponse,
   WorkWeek,
 } from "./worker-management-types"
 
@@ -249,5 +252,18 @@ export function fetchWageReport(filters: {
       search: filters.search,
       page_size: filters.pageSize ?? 200,
     })}`,
+  )
+}
+
+export function pushWorkerSync(operations: WorkerSyncOperation[]) {
+  return requestJson<WorkerSyncPushResponse>("sync/push", {
+    method: "POST",
+    body: JSON.stringify({ operations }),
+  })
+}
+
+export function pullWorkerSync(cursor: number, limit = 250) {
+  return requestJson<WorkerSyncPullResponse>(
+    `sync/pull${queryString({ cursor, limit })}`,
   )
 }

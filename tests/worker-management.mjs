@@ -150,7 +150,10 @@ check(/id: "worker-management"[\s\S]*?href: "\/worker-management"[\s\S]*?status:
 const dailyEntry = read("components/worker-management/daily-wage-entry.tsx")
 check(/if \(item\.account_type === "OUTSIDE"\) return \["FULL", "ABSENT"\]/.test(dailyEntry), "Outside Workers must allow only Full or Absent")
 check(/item\.scheme_snapshot === "THREE_OPTION"[\s\S]*?"ONE_THIRD"/.test(dailyEntry), "Three-option Farm Workers must allow one-third day")
-check(/setDirtyIds\(new Set\(result\.items\.filter\(\(item\) => item\.is_default\)/.test(dailyEntry), "Default Farm rows must be ready to save")
+check(/filter\(\(item\) => item\.is_default && !states\.has\(item\.account_id\)\)/.test(dailyEntry), "Unsynced default Farm rows must be ready to save")
+check(dailyEntry.includes("queueAttendanceOperations"), "Daily entry must save through the durable offline queue")
+check(dailyEntry.includes("Offline roster loaded"), "Daily entry must load its cached roster offline")
+check(dailyEntry.includes("Retry Device Entry"), "Attendance conflicts need an explicit device retry action")
 
 const settlement = read("components/worker-management/weekly-settlement.tsx")
 for (const heading of ["Wages", "Cash Paid During Week", "Weekly Payment", "Balance to Loan"]) {
@@ -164,11 +167,32 @@ check(loanRegister.includes('sign: "negative"'), "Cash advances and withdrawals 
 check(loanRegister.includes('sign: "positive"'), "Repayments and contributions need a positive sign rule")
 check(loanRegister.includes("SETTLEMENT_TRANSFER"), "Loan Register must identify wage transfers")
 check(loanRegister.includes("Other movements"), "Loan Register must disclose deposit and cash-repayment variations")
+check(loanRegister.includes("queueLedgerOperation"), "Loan advances must use unique durable offline operations")
+check(loanRegister.includes("Device transaction queue"), "Loan Register must show queued device transactions")
+
+const offlineStore = read("lib/worker-management-offline.ts")
+for (const state of ["SAVED_ON_DEVICE", "WAITING_TO_SYNC", "SYNCED", "CONFLICT"]) {
+  check(offlineStore.includes(`"${state}"`), `Offline store is missing ${state}`)
+}
+check(offlineStore.includes('createObjectStore(OPERATIONS'), "Offline store needs a durable operations outbox")
+check(offlineStore.includes("last_known_server_row_version"), "Offline attendance must carry its server row version")
+check(offlineStore.includes("crypto.randomUUID()"), "Offline operations need globally unique IDs")
+check(offlineStore.includes("for (let page = 0; page < 20"), "Offline pull must advance through cursor pages")
+
+const offlineProvider = read("components/worker-management/worker-offline-provider.tsx")
+check(offlineProvider.includes('window.addEventListener("online"'), "Reconnect must trigger Worker synchronisation")
+check(offlineProvider.includes('register("/worker-management-sw.js"'), "Worker service worker must be registered")
+
+const serviceWorker = read("public/worker-management-sw.js")
+check(serviceWorker.includes('url.pathname.startsWith("/api/")'), "Service worker must never cache Worker API responses")
+check(serviceWorker.includes("WORKER_SHELL"), "Service worker must cache the Worker application shell")
+check(existsSync(join(root, "public/worker-management.webmanifest")), "Worker PWA manifest is missing")
 
 const bff = read("app/api/worker-management/[[...path]]/route.ts")
 check(bff.includes('"X-MFMS-Authenticated-Signature"'), "BFF must forward its HMAC signature")
 check(bff.includes("resolveWorkerActor(request.headers, process.env)"), "BFF must derive its actor from trusted identity configuration")
 check(!bff.includes('request.headers.get("x-mfms-authenticated-user")'), "BFF must not trust a browser actor assertion")
 check(bff.includes("AbortSignal.timeout(30_000)"), "BFF needs a bounded backend timeout")
+check(bff.includes("export function POST"), "BFF must proxy offline sync push requests")
 
 console.log(`worker-management: ${assertions} assertions passed`)
