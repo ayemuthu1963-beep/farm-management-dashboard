@@ -42,11 +42,13 @@ readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
 readonly database_backup_dir="$state_dir/database-backups"
 readonly approved_restart_policy="no"
-readonly approved_mount_source="/tmp"
-readonly approved_mount_target="/host-tmp"
-readonly screenshot_mount_source="/home/muthu/mfms_data/preview/motor-screenshot-analysis"
-readonly screenshot_mount_target="/var/lib/mfms/motor-screenshot-analysis"
-readonly expected_mount_contract="bind|$approved_mount_source|$approved_mount_target|truebind|$screenshot_mount_source|$screenshot_mount_target|true"
+readonly approved_preview_well_odk_cutoff="2026-07-21T06:06:53+05:30"
+readonly approved_temp_mount_source="/tmp"
+readonly approved_temp_mount_target="/host-tmp"
+readonly approved_storage_mount_source="/home/muthu/mfms_data/preview/motor-screenshot-analysis"
+readonly approved_storage_mount_target="/var/lib/mfms/motor-screenshot-analysis"
+readonly expected_mount_contract="bind|$approved_storage_mount_source|$approved_storage_mount_target|true
+bind|$approved_temp_mount_source|$approved_temp_mount_target|true"
 readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8015"}]}'
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
@@ -121,15 +123,16 @@ network_ip_for_container() {
 mount_contract_for_container() {
   local container=$1
   docker inspect \
-    --format '{{range .Mounts}}{{.Type}}|{{.Source}}|{{.Destination}}|{{.RW}}{{end}}' \
-    "$container"
+    --format '{{json .Mounts}}' \
+    "$container" \
+    | python3 -c 'import json,sys; mounts=json.load(sys.stdin); print("\n".join(sorted("{}|{}|{}|{}".format(item["Type"], item["Source"], item["Destination"], str(item["RW"]).lower()) for item in mounts)))'
 }
 
 assert_approved_mount_contract() {
   local container=$1 contract
   contract=$(mount_contract_for_container "$container")
   [[ "$contract" == "$expected_mount_contract" ]] \
-    || blocked "Preview backend mount contract differs from the two approved Preview bind mounts"
+    || blocked "Preview backend mount contract differs from the approved persistent storage and /tmp bind mounts"
 }
 
 disconnect_preview_network() {
@@ -302,13 +305,13 @@ write_environment_file() {
   ensure_worker_signing_secret
   worker_secret=$(awk -F= '$1 == "MFMS_ACTOR_ASSERTION_SECRET" {print $2}' "$worker_secret_file")
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
-    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
+    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_PREVIEW_WELL_ODK_CUTOFF|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
     > "$environment_file"
   [[ -n "$(grep -E '^DATABASE_URL=' "$environment_file" || true)" ]] \
     || blocked "Preview backend has no DATABASE_URL environment entry"
   if [[ -n "$target_revision" ]]; then
-    printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\n' \
-      "$target_revision" "$timestamp" >> "$environment_file"
+    printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\nMFMS_PREVIEW_WELL_ODK_CUTOFF=%s\n' \
+      "$target_revision" "$timestamp" "$approved_preview_well_odk_cutoff" >> "$environment_file"
   fi
   printf 'MFMS_WORKER_MANAGEMENT_ENABLED=true\nMFMS_ACTOR_ASSERTION_SECRET=%s\nMFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS=120\nMFMS_LOCAL_ACTOR_ENABLED=false\n' \
     "$worker_secret" >> "$environment_file"
@@ -466,7 +469,7 @@ if not isinstance(required_paths, list) or not required_paths:
     raise SystemExit("backend release descriptor required_openapi_paths is empty")
 openapi_paths = []
 for path in required_paths:
-    if not isinstance(path, str) or not re.fullmatch(r"/(?:health|api(?:/[A-Za-z0-9_.-]+)*)", path):
+    if not isinstance(path, str) or not re.fullmatch(r"/(?:health|api(?:/[A-Za-z0-9_.{}-]+)*)", path):
         raise SystemExit(f"invalid OpenAPI path: {path!r}")
     if path not in openapi_paths:
         openapi_paths.append(path)
@@ -481,9 +484,10 @@ allowed = re.compile(
     r"^(?:api/(?:Dockerfile|requirements\.txt|app/(?:[^/]+\.py|routers/[^/]+\.py|"
     r"models/(?:__init__|worker_management)\.py|"
     r"repositories/(?:__init__|worker_management)\.py|"
-    r"services/worker_management(?:_api|_auth)?\.py))|"
+    r"services/(?:motor_excel_parser|motor_runtime_management|well_water_dashboard|"
+    r"worker_management(?:_api|_auth)?)\.py))|"
     r"db/migrations/[0-9][A-Za-z0-9_.-]*\.sql|"
-    r"db/rollbacks/20260810_worker_management\.sql|"
+    r"db/rollbacks/(?:20260806_motor_runtime_management|20260810_worker_management)\.sql|"
     r"scripts/apply_preview_migrations\.py|"
     r"deploy/preview-backend-release\.json|"
     r"tests/[^/]+)$"
@@ -628,8 +632,8 @@ start_candidate() {
     --network "$preview_network" \
     --restart no \
     -p "127.0.0.1:$candidate_port:8000" \
-    --mount "type=bind,source=$approved_mount_source,target=$approved_mount_target" \
-    --mount "type=bind,source=$screenshot_mount_source,target=$screenshot_mount_target" \
+    --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
+    --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
   wait_for_health "http://127.0.0.1:$candidate_port" \
@@ -812,8 +816,8 @@ deploy_backend() {
     --ip "$original_network_ip" \
     --restart "$approved_restart_policy" \
     -p "127.0.0.1:$live_port:8000" \
-    --mount "type=bind,source=$approved_mount_source,target=$approved_mount_target" \
-    --mount "type=bind,source=$screenshot_mount_source,target=$screenshot_mount_target" \
+    --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
+    --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 

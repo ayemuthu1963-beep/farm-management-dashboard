@@ -23,8 +23,8 @@ revision of `farm-management-dashboard`:
 
 ```powershell
 scp .\scripts\preview-server-backend-deploy.sh muthu@168.144.179.221:/home/muthu/.local/libexec/mfms-preview-backend-deploy
-scp .\scripts\preview-server-deploy.sh muthu@168.144.179.221:/home/muthu/.local/libexec/mfms-preview-deploy
-ssh muthu@168.144.179.221 'chmod 755 /home/muthu/.local/libexec/mfms-preview-backend-deploy /home/muthu/.local/libexec/mfms-preview-deploy'
+scp .\scripts\preview-server-deploy.sh muthu@168.144.179.221:/home/muthu/bin/mfms-preview-github-deploy
+ssh muthu@168.144.179.221 'chmod 755 /home/muthu/.local/libexec/mfms-preview-backend-deploy && chmod 700 /home/muthu/bin/mfms-preview-github-deploy'
 ```
 
 The backend release program creates one random, mode-`0600`, server-local
