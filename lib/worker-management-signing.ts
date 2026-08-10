@@ -114,6 +114,32 @@ export function actorCanonicalString(input: {
   ].join("\n")
 }
 
+export function authenticatedUserCanonicalString(input: {
+  timestamp: string
+  method: string
+  target: string
+  username: string
+}): string {
+  return [
+    input.timestamp,
+    input.method.toUpperCase(),
+    input.target,
+    input.username,
+  ].join("\n")
+}
+
+export function signAuthenticatedUserAssertion(
+  secret: string,
+  input: Parameters<typeof authenticatedUserCanonicalString>[0],
+): string {
+  if (!secret) {
+    throw new WorkerBffError("MFMS authenticated-user signing is not configured.", 503)
+  }
+  return createHmac("sha256", secret)
+    .update(authenticatedUserCanonicalString(input), "utf8")
+    .digest("hex")
+}
+
 export function signActorAssertion(
   secret: string,
   input: Parameters<typeof actorCanonicalString>[0],

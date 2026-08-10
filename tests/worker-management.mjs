@@ -3,9 +3,11 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
+  authenticatedUserCanonicalString,
   actorCanonicalString,
   resolveWorkerActor,
   sha256Hex,
+  signAuthenticatedUserAssertion,
   signActorAssertion,
   WorkerBffError,
 } from "../lib/worker-management-signing.ts"
@@ -23,6 +25,27 @@ const body = '{"weekly_payment":"500.00"}'
 const bodySha256 = sha256Hex(body)
 assert.equal(bodySha256, "2c904ae5ea860e4361446cf93a99b827ed52936a71ceefde4d43e18b17f86258")
 assertions += 1
+
+const authenticatedUserInput = {
+  timestamp: "1786329000",
+  method: "get",
+  target: "/api/worker-management/accounts?is_active=true",
+  username: "muthu",
+}
+assert.equal(
+  authenticatedUserCanonicalString(authenticatedUserInput),
+  [
+    "1786329000",
+    "GET",
+    "/api/worker-management/accounts?is_active=true",
+    "muthu",
+  ].join("\n"),
+)
+assert.equal(
+  signAuthenticatedUserAssertion("service-secret", authenticatedUserInput),
+  "9e61bc8ba7553d4f256f56ddea430e92f5941cc5f2f4b1bfe13ac961f6434023",
+)
+assertions += 2
 
 const signingInput = {
   timestamp: "1786329000",
@@ -190,6 +213,8 @@ check(existsSync(join(root, "public/worker-management.webmanifest")), "Worker PW
 
 const bff = read("app/api/worker-management/[[...path]]/route.ts")
 check(bff.includes('"X-MFMS-Authenticated-Signature"'), "BFF must forward its HMAC signature")
+check(bff.includes('"X-MFMS-Authenticated-User-Timestamp"'), "BFF must complete the operational user assertion")
+check(bff.includes('"X-MFMS-Authenticated-User-Signature"'), "BFF must sign the operational user assertion")
 check(bff.includes("resolveWorkerActor(request.headers, process.env)"), "BFF must derive its actor from trusted identity configuration")
 check(!bff.includes('request.headers.get("x-mfms-authenticated-user")'), "BFF must not trust a browser actor assertion")
 check(bff.includes("AbortSignal.timeout(30_000)"), "BFF needs a bounded backend timeout")

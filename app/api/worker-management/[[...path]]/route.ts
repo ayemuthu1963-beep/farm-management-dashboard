@@ -2,6 +2,7 @@ import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import {
   resolveWorkerActor,
   sha256Hex,
+  signAuthenticatedUserAssertion,
   signActorAssertion,
   WorkerBffError,
 } from "@/lib/worker-management-signing"
@@ -46,9 +47,20 @@ async function proxyWorkerManagement(
       role: actor.role,
       environment: actor.environment,
     })
+    const authenticatedUserSignature = signAuthenticatedUserAssertion(
+      process.env.HARVEST_API_PASSWORD ?? "",
+      {
+        timestamp,
+        method: request.method,
+        target,
+        username: actor.username,
+      },
+    )
     const headers = new Headers({
       Accept: request.headers.get("accept") ?? "application/json",
       "X-MFMS-Authenticated-User": actor.username,
+      "X-MFMS-Authenticated-User-Timestamp": timestamp,
+      "X-MFMS-Authenticated-User-Signature": authenticatedUserSignature,
       "X-MFMS-Authenticated-Role": actor.role,
       "X-MFMS-Authenticated-Environment": actor.environment,
       "X-MFMS-Authenticated-Timestamp": timestamp,
