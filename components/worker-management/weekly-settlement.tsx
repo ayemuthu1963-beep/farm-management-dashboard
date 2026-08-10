@@ -10,7 +10,15 @@ import {
   reopenWeek,
   updateWeeklyPayment,
 } from "@/lib/worker-management-api"
-import { accountTypeLabel, formatDate, formatINR, money, weekStatusLabel } from "@/lib/worker-management-format"
+import {
+  accountTypeLabel,
+  addDays,
+  defaultSettlementDate,
+  formatDate,
+  formatINR,
+  money,
+  weekStatusLabel,
+} from "@/lib/worker-management-format"
 import type { SettlementResponse } from "@/lib/worker-management-types"
 import {
   Badge,
@@ -24,6 +32,7 @@ import {
 } from "./worker-ui"
 
 export function WeeklySettlement() {
+  const [selectedDate, setSelectedDate] = useState(defaultSettlementDate)
   const [data, setData] = useState<SettlementResponse | null>(null)
   const [payments, setPayments] = useState<Record<number, string>>({})
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set())
@@ -38,7 +47,7 @@ export function WeeklySettlement() {
     setLoading(true)
     setError("")
     try {
-      const week = await fetchCurrentWeek()
+      const week = await fetchCurrentWeek(selectedDate)
       if (week.week_id === null) {
         setData({ week, items: [] })
         setPayments({})
@@ -54,7 +63,7 @@ export function WeeklySettlement() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedDate])
 
   useEffect(() => {
     void load()
@@ -158,6 +167,24 @@ export function WeeklySettlement() {
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <div className="mt-3"><Notice tone="success">{notice}</Notice></div> : null}
+
+      <div className="mt-5 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[auto_minmax(190px,260px)_auto] sm:items-end">
+        <WorkerButton variant="secondary" onClick={() => setSelectedDate((current) => addDays(current, -7))}>
+          Previous week
+        </WorkerButton>
+        <WorkerInput
+          label="Week containing"
+          type="date"
+          value={selectedDate}
+          onChange={(event) => setSelectedDate(event.target.value)}
+        />
+        <WorkerButton variant="secondary" onClick={() => setSelectedDate((current) => addDays(current, 7))}>
+          Next week
+        </WorkerButton>
+        <p className="text-xs text-muted-foreground sm:col-span-3">
+          On Saturday, this page opens the week that ended Friday so payment can be completed immediately.
+        </p>
+      </div>
 
       <div className="mt-5">
         {loading ? <LoadingState label="Loading weekly settlement…" /> : null}

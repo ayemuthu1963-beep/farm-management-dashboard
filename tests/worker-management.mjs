@@ -11,6 +11,7 @@ import {
   signActorAssertion,
   WorkerBffError,
 } from "../lib/worker-management-signing.ts"
+import { defaultSettlementDate } from "../lib/worker-management-format.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(join(root, path), "utf8")
@@ -20,6 +21,10 @@ const check = (condition, message) => {
   assert.ok(condition, message)
   assertions += 1
 }
+
+assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
+assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
+assertions += 2
 
 const body = '{"weekly_payment":"500.00"}'
 const bodySha256 = sha256Hex(body)
@@ -184,6 +189,17 @@ for (const heading of ["Wages", "Cash Paid During Week", "Weekly Payment", "Bala
 }
 check(settlement.includes("money(item.wages) - weeklyPayment"), "Balance to Loan must equal Wages minus Weekly Payment")
 check(settlement.includes("read-only from the Loan Register"), "Cash Paid During Week must be documented as read-only")
+check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
+check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
+check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
+
+const query = read("components/worker-management/worker-query.tsx")
+check(query.includes("weekDate"), "Query must expose a work-week filter")
+check(query.includes("hasCustomRange ? undefined"), "Custom date ranges must not remain pinned to the selected week")
+check(query.includes("weekId: scopedWeekId"), "Wage and Loan queries must use the resolved week scope")
+
+const formatting = read("lib/worker-management-format.ts")
+check(formatting.includes('weekday === "Sat" ? addDays(indiaDate, -1)'), "Saturday settlement must resolve to the prior Friday")
 
 const loanRegister = read("components/worker-management/loan-register.tsx")
 check(loanRegister.includes('sign: "negative"'), "Cash advances and withdrawals need a negative sign rule")

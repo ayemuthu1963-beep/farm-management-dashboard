@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Render structured Worker close-readiness errors as actionable text",
+  "Add Saturday-safe week selection and correct custom date query scope",
 )
-assert.equal(manifest.base_commit, "3542297bda67831bed48634e2923a5e33125fd7d")
+assert.equal(manifest.base_commit, "9a849febbf2f213e102949bd77cf35a7cbe57337")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,8 +228,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/worker-management/weekly-settlement.tsx",
+  "components/worker-management/worker-query.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-api.ts",
+  "lib/worker-management-format.ts",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",
 ]
