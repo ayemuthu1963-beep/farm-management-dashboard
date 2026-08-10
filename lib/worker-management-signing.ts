@@ -69,18 +69,18 @@ export function resolveWorkerActor(
   }
 
   const username = (requestHeaders.get("x-mfms-user") ?? "").trim()
-  const actorEnvironment = normalise(requestHeaders.get("x-mfms-environment"))
   if (!username || username.length > 200) {
     throw new WorkerBffError("A valid authenticated MFMS user is required.", 401)
   }
-  if (actorEnvironment !== configuredEnvironment) {
-    throw new WorkerBffError("The authenticated MFMS environment does not match this application.", 401)
+  const configuredRole = normalise(environment.MFMS_WORKER_PROXY_DEFAULT_ROLE)
+  if (!ACTOR_ROLES.has(configuredRole as WorkerActorRole)) {
+    throw new WorkerBffError("The trusted MFMS proxy role is not configured.", 503)
   }
 
   return {
     username,
-    role: parseRole(requestHeaders.get("x-mfms-role")),
-    environment: actorEnvironment,
+    role: configuredRole as WorkerActorRole,
+    environment: configuredEnvironment,
   }
 }
 
