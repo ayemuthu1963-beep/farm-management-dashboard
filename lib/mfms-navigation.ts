@@ -217,14 +217,15 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
   {
     id: "worker-management",
     label: "Worker Management",
-    href: "/under-construction",
+    href: "/worker-management",
     icon: Users,
     dashboardIcon: "/mfms/icons/worker-management.png",
     description: "Labour records, attendance and tasks",
-    status: "coming-soon",
+    status: "active",
     showOnDashboard: true,
     showInSidebar: true,
     order: 13,
+    ctaLabel: "Open Worker Management",
   },
   {
     id: "inventory-management",
