@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Complete the operational authenticated-user bridge for Worker Management",
+  "Render structured Worker close-readiness errors as actionable text",
 )
-assert.equal(manifest.base_commit, "caffb7fbaf4adeebf3a7396104817f75c55e8ea4")
+assert.equal(manifest.base_commit, "3542297bda67831bed48634e2923a5e33125fd7d")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,9 +228,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/worker-management/[[...path]]/route.ts",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-signing.ts",
+  "lib/worker-management-api.ts",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",
 ]

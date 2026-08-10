@@ -28,6 +28,28 @@ export class WorkerApiError extends Error {
   }
 }
 
+function normaliseWorkerError(value: unknown): string | null {
+  if (typeof value === "string") {
+    const message = value.trim()
+    return message || null
+  }
+  if (Array.isArray(value)) {
+    const messages = value
+      .map((item) => normaliseWorkerError(item))
+      .filter((item): item is string => Boolean(item))
+    return messages.length ? messages.join("; ") : null
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    return (
+      normaliseWorkerError(record.message) ??
+      normaliseWorkerError(record.msg) ??
+      normaliseWorkerError(record.detail)
+    )
+  }
+  return null
+}
+
 function queryString(values: Record<string, string | number | boolean | null | undefined>): string {
   const query = new URLSearchParams()
   Object.entries(values).forEach(([key, value]) => {
@@ -48,13 +70,18 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
   })
   const payload = (await response.json().catch(() => null)) as
-    | { detail?: string; error?: string }
+    | { detail?: unknown; error?: unknown }
     | T
     | null
   if (!response.ok) {
     const detail = payload && typeof payload === "object" && "detail" in payload ? payload.detail : null
     const error = payload && typeof payload === "object" && "error" in payload ? payload.error : null
-    throw new WorkerApiError(detail || error || `Worker Management request failed (${response.status}).`, response.status)
+    throw new WorkerApiError(
+      normaliseWorkerError(detail) ??
+        normaliseWorkerError(error) ??
+        `Worker Management request failed (${response.status}).`,
+      response.status,
+    )
   }
   return payload as T
 }

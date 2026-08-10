@@ -220,4 +220,8 @@ check(!bff.includes('request.headers.get("x-mfms-authenticated-user")'), "BFF mu
 check(bff.includes("AbortSignal.timeout(30_000)"), "BFF needs a bounded backend timeout")
 check(bff.includes("export function POST"), "BFF must proxy offline sync push requests")
 
+const workerApi = read("lib/worker-management-api.ts")
+check(workerApi.includes("normaliseWorkerError"), "Worker API errors must be normalised for display")
+check(workerApi.includes("record.message"), "Structured FastAPI detail messages must remain readable")
+
 console.log(`worker-management: ${assertions} assertions passed`)
