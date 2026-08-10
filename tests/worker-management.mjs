@@ -87,11 +87,15 @@ assert.deepEqual(
   resolveWorkerActor(
     new Headers({
       "X-MFMS-User": "preview-admin",
-      "X-MFMS-Role": "admin",
-      "X-MFMS-Environment": "preview",
+      "X-MFMS-Role": "viewer",
+      "X-MFMS-Environment": "production",
       "X-MFMS-Authenticated-User": "spoofed-browser-user",
     }),
-    { MFMS_ENV: "preview", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" },
+    {
+      MFMS_ENV: "preview",
+      MFMS_TRUST_PROXY_ACTOR_HEADERS: "true",
+      MFMS_WORKER_PROXY_DEFAULT_ROLE: "admin",
+    },
   ),
   { username: "preview-admin", role: "admin", environment: "preview" },
 )
@@ -100,14 +104,10 @@ assertions += 1
 assert.throws(
   () =>
     resolveWorkerActor(
-      new Headers({
-        "X-MFMS-User": "preview-admin",
-        "X-MFMS-Role": "admin",
-        "X-MFMS-Environment": "production",
-      }),
+      new Headers({ "X-MFMS-User": "preview-admin" }),
       { MFMS_ENV: "preview", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" },
     ),
-  (error) => error instanceof WorkerBffError && error.status === 401,
+  (error) => error instanceof WorkerBffError && error.status === 503,
 )
 assertions += 1
 
