@@ -57,6 +57,11 @@ assert.match(deployWorkflow, /BatchMode=yes/)
 assert.doesNotMatch(deployWorkflow, /ssh-keyscan/)
 assert.doesNotMatch(deployWorkflow, /https:\/\/muthufarms\.com(?:\/|['"])/)
 
+for (const workflow of [deployWorkflow, rollbackWorkflow]) {
+  assert.match(workflow, /ServerAliveInterval=30/)
+  assert.match(workflow, /ServerAliveCountMax=10/)
+}
+
 for (const action of deployWorkflow.matchAll(/^\s*uses:\s*([^\s#]+)/gm)) {
   const reference = action[1].split("@")[1]
   assert.match(reference, /^[0-9a-f]{40}$/, `Action is not immutable: ${action[1]}`)
