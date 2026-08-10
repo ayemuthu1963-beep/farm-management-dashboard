@@ -23,6 +23,7 @@ import {
 
 type Register = "wage" | "loan"
 type Filters = {
+  weekDate: string
   startDate: string
   endDate: string
   accountType: "" | AccountType
@@ -31,6 +32,7 @@ type Filters = {
 }
 
 const emptyFilters: Filters = {
+  weekDate: "",
   startDate: "",
   endDate: "",
   accountType: "",
@@ -51,27 +53,35 @@ export function WorkerQuery() {
     setLoading(true)
     setError("")
     try {
-      const currentWeek = await fetchCurrentWeek()
-      const [wageResult, ledgerResult] = await Promise.all([
-        fetchWageReport({
-          weekId: currentWeek.week_id ?? undefined,
-          accountType: selectedFilters.accountType || undefined,
-          settlementStatus: selectedFilters.paymentStatus === "PAID" ? "PAID" : undefined,
-          startDate: selectedFilters.startDate || undefined,
-          endDate: selectedFilters.endDate || undefined,
-          search: selectedFilters.search || undefined,
-          pageSize: 200,
-        }),
-        fetchLedger({
-          weekId: currentWeek.week_id ?? undefined,
-          startDate: selectedFilters.startDate || undefined,
-          endDate: selectedFilters.endDate || undefined,
-          accountType: selectedFilters.accountType || undefined,
-          search: selectedFilters.search || undefined,
-          pageSize: 200,
-        }),
-      ])
-      setWeek(currentWeek)
+      const selectedWeek = await fetchCurrentWeek(selectedFilters.weekDate || undefined)
+      const hasCustomRange = Boolean(selectedFilters.startDate || selectedFilters.endDate)
+      const scopedWeekId = hasCustomRange ? undefined : selectedWeek.week_id ?? undefined
+      const shouldQuery = hasCustomRange || selectedWeek.week_id !== null
+      const [wageResult, ledgerResult] = shouldQuery
+        ? await Promise.all([
+            fetchWageReport({
+              weekId: scopedWeekId,
+              accountType: selectedFilters.accountType || undefined,
+              settlementStatus: selectedFilters.paymentStatus === "PAID" ? "PAID" : undefined,
+              startDate: selectedFilters.startDate || undefined,
+              endDate: selectedFilters.endDate || undefined,
+              search: selectedFilters.search || undefined,
+              pageSize: 200,
+            }),
+            fetchLedger({
+              weekId: scopedWeekId,
+              startDate: selectedFilters.startDate || undefined,
+              endDate: selectedFilters.endDate || undefined,
+              accountType: selectedFilters.accountType || undefined,
+              search: selectedFilters.search || undefined,
+              pageSize: 200,
+            }),
+          ])
+        : [
+            { items: [], pagination: { page: 1, page_size: 200, total: 0, total_pages: 0 } },
+            { items: [], pagination: { page: 1, page_size: 200, total: 0, total_pages: 0 } },
+          ]
+      setWeek(selectedWeek)
       setWages(
         selectedFilters.paymentStatus === "UNPAID"
           ? wageResult.items.filter((row) => row.settlement_status !== "PAID")
@@ -100,7 +110,7 @@ export function WorkerQuery() {
         eyebrow="Query"
         title="Registers and worker history"
         description="Filter by week, custom dates, worker type, worker/group name, and payment status."
-        actions={week?.week_id ? <Badge tone="muted">{formatDate(week.start_date)} – {formatDate(week.end_date)}</Badge> : null}
+        actions={week ? <Badge tone="muted">{formatDate(week.start_date)} – {formatDate(week.end_date)}</Badge> : null}
       />
       {error ? <Notice tone="error">{error}</Notice> : null}
 
@@ -112,12 +122,14 @@ export function WorkerQuery() {
         }}
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <WorkerInput label="Week containing" type="date" value={filters.weekDate} onChange={(event) => setFilters((current) => ({ ...current, weekDate: event.target.value }))} />
           <WorkerInput label="From" type="date" value={filters.startDate} onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))} />
           <WorkerInput label="To" type="date" value={filters.endDate} onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))} />
           <WorkerSelect label="Worker type" value={filters.accountType} onChange={(event) => setFilters((current) => ({ ...current, accountType: event.target.value as Filters["accountType"] }))}><option value="">All types</option><option value="FARM">Farm Worker</option><option value="OUTSIDE">Outside Worker</option><option value="GROUP">Group</option></WorkerSelect>
           <WorkerInput label="Worker / Group" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Search name, ID, or leader" />
           <WorkerSelect label="Payment status" value={filters.paymentStatus} onChange={(event) => setFilters((current) => ({ ...current, paymentStatus: event.target.value as Filters["paymentStatus"] }))}><option value="">All</option><option value="PAID">Paid</option><option value="UNPAID">Unpaid</option></WorkerSelect>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">From/To selects a custom date range and takes priority over Week containing.</p>
         <div className="mt-4 flex flex-wrap gap-2"><WorkerButton type="submit" disabled={loading}>{loading ? "Applying…" : "Apply Filters"}</WorkerButton><WorkerButton variant="secondary" onClick={clear} disabled={loading}>Clear</WorkerButton></div>
       </form>
 

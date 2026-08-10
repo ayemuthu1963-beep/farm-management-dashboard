@@ -73,6 +73,15 @@ export function addDays(value: string, days: number): string {
   return date.toISOString().slice(0, 10)
 }
 
+export function defaultSettlementDate(date = new Date()): string {
+  const indiaDate = toDateInput(date)
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+  }).format(date)
+  return weekday === "Sat" ? addDays(indiaDate, -1) : indiaDate
+}
+
 export function calculateDailyWage(
   dailyRate: string | number,
   attendance: AttendanceValue | null,

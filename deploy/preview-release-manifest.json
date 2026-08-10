@@ -3,11 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Render structured Worker close-readiness errors as actionable text",
-  "base_commit": "3542297bda67831bed48634e2923a5e33125fd7d",
+  "release_note": "Add Saturday-safe week selection and correct custom date query scope",
+  "base_commit": "9a849febbf2f213e102949bd77cf35a7cbe57337",
   "allowed_paths": [
+    "components/worker-management/weekly-settlement.tsx",
+    "components/worker-management/worker-query.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/worker-management-api.ts",
+    "lib/worker-management-format.ts",
     "tests/preview-deployment-workflow.mjs",
     "tests/worker-management.mjs"
   ],
