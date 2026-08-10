@@ -15,6 +15,44 @@ It can operate only on:
 It cannot select a Production container, Production database, arbitrary SSH
 command, proxy configuration, ODK configuration, or scheduler command.
 
+## Worker Management release-control update
+
+Before the first Worker Management Preview deployment, install the reviewed
+versions of both restricted server programs from the exact merged `main`
+revision of `farm-management-dashboard`:
+
+```powershell
+scp .\scripts\preview-server-backend-deploy.sh muthu@168.144.179.221:/home/muthu/.local/libexec/mfms-preview-backend-deploy
+scp .\scripts\preview-server-deploy.sh muthu@168.144.179.221:/home/muthu/.local/libexec/mfms-preview-deploy
+ssh muthu@168.144.179.221 'chmod 755 /home/muthu/.local/libexec/mfms-preview-backend-deploy /home/muthu/.local/libexec/mfms-preview-deploy'
+```
+
+The backend release program creates one random, mode-`0600`, server-local
+Worker actor signing secret. It is never printed or sent through GitHub. The
+frontend release reads that same file and refuses a Worker Management candidate
+when the secret is absent or invalid. The trusted gateway supplies the verified
+username; the server-side Preview configuration grants the current gateway user
+the administrator role. Browser-supplied role and environment headers are not
+trusted.
+
+Immediately before any declared migration, the backend release program creates
+a custom-format `pg_dump` of **only** `mfms_server_uat`, verifies it with
+`pg_restore --list`, and retains it under:
+
+```text
+/home/muthu/.local/state/mfms-preview-github/database-backups/
+```
+
+The sanitized deployment artifact records the backup path, SHA-256, byte size,
+and `database_backup_verified=true`. A backup failure blocks migrations and the
+API switch. The script also preserves both approved Preview backend bind mounts
+and records the live proxy-target count before requiring that count and the
+proxy digest to remain unchanged.
+
+Deploy the Worker Management backend first. Deploy the frontend only after the
+backend report ends with `PREVIEW_BACKEND_DEPLOYMENT=PASS` and contains the
+verified backup evidence. Production remains out of scope.
+
 ## Normal future release procedure
 
 1. Codex implements and tests a backend change in

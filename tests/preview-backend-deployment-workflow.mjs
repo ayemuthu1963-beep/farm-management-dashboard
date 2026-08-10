@@ -1,24 +1,14 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 
-const deployWorkflow = readFileSync(
-  ".github/workflows/preview-backend-deploy.yml",
-  "utf8",
-)
-const rollbackWorkflow = readFileSync(
-  ".github/workflows/preview-backend-rollback.yml",
-  "utf8",
-)
-const deployScript = readFileSync(
-  "scripts/preview-server-backend-deploy.sh",
-  "utf8",
-)
-const bootstrapScript = readFileSync(
-  "scripts/bootstrap-preview-backend-state.sh",
-  "utf8",
-)
-const setupGuide = readFileSync("docs/PREVIEW_BACKEND_RELEASE_SETUP.md", "utf8")
+const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
+
+const deployWorkflow = readText(".github/workflows/preview-backend-deploy.yml")
+const rollbackWorkflow = readText(".github/workflows/preview-backend-rollback.yml")
+const deployScript = readText("scripts/preview-server-backend-deploy.sh")
+const bootstrapScript = readText("scripts/bootstrap-preview-backend-state.sh")
+const setupGuide = readText("docs/PREVIEW_BACKEND_RELEASE_SETUP.md")
 
 function pythonFullmatch(pattern, value) {
   const result = spawnSync(
@@ -34,6 +24,15 @@ function pythonFullmatch(pattern, value) {
   assert.equal(result.error, undefined, "python3 must be available for validator tests")
   assert.equal(result.status, 0, result.stderr)
   return result.stdout.trim() === "MATCH"
+}
+
+function gitFileMode(path) {
+  const result = spawnSync("git", ["ls-files", "-s", "--", path], {
+    encoding: "utf8",
+  })
+  assert.equal(result.error, undefined, "git must be available for mode checks")
+  assert.equal(result.status, 0, result.stderr)
+  return result.stdout.trim().split(/\s+/, 1)[0]
 }
 
 const migrationPattern = deployScript.match(
@@ -61,8 +60,16 @@ for (const path of [
   "api/Dockerfile",
   "api/requirements.txt",
   "api/app/main.py",
+  "api/app/models/__init__.py",
+  "api/app/models/worker_management.py",
+  "api/app/repositories/worker_management.py",
   "api/app/routers/tree_lifecycle.py",
+  "api/app/routers/worker_management.py",
+  "api/app/services/worker_management.py",
+  "api/app/services/worker_management_api.py",
+  "api/app/services/worker_management_auth.py",
   "db/migrations/20260803_tree_lifecycle_saplings.sql",
+  "db/rollbacks/20260810_worker_management.sql",
   "scripts/apply_preview_migrations.py",
   "deploy/preview-backend-release.json",
   "tests/test_preview_migrations.py",
@@ -70,6 +77,7 @@ for (const path of [
   assert.equal(pythonFullmatch(allowedPattern, path), true, "must allow " + path)
 }
 assert.equal(pythonFullmatch(allowedPattern, ".github/workflows/preview-backend-deploy.yml"), false)
+assert.equal(pythonFullmatch(allowedPattern, "db/rollbacks/drop_everything.sql"), false)
 
 function assertPythonPlanLines(label, source, expectedLines) {
   const result = spawnSync("python3", ["-c", source], { encoding: "utf8" })
@@ -130,7 +138,7 @@ for (const file of [
   "scripts/preview-server-backend-deploy.sh",
   "scripts/bootstrap-preview-backend-state.sh",
 ]) {
-  assert.equal(statSync(file).mode & 0o777, 0o755, `${file} must be executable`)
+  assert.equal(gitFileMode(file), "100755", `${file} must be executable`)
 }
 
 for (const workflow of [deployWorkflow, rollbackWorkflow]) {
@@ -162,7 +170,10 @@ assert.match(deployWorkflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/
 assert.match(deployWorkflow, /\[\[ "\$CONFIRMATION" == "DEPLOY PREVIEW BACKEND ONLY" \]\]/)
 assert.match(deployWorkflow, /deploy-preview-backend \$CANDIDATE_REVISION \$GITHUB_RUN_ID/)
 assert.match(deployWorkflow, /database=mfms_server_uat/)
+assert.match(deployWorkflow, /database_backup_verified=true/)
+assert.match(deployWorkflow, /database_backup_sha256=\[0-9a-f\]\{64\}/)
 assert.match(deployWorkflow, /database_migrations=forward-only/)
+assert.match(deployWorkflow, /worker_actor_assertion=server-local/)
 assert.match(deployWorkflow, /frontend_unchanged=true/)
 assert.match(deployWorkflow, /PREVIEW_BACKEND_DEPLOYMENT=PASS/)
 
@@ -182,6 +193,8 @@ assert.match(deployScript, /readonly candidate_port="8016"/)
 assert.match(deployScript, /readonly approved_restart_policy="no"/)
 assert.match(deployScript, /readonly approved_mount_source="\/tmp"/)
 assert.match(deployScript, /readonly approved_mount_target="\/host-tmp"/)
+assert.match(deployScript, /readonly screenshot_mount_source="\/home\/muthu\/mfms_data\/preview\/motor-screenshot-analysis"/)
+assert.match(deployScript, /readonly screenshot_mount_target="\/var\/lib\/mfms\/motor-screenshot-analysis"/)
 assert.match(deployScript, /assert_approved_mount_contract/)
 assert.match(deployScript, /deploy_command_pattern='\^deploy-preview-backend /)
 assert.match(deployScript, /rollback_command_pattern='\^rollback-preview-backend /)
@@ -191,6 +204,15 @@ assert.match(deployScript, /authoritative backend checkout origin is not approve
 assert.match(deployScript, /backend candidate health endpoint failed/)
 assert.match(deployScript, /backend candidate version endpoint failed/)
 assert.match(deployScript, /apply_preview_migrations\.py/)
+assert.match(deployScript, /ensure_worker_signing_secret/)
+assert.match(deployScript, /MFMS_WORKER_MANAGEMENT_ENABLED=true/)
+assert.match(deployScript, /MFMS_ACTOR_ASSERTION_SECRET=\[0-9a-f\]\{64\}/)
+assert.match(deployScript, /create_preview_database_backup/)
+assert.match(deployScript, /pg_dump --format=custom/)
+assert.match(deployScript, /pg_restore --list/)
+assert.match(deployScript, /database_backup_verified=true/)
+assert.match(deployScript, /database_backup_sha256=/)
+assert.match(deployScript, /proxy_target_count_before/)
 assert.match(deployScript, /database_migrations=forward-only/)
 assert.match(deployScript, /DATABASE_MIGRATIONS_ROLLED_BACK=false/)
 assert.match(deployScript, /frontend_unchanged=true/)
@@ -222,5 +244,8 @@ assert.match(setupGuide, /Set-Content -Path .* -Encoding ascii/)
 assert.match(setupGuide, /mfms-preview-backend-repository-readonly/)
 assert.match(setupGuide, /Host github\.com-mfms-preview-backend/)
 assert.match(setupGuide, /Allow write access.*unchecked/)
+assert.match(setupGuide, /Worker Management release-control update/)
+assert.match(setupGuide, /database_backup_verified=true/)
+assert.match(setupGuide, /server-local/)
 
 console.log("Preview backend deployment and rollback workflow tests passed.")
