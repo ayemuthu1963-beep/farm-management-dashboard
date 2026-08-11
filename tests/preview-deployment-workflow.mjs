@@ -207,6 +207,13 @@ assert.match(deployScript, /Preview candidate port \$candidate_port is already a
 assert.match(deployScript, /--ip "\$original_network_ip"/)
 assert.match(deployScript, /Preview frontend network address changed/)
 assert.match(deployScript, /docker network disconnect -f "\$preview_network" "\$container"/)
+assert.match(deployScript, /announce_preview_network_identity\(\)/)
+assert.match(deployScript, /--network "container:\$live_container"/)
+assert.match(deployScript, /gratuitous_arp=PASS/)
+assert.equal(
+  (deployScript.match(/announce_preview_network_identity(?:\s|$)/g) || []).length,
+  3,
+)
 assert.match(
   deployScript,
   /ensure_preview_network_ip "\$live_container" "\$original_network_ip" \\\n+\s+\|\| blocked "rollback replacement could not preserve the Preview network address"/,
