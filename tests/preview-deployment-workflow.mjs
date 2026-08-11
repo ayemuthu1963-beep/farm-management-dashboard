@@ -9,6 +9,7 @@ const rollbackWorkflow = readText(".github/workflows/preview-server-rollback.yml
 const releaseSignalWorkflow = readText(".github/workflows/preview-release-candidate.yml")
 const preflightScript = readText("scripts/preview-server-preflight.sh")
 const deployScript = readText("scripts/preview-server-deploy.sh")
+const gitAttributes = readText(".gitattributes")
 const manifest = JSON.parse(
   readFileSync("deploy/preview-release-manifest.json", "utf8"),
 )
@@ -19,6 +20,7 @@ if (process.platform !== "win32") {
   assert.equal(statSync("scripts/preview-server-preflight.sh").mode & 0o777, 0o755)
   assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
 }
+assert.equal(gitAttributes, "*.sh text eol=lf\n")
 
 for (const workflow of manualWorkflows) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
@@ -170,6 +172,10 @@ for (const prohibited of [
 }
 
 assert.match(deployScript, /readonly preview_url="https:\/\/preview\.muthufarms\.com"/)
+assert.match(
+  deployScript,
+  /readonly central_login_url="https:\/\/auth\.muthufarms\.com\/login"/,
+)
 assert.doesNotMatch(deployScript, /https:\/\/muthufarms\.com(?:\/|['"])/)
 assert.match(deployScript, /readonly release_ref="refs\/heads\/preview-release"/)
 assert.match(deployScript, /readonly live_container="mfms-pilot-web"/)
@@ -190,7 +196,10 @@ assert.match(deployScript, /wait_for_public_preview_guard/)
 assert.match(deployScript, /public Preview authentication guard is unavailable/)
 assert.match(deployScript, /public Preview authentication guard failed/)
 assert.match(deployScript, /public Preview rollback authentication guard failed/)
-assert.match(deployScript, /public_preview_guard=401/)
+assert.match(deployScript, /parsed\.netloc == login\.netloc == "auth\.muthufarms\.com"/)
+assert.match(deployScript, /parse_qsl\(parsed\.query, keep_blank_values=True\)/)
+assert.match(deployScript, /public_guard_result="303-central-login"/)
+assert.match(deployScript, /public_preview_guard=\$public_guard_result/)
 assert.doesNotMatch(deployScript, /wait_for_version "\$preview_url"/)
 assert.doesNotMatch(deployScript, /smoke_routes "\$preview_url"/)
 assert.doesNotMatch(
@@ -202,6 +211,10 @@ assert.match(deployScript, /POSTGRES_DB=mfms_server_uat/)
 assert.match(deployScript, /MFMS_TARGET_DATABASE=mfms_server_uat/)
 assert.match(deployScript, /proxy configuration changed/)
 assert.match(deployScript, /Preview schedules changed/)
+assert.match(deployScript, /readonly worker_secret_file="\$state_dir\/worker-management-signing\.env"/)
+assert.match(deployScript, /MFMS_ACTOR_ASSERTION_SECRET=\[0-9a-f\]\{64\}/)
+assert.match(deployScript, /worker_actor_assertion=server-local/)
+assert.match(deployScript, /proxy_target_count_before=\$\(proxy_target_count\)/)
 assert.match(deployScript, /production_touched=0/)
 assert.match(deployScript, /PREVIEW_DEPLOYMENT=PASS/)
 assert.match(deployScript, /PREVIEW_ROLLBACK=PASS/)
@@ -216,9 +229,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Harden non-Production dependencies, environment identity, and write-target isolation",
+  "Harden non-Production dependencies, environment identity, write-target isolation, and Preview authentication-guard validation",
 )
-assert.equal(manifest.base_commit, "da6f3a2305cbd4897cab74674ef1bd1a295658a6")
+assert.equal(manifest.base_commit, "574d21ea09b279f7d35f141a22321fa45605b412")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,6 +241,7 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  ".gitattributes",
   ".github/CODEOWNERS",
   ".github/pull_request_template.md",
   ".github/workflows/preview-baseline.yml",
@@ -242,12 +256,14 @@ const expectedReleasePaths = [
   "components/farm/local-environment-banner.tsx",
   "deploy/preview-release-manifest.json",
   "docs/MFMS_RELEASE_GOVERNANCE.md",
+  "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
   "eslint.config.mjs",
   "lib/preview-admin-write-safety.ts",
   "lib/public-environment.ts",
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "scripts/preview-server-deploy.sh",
   "tests/admin-entry-workflows.mjs",
   "tests/environment-identity.mjs",
   "tests/preview-deployment-workflow.mjs",

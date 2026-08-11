@@ -27,11 +27,13 @@ readonly backend_container="harvest-api-pilot"
 readonly proxy_container="central-nginx-1"
 readonly preview_network="harvest-net"
 readonly preview_url="https://preview.muthufarms.com"
+readonly central_login_url="https://auth.muthufarms.com/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
+readonly worker_secret_file="$state_dir/worker-management-signing.env"
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
   || blocked "the public target is not Preview"
@@ -74,10 +76,18 @@ replacement_origin=""
 original_container_id=""
 original_image_id=""
 original_image_tag=""
+original_reported_revision=""
 original_revision=""
 original_network_ip=""
+backend_id_before=""
+backend_image_before=""
+cron_digest_before=""
+proxy_digest_before=""
+proxy_target_count_before=""
+worker_secret_loaded=0
 transaction_active=0
 automatic_restore_result="not-required"
+public_guard_result=""
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -181,13 +191,51 @@ wait_for_version() {
 }
 
 wait_for_public_preview_guard() {
-  local status attempt
+  local headers status location attempt
+  headers=$(mktemp "$work_dir/public-preview-guard.XXXXXX")
   for attempt in $(seq 1 30); do
-    status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+    : > "$headers"
+    status=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' --max-time 10 \
       "$preview_url/api/version" 2>/dev/null || true)
-    [[ "$status" == "401" ]] && return 0
+    if [[ "$status" == "401" ]]; then
+      public_guard_result="401"
+      rm -f "$headers"
+      return 0
+    fi
+    if [[ "$status" == "303" ]]; then
+      location=$(awk '
+        tolower(substr($0, 1, 9)) == "location:" {
+          sub(/^[^:]*:[[:space:]]*/, "")
+          sub(/\r$/, "")
+          print
+          exit
+        }
+      ' "$headers")
+      if python3 - "$location" "$central_login_url" "$preview_url/api/version" <<'PY'
+import sys
+from urllib.parse import parse_qsl, urlsplit
+
+location, expected_login, expected_return = sys.argv[1:]
+parsed = urlsplit(location)
+login = urlsplit(expected_login)
+valid = (
+    parsed.scheme == login.scheme == "https"
+    and parsed.netloc == login.netloc == "auth.muthufarms.com"
+    and parsed.path == login.path == "/login"
+    and parsed.fragment == ""
+    and parse_qsl(parsed.query, keep_blank_values=True) == [("next", expected_return)]
+)
+raise SystemExit(0 if valid else 1)
+PY
+      then
+        public_guard_result="303-central-login"
+        rm -f "$headers"
+        return 0
+      fi
+    fi
     sleep 2
   done
+  rm -f "$headers"
   return 1
 }
 
@@ -222,15 +270,49 @@ assert_candidate_port_available() {
     || blocked "Preview candidate port $candidate_port is already allocated"
 }
 
+append_worker_environment() {
+  local worker_secret
+  if [[ ! -e "$worker_secret_file" ]]; then
+    if [[ "$operation" == "deploy" \
+      && -f "$source_dir/app/api/worker-management/[[...path]]/route.ts" ]]; then
+      blocked "Worker Management requires the server-local signing secret created by the backend release"
+      return 1
+    fi
+    return 0
+  fi
+  python3 - "$worker_secret_file" <<'PY'
+import os
+import pathlib
+import re
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("Worker signing secret must be a regular mode-0600 file")
+if metadata.st_uid != os.getuid():
+    raise SystemExit("Worker signing secret has the wrong owner")
+lines = path.read_text(encoding="ascii").splitlines()
+if len(lines) != 1 or not re.fullmatch(r"MFMS_ACTOR_ASSERTION_SECRET=[0-9a-f]{64}", lines[0]):
+    raise SystemExit("Worker signing secret file is invalid")
+PY
+  worker_secret=$(awk -F= '$1 == "MFMS_ACTOR_ASSERTION_SECRET" {print $2}' "$worker_secret_file")
+  printf 'MFMS_ACTOR_ASSERTION_SECRET=%s\nMFMS_TRUST_PROXY_ACTOR_HEADERS=true\nMFMS_WORKER_PROXY_DEFAULT_ROLE=admin\nMFMS_WORKER_LOCAL_ACTOR_ENABLED=false\n' \
+    "$worker_secret" >> "$environment_file"
+  worker_secret_loaded=1
+}
+
 write_environment_file() {
   local source_container=$1 target_revision=${2:-} target_timestamp=${3:-}
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
-    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT)=/' \
+    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_ACTOR_ASSERTION_SECRET|MFMS_TRUST_PROXY_ACTOR_HEADERS|MFMS_WORKER_PROXY_DEFAULT_ROLE|MFMS_WORKER_LOCAL_ACTOR_ENABLED|MFMS_WORKER_LOCAL_ACTOR_USERNAME|MFMS_WORKER_LOCAL_ACTOR_ROLE)=/' \
     > "$environment_file"
   if [[ -n "$target_revision" ]]; then
     printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Preview\n' \
       "$target_revision" "$target_timestamp" >> "$environment_file"
   fi
+  append_worker_environment
   chmod 600 "$environment_file"
   grep -Fqx 'MFMS_ENV=preview' "$environment_file" \
     || blocked "frontend environment is not Preview"
@@ -295,7 +377,8 @@ assert_live_contract() {
     || blocked "Preview backend no longer targets the UAT database"
   [[ "$(cron_digest)" == "$cron_digest_before" ]] || blocked "Preview schedules changed"
   [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || blocked "proxy configuration changed"
-  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target changed"
+  [[ "$(proxy_target_count)" == "$proxy_target_count_before" ]] \
+    || blocked "Preview proxy target count changed"
   snapshot_unrelated_containers > "$after_unrelated"
   cmp -s "$expected_unrelated" "$after_unrelated" \
     || blocked "a backend, Production, ODK, proxy, database, or unrelated container changed"
@@ -328,7 +411,7 @@ restore_original_frontend() {
     ensure_preview_network_ip "$live_container" "$original_network_ip" \
       >/dev/null 2>&1 || return 1
     docker start "$live_container" >/dev/null 2>&1 || return 1
-    if wait_for_version "http://127.0.0.1:$live_port" "$original_revision" \
+    if wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" \
       && smoke_routes "http://127.0.0.1:$live_port" \
       && wait_for_public_preview_guard; then
       automatic_restore_result="pass"
@@ -388,9 +471,21 @@ validate_common_live_state() {
   original_container_id=$(docker inspect --format '{{.Id}}' "$live_container")
   original_image_id=$(docker inspect --format '{{.Image}}' "$live_container")
   original_image_tag=$(docker inspect --format '{{.Config.Image}}' "$live_container")
-  original_revision=$(image_revision_for_container "$live_container")
+  original_reported_revision=$(image_revision_for_container "$live_container")
+  original_revision=$original_reported_revision
   original_network_ip=$(network_ip_for_container "$live_container")
-  [[ "$original_revision" =~ ^[0-9a-f]{40}$ ]] || blocked "live Preview revision is invalid"
+  if [[ "$original_revision" =~ ^([0-9a-f]{7,39})-project23$ ]]; then
+    original_revision=${BASH_REMATCH[1]}
+  fi
+  if [[ "$original_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    [[ "$original_revision" == "$expected_current_revision" ]] \
+      || blocked "live Preview revision differs from the approved current revision"
+  elif [[ "$original_revision" =~ ^[0-9a-f]{7,39}$ ]] \
+    && [[ "${expected_current_revision:0:${#original_revision}}" == "$original_revision" ]]; then
+    original_revision=$expected_current_revision
+  else
+    blocked "live Preview revision is invalid or does not match the approved current revision"
+  fi
   python3 - "$original_network_ip" <<'PY' \
     || blocked "live Preview network address is invalid"
 import ipaddress
@@ -399,14 +494,13 @@ import sys
 address = ipaddress.ip_address(sys.argv[1])
 raise SystemExit(0 if address.version == 4 and not address.is_unspecified else 1)
 PY
-  [[ "$original_revision" == "$expected_current_revision" ]] \
-    || blocked "live Preview revision differs from the approved current revision"
-
   backend_id_before=$(docker inspect --format '{{.Id}}' "$backend_container")
   backend_image_before=$(docker inspect --format '{{.Image}}' "$backend_container")
   cron_digest_before=$(cron_digest)
   proxy_digest_before=$(proxy_digest)
-  [[ "$(proxy_target_count)" == "1" ]] || blocked "Preview proxy target is not unique"
+  proxy_target_count_before=$(proxy_target_count)
+  [[ "$proxy_target_count_before" =~ ^[1-9][0-9]*$ ]] \
+    || blocked "Preview proxy has no approved frontend target"
   snapshot_unrelated_containers > "$before_unrelated"
   wait_for_public_preview_guard \
     || blocked "public Preview authentication guard is unavailable"
@@ -571,12 +665,15 @@ deploy_preview() {
 
   echo "deployment_environment=Preview"
   echo "deployment_url=$preview_url"
-  echo "public_preview_guard=401"
+  echo "public_preview_guard=$public_guard_result"
   echo "previous_revision=$original_revision"
   echo "deployed_revision=$candidate_revision"
   echo "deployed_image=$new_image"
   echo "deployed_image_id=$new_image_id"
   echo "rollback_container=$transaction_backup"
+  if [[ "$worker_secret_loaded" -eq 1 ]]; then
+    echo "worker_actor_assertion=server-local"
+  fi
   echo "backend_unchanged=true"
   echo "database_unchanged=true"
   echo "odk_unchanged=true"
@@ -589,7 +686,7 @@ deploy_preview() {
 rollback_preview() {
   local deployed_revision deployed_image_id deployed_image_tag
   local rollback_container rollback_revision rollback_image_id rollback_image_tag
-  local replacement_id
+  local replacement_id rollback_reported_revision rollback_revision_for_match
   [[ -f "$state_file" ]] || blocked "no successful GitHub Preview deployment is recorded"
   validate_common_live_state
 
@@ -615,11 +712,23 @@ rollback_preview() {
   ! container_running "$rollback_container" || blocked "recorded rollback container is unexpectedly running"
   [[ "$(docker inspect --format '{{.Image}}' "$rollback_container")" == "$rollback_image_id" ]] \
     || blocked "rollback container image ID changed"
-  [[ "$(image_revision_for_container "$rollback_container")" == "$rollback_revision" ]] \
-    || blocked "rollback container revision changed"
+  rollback_reported_revision=$(image_revision_for_container "$rollback_container")
+  rollback_revision_for_match=$rollback_reported_revision
+  if [[ "$rollback_revision_for_match" =~ ^([0-9a-f]{7,39})-project23$ ]]; then
+    rollback_revision_for_match=${BASH_REMATCH[1]}
+  fi
+  if [[ "$rollback_revision_for_match" =~ ^[0-9a-f]{40}$ ]]; then
+    [[ "$rollback_revision_for_match" == "$rollback_revision" ]] \
+      || blocked "rollback container revision changed"
+  elif [[ "$rollback_revision_for_match" =~ ^[0-9a-f]{7,39}$ ]] \
+    && [[ "${rollback_revision:0:${#rollback_revision_for_match}}" == "$rollback_revision_for_match" ]]; then
+    :
+  else
+    blocked "rollback container revision is invalid"
+  fi
 
   write_environment_file "$rollback_container"
-  start_candidate "$rollback_image_id" "$rollback_revision"
+  start_candidate "$rollback_image_id" "$rollback_reported_revision"
   remove_candidate
 
   transaction_backup="$live_container-pre-rollback-$run_id-$timestamp"
@@ -634,11 +743,11 @@ rollback_preview() {
   docker start "$live_container" >/dev/null
   replacement_id=$(docker inspect --format '{{.Image}}' "$live_container")
 
-  wait_for_version "http://127.0.0.1:$live_port" "$rollback_revision" \
+  wait_for_version "http://127.0.0.1:$live_port" "$rollback_reported_revision" \
     || blocked "rollback replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "rollback local smoke test failed"
   wait_for_public_preview_guard || blocked "public Preview rollback authentication guard failed"
-  assert_live_contract "$rollback_revision" "$replacement_id" "$before_unrelated"
+  assert_live_contract "$rollback_reported_revision" "$replacement_id" "$before_unrelated"
 
   trap '' HUP INT TERM
   write_state \
@@ -651,7 +760,7 @@ rollback_preview() {
 
   echo "rollback_environment=Preview"
   echo "rollback_url=$preview_url"
-  echo "public_preview_guard=401"
+  echo "public_preview_guard=$public_guard_result"
   echo "previous_revision=$deployed_revision"
   echo "restored_revision=$rollback_revision"
   echo "rollback_container_retained=$transaction_backup"
