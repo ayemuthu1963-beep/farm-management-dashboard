@@ -102,3 +102,4 @@ export function getPreviewAdminTargetSafetyErrors(
 }
 
 export const getPreviewAdminWriteSafetyErrors = getPreviewAdminTargetSafetyErrors
+export const getAdminTargetSafetyErrors = getPreviewAdminTargetSafetyErrors

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
 import { beetleTrapSyncErrorMessage } from "@/lib/beetle-sync"
-import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
+import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -14,7 +14,13 @@ const AUTHENTICATED_USER_HEADER = "X-MFMS-Authenticated-User"
 const AUTHENTICATED_USER_TIMESTAMP_HEADER = "X-MFMS-Authenticated-User-Timestamp"
 const AUTHENTICATED_USER_SIGNATURE_HEADER = "X-MFMS-Authenticated-User-Signature"
 
-function getAuthenticatedPreviewUsername(request: NextRequest): string | null {
+function validUsername(value: string | null): string | null {
+  const username = value?.trim()
+  if (!username || username.length > 128 || /[\u0000-\u001f\u007f]/.test(username)) return null
+  return username
+}
+
+function basicAuthenticatedUsername(request: NextRequest): string | null {
   const authorization = request.headers.get("authorization")
   const match = authorization?.match(/^Basic\s+([A-Za-z0-9+/=]+)$/i)
   if (!match) return null
@@ -23,12 +29,16 @@ function getAuthenticatedPreviewUsername(request: NextRequest): string | null {
     const decoded = Buffer.from(match[1], "base64").toString("utf8")
     const separator = decoded.indexOf(":")
     if (separator <= 0 || separator === decoded.length - 1) return null
-    const username = decoded.slice(0, separator)
-    if (username.length > 128 || /[\u0000-\u001f\u007f]/.test(username)) return null
-    return username
+    return validUsername(decoded.slice(0, separator))
   } catch {
     return null
   }
+}
+
+function getAuthenticatedMfmsUsername(request: NextRequest): string | null {
+  // The MFMS auth gateway validates the session and overwrites this header
+  // before forwarding the request to the private Next.js container.
+  return validUsername(request.headers.get("x-mfms-user")) ?? basicAuthenticatedUsername(request)
 }
 
 function getAuthenticatedUserAssertionHeaders(username: string, target: URL): Record<string, string> {
@@ -48,18 +58,18 @@ function getAuthenticatedUserAssertionHeaders(username: string, target: URL): Re
 export async function POST(request: NextRequest) {
   if (
     !isBeetleTrapManualSyncAvailable() ||
-    getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length > 0
+    getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length > 0
   ) {
     return NextResponse.json(
-      { status: "failed", message: "Beetle Trap ODK sync is not enabled for this MFMS environment." },
+      { status: "failed", message: "Beetle Trap ODK sync is available only in Production." },
       { status: 403, headers: NO_STORE_HEADERS },
     )
   }
 
-  const authenticatedUsername = getAuthenticatedPreviewUsername(request)
+  const authenticatedUsername = getAuthenticatedMfmsUsername(request)
   if (!authenticatedUsername) {
     return NextResponse.json(
-      { status: "failed", message: "MFMS administrator authentication is required." },
+      { status: "failed", message: "MFMS authentication is required." },
       { status: 401, headers: NO_STORE_HEADERS },
     )
   }
