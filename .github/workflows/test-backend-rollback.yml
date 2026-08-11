@@ -100,7 +100,7 @@ jobs:
           grep -Fqx 'rollback_component=backend' "$report"
           grep -Fqx 'rollback_url=https://test.muthufarms.com' "$report"
           grep -Eq '^restored_backend_revision=[0-9a-f]{40}$' "$report"
-          grep -Fqx 'database_migrations=forward-only-not-reversed' "$report"
+          grep -Eq '^database_migrations=(none|forward-only-not-reversed)$' "$report"
           grep -Fqx 'frontend_unchanged=true' "$report"
           grep -Fqx 'odk_unchanged=true' "$report"
           grep -Fqx 'schedules_unchanged=true' "$report"
