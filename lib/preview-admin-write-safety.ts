@@ -10,6 +10,8 @@ const APPROVED_TARGETS: Record<string, ApprovedTarget> = {
   preview: { database: "mfms_server_uat", backendHost: "harvest-api-pilot", backendPort: "8000" },
   uat: { database: "mfms_server_uat", backendHost: "harvest-api-pilot", backendPort: "8000" },
   test: { database: "mfms_server_test", backendHost: "harvest-api-test", backendPort: "8000" },
+  production: { database: "mfms_server_prod", backendHost: "harvest-api", backendPort: "8000" },
+  prod: { database: "mfms_server_prod", backendHost: "harvest-api", backendPort: "8000" },
 }
 
 const PRODUCTION_DATABASE_NAMES = new Set([
@@ -48,13 +50,13 @@ export function getPreviewAdminTargetSafetyErrors(
   const allowedHosts = parseHosts(env.MFMS_ALLOWED_BACKEND_HOSTS)
 
   if (normalise(env.MFMS_ENABLE_LOCAL_WRITE_GUARD) !== "true") {
-    errors.push("MFMS_ENABLE_LOCAL_WRITE_GUARD must be true for non-production admin writes.")
+    errors.push("MFMS_ENABLE_LOCAL_WRITE_GUARD must be true for administrator writes.")
   }
   if (!approved) {
-    errors.push("MFMS_ENV does not have an approved non-production target.")
+    errors.push("MFMS_ENV does not have an approved target.")
   }
   if (publicEnvironment && !publicApproved) {
-    errors.push("NEXT_PUBLIC_MFMS_ENV does not have an approved non-production target.")
+    errors.push("NEXT_PUBLIC_MFMS_ENV does not have an approved target.")
   }
   if (
     approved &&
@@ -67,9 +69,9 @@ export function getPreviewAdminTargetSafetyErrors(
     errors.push(`MFMS_TARGET_DATABASE must be ${approved.database} for ${environment}.`)
   }
   if (!approved || guardedDatabase !== approved.database || guardedDatabase !== targetDatabase) {
-    errors.push("MFMS_LOCAL_WRITE_DATABASE must match the approved non-production database.")
+    errors.push("MFMS_LOCAL_WRITE_DATABASE must match the approved environment database.")
   }
-  if (targetDatabase && PRODUCTION_DATABASE_NAMES.has(targetDatabase.toLowerCase())) {
+  if (environment !== "production" && environment !== "prod" && targetDatabase && PRODUCTION_DATABASE_NAMES.has(targetDatabase.toLowerCase())) {
     errors.push("Production database names are rejected for non-production admin writes.")
   }
   if (approved && configuredHost !== approved.backendHost) {
@@ -86,12 +88,12 @@ export function getPreviewAdminTargetSafetyErrors(
   try {
     parsedUrl = new URL(apiBaseUrl)
   } catch {
-    errors.push("Non-production API base URL is invalid.")
+    errors.push("MFMS API base URL is invalid.")
     return errors
   }
 
   if (parsedUrl.username || parsedUrl.password) {
-    errors.push("Non-production API base URL must not contain credentials.")
+    errors.push("MFMS API base URL must not contain credentials.")
   }
 
   const actualHost = normalise(parsedUrl.hostname)
@@ -107,3 +109,4 @@ export function getPreviewAdminTargetSafetyErrors(
 }
 
 export const getPreviewAdminWriteSafetyErrors = getPreviewAdminTargetSafetyErrors
+export const getAdminTargetSafetyErrors = getPreviewAdminTargetSafetyErrors
