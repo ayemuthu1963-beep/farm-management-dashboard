@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
 import { getPreviewAdminTargetSafetyErrors, getPreviewAdminWriteSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
@@ -128,12 +129,23 @@ export async function POST(request: Request) {
     )
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${BACKEND_ENTRIES_PATH}`, {
+  const target = new URL(`${getApiBaseUrl()}${BACKEND_ENTRIES_PATH}`)
+  let actorHeaders: Record<string, string>
+  try {
+    actorHeaders = getAuthenticatedUserAssertionHeaders({ requestHeaders: request.headers, method: "POST", target })
+  } catch (error) {
+    const status = error instanceof MfmsAdminIdentityError ? error.status : 503
+    const message = error instanceof Error ? error.message : "MFMS administrator authentication is required."
+    return NextResponse.json({ ok: false, errors: [message], message: "Motor runtime entries were not saved." }, { status })
+  }
+
+  const response = await fetch(target, {
     method: "POST",
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...actorHeaders,
     },
     cache: "no-store",
     body: JSON.stringify({

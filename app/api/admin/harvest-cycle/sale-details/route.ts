@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
+import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
+import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-function isPreviewWriteEnabled(): boolean {
-  const explicitFlag = (process.env.MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES ?? "").toLowerCase()
-
-  if (explicitFlag === "false") return false
-  return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
+function isHarvestCycleWriteEnabled(): boolean {
+  const explicitFlag = (process.env.MFMS_HARVEST_CYCLE_WRITES_ENABLED ?? "").trim().toLowerCase()
+  return explicitFlag === "true" && getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
 }
 
 export async function POST(request: Request) {
-  if (!isPreviewWriteEnabled()) {
+  if (!isHarvestCycleWriteEnabled()) {
     return NextResponse.json({ ok: false, errors: ["Harvest Cycle Admin writes are not enabled for this MFMS environment."], message: "Sale details were not saved." }, { status: 403 })
   }
 
@@ -33,12 +32,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, errors: ["Harvest API credentials are not configured."], message: "Sale details were not saved." }, { status: 500 })
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/cycles/${encodeURIComponent(harvestCycle)}/sale-details`, {
+  const target = new URL(`${getApiBaseUrl()}/api/cycles/${encodeURIComponent(harvestCycle)}/sale-details`)
+  let actorHeaders: Record<string, string>
+  try {
+    actorHeaders = getAuthenticatedUserAssertionHeaders({ requestHeaders: request.headers, method: "PATCH", target })
+  } catch (error) {
+    const status = error instanceof MfmsAdminIdentityError ? error.status : 503
+    const message = error instanceof Error ? error.message : "MFMS administrator authentication is required."
+    return NextResponse.json({ ok: false, errors: [message], message: "Sale details were not saved." }, { status })
+  }
+
+  const response = await fetch(target, {
     method: "PATCH",
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...actorHeaders,
     },
     cache: "no-store",
     body: JSON.stringify({
