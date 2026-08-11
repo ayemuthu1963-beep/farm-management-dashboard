@@ -36,11 +36,20 @@ export function formatSignedRupees(amount: number): string {
   return `${sign}₹${Math.abs(rounded).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
 }
 
+/**
+ * Parses an ISO date (YYYY-MM-DD) as UTC midnight. All farm-week math is done in UTC so
+ * results never shift across day boundaries in non-UTC runtimes (e.g. IST).
+ */
+function parseISODate(iso: string): Date {
+  return new Date(`${iso}T00:00:00.000Z`)
+}
+
 export function formatDisplayDate(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", {
+  return parseISODate(iso).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   })
 }
 
@@ -49,21 +58,24 @@ export function toISODate(date: Date): string {
 }
 
 /**
- * Farm weeks run Saturday–Friday. Returns the ISO date of the Saturday that starts
- * the farm week containing the given ISO date.
+ * Farm weeks run Saturday–Friday (inclusive). Returns the ISO date of the Saturday that
+ * starts the farm week containing the given ISO date.
  */
 export function getWeekStart(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`)
-  const day = date.getDay() // 0 = Sunday … 6 = Saturday
+  const date = parseISODate(iso)
+  const day = date.getUTCDay() // 0 = Sunday … 6 = Saturday
   const diff = -((day + 1) % 7) // Saturday → 0, Sunday → -1, … Friday → -6
-  date.setDate(date.getDate() + diff)
+  date.setUTCDate(date.getUTCDate() + diff)
   return toISODate(date)
 }
 
-/** Returns the ISO date of the Friday that ends the farm week containing the given ISO date. */
+/**
+ * Returns the ISO date of the Friday that ends the farm week containing the given ISO date,
+ * i.e. exactly six days after the Saturday start (inclusive Saturday–Friday range).
+ */
 export function getWeekEnd(iso: string): string {
-  const start = new Date(`${getWeekStart(iso)}T00:00:00`)
-  start.setDate(start.getDate() + 6)
+  const start = parseISODate(getWeekStart(iso))
+  start.setUTCDate(start.getUTCDate() + 6)
   return toISODate(start)
 }
 
@@ -72,8 +84,8 @@ export function isDateInRange(iso: string, start: string, end: string): boolean 
 }
 
 export function shiftWeek(weekStartIso: string, weeks: number): string {
-  const date = new Date(`${weekStartIso}T00:00:00`)
-  date.setDate(date.getDate() + weeks * 7)
+  const date = parseISODate(weekStartIso)
+  date.setUTCDate(date.getUTCDate() + weeks * 7)
   return toISODate(date)
 }
 
