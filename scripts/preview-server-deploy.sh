@@ -180,7 +180,7 @@ wait_for_version() {
   for attempt in $(seq 1 60); do
     if payload=$(curl -fsS --max-time 10 "$base_url/api/version" 2>/dev/null); then
       if python3 -c \
-        'import json,sys; data=json.load(sys.stdin); raise SystemExit(0 if data.get("git_commit")==sys.argv[1] and data.get("environment")=="Preview" else 1)' \
+        'import json,sys; data=json.load(sys.stdin); valid=(data.get("git_commit")==sys.argv[1] and data.get("environment")=="Preview" and data.get("public_environment")=="preview" and data.get("database")=="mfms_server_uat"); raise SystemExit(0 if valid else 1)' \
         "$expected_revision" <<<"$payload"; then
         return 0
       fi
@@ -188,6 +188,23 @@ wait_for_version() {
     sleep 2
   done
   return 1
+}
+
+assert_preview_environment_banner() {
+  local base_url=$1 body
+  body=$(mktemp "$work_dir/environment-banner.XXXXXX")
+  if ! curl -fsS --max-time 20 "$base_url/worker-management/query" -o "$body"; then
+    rm -f "$body"
+    return 1
+  fi
+  if ! grep -Fq 'data-mfms-environment="preview"' "$body" \
+    || ! grep -Fq 'data-mfms-database="mfms_server_uat"' "$body" \
+    || ! grep -Fq 'PREVIEW / UAT - Database: mfms_server_uat - TEST DATA / TEST ACTIONS ONLY' "$body" \
+    || grep -Fq 'CONFIGURATION MISMATCH' "$body"; then
+    rm -f "$body"
+    return 1
+  fi
+  rm -f "$body"
 }
 
 wait_for_public_preview_guard() {
@@ -318,6 +335,10 @@ write_environment_file() {
     || blocked "frontend environment is not Preview"
   grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_uat' "$environment_file" \
     || blocked "frontend database target is not UAT"
+  grep -Fqx 'NEXT_PUBLIC_MFMS_ENV=preview' "$environment_file" \
+    || blocked "public frontend environment is not Preview"
+  grep -Fqx 'NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat' "$environment_file" \
+    || blocked "public frontend database label is not UAT"
 }
 
 start_candidate() {
@@ -622,6 +643,8 @@ deploy_preview() {
     --build-arg "MFMS_GIT_COMMIT=$candidate_revision" \
     --build-arg "MFMS_BUILD_TIMESTAMP=$timestamp" \
     --build-arg "MFMS_BUILD_ENVIRONMENT=Preview" \
+    --build-arg "NEXT_PUBLIC_MFMS_ENV=preview" \
+    --build-arg "NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat" \
     --tag "$new_image" \
     "$source_dir" >/dev/null
   new_image_id=$(docker image inspect --format '{{.Id}}' "$new_image")
@@ -632,6 +655,8 @@ deploy_preview() {
 
   write_environment_file "$live_container" "$candidate_revision" "$timestamp"
   start_candidate "$new_image" "$candidate_revision"
+  assert_preview_environment_banner "http://127.0.0.1:$candidate_port" \
+    || blocked "candidate Preview environment banner is invalid"
   remove_candidate
 
   transaction_backup="$live_container-pre-github-$run_id-$timestamp"
@@ -651,6 +676,8 @@ deploy_preview() {
   wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
     || blocked "replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
+  assert_preview_environment_banner "http://127.0.0.1:$live_port" \
+    || blocked "replacement Preview environment banner is invalid"
   wait_for_public_preview_guard || blocked "public Preview authentication guard failed"
   assert_live_contract "$candidate_revision" "$new_image_id" "$before_unrelated"
 
