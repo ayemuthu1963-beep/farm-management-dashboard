@@ -1,0 +1,147 @@
+name: Deploy Test frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_revision:
+        description: Exact 40-character test-release revision to deploy
+        required: true
+        type: string
+      expected_current_revision:
+        description: Exact 40-character revision currently running on Test
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY TEST ONLY to authorize the guarded switch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-test-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require an exact reviewed Test candidate
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_CURRENT_REVISION: ${{ inputs.expected_current_revision }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Test deployment must execute from trusted main" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "DEPLOY TEST ONLY" ]] || {
+            echo "Confirmation did not match DEPLOY TEST ONLY" >&2
+            exit 1
+          }
+          [[ "$CANDIDATE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_CURRENT_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          remote_release=$(git ls-remote "https://github.com/$REPOSITORY.git" refs/heads/test-release | awk 'NR == 1 {print $1}')
+          [[ "$remote_release" == "$CANDIDATE_REVISION" ]] || {
+            echo "Candidate is not the exact test-release head" >&2
+            exit 1
+          }
+
+  deploy:
+    needs: authorize
+    environment:
+      name: Test
+      url: https://test.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Install the dedicated Test-only SSH identity
+        id: ssh
+        shell: bash
+        env:
+          TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST }}
+          TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+          TEST_SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          TEST_SSH_KNOWN_HOSTS: ${{ secrets.TEST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for required_name in TEST_SSH_HOST TEST_SSH_USER TEST_SSH_PRIVATE_KEY TEST_SSH_KNOWN_HOSTS; do
+            [[ -n "${!required_name:-}" ]] || {
+              echo "Missing required Test environment setting: $required_name" >&2
+              exit 1
+            }
+          done
+          [[ "$TEST_SSH_HOST" == "168.144.179.221" ]]
+          [[ "$TEST_SSH_USER" == "muthu" ]]
+          ssh_dir="$RUNNER_TEMP/mfms-test-deploy-ssh"
+          install -d -m 700 "$ssh_dir"
+          printf '%s\n' "$TEST_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$TEST_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_ed25519" "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$TEST_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Run Test preflight and guarded exact-SHA deployment
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          EXPECTED_CURRENT_REVISION: ${{ inputs.expected_current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST }}
+          TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/test-server-deployment.txt"
+          : > "$report"
+          ssh_options=(
+            -T
+            -i "$IDENTITY_FILE"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o KbdInteractiveAuthentication=no
+            -o PasswordAuthentication=no
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE"
+            -o ConnectTimeout=10
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=10
+          )
+          ssh "${ssh_options[@]}" "$TEST_SSH_USER@$TEST_SSH_HOST" \
+            "preflight-test $CANDIDATE_REVISION $EXPECTED_CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee -a "$report"
+          grep -Fqx 'TEST_PREFLIGHT=PASS' "$report"
+          ssh "${ssh_options[@]}" "$TEST_SSH_USER@$TEST_SSH_HOST" \
+            "deploy-test $CANDIDATE_REVISION $EXPECTED_CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee -a "$report"
+          grep -Fqx 'deployment_environment=Test' "$report"
+          grep -Fqx 'deployment_url=https://test.muthufarms.com' "$report"
+          grep -Fqx 'database_identity=mfms_server_test' "$report"
+          grep -Fqx 'shared_proxy_unchanged=true' "$report"
+          grep -Fqx 'other_containers_unchanged=true' "$report"
+          grep -Fqx 'production_touched=0' "$report"
+          grep -Fqx 'TEST_DEPLOYMENT=PASS' "$report"
+
+      - name: Upload sanitized Test deployment report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: test-server-deployment-${{ github.run_id }}
+          path: ${{ runner.temp }}/test-server-deployment.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove Test SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-test-deploy-ssh"
