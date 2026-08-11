@@ -229,9 +229,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Harden non-Production dependencies, environment identity, write-target isolation, and Preview authentication-guard validation",
+  "Unify signed MFMS administrator identity across Preview write and import gateways",
 )
-assert.equal(manifest.base_commit, "574d21ea09b279f7d35f141a22321fa45605b412")
+assert.equal(manifest.base_commit, "933a3c36fd18f9b173c237494f2e06dfba5d67e2")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -241,33 +241,22 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  ".gitattributes",
-  ".github/CODEOWNERS",
-  ".github/pull_request_template.md",
-  ".github/workflows/preview-baseline.yml",
-  "Dockerfile.preview",
-  "app/api/version/route.ts",
-  "app/coconut-counting/page.tsx",
-  "app/fertiliser-management/page.tsx",
-  "app/globals.css",
-  "app/layout.tsx",
-  "app/shadcn-tailwind.css",
-  "components/farm/environment-banner.tsx",
-  "components/farm/local-environment-banner.tsx",
+  "app/api/admin/beetle-trap/sync/route.ts",
+  "app/api/admin/harvest-sync/[[...path]]/route.ts",
+  "app/api/admin/motor-runtime/management/[...path]/route.ts",
+  "app/api/admin/well-water/sync/route.ts",
+  "app/api/motor-screenshot-analysis/[...path]/route.ts",
   "deploy/preview-release-manifest.json",
-  "docs/MFMS_RELEASE_GOVERNANCE.md",
-  "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
-  "eslint.config.mjs",
+  "lib/mfms-admin-identity.ts",
   "lib/preview-admin-write-safety.ts",
-  "lib/public-environment.ts",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  "scripts/preview-server-deploy.sh",
   "tests/admin-entry-workflows.mjs",
+  "tests/beetle-trap-uat-amendment.mjs",
   "tests/environment-identity.mjs",
+  "tests/harvest-sync-exact-duplicates.mjs",
+  "tests/mfms-admin-identity.mjs",
+  "tests/motor-screenshot-analysis-real-workflow.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/version-visibility.mjs",
+  "tests/well-water-page-corrections.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
