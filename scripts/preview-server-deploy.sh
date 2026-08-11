@@ -129,6 +129,53 @@ ensure_preview_network_ip() {
   return 1
 }
 
+announce_preview_network_identity() {
+  local helper_image
+  helper_image=$(docker inspect --format '{{.Image}}' "$backend_container")
+  docker run --rm -i \
+    --network "container:$live_container" \
+    --entrypoint python \
+    "$helper_image" - <<'PY'
+import fcntl
+import socket
+import struct
+import time
+
+interface = "eth0"
+with open(f"/sys/class/net/{interface}/address", encoding="ascii") as handle:
+    mac_text = handle.read().strip()
+mac = bytes.fromhex(mac_text.replace(":", ""))
+
+probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    address = fcntl.ioctl(
+        probe.fileno(),
+        0x8915,
+        struct.pack("256s", interface.encode("ascii")[:15]),
+    )[20:24]
+finally:
+    probe.close()
+
+ethernet = b"\xff" * 6 + mac + struct.pack("!H", 0x0806)
+arp_prefix = struct.pack("!HHBB", 1, 0x0800, 6, 4)
+zero_mac = b"\x00" * 6
+request = ethernet + arp_prefix + struct.pack("!H", 1) + mac + address + zero_mac + address
+reply = ethernet + arp_prefix + struct.pack("!H", 2) + mac + address + b"\xff" * 6 + address
+
+raw = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+try:
+    raw.bind((interface, 0))
+    for _ in range(3):
+        raw.send(request)
+        raw.send(reply)
+        time.sleep(0.2)
+finally:
+    raw.close()
+
+print(f"gratuitous_arp=PASS ip={socket.inet_ntoa(address)} mac={mac_text}")
+PY
+}
+
 image_revision_for_container() {
   local container=$1 image_id
   image_id=$(docker inspect --format '{{.Image}}' "$container")
@@ -408,6 +455,7 @@ restore_original_frontend() {
     ensure_preview_network_ip "$live_container" "$original_network_ip" \
       >/dev/null 2>&1 || return 1
     docker start "$live_container" >/dev/null 2>&1 || return 1
+    announce_preview_network_identity >/dev/null 2>&1 || return 1
     if wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" \
       && smoke_routes "http://127.0.0.1:$live_port" \
       && wait_for_public_preview_guard; then
@@ -646,6 +694,9 @@ deploy_preview() {
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 
+  announce_preview_network_identity \
+    || blocked "replacement could not announce the Preview network identity"
+
   wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
     || blocked "replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
@@ -739,6 +790,8 @@ rollback_preview() {
   ensure_preview_network_ip "$live_container" "$original_network_ip" \
     || blocked "rollback replacement could not preserve the Preview network address"
   docker start "$live_container" >/dev/null
+  announce_preview_network_identity \
+    || blocked "rollback replacement could not announce the Preview network identity"
   replacement_id=$(docker inspect --format '{{.Image}}' "$live_container")
 
   wait_for_version "http://127.0.0.1:$live_port" "$rollback_reported_revision" \
