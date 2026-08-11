@@ -213,6 +213,7 @@ assert.match(deployScript, /candidate does not contain the live Preview backend 
 assert.match(deployScript, /authoritative backend checkout origin is not approved/)
 assert.match(deployScript, /backend candidate health endpoint failed/)
 assert.match(deployScript, /backend candidate version endpoint failed/)
+assert.match(deployScript, /: > "\$openapi_plan"/)
 assert.match(deployScript, /apply_preview_migrations\.py/)
 assert.match(deployScript, /ensure_worker_signing_secret/)
 assert.match(deployScript, /MFMS_WORKER_MANAGEMENT_ENABLED=true/)
