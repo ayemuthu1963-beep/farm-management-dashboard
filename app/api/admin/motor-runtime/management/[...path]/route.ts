@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
+import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
+import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -15,25 +16,7 @@ function safePath(segments: string[]): string | null {
 
 function writeSafetyErrors(method: string): string[] {
   if (!WRITE_METHODS.has(method)) return []
-  const environment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
-  if (["preview", "uat"].includes(environment)) {
-    return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl())
-  }
-  if (["local", "development", "test"].includes(environment)) {
-    const target = (process.env.MFMS_TARGET_DATABASE ?? "").trim().toLowerCase()
-    if (["harvest", "production", "mfms_production"].includes(target)) {
-      return ["Production database names are rejected for local Motor Runtime writes."]
-    }
-    try {
-      const host = new URL(getApiBaseUrl()).hostname.toLowerCase()
-      return ["127.0.0.1", "localhost", "::1"].includes(host)
-        ? []
-        : ["Local Motor Runtime writes require a loopback backend."]
-    } catch {
-      return ["Motor Runtime API base URL is invalid."]
-    }
-  }
-  return ["Motor Runtime management writes are disabled in this frontend environment."]
+  return getAdminTargetSafetyErrors(process.env, getApiBaseUrl())
 }
 
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
@@ -46,7 +29,22 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   if (!authorization) return NextResponse.json({ detail: "Harvest API credentials are not configured." }, { status: 503 })
 
   const incoming = new URL(request.url)
+  const target = new URL(`${getApiBaseUrl()}/api/motor-runtime/management/${targetPath}${incoming.search}`)
   const headers = new Headers({ Authorization: authorization, Accept: "application/json" })
+  if (WRITE_METHODS.has(request.method)) {
+    try {
+      const actorHeaders = getAuthenticatedUserAssertionHeaders({
+        requestHeaders: request.headers,
+        method: request.method,
+        target,
+      })
+      Object.entries(actorHeaders).forEach(([name, value]) => headers.set(name, value))
+    } catch (error) {
+      const status = error instanceof MfmsAdminIdentityError ? error.status : 503
+      const detail = error instanceof Error ? error.message : "MFMS administrator authentication is required."
+      return NextResponse.json({ detail }, { status })
+    }
+  }
   let body: BodyInit | undefined
   if (!new Set(["GET", "HEAD"]).has(request.method)) {
     const contentType = request.headers.get("content-type") ?? ""
@@ -55,7 +53,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   }
   try {
     const response = await fetch(
-      `${getApiBaseUrl()}/api/motor-runtime/management/${targetPath}${incoming.search}`,
+      target,
       { method: request.method, headers, body, cache: "no-store" },
     )
     const responseHeaders = new Headers({

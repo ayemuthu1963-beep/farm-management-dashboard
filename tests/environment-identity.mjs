@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import "./mfms-admin-identity.mjs"
 import { readFile } from "node:fs/promises"
 import {
   normalizePublicEnvironment,

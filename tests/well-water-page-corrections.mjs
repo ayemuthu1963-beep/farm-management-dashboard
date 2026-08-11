@@ -113,19 +113,14 @@ assert.equal(
 assert.equal(getWellWaterSyncErrorMessage({ detail: "Not authenticated" }), "Not authenticated")
 assert.equal(getWellWaterSyncErrorMessage(null), WELL_WATER_SYNC_FAILURE_MESSAGE)
 
-// The browser calls only a same-origin, exact-target-gated proxy with server-side credentials.
+// The browser calls a same-origin proxy guarded by the shared environment and gateway identity contracts.
 assert.match(syncProxy, /export async function POST\(request: NextRequest\)/)
 assert.doesNotMatch(syncProxy, /export async function GET/)
-assert.match(syncProxy, /getPreviewAdminTargetSafetyErrors\(process\.env, getApiBaseUrl\(\)\)/)
+assert.match(syncProxy, /getAdminTargetSafetyErrors/)
 assert.match(syncProxy, /api\/admin\/well-water\/sync/)
 assert.match(syncProxy, /getBasicAuthHeader\(\)/)
-assert.match(syncProxy, /request\.headers\.get\("authorization"\)/)
-assert.match(syncProxy, /separator === decoded\.length - 1/)
-assert.match(syncProxy, /if \(!authenticatedUsername\)/)
-assert.match(syncProxy, /status: 401/)
-assert.match(syncProxy, /X-MFMS-Authenticated-User/)
-assert.match(syncProxy, /X-MFMS-Authenticated-User-Timestamp/)
-assert.match(syncProxy, /X-MFMS-Authenticated-User-Signature/)
+assert.match(syncProxy, /getAuthenticatedUserAssertionHeaders/)
+assert.match(syncProxy, /MfmsAdminIdentityError/)
 assert.match(syncProxy, /AbortSignal\.timeout\(SYNC_PROXY_TIMEOUT_MS\)/)
 assert.doesNotMatch(syncProxy, /ODK_(?:PASSWORD|TOKEN|CENTRAL)/)
 
