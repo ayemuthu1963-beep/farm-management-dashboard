@@ -11,6 +11,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 
 const livePreviewEnv = {
   MFMS_ENV: "preview",
+  NEXT_PUBLIC_MFMS_ENV: "preview",
   MFMS_ENABLE_LOCAL_WRITE_GUARD: "true",
   MFMS_TARGET_DATABASE: "mfms_server_uat",
   MFMS_LOCAL_WRITE_DATABASE: "mfms_server_uat",
@@ -18,6 +19,16 @@ const livePreviewEnv = {
   MFMS_LOCAL_WRITE_BACKEND_PORT: "8000",
   MFMS_ALLOWED_BACKEND_HOSTS: "harvest-api-pilot",
   MFMS_ALLOWED_BACKEND_PORT: "8000",
+}
+
+const liveTestEnv = {
+  ...livePreviewEnv,
+  MFMS_ENV: "test",
+  NEXT_PUBLIC_MFMS_ENV: "test",
+  MFMS_TARGET_DATABASE: "mfms_server_test",
+  MFMS_LOCAL_WRITE_DATABASE: "mfms_server_test",
+  MFMS_LOCAL_WRITE_BACKEND_HOST: "harvest-api-test",
+  MFMS_ALLOWED_BACKEND_HOSTS: "harvest-api-test",
 }
 
 assert.deepEqual(
@@ -28,11 +39,19 @@ assert.deepEqual(
   getPreviewAdminWriteSafetyErrors({ ...livePreviewEnv, MFMS_ENV: "uat" }, "http://harvest-api-pilot:8000"),
   [],
 )
+assert.deepEqual(
+  getPreviewAdminWriteSafetyErrors(liveTestEnv, "http://harvest-api-test:8000"),
+  [],
+)
 
 for (const [label, env, url] of [
   ["guard disabled", { ...livePreviewEnv, MFMS_ENABLE_LOCAL_WRITE_GUARD: "false" }, "http://harvest-api-pilot:8000"],
   ["production environment", { ...livePreviewEnv, MFMS_ENV: "production" }, "http://harvest-api-pilot:8000"],
   ["production database", { ...livePreviewEnv, MFMS_TARGET_DATABASE: "harvest", MFMS_LOCAL_WRITE_DATABASE: "harvest" }, "http://harvest-api-pilot:8000"],
+  ["actual Production database", { ...livePreviewEnv, MFMS_TARGET_DATABASE: "mfms_server_prod", MFMS_LOCAL_WRITE_DATABASE: "mfms_server_prod" }, "http://harvest-api-pilot:8000"],
+  ["Preview labels with Test database", { ...livePreviewEnv, MFMS_TARGET_DATABASE: "mfms_server_test", MFMS_LOCAL_WRITE_DATABASE: "mfms_server_test" }, "http://harvest-api-pilot:8000"],
+  ["Test labels with Preview public environment", { ...liveTestEnv, NEXT_PUBLIC_MFMS_ENV: "preview" }, "http://harvest-api-test:8000"],
+  ["Test labels with Preview backend", { ...liveTestEnv }, "http://harvest-api-pilot:8000"],
   ["wrong host", { ...livePreviewEnv }, "http://harvest-api:8000"],
   ["wrong port", { ...livePreviewEnv }, "http://harvest-api-pilot:8001"],
   ["URL credentials", { ...livePreviewEnv }, "http://user:secret@harvest-api-pilot:8000"],
