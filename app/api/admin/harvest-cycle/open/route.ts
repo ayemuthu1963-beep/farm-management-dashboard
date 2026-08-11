@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
+import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
+import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-function isPreviewWriteEnabled(): boolean {
-  const explicitFlag = (process.env.MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES ?? "").toLowerCase()
-
-  if (explicitFlag === "false") return false
-  return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
+function isHarvestCycleWriteEnabled(): boolean {
+  const explicitFlag = (process.env.MFMS_HARVEST_CYCLE_WRITES_ENABLED ?? "").trim().toLowerCase()
+  return explicitFlag === "true" && getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
 }
 
 function isValidDate(value: string): boolean {
@@ -19,7 +18,7 @@ function isValidDate(value: string): boolean {
 }
 
 export async function POST(request: Request) {
-  if (!isPreviewWriteEnabled()) {
+  if (!isHarvestCycleWriteEnabled()) {
     return NextResponse.json(
       {
         ok: false,
@@ -72,12 +71,23 @@ export async function POST(request: Request) {
     )
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/api/cycles`, {
+  const target = new URL(`${getApiBaseUrl()}/api/cycles`)
+  let actorHeaders: Record<string, string>
+  try {
+    actorHeaders = getAuthenticatedUserAssertionHeaders({ requestHeaders: request.headers, method: "POST", target })
+  } catch (error) {
+    const status = error instanceof MfmsAdminIdentityError ? error.status : 503
+    const message = error instanceof Error ? error.message : "MFMS administrator authentication is required."
+    return NextResponse.json({ ok: false, errors: [message], message: "Harvest cycle was not opened." }, { status })
+  }
+
+  const response = await fetch(target, {
     method: "POST",
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...actorHeaders,
     },
     cache: "no-store",
     body: JSON.stringify({

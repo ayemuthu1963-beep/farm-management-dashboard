@@ -9,13 +9,23 @@ type ApprovedTarget = {
 const APPROVED_TARGETS: Record<string, ApprovedTarget> = {
   preview: { database: "mfms_server_uat", backendHost: "harvest-api-pilot", backendPort: "8000" },
   uat: { database: "mfms_server_uat", backendHost: "harvest-api-pilot", backendPort: "8000" },
+  test: { database: "mfms_server_test", backendHost: "harvest-api-test", backendPort: "8000" },
   "production-candidate": {
     database: "mfms_server_prod_candidate",
     backendHost: "harvest-api-prod-candidate",
     backendPort: "8000",
   },
   production: { database: "mfms_server_prod", backendHost: "harvest-api", backendPort: "8000" },
+  prod: { database: "mfms_server_prod", backendHost: "harvest-api", backendPort: "8000" },
 }
+
+const PRODUCTION_DATABASE_NAMES = new Set([
+  "harvest",
+  "production",
+  "mfms_production",
+  "mfms_server_prod",
+  "prod",
+])
 
 function normalise(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase()
@@ -45,16 +55,15 @@ export function getPreviewAdminTargetSafetyErrors(
   const allowedHosts = parseHosts(env.MFMS_ALLOWED_BACKEND_HOSTS)
 
   if (normalise(env.MFMS_ENABLE_LOCAL_WRITE_GUARD) !== "true") {
-    errors.push("MFMS_ENABLE_LOCAL_WRITE_GUARD must be true for MFMS admin writes.")
+    errors.push("MFMS_ENABLE_LOCAL_WRITE_GUARD must be true for administrator writes.")
   }
   if (!approved) {
-    errors.push("MFMS_ENV does not have an approved environment/database target.")
+    errors.push("MFMS_ENV does not have an approved target.")
   }
   if (publicEnvironment && !publicApproved) {
     errors.push("NEXT_PUBLIC_MFMS_ENV does not have an approved target.")
   }
   if (
-    publicEnvironment &&
     approved &&
     publicApproved &&
     (publicApproved.database !== approved.database || publicApproved.backendHost !== approved.backendHost)
@@ -65,16 +74,19 @@ export function getPreviewAdminTargetSafetyErrors(
     errors.push(`MFMS_TARGET_DATABASE must be ${approved.database} for ${environment}.`)
   }
   if (!approved || guardedDatabase !== approved.database || guardedDatabase !== targetDatabase) {
-    errors.push("MFMS_LOCAL_WRITE_DATABASE must match the approved target database.")
+    errors.push("MFMS_LOCAL_WRITE_DATABASE must match the approved environment database.")
+  }
+  if (environment !== "production" && environment !== "prod" && targetDatabase && PRODUCTION_DATABASE_NAMES.has(targetDatabase.toLowerCase())) {
+    errors.push("Production database names are rejected for non-production admin writes.")
   }
   if (approved && configuredHost !== approved.backendHost) {
-    errors.push("MFMS_LOCAL_WRITE_BACKEND_HOST does not match the approved API host.")
+    errors.push("MFMS_LOCAL_WRITE_BACKEND_HOST does not match the approved non-production API host.")
   }
   if (approved && (configuredPort !== approved.backendPort || allowedPort !== approved.backendPort)) {
-    errors.push("Configured MFMS API ports do not match the approved target.")
+    errors.push(`Configured ${environment} API ports must both be ${approved.backendPort}.`)
   }
   if (approved && (allowedHosts.length !== 1 || allowedHosts[0] !== approved.backendHost)) {
-    errors.push("MFMS_ALLOWED_BACKEND_HOSTS must contain only the approved API host.")
+    errors.push(`MFMS_ALLOWED_BACKEND_HOSTS must contain only ${approved.backendHost}.`)
   }
 
   let parsedUrl: URL
@@ -92,13 +104,14 @@ export function getPreviewAdminTargetSafetyErrors(
   const actualHost = normalise(parsedUrl.hostname)
   const actualPort = parsedUrl.port || (parsedUrl.protocol === "https:" ? "443" : "80")
   if (approved && actualHost !== approved.backendHost) {
-    errors.push("MFMS API host does not match the approved target.")
+    errors.push(`Non-production API host does not match ${approved.backendHost}.`)
   }
   if (approved && actualPort !== approved.backendPort) {
-    errors.push("MFMS API port does not match the approved target.")
+    errors.push(`Non-production API port does not match ${approved.backendPort}.`)
   }
 
   return errors
 }
 
 export const getPreviewAdminWriteSafetyErrors = getPreviewAdminTargetSafetyErrors
+export const getAdminTargetSafetyErrors = getPreviewAdminTargetSafetyErrors

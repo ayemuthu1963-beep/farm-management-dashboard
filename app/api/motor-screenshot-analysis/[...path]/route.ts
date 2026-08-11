@@ -1,35 +1,26 @@
 import { NextResponse } from "next/server"
 
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { getPreviewAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
+import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
+import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const WRITE_METHODS = new Set(["POST", "PATCH", "DELETE"])
 
-function targetSafetyErrors(method: string): string[] {
+function targetSafetyErrors(method: string, targetPath: string): string[] {
   if (!WRITE_METHODS.has(method)) return []
+  const errors = getAdminTargetSafetyErrors(process.env, getApiBaseUrl())
   const environment = (process.env.MFMS_ENV ?? "").trim().toLowerCase()
-  if (environment === "preview" || environment === "uat") {
-    return getPreviewAdminTargetSafetyErrors(process.env, getApiBaseUrl())
+  if (
+    ["production", "prod"].includes(environment) &&
+    targetPath !== "excel-imports" &&
+    !targetPath.startsWith("excel-imports/")
+  ) {
+    errors.push("Production permits deterministic Excel motor imports only; screenshot OCR and text writes remain disabled.")
   }
-  if (environment === "local" || environment === "development" || environment === "test") {
-    const target = (process.env.MFMS_TARGET_DATABASE ?? "").trim().toLowerCase()
-    if (["harvest", "production", "mfms_production"].includes(target)) {
-      return ["Production database names are rejected for local motor screenshot writes."]
-    }
-    try {
-      const host = new URL(getApiBaseUrl()).hostname.toLowerCase()
-      if (!["127.0.0.1", "localhost", "::1"].includes(host)) {
-        return ["Local motor screenshot writes require a loopback backend."]
-      }
-    } catch {
-      return ["Motor screenshot API base URL is invalid."]
-    }
-    return []
-  }
-  return ["Motor screenshot writes are disabled in this frontend environment."]
+  return errors
 }
 
 function safePath(segments: string[]): string | null {
@@ -41,14 +32,28 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const { path } = await context.params
   const targetPath = safePath(path)
   if (!targetPath) return NextResponse.json({ detail: "Invalid motor screenshot API path." }, { status: 400 })
-  const safetyErrors = targetSafetyErrors(request.method)
+  const safetyErrors = targetSafetyErrors(request.method, targetPath)
   if (safetyErrors.length > 0) return NextResponse.json({ errors: safetyErrors }, { status: 403 })
   const authHeader = getBasicAuthHeader()
   if (!authHeader) return NextResponse.json({ detail: "Harvest API credentials are not configured." }, { status: 503 })
 
   const incomingUrl = new URL(request.url)
-  const target = `${getApiBaseUrl()}/api/motor-screenshot-analysis/${targetPath}${incomingUrl.search}`
+  const target = new URL(`${getApiBaseUrl()}/api/motor-screenshot-analysis/${targetPath}${incomingUrl.search}`)
   const headers = new Headers({ Authorization: authHeader, Accept: request.headers.get("accept") ?? "application/json" })
+  if (WRITE_METHODS.has(request.method)) {
+    try {
+      const actorHeaders = getAuthenticatedUserAssertionHeaders({
+        requestHeaders: request.headers,
+        method: request.method,
+        target,
+      })
+      Object.entries(actorHeaders).forEach(([name, value]) => headers.set(name, value))
+    } catch (error) {
+      const status = error instanceof MfmsAdminIdentityError ? error.status : 503
+      const detail = error instanceof Error ? error.message : "MFMS administrator authentication is required."
+      return NextResponse.json({ detail }, { status })
+    }
+  }
   let body: BodyInit | undefined
   if (!new Set(["GET", "HEAD"]).has(request.method)) {
     const contentType = request.headers.get("content-type") ?? ""
