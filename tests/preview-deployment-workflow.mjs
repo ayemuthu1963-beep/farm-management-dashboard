@@ -206,6 +206,15 @@ assert.match(deployScript, /rollback_reported_revision=/)
 assert.match(deployScript, /Preview candidate port \$candidate_port is already allocated/)
 assert.match(deployScript, /--ip "\$original_network_ip"/)
 assert.match(deployScript, /Preview frontend network address changed/)
+assert.match(deployScript, /ensure_preview_network_attachment\(\)/)
+assert.match(
+  deployScript,
+  /ensure_preview_network_attachment "\$live_container" \\\n+\s+\|\| blocked "rollback replacement could not attach to the Preview network"/,
+)
+assert.match(
+  deployScript,
+  /assert_live_contract "\$rollback_reported_revision" "\$replacement_id" "\$before_unrelated" false/,
+)
 assert.match(deployScript, /readonly worker_secret_file=/)
 assert.match(deployScript, /append_worker_environment/)
 assert.match(deployScript, /MFMS_TRUST_PROXY_ACTOR_HEADERS=true/)
