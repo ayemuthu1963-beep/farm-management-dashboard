@@ -30,6 +30,7 @@ readonly preview_url="https://preview.muthufarms.com"
 readonly central_login_url="https://auth.muthufarms.com/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
+readonly network_reclaim_attempts="180"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
@@ -110,7 +111,11 @@ disconnect_preview_network() {
 
 ensure_preview_network_ip() {
   local container=$1 expected_ip=$2 current_ip attempt
-  for attempt in $(seq 1 30); do
+  # Docker's bridge IPAM can retain a just-disconnected static address for
+  # longer than 30 seconds. Keep the transaction locked and retry for up to
+  # three minutes so rollback and automatic restoration do not fail during
+  # that eventual-consistency window.
+  for attempt in $(seq 1 "$network_reclaim_attempts"); do
     current_ip=$(network_ip_for_container "$container")
     [[ "$current_ip" == "$expected_ip" ]] && return 0
     # Historical containers can retain a stale endpoint record even when
