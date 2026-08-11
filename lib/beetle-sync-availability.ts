@@ -3,11 +3,6 @@ export function isBeetleTrapManualSyncAvailable(
 ): boolean {
   const publicEnvironment = (environment.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
   const serverEnvironment = (environment.MFMS_ENV ?? "").trim().toLowerCase()
-  if (publicEnvironment === "production" || serverEnvironment === "production") return false
-  return (
-    publicEnvironment === "preview" ||
-    publicEnvironment === "uat" ||
-    serverEnvironment === "preview" ||
-    serverEnvironment === "uat"
-  )
+  const approved = new Set(["production", "prod"])
+  return approved.has(publicEnvironment) || approved.has(serverEnvironment)
 }
