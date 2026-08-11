@@ -1,12 +1,13 @@
 "use client"
 
 import { useMemo } from "react"
-import { CircleDollarSign, CreditCard, Users, Wallet } from "lucide-react"
+import { CircleDollarSign, CreditCard, MessageCircleQuestion, Users, Wallet } from "lucide-react"
 import { SectionHeader } from "@/components/worker-management/section-header"
 import { AccountTypeBadge, PaidStatusBadge, SignedAmount } from "@/components/worker-management/status-badges"
 import { useWorkerManagement } from "@/components/worker-management/worker-management-context"
 import {
   CURRENT_WEEK_START,
+  findAccount,
   formatDisplayDate,
   formatRupees,
   getLoanBalance,
@@ -38,7 +39,7 @@ function Stat({
 }
 
 export function DashboardSection() {
-  const { accounts, wageEntries, loanTransactions } = useWorkerManagement()
+  const { accounts, wageEntries, loanTransactions, queries } = useWorkerManagement()
 
   const weekEnd = getWeekEnd(CURRENT_WEEK_START)
 
@@ -77,6 +78,11 @@ export function DashboardSection() {
     [accounts, loanTransactions],
   )
 
+  const openQueries = useMemo(
+    () => queries.filter((query) => query.status === "Open").slice(0, 4),
+    [queries],
+  )
+
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader
@@ -106,7 +112,7 @@ export function DashboardSection() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr_0.9fr]">
         <div className="rounded-xl border border-border bg-card p-5">
           <div className="flex items-center justify-between">
             <h2 className="font-serif text-xl font-bold">Recent wage activity</h2>
@@ -154,6 +160,30 @@ export function DashboardSection() {
                   <SignedAmount amount={balance} />
                 </div>
               ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center gap-2">
+            <MessageCircleQuestion className="size-5 text-primary" aria-hidden="true" />
+            <h2 className="font-serif text-xl font-bold">Open queries</h2>
+          </div>
+          <div className="mt-5 flex flex-col gap-4">
+            {openQueries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No open queries right now.</p>
+            ) : (
+              openQueries.map((query) => {
+                const account = findAccount(accounts, query.accountId)
+                return (
+                  <div key={query.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+                    <p className="truncate text-sm font-medium">{query.subject}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {account?.name ?? query.accountId} · raised {formatDisplayDate(query.date)}
+                    </p>
+                  </div>
+                )
+              })
             )}
           </div>
         </div>

@@ -4,10 +4,12 @@ import { createContext, useContext, useMemo, useState, type Dispatch, type React
 import {
   initialAccounts,
   initialLoanTransactions,
+  initialQueries,
   initialWageEntries,
   type Account,
   type LoanTransaction,
   type WageEntry,
+  type WorkerQuery,
 } from "@/lib/worker-management"
 
 interface WorkerManagementContextValue {
@@ -17,6 +19,8 @@ interface WorkerManagementContextValue {
   setWageEntries: Dispatch<SetStateAction<WageEntry[]>>
   loanTransactions: LoanTransaction[]
   setLoanTransactions: Dispatch<SetStateAction<LoanTransaction[]>>
+  queries: WorkerQuery[]
+  setQueries: Dispatch<SetStateAction<WorkerQuery[]>>
   /** Editable weekly payment overrides, keyed by `${accountId}__${weekStart}`. */
   weeklyPayments: Record<string, number>
   setWeeklyPayments: Dispatch<SetStateAction<Record<string, number>>>
@@ -32,6 +36,7 @@ export function WorkerManagementProvider({ children }: { children: ReactNode }) 
   const [accounts, setAccounts] = useState<Account[]>(initialAccounts)
   const [wageEntries, setWageEntries] = useState<WageEntry[]>(initialWageEntries)
   const [loanTransactions, setLoanTransactions] = useState<LoanTransaction[]>(initialLoanTransactions)
+  const [queries, setQueries] = useState<WorkerQuery[]>(initialQueries)
   const [weeklyPayments, setWeeklyPayments] = useState<Record<string, number>>({})
 
   const value = useMemo(
@@ -42,10 +47,12 @@ export function WorkerManagementProvider({ children }: { children: ReactNode }) 
       setWageEntries,
       loanTransactions,
       setLoanTransactions,
+      queries,
+      setQueries,
       weeklyPayments,
       setWeeklyPayments,
     }),
-    [accounts, wageEntries, loanTransactions, weeklyPayments],
+    [accounts, wageEntries, loanTransactions, queries, weeklyPayments],
   )
 
   return <WorkerManagementContext.Provider value={value}>{children}</WorkerManagementContext.Provider>
