@@ -99,8 +99,12 @@ container_running() {
 }
 
 network_ip_for_container() {
+  # A stopped container has no runtime IPAddress even after a successful
+  # static network attachment. Docker records the requested address in
+  # IPAMConfig until the container starts, so use it as the verification
+  # source during rollback and automatic restoration.
   docker inspect \
-    --format "{{with index .NetworkSettings.Networks \"$preview_network\"}}{{.IPAddress}}{{end}}" \
+    --format "{{with index .NetworkSettings.Networks \"$preview_network\"}}{{if .IPAddress}}{{.IPAddress}}{{else}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}{{end}}" \
     "$1"
 }
 
