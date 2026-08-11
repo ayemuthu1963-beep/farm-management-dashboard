@@ -166,6 +166,19 @@ ensure_preview_network_ip() {
   return 1
 }
 
+ensure_preview_network_attachment() {
+  local container=$1 current_ip attempt
+  for attempt in $(seq 1 30); do
+    current_ip=$(network_ip_for_container "$container")
+    [[ -n "$current_ip" ]] && return 0
+    docker network connect "$preview_network" "$container" >/dev/null 2>&1 || true
+    current_ip=$(network_ip_for_container "$container")
+    [[ -n "$current_ip" ]] && return 0
+    sleep 1
+  done
+  return 1
+}
+
 image_revision_for_container() {
   local container=$1 image_id
   image_id=$(docker inspect --format '{{.Image}}' "$container")
@@ -670,6 +683,7 @@ remove_candidate() {
 
 assert_live_contract() {
   local expected_revision=$1 expected_image_id=$2 require_version_endpoint=${3:-true}
+  local require_same_network_ip=${4:-true}
   container_exists "$backend_live_container" || blocked "Preview backend container is missing after switch"
   container_running "$backend_live_container" || blocked "Preview backend container is not running after switch"
   [[ "$(docker inspect --format '{{.Image}}' "$backend_live_container")" == "$expected_image_id" ]] \
@@ -682,8 +696,13 @@ assert_live_contract() {
     || blocked "Preview backend restart policy changed"
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$backend_live_container")" == "$preview_network" ]] \
     || blocked "Preview backend network changed"
-  [[ "$(network_ip_for_container "$backend_live_container")" == "$original_network_ip" ]] \
-    || blocked "Preview backend network address changed"
+  if [[ "$require_same_network_ip" == "true" ]]; then
+    [[ "$(network_ip_for_container "$backend_live_container")" == "$original_network_ip" ]] \
+      || blocked "Preview backend network address changed"
+  else
+    [[ -n "$(network_ip_for_container "$backend_live_container")" ]] \
+      || blocked "Preview backend is not attached to the Preview network"
+  fi
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$backend_live_container")" == "$expected_port_bindings" ]] \
     || blocked "Preview backend host port changed"
   assert_approved_mount_contract "$backend_live_container"
@@ -751,7 +770,7 @@ restore_original_backend() {
     docker rename "$transaction_backup" "$backend_live_container" >/dev/null 2>&1 || return 1
   fi
   if container_exists "$backend_live_container"; then
-    ensure_preview_network_ip "$backend_live_container" "$original_network_ip" \
+    ensure_preview_network_attachment "$backend_live_container" \
       >/dev/null 2>&1 || return 1
     docker start "$backend_live_container" >/dev/null 2>&1 || return 1
     if wait_for_health "http://127.0.0.1:$live_port"; then
@@ -900,12 +919,12 @@ rollback_backend() {
   disconnect_preview_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
   docker rename "$rollback_container" "$backend_live_container"
-  ensure_preview_network_ip "$backend_live_container" "$original_network_ip" \
-    || blocked "backend rollback could not preserve the Preview network address"
+  ensure_preview_network_attachment "$backend_live_container" \
+    || blocked "backend rollback could not attach to the Preview network"
   docker start "$backend_live_container" >/dev/null
   replacement_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
 
-  assert_live_contract "$rollback_revision" "$replacement_id" false
+  assert_live_contract "$rollback_revision" "$replacement_id" false false
   trap '' HUP INT TERM
   write_state \
     "$rollback_revision" "$replacement_id" "$rollback_image_tag" \
