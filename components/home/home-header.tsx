@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Home, Leaf, BarChart3 } from "lucide-react"
+import { Home, Leaf, BarChart3, LogOut } from "lucide-react"
 
 const pills = [
   { label: "DATA DRIVEN", icon: Leaf },
@@ -68,6 +68,16 @@ export function HomeHeader() {
           <Home className="size-5" aria-hidden="true" />
           Home
         </Link>
+        <form action="https://auth.muthufarms.com/logout" method="post">
+          <button
+            type="submit"
+            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-extrabold text-[#082c17] shadow-md transition-colors hover:bg-white/90"
+            aria-label="Log out and sign in as a different user"
+          >
+            <LogOut className="size-5" aria-hidden="true" />
+            Log out
+          </button>
+        </form>
       </div>
 
       {/* Main content */}
