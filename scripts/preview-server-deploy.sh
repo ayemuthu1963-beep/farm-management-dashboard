@@ -27,7 +27,7 @@ readonly backend_container="harvest-api-pilot"
 readonly proxy_container="central-nginx-1"
 readonly preview_network="harvest-net"
 readonly preview_url="https://preview.muthufarms.com"
-readonly central_login_url="https://admin.muthufarms.com/login"
+readonly central_login_url="https://auth.muthufarms.com/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
@@ -264,7 +264,7 @@ parsed = urlsplit(location)
 login = urlsplit(expected_login)
 valid = (
     parsed.scheme == login.scheme == "https"
-    and parsed.netloc == login.netloc == "admin.muthufarms.com"
+    and parsed.netloc == login.netloc == "auth.muthufarms.com"
     and parsed.path == login.path == "/login"
     and parsed.fragment == ""
     and parse_qsl(parsed.query, keep_blank_values=True) == [("next", expected_return)]
