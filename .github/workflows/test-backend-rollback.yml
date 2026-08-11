@@ -1,0 +1,123 @@
+name: Roll back Test backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_revision:
+        description: Exact 40-character backend revision currently running on Test
+        required: true
+        type: string
+      confirmation:
+        description: Type ROLL BACK TEST BACKEND to authorize the guarded rollback
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-test-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require exact Test backend rollback inputs
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          CURRENT_REVISION: ${{ inputs.current_revision }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]]
+          [[ "$CONFIRMATION" == "ROLL BACK TEST BACKEND" ]]
+          [[ "$CURRENT_REVISION" =~ ^[0-9a-f]{40}$ ]]
+
+  rollback:
+    needs: authorize
+    environment:
+      name: Test
+      url: https://test.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install the dedicated Test-only SSH identity
+        id: ssh
+        shell: bash
+        env:
+          TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST }}
+          TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+          TEST_SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          TEST_SSH_KNOWN_HOSTS: ${{ secrets.TEST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for required_name in TEST_SSH_HOST TEST_SSH_USER TEST_SSH_PRIVATE_KEY TEST_SSH_KNOWN_HOSTS; do
+            [[ -n "${!required_name:-}" ]]
+          done
+          [[ "$TEST_SSH_HOST" == "168.144.179.221" ]]
+          [[ "$TEST_SSH_USER" == "muthu" ]]
+          ssh_dir="$RUNNER_TEMP/mfms-test-backend-rollback-ssh"
+          install -d -m 700 "$ssh_dir"
+          printf '%s\n' "$TEST_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$TEST_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_ed25519" "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$TEST_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the immediately previous verified Test backend
+        shell: bash
+        env:
+          CURRENT_REVISION: ${{ inputs.current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST }}
+          TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/test-backend-rollback.txt"
+          : > "$report"
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
+            "$TEST_SSH_USER@$TEST_SSH_HOST" \
+            "rollback-test-backend $CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee "$report"
+          grep -Fqx 'rollback_environment=Test' "$report"
+          grep -Fqx 'rollback_component=backend' "$report"
+          grep -Fqx 'rollback_url=https://test.muthufarms.com' "$report"
+          grep -Eq '^restored_backend_revision=[0-9a-f]{40}$' "$report"
+          grep -Fqx 'database_migrations=forward-only-not-reversed' "$report"
+          grep -Fqx 'frontend_unchanged=true' "$report"
+          grep -Fqx 'odk_unchanged=true' "$report"
+          grep -Fqx 'schedules_unchanged=true' "$report"
+          grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          grep -Fqx 'production_touched=0' "$report"
+          grep -Fqx 'TEST_BACKEND_ROLLBACK=PASS' "$report"
+
+      - name: Upload sanitized Test backend rollback report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: test-backend-rollback-${{ github.run_id }}
+          path: ${{ runner.temp }}/test-backend-rollback.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove Test SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-test-backend-rollback-ssh"
