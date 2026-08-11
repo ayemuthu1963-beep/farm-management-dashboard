@@ -9,6 +9,7 @@ const rollbackWorkflow = readText(".github/workflows/preview-server-rollback.yml
 const releaseSignalWorkflow = readText(".github/workflows/preview-release-candidate.yml")
 const preflightScript = readText("scripts/preview-server-preflight.sh")
 const deployScript = readText("scripts/preview-server-deploy.sh")
+const previewDockerfile = readText("Dockerfile.preview")
 const gitAttributes = readText(".gitattributes")
 const manifest = JSON.parse(
   readFileSync("deploy/preview-release-manifest.json", "utf8"),
@@ -200,6 +201,13 @@ assert.match(deployScript, /parsed\.netloc == login\.netloc == "auth\.muthufarms
 assert.match(deployScript, /parse_qsl\(parsed\.query, keep_blank_values=True\)/)
 assert.match(deployScript, /public_guard_result="303-central-login"/)
 assert.match(deployScript, /public_preview_guard=\$public_guard_result/)
+assert.match(deployScript, /assert_preview_environment_banner/)
+assert.match(deployScript, /candidate Preview environment banner is invalid/)
+assert.match(deployScript, /replacement Preview environment banner is invalid/)
+assert.match(deployScript, /data-mfms-environment=\"preview\"/)
+assert.match(deployScript, /data-mfms-database=\"mfms_server_uat\"/)
+assert.match(deployScript, /NEXT_PUBLIC_MFMS_ENV=preview/)
+assert.match(deployScript, /NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat/)
 assert.doesNotMatch(deployScript, /wait_for_version "\$preview_url"/)
 assert.doesNotMatch(deployScript, /smoke_routes "\$preview_url"/)
 assert.doesNotMatch(
@@ -223,15 +231,32 @@ assert.doesNotMatch(deployScript, /\bsudo\b/)
 assert.doesNotMatch(deployScript, /nginx\s+-s\s+reload/)
 assert.doesNotMatch(deployScript, /crontab\s+-[er]/)
 
+assert.equal(
+  (previewDockerfile.match(/ARG NEXT_PUBLIC_MFMS_ENV=preview/g) ?? []).length,
+  2,
+)
+assert.equal(
+  (previewDockerfile.match(/ARG NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat/g) ?? []).length,
+  2,
+)
+assert.equal(
+  (previewDockerfile.match(/ENV NEXT_PUBLIC_MFMS_ENV=\$NEXT_PUBLIC_MFMS_ENV/g) ?? []).length,
+  2,
+)
+assert.equal(
+  (previewDockerfile.match(/ENV NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=\$NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL/g) ?? []).length,
+  2,
+)
+
 assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Unify signed MFMS administrator identity across Preview write and import gateways",
+  "Bake and verify the Preview UAT environment identity during frontend builds",
 )
-assert.equal(manifest.base_commit, "933a3c36fd18f9b173c237494f2e06dfba5d67e2")
+assert.equal(manifest.base_commit, "ce417c956ba7b00a3c31360e438a478e66122706")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -241,22 +266,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/admin/beetle-trap/sync/route.ts",
-  "app/api/admin/harvest-sync/[[...path]]/route.ts",
-  "app/api/admin/motor-runtime/management/[...path]/route.ts",
-  "app/api/admin/well-water/sync/route.ts",
-  "app/api/motor-screenshot-analysis/[...path]/route.ts",
+  "Dockerfile.preview",
   "deploy/preview-release-manifest.json",
-  "lib/mfms-admin-identity.ts",
-  "lib/preview-admin-write-safety.ts",
-  "tests/admin-entry-workflows.mjs",
-  "tests/beetle-trap-uat-amendment.mjs",
-  "tests/environment-identity.mjs",
-  "tests/harvest-sync-exact-duplicates.mjs",
-  "tests/mfms-admin-identity.mjs",
-  "tests/motor-screenshot-analysis-real-workflow.mjs",
+  "scripts/preview-server-deploy.sh",
   "tests/preview-deployment-workflow.mjs",
-  "tests/well-water-page-corrections.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
