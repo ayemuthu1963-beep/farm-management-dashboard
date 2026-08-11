@@ -57,7 +57,7 @@ function getAuthenticatedUserAssertionHeaders(username: string, target: URL): Re
 export async function POST(request: NextRequest) {
   if (!isBeetleTrapManualSyncAvailable()) {
     return NextResponse.json(
-      { status: "failed", message: "Beetle Trap ODK sync is available only in Preview/UAT." },
+      { status: "failed", message: "Beetle Trap ODK sync is available only in Production." },
       { status: 403, headers: NO_STORE_HEADERS },
     )
   }
