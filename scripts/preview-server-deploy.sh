@@ -99,13 +99,23 @@ container_running() {
 }
 
 network_ip_for_container() {
+  local container=$1
   # A stopped container has no runtime IPAddress even after a successful
   # static network attachment. Docker records the requested address in
-  # IPAMConfig until the container starts, so use it as the verification
-  # source during rollback and automatic restoration.
+  # IPAMConfig until the container starts. Parse Docker's JSON because its Go
+  # template formatter renders that stopped-container value as "invalid IP".
   docker inspect \
-    --format "{{with index .NetworkSettings.Networks \"$preview_network\"}}{{if .IPAddress}}{{.IPAddress}}{{else}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}{{end}}" \
-    "$1"
+    --format '{{json .NetworkSettings.Networks}}' \
+    "$container" \
+    | python3 -c '
+import json
+import sys
+
+networks = json.load(sys.stdin)
+network = networks.get(sys.argv[1]) or {}
+ipam = network.get("IPAMConfig") or {}
+print(network.get("IPAddress") or ipam.get("IPv4Address") or "")
+' "$preview_network"
 }
 
 disconnect_preview_network() {
