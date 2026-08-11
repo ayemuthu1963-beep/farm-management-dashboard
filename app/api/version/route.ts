@@ -33,6 +33,8 @@ export function GET() {
       git_branch: firstConfigured(process.env.VERCEL_GIT_COMMIT_REF),
       build_timestamp: firstConfigured(process.env.MFMS_BUILD_TIMESTAMP),
       environment: releaseEnvironment(),
+      public_environment: firstConfigured(process.env.NEXT_PUBLIC_MFMS_ENV),
+      database: firstConfigured(process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL),
       deployment_id: firstConfigured(process.env.VERCEL_DEPLOYMENT_ID),
     },
     {

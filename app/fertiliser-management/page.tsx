@@ -27,6 +27,7 @@ import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard, StatGrid } from "@/components/farm/stat-card"
+import { publicEnvironmentIdentity } from "@/lib/public-environment"
 import { cn } from "@/lib/utils"
 import {
   duplicateConfirmationNotes,
@@ -97,6 +98,13 @@ type MasterActionTarget = {
 }
 
 const QUANTITY_PRECISION_ERROR = "Quantity must be greater than zero and may contain up to 3 decimal places."
+const fertiliserIdentity = publicEnvironmentIdentity(
+  process.env.NEXT_PUBLIC_MFMS_ENV,
+  process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL,
+)
+const fertiliserDatabase = fertiliserIdentity.database ?? "unconfigured database"
+const fertiliserDatabaseDescription = `${fertiliserIdentity.label} database (${fertiliserDatabase})`
+const fertiliserLiveBadge = `LIVE ${fertiliserIdentity.label} DATABASE DATA`
 
 const tabs: Array<{ id: ActiveTab; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Stock Overview", icon: Boxes },
@@ -238,7 +246,7 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-bold uppercase tracking-wide">LOADING LIVE FERTILISER DATA</p>
-            <p className="text-primary/85">Reading Fertiliser product master, stock, transactions, and requirements from the MFMS Preview database.</p>
+            <p className="text-primary/85">Reading Fertiliser product master, stock, transactions, and requirements from the {fertiliserDatabaseDescription}.</p>
           </div>
         </div>
       </div>
@@ -251,8 +259,8 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
         <div className="flex items-start gap-2">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-bold uppercase tracking-wide">LIVE PREVIEW DATABASE DATA</p>
-            <p className="text-chart-2/85">Stock Overview, Product Master, Transaction History, and Future Requirements are read from `mfms_server_uat`. Writes remain guarded to Preview only.</p>
+            <p className="font-bold uppercase tracking-wide">{fertiliserLiveBadge}</p>
+            <p className="text-chart-2/85">Stock Overview, Product Master, Transaction History, and Future Requirements are read from {fertiliserDatabase}. Writes remain bound to the verified {fertiliserIdentity.label} target.</p>
           </div>
         </div>
       </div>
@@ -265,7 +273,7 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <div className="flex-1">
           <p className="font-bold uppercase tracking-wide">LIVE FERTILISER DATA UNAVAILABLE</p>
-          <p className="text-destructive/85">The live Preview Fertiliser API did not load. No mock balances are being displayed. {error ? `Reason: ${error}` : null}</p>
+          <p className="text-destructive/85">The live {fertiliserIdentity.label} Fertiliser API did not load. No mock balances are being displayed. {error ? `Reason: ${error}` : null}</p>
           {onRetry ? (
             <button type="button" onClick={onRetry} className="mt-2 rounded-lg border border-destructive/30 bg-white px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/5">
               Retry
@@ -987,7 +995,7 @@ export default function FertiliserManagementPage() {
   const submitIncomingStock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setIncomingStockErrors({ form: "Incoming Stock saves require live Preview database data." })
+      setIncomingStockErrors({ form: `Incoming Stock saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1045,7 +1053,7 @@ export default function FertiliserManagementPage() {
   const submitOutgoingStock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setOutgoingStockErrors({ form: "Outgoing Stock saves require live Preview database data." })
+      setOutgoingStockErrors({ form: `Outgoing Stock saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1112,7 +1120,7 @@ export default function FertiliserManagementPage() {
   const submitAdjustment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setStockAdjustmentErrors({ form: "Stock Adjustment saves require live Preview database data." })
+      setStockAdjustmentErrors({ form: `Stock Adjustment saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1178,7 +1186,7 @@ export default function FertiliserManagementPage() {
   const submitRequirement = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setFutureRequirementErrors({ form: "Future Requirement saves require live Preview database data." })
+      setFutureRequirementErrors({ form: `Future Requirement saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1555,10 +1563,10 @@ export default function FertiliserManagementPage() {
             </span>
             <div>
               <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">Fertiliser Management</h1>
-              <p className="text-sm text-muted-foreground">Fertiliser stock and requirements connected to the MFMS Preview database</p>
+              <p className="text-sm text-muted-foreground">Fertiliser stock and requirements connected to the {fertiliserDatabaseDescription}</p>
             </div>
           </div>
-          <Badge className="border border-primary/25 bg-primary/10 text-primary">{dataMode === "live" ? "LIVE PREVIEW DATABASE DATA" : dataMode === "loading" ? "LOADING LIVE FERTILISER DATA" : "LIVE DATA UNAVAILABLE"}</Badge>
+          <Badge className="border border-primary/25 bg-primary/10 text-primary">{dataMode === "live" ? fertiliserLiveBadge : dataMode === "loading" ? "LOADING LIVE FERTILISER DATA" : "LIVE DATA UNAVAILABLE"}</Badge>
         </div>
 
         <DataNotice mode={dataMode} error={dataError} onRetry={() => void refreshLiveData().catch((error) => {
@@ -1604,7 +1612,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "incoming" ? (
           <Panel title="Incoming Stock" icon={PackagePlus}>
-            <FormIntro text="Receive stock into the MFMS Preview database only. This creates one batch/transaction after the backend confirms the save." />
+            <FormIntro text={`Receive stock into the ${fertiliserDatabaseDescription} only. This creates one batch/transaction after the backend confirms the save.`} />
             {incomingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{incomingStockErrors.form}</div> : null}
             <form onSubmit={submitIncomingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={incomingStockErrors.transaction_date} />
@@ -1639,7 +1647,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "outgoing" ? (
           <Panel title="Outgoing Stock with FEFO Allocation" icon={Send}>
-            <FormIntro text="Issue stock from the MFMS Preview database only. FEFO allocation is automatic: earliest valid expiry first, null-expiry batches last." />
+            <FormIntro text={`Issue stock from the ${fertiliserDatabaseDescription} only. FEFO allocation is automatic: earliest valid expiry first, null-expiry batches last.`} />
             {outgoingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{outgoingStockErrors.form}</div> : null}
             <form onSubmit={submitOutgoingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={outgoingStockErrors.transaction_date} />
