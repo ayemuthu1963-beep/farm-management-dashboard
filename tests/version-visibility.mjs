@@ -6,11 +6,22 @@ const dockerfile = await readFile("Dockerfile.preview", "utf8")
 const dockerignore = await readFile(".dockerignore", "utf8")
 const exampleEnvironment = await readFile(".env.example", "utf8")
 
-for (const field of ["git_commit", "build_timestamp", "environment"]) {
+for (const field of [
+  "git_commit",
+  "git_branch",
+  "build_timestamp",
+  "environment",
+  "deployment_id",
+]) {
   assert.ok(route.includes(field), `Version route is missing ${field}`)
 }
 
 assert.match(route, /Cache-Control": "no-store"/)
+assert.match(route, /VERCEL_GIT_COMMIT_SHA/)
+assert.match(route, /VERCEL_GIT_COMMIT_REF/)
+assert.match(route, /VERCEL_DEPLOYMENT_ID/)
+assert.match(route, /Vercel Preview/)
+assert.match(route, /Vercel Production Target/)
 assert.match(dockerfile, /pnpm@10\.34\.5/)
 assert.match(dockerfile, /pnpm install --frozen-lockfile/)
 assert.match(dockerfile, /org\.opencontainers\.image\.revision/)
