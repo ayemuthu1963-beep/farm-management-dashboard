@@ -105,41 +105,25 @@ network_ip_for_container() {
 
 disconnect_preview_network() {
   local container=$1
-  if [[ -n "$(network_ip_for_container "$container")" ]]; then
-    docker network disconnect "$preview_network" "$container"
-  fi
+  docker network disconnect -f "$preview_network" "$container" >/dev/null 2>&1 || true
 }
 
 ensure_preview_network_ip() {
   local container=$1 expected_ip=$2 current_ip attempt
   for attempt in $(seq 1 30); do
     current_ip=$(network_ip_for_container "$container")
-    if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
-      docker network disconnect "$preview_network" "$container" >/dev/null 2>&1 || true
-      current_ip=""
-    fi
-    if [[ -z "$current_ip" ]]; then
-      docker network connect --ip "$expected_ip" "$preview_network" "$container" \
-        >/dev/null 2>&1 || {
-          sleep 1
-          continue
-        }
-      current_ip=$(network_ip_for_container "$container")
-    fi
     [[ "$current_ip" == "$expected_ip" ]] && return 0
-    sleep 1
-  done
-  return 1
-}
-
-ensure_preview_network_attachment() {
-  local container=$1 current_ip attempt
-  for attempt in $(seq 1 30); do
+    # Historical containers can retain a stale endpoint record even when
+    # Docker reports no active IP. Clear it before reclaiming the established
+    # address used by the shared nginx upstream.
+    docker network disconnect -f "$preview_network" "$container" >/dev/null 2>&1 || true
+    docker network connect --ip "$expected_ip" "$preview_network" "$container" \
+      >/dev/null 2>&1 || {
+        sleep 1
+        continue
+      }
     current_ip=$(network_ip_for_container "$container")
-    [[ -n "$current_ip" ]] && return 0
-    docker network connect "$preview_network" "$container" >/dev/null 2>&1 || true
-    current_ip=$(network_ip_for_container "$container")
-    [[ -n "$current_ip" ]] && return 0
+    [[ "$current_ip" == "$expected_ip" ]] && return 0
     sleep 1
   done
   return 1
@@ -358,7 +342,6 @@ remove_candidate() {
 
 assert_live_contract() {
   local expected_revision=$1 expected_image_id=$2 expected_unrelated=$3
-  local require_same_network_ip=${4:-true}
   container_exists "$live_container" || blocked "Preview frontend container is missing"
   container_running "$live_container" || blocked "Preview frontend container is not running"
   [[ "$(image_revision_for_container "$live_container")" == "$expected_revision" ]] \
@@ -371,13 +354,8 @@ assert_live_contract() {
     || blocked "Preview frontend restart policy changed"
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$live_container")" == "$preview_network" ]] \
     || blocked "Preview frontend network changed"
-  if [[ "$require_same_network_ip" == "true" ]]; then
-    [[ "$(network_ip_for_container "$live_container")" == "$original_network_ip" ]] \
-      || blocked "Preview frontend network address changed"
-  else
-    [[ -n "$(network_ip_for_container "$live_container")" ]] \
-      || blocked "Preview frontend is not attached to the Preview network"
-  fi
+  [[ "$(network_ip_for_container "$live_container")" == "$original_network_ip" ]] \
+    || blocked "Preview frontend network address changed"
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$live_container")" == \
       '{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3015"}]}' ]] \
     || blocked "Preview frontend host port changed"
@@ -427,7 +405,7 @@ restore_original_frontend() {
     docker rename "$transaction_backup" "$live_container" >/dev/null 2>&1 || return 1
   fi
   if container_exists "$live_container"; then
-    ensure_preview_network_attachment "$live_container" \
+    ensure_preview_network_ip "$live_container" "$original_network_ip" \
       >/dev/null 2>&1 || return 1
     docker start "$live_container" >/dev/null 2>&1 || return 1
     if wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" \
@@ -758,8 +736,8 @@ rollback_preview() {
   disconnect_preview_network "$live_container"
   docker rename "$live_container" "$transaction_backup"
   docker rename "$rollback_container" "$live_container"
-  ensure_preview_network_attachment "$live_container" \
-    || blocked "rollback replacement could not attach to the Preview network"
+  ensure_preview_network_ip "$live_container" "$original_network_ip" \
+    || blocked "rollback replacement could not preserve the Preview network address"
   docker start "$live_container" >/dev/null
   replacement_id=$(docker inspect --format '{{.Image}}' "$live_container")
 
@@ -767,7 +745,7 @@ rollback_preview() {
     || blocked "rollback replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "rollback local smoke test failed"
   wait_for_public_preview_guard || blocked "public Preview rollback authentication guard failed"
-  assert_live_contract "$rollback_reported_revision" "$replacement_id" "$before_unrelated" false
+  assert_live_contract "$rollback_reported_revision" "$replacement_id" "$before_unrelated"
 
   trap '' HUP INT TERM
   write_state \
