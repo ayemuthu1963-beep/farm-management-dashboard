@@ -1,0 +1,135 @@
+name: Deploy Test backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_revision:
+        description: Exact 40-character backend test-release revision to deploy
+        required: true
+        type: string
+      expected_current_revision:
+        description: Exact 40-character backend revision currently running on Test
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY TEST BACKEND ONLY to authorize the guarded API switch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-test-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require an exact Test-only backend release request
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_CURRENT_REVISION: ${{ inputs.expected_current_revision }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]]
+          [[ "$CONFIRMATION" == "DEPLOY TEST BACKEND ONLY" ]]
+          [[ "$CANDIDATE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_CURRENT_REVISION" =~ ^[0-9a-f]{40}$ ]]
+
+  deploy:
+    needs: authorize
+    environment:
+      name: Test
+      url: https://test.muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Install the dedicated Test-only SSH identity
+        id: ssh
+        shell: bash
+        env:
+          TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST }}
+          TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+          TEST_SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          TEST_SSH_KNOWN_HOSTS: ${{ secrets.TEST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for required_name in TEST_SSH_HOST TEST_SSH_USER TEST_SSH_PRIVATE_KEY TEST_SSH_KNOWN_HOSTS; do
+            [[ -n "${!required_name:-}" ]]
+          done
+          [[ "$TEST_SSH_HOST" == "168.144.179.221" ]]
+          [[ "$TEST_SSH_USER" == "muthu" ]]
+          ssh_dir="$RUNNER_TEMP/mfms-test-backend-ssh"
+          install -d -m 700 "$ssh_dir"
+          printf '%s\n' "$TEST_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$TEST_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_ed25519" "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$TEST_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the approved Test backend revision
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+          EXPECTED_CURRENT_REVISION: ${{ inputs.expected_current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          TEST_SSH_HOST: ${{ vars.TEST_SSH_HOST }}
+          TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/test-backend-deployment.txt"
+          : > "$report"
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
+            "$TEST_SSH_USER@$TEST_SSH_HOST" \
+            "deploy-test-backend $CANDIDATE_REVISION $EXPECTED_CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee "$report"
+          grep -Fqx 'deployment_environment=Test' "$report"
+          grep -Fqx 'deployment_component=backend' "$report"
+          grep -Fqx 'deployment_url=https://test.muthufarms.com' "$report"
+          grep -Fqx "deployed_backend_revision=$CANDIDATE_REVISION" "$report"
+          grep -Fqx 'database=mfms_server_test' "$report"
+          grep -Eq '^database_backup_path=/home/muthu/\.local/state/mfms-test-github/database-backups/mfms_server_test-pre-[0-9a-f]{40}-[0-9]{8}T[0-9]{6}Z\.dump$' "$report"
+          grep -Eq '^database_backup_sha256=[0-9a-f]{64}$' "$report"
+          grep -Eq '^database_backup_bytes=[1-9][0-9]*$' "$report"
+          grep -Fqx 'database_backup_verified=true' "$report"
+          grep -Fqx 'database_migrations=forward-only' "$report"
+          grep -Fqx 'frontend_unchanged=true' "$report"
+          grep -Fqx 'odk_unchanged=true' "$report"
+          grep -Fqx 'schedules_unchanged=true' "$report"
+          grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          grep -Fqx 'production_touched=0' "$report"
+          grep -Fqx 'TEST_BACKEND_DEPLOYMENT=PASS' "$report"
+
+      - name: Upload sanitized Test backend deployment report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: test-backend-deployment-${{ github.run_id }}
+          path: ${{ runner.temp }}/test-backend-deployment.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove Test SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-test-backend-ssh"
