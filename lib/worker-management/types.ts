@@ -54,7 +54,11 @@ export interface LoanTransaction {
   /** ISO date, yyyy-mm-dd */
   date: string
   type: LoanTransactionType
-  /** Positive increases the balance the account owes the farm; negative reduces it. */
+  /**
+   * Signed amount. Negative = cash out to the worker/group (Cash Loan/Advance,
+   * Deposit Withdrawal); positive = money coming back (Wage Repayment, Cash Repayment,
+   * Deposit Contribution). A negative running balance means the account owes the farm.
+   */
   amount: number
   notes: string
 }
@@ -65,7 +69,7 @@ export const navItems = [
   "Worker Directory",
   "Weekly Settlement",
   "Loan Register",
-  "Query",
+  "Registers & History",
 ] as const
 
 export type WorkerSection = (typeof navItems)[number]

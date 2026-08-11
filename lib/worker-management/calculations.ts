@@ -48,16 +48,19 @@ export function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-/** Returns the ISO date of the Monday for the week containing the given ISO date. */
+/**
+ * Farm weeks run Saturday–Friday. Returns the ISO date of the Saturday that starts
+ * the farm week containing the given ISO date.
+ */
 export function getWeekStart(iso: string): string {
   const date = new Date(`${iso}T00:00:00`)
-  const day = date.getDay()
-  const diff = (day === 0 ? -6 : 1) - day
+  const day = date.getDay() // 0 = Sunday … 6 = Saturday
+  const diff = -((day + 1) % 7) // Saturday → 0, Sunday → -1, … Friday → -6
   date.setDate(date.getDate() + diff)
   return toISODate(date)
 }
 
-/** Returns the ISO date of the Sunday for the week containing the given ISO date. */
+/** Returns the ISO date of the Friday that ends the farm week containing the given ISO date. */
 export function getWeekEnd(iso: string): string {
   const start = new Date(`${getWeekStart(iso)}T00:00:00`)
   start.setDate(start.getDate() + 6)
@@ -136,8 +139,18 @@ export function getWagesForWeek(
 }
 
 /**
- * Cash paid directly to the account during the week, sourced from Cash Repayment
- * transactions in the Loan Register. This is informational only — it is never
+ * Cash-out transaction types: money handed to the worker/group. These are recorded as
+ * negative amounts in the ledger (cash received by a worker reduces what they are owed).
+ */
+export function isCashOutTransaction(type: LoanTransaction["type"]): boolean {
+  return type === "Cash Loan/Advance" || type === "Deposit Withdrawal"
+}
+
+/**
+ * Cash Paid During Week = the signed total of cash-out transactions (Cash Loan/Advance,
+ * Deposit Withdrawal) recorded against the account within the selected farm week. It is
+ * negative because cash paid out to the worker is a cash-out event. This figure is
+ * informational only — it is displayed read-only in Weekly Settlement and is NEVER
  * subtracted a second time when computing Balance to Loan.
  */
 export function getCashPaidDuringWeek(
@@ -151,10 +164,10 @@ export function getCashPaidDuringWeek(
       .filter(
         (transaction) =>
           transaction.accountId === accountId &&
-          transaction.type === "Cash Repayment" &&
+          isCashOutTransaction(transaction.type) &&
           isDateInRange(transaction.date, weekStart, weekEnd),
       )
-      .reduce((total, transaction) => total + Math.abs(transaction.amount), 0),
+      .reduce((total, transaction) => total + transaction.amount, 0),
   )
 }
 

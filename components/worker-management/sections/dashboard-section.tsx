@@ -52,9 +52,10 @@ export function DashboardSection() {
     const pendingSettlement = wageEntries
       .filter((entry) => entry.date >= CURRENT_WEEK_START && entry.date <= weekEnd && entry.paidStatus === "Unpaid")
       .reduce((sum, entry) => sum + entry.wage, 0)
+    // A negative balance means the account owes the farm; sum those as the outstanding total.
     const outstandingLoans = activeAccounts.reduce((sum, account) => {
       const balance = getLoanBalance(loanTransactions, account.id)
-      return sum + (balance > 0 ? balance : 0)
+      return sum + (balance < 0 ? -balance : 0)
     }, 0)
     return { activeAccounts: activeAccounts.length, thisWeek, pendingSettlement, outstandingLoans }
   }, [accounts, wageEntries, loanTransactions, weekEnd])

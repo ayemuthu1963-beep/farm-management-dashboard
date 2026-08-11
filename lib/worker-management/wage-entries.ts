@@ -2,10 +2,10 @@ import { findAccount, initialAccounts } from "./accounts"
 import { computeWageAmount } from "./calculations"
 import type { WageEntry } from "./types"
 
-/** Current wage week: Monday 10 Aug 2026 – Sunday 16 Aug 2026 (partially entered, unpaid). */
-export const CURRENT_WEEK_START = "2026-08-10"
-/** Previous wage week: Monday 3 Aug 2026 – Sunday 9 Aug 2026 (fully entered and paid). */
-export const PREVIOUS_WEEK_START = "2026-08-03"
+/** Current farm week: Saturday 08 Aug 2026 – Friday 14 Aug 2026 (partially entered, unpaid). */
+export const CURRENT_WEEK_START = "2026-08-08"
+/** Previous farm week: Saturday 01 Aug 2026 – Friday 07 Aug 2026 (fully entered and paid). */
+export const PREVIOUS_WEEK_START = "2026-08-01"
 
 interface SeedRow {
   accountId: string

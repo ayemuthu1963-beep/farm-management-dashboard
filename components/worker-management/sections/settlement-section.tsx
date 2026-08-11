@@ -46,7 +46,7 @@ export function SettlementSection() {
     <div className="flex flex-col gap-6">
       <SectionHeader
         title="Weekly Settlement"
-        description="Review wages for the week, note any cash already paid, and record the actual weekly payment for each account."
+        description="Review wages for the farm week (Saturday–Friday) and record the actual weekly payment for each account. Balance to Loan = Wages − Weekly Payment."
       />
 
       <div className="rounded-xl border border-border bg-card p-5">
@@ -95,7 +95,13 @@ export function SettlementSection() {
                         <p className="text-xs text-muted-foreground">{row.account.id}</p>
                       </td>
                       <td className="px-3 py-4 text-right font-semibold">{formatRupees(row.wages)}</td>
-                      <td className="px-3 py-4 text-right text-muted-foreground">{formatRupees(row.cashPaidDuringWeek)}</td>
+                      <td className="px-3 py-4 text-right">
+                        {row.cashPaidDuringWeek === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <SignedAmount amount={row.cashPaidDuringWeek} />
+                        )}
+                      </td>
                       <td className="px-3 py-4 text-right">
                         <input
                           type="number"
@@ -137,7 +143,13 @@ export function SettlementSection() {
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Cash paid during week</dt>
-                      <dd className="text-muted-foreground">{formatRupees(row.cashPaidDuringWeek)}</dd>
+                      <dd>
+                        {row.cashPaidDuringWeek === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <SignedAmount amount={row.cashPaidDuringWeek} />
+                        )}
+                      </dd>
                     </div>
                     <div className="col-span-2">
                       <dt className="text-xs text-muted-foreground">Weekly payment</dt>
@@ -157,6 +169,12 @@ export function SettlementSection() {
                 </div>
               ))}
             </div>
+
+            <p className="mt-4 text-xs text-muted-foreground">
+              Cash paid during week is the signed total of cash-out transactions (Cash Loan/Advance, Deposit
+              Withdrawal) recorded in the Loan Register for this farm week. It is shown for reference only and is not
+              deducted from Balance to Loan.
+            </p>
           </>
         )}
       </div>

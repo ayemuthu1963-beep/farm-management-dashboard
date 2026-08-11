@@ -12,13 +12,17 @@ const transactionTypes: LoanTransactionType[] = [
   "Deposit Withdrawal",
 ]
 
-/** Default sign per type: positive increases what the account owes, negative reduces it. */
+/**
+ * Default sign per type. Negative = cash out to the worker (Cash Loan/Advance,
+ * Deposit Withdrawal); positive = money coming back from the worker (Wage Repayment,
+ * Cash Repayment, Deposit Contribution).
+ */
 const defaultSign: Record<LoanTransactionType, 1 | -1> = {
-  "Cash Loan/Advance": 1,
-  "Wage Repayment": -1,
-  "Cash Repayment": -1,
-  "Deposit Contribution": -1,
-  "Deposit Withdrawal": 1,
+  "Cash Loan/Advance": -1,
+  "Wage Repayment": 1,
+  "Cash Repayment": 1,
+  "Deposit Contribution": 1,
+  "Deposit Withdrawal": -1,
 }
 
 export interface LoanTransactionSubmit {
@@ -41,7 +45,7 @@ export function LoanTransactionForm({
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "")
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [type, setType] = useState<LoanTransactionType>("Cash Loan/Advance")
-  const [sign, setSign] = useState<1 | -1>(1)
+  const [sign, setSign] = useState<1 | -1>(-1)
   const [magnitude, setMagnitude] = useState("")
   const [notes, setNotes] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -114,8 +118,8 @@ export function LoanTransactionForm({
               aria-label="Amount sign"
               className="rounded-lg border border-input bg-background px-2 py-2"
             >
-              <option value={1}>+ Increase</option>
-              <option value={-1}>− Decrease</option>
+              <option value={-1}>− Cash out to worker</option>
+              <option value={1}>+ Money in (repayment)</option>
             </select>
             <input
               type="number"

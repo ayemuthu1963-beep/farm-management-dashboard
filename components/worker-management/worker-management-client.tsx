@@ -10,7 +10,7 @@ import { WageEntrySection } from "@/components/worker-management/sections/wage-e
 import { DirectorySection } from "@/components/worker-management/sections/directory-section"
 import { SettlementSection } from "@/components/worker-management/sections/settlement-section"
 import { LoanRegisterSection } from "@/components/worker-management/sections/loan-register-section"
-import { QuerySection } from "@/components/worker-management/sections/query-section"
+import { RegistersSection } from "@/components/worker-management/sections/registers-section"
 import { navItems, type WorkerSection } from "@/lib/worker-management"
 
 function WorkerManagementWorkspace() {
@@ -28,8 +28,8 @@ function WorkerManagementWorkspace() {
         return <SettlementSection />
       case "Loan Register":
         return <LoanRegisterSection />
-      case "Query":
-        return <QuerySection />
+      case "Registers & History":
+        return <RegistersSection />
       default:
         return null
     }
