@@ -207,6 +207,8 @@ assert.match(deployScript, /Preview candidate port \$candidate_port is already a
 assert.match(deployScript, /--ip "\$original_network_ip"/)
 assert.match(deployScript, /Preview frontend network address changed/)
 assert.match(deployScript, /docker network disconnect -f "\$preview_network" "\$container"/)
+assert.match(deployScript, /readonly network_reclaim_attempts="180"/)
+assert.match(deployScript, /seq 1 "\$network_reclaim_attempts"/)
 assert.match(deployScript, /announce_preview_network_identity\(\)/)
 assert.match(deployScript, /--network "container:\$live_container"/)
 assert.match(deployScript, /gratuitous_arp=PASS/)
