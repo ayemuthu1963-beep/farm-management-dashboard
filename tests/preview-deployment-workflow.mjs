@@ -216,9 +216,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add Saturday-safe week selection and correct custom date query scope",
+  "Harden non-Production dependencies, environment identity, and write-target isolation",
 )
-assert.equal(manifest.base_commit, "9a849febbf2f213e102949bd77cf35a7cbe57337")
+assert.equal(manifest.base_commit, "da6f3a2305cbd4897cab74674ef1bd1a295658a6")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -228,12 +228,30 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-settlement.tsx",
-  "components/worker-management/worker-query.tsx",
+  ".github/CODEOWNERS",
+  ".github/pull_request_template.md",
+  ".github/workflows/preview-baseline.yml",
+  "Dockerfile.preview",
+  "app/api/version/route.ts",
+  "app/coconut-counting/page.tsx",
+  "app/fertiliser-management/page.tsx",
+  "app/globals.css",
+  "app/layout.tsx",
+  "app/shadcn-tailwind.css",
+  "components/farm/environment-banner.tsx",
+  "components/farm/local-environment-banner.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-format.ts",
+  "docs/MFMS_RELEASE_GOVERNANCE.md",
+  "eslint.config.mjs",
+  "lib/preview-admin-write-safety.ts",
+  "lib/public-environment.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tests/admin-entry-workflows.mjs",
+  "tests/environment-identity.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
+  "tests/version-visibility.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
