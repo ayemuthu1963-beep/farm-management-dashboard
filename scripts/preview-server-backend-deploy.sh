@@ -86,6 +86,8 @@ migration_plan="$work_dir/migrations.plan"
 openapi_plan="$work_dir/openapi.plan"
 before_unrelated="$work_dir/unrelated.before"
 after_unrelated="$work_dir/unrelated.after"
+: > "$migration_plan"
+: > "$openapi_plan"
 
 candidate_container=""
 transaction_backup=""
