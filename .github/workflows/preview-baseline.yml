@@ -43,5 +43,8 @@ jobs:
       - name: Run TypeScript validation
         run: pnpm typecheck
 
+      - name: Run ESLint validation
+        run: pnpm lint
+
       - name: Build production frontend
         run: pnpm build
