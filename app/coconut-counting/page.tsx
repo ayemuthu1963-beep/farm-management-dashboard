@@ -446,7 +446,7 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border">
-        <div className="border-b border-border bg-muted/50 px-4 py-3"><h3 className="font-bold">Session reset links</h3><p className="text-xs text-muted-foreground">Shows this session's relationship to the session before or after an APK reset.</p></div>
+        <div className="border-b border-border bg-muted/50 px-4 py-3"><h3 className="font-bold">Session reset links</h3><p className="text-xs text-muted-foreground">Shows this session&apos;s relationship to the session before or after an APK reset.</p></div>
         {detail.reset_events.length ? <ul className="divide-y divide-border">{detail.reset_events.map((event) => <li key={event.operation_uuid} className="space-y-2 px-4 py-3 text-sm"><p><strong>Prior session:</strong> {event.prior_session_uuid}</p><p><strong>New session:</strong> {event.new_session_uuid}</p><dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2"><div><dt className="inline font-bold">Operation:</dt> <dd className="inline">{event.operation_uuid}</dd></div><div><dt className="inline font-bold">Source device:</dt> <dd className="inline">{event.source_device_id}</dd></div><div><dt className="inline font-bold">APK created:</dt> <dd className="inline">{formatDateTime(event.event_created_at)}</dd></div><div><dt className="inline font-bold">Server received:</dt> <dd className="inline">{formatDateTime(event.server_received_at)}</dd></div></dl></li>)}</ul> : <p className="px-4 py-6 text-sm text-muted-foreground">No reset links for this session.</p>}
       </div>
     </section>
