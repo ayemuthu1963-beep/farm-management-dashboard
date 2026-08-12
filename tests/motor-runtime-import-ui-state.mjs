@@ -12,6 +12,7 @@ assert.match(component, /function startNewImport\(\)/)
 assert.match(component, /setImports\(\[\]\)/)
 assert.match(component, /setRuns\(\[\]\)/)
 assert.match(component, /Start New Import/)
-assert.match(component, /setError\(null\)\s+patchRun\(run\.key, \{ saving: true/)
+assert.match(component, /setError\(null\)\s+patch\(run\.key, \{ saving: true/)
+assert.match(component, /patch: \(key: string, value: Partial<EditableRun>\) => void = patchRun/)
 
 console.log("Motor Runtime history page-size, clean new-import state and stale-error safeguards: PASS")
