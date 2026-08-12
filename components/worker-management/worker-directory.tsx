@@ -287,7 +287,7 @@ export function WorkerDirectory() {
                 value={form.farmScheme}
                 onChange={(event) => setForm((current) => ({ ...current, farmScheme: event.target.value as FarmScheme }))}
               >
-                <option value="THREE_OPTION">3 — Full, Half, 1/3, Absent</option>
+                <option value="THREE_OPTION">3 — Full, 2/3, 1/3, Absent</option>
                 <option value="TWO_OPTION">2 — Full, Half, Absent</option>
               </WorkerSelect>
             ) : null}

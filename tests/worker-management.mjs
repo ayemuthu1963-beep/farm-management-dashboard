@@ -12,6 +12,7 @@ import {
   WorkerBffError,
 } from "../lib/worker-management-signing.ts"
 import {
+  calculateDailyWage,
   compareAccountCodes,
   defaultSettlementDate,
   workerAccountOptionLabel,
@@ -29,6 +30,16 @@ const check = (condition, message) => {
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
 assertions += 2
+
+for (const [rate, expectedTwoThirds, expectedOneThird] of [
+  [400, 266, 133],
+  [350, 233, 116],
+  [300, 200, 100],
+]) {
+  assert.equal(calculateDailyWage(rate, "TWO_THIRDS", null, "FARM"), expectedTwoThirds)
+  assert.equal(calculateDailyWage(rate, "ONE_THIRD", null, "FARM"), expectedOneThird)
+  assertions += 2
+}
 
 const naturallySortedAccounts = [
   { account_id: 10, account_code: "FW-10", display_name: "Ten" },
@@ -194,6 +205,8 @@ check(/id: "worker-management"[\s\S]*?href: "\/worker-management"[\s\S]*?status:
 const dailyEntry = read("components/worker-management/daily-wage-entry.tsx")
 check(/if \(item\.account_type === "OUTSIDE"\) return \["FULL", "ABSENT"\]/.test(dailyEntry), "Outside Workers must allow only Full or Absent")
 check(/item\.scheme_snapshot === "THREE_OPTION"[\s\S]*?"ONE_THIRD"/.test(dailyEntry), "Three-option Farm Workers must allow one-third day")
+check(/item\.scheme_snapshot === "THREE_OPTION"[\s\S]*?"TWO_THIRDS"/.test(dailyEntry), "Three-option Farm Workers must allow two-thirds day")
+check(dailyEntry.includes("formatWholeINR(item.daily_wage_amount)"), "Daily Wage Entry must display whole rupees without paise")
 check(dailyEntry.includes("attendance_value: null"), "New Daily Wage rows must not default attendance")
 check(dailyEntry.includes("group_attendee_count: null"), "New Group rows must require an explicit attendee count")
 check(dailyEntry.includes("Selection required"), "Unselected Daily Wage rows need a visible required state")

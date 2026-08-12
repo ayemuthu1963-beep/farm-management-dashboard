@@ -9,7 +9,7 @@ import {
   calculateDailyWage,
   compareAccountCodes,
   formatDayDate,
-  formatINR,
+  formatWholeINR,
   money,
   toDateInput,
   workerAccountOptionLabel,
@@ -42,6 +42,7 @@ import { useWorkerOffline } from "./worker-offline-provider"
 
 const attendanceLabels: Record<AttendanceValue, string> = {
   FULL: "Full",
+  TWO_THIRDS: "2/3",
   HALF: "Half",
   ONE_THIRD: "1/3",
   ABSENT: "Absent",
@@ -51,7 +52,7 @@ function availableAttendance(item: DailyWageItem): AttendanceValue[] {
   if (item.account_type === "OUTSIDE") return ["FULL", "ABSENT"]
   if (item.account_type !== "FARM") return []
   return item.scheme_snapshot === "THREE_OPTION"
-    ? ["FULL", "HALF", "ONE_THIRD", "ABSENT"]
+    ? ["FULL", "TWO_THIRDS", "ONE_THIRD", "ABSENT"]
     : ["FULL", "HALF", "ABSENT"]
 }
 
@@ -463,7 +464,7 @@ export function DailyWageEntry() {
                       {!dirtyIds.has(item.account_id) && !syncState && !selectionRequired ? <Badge tone="green">Saved</Badge> : null}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {item.account_code} · {formatINR(item.wage_rate_snapshot)}/day
+                      {item.account_code} · {formatWholeINR(item.wage_rate_snapshot)}/day
                       {item.account_type === "GROUP" ? " per attendee" : ""}
                     </p>
                     {item.account_type === "GROUP" ? (
@@ -474,7 +475,7 @@ export function DailyWageEntry() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Daily total</p>
-                    <p className="font-bold tabular-nums">{formatINR(item.daily_wage_amount)}</p>
+                    <p className="font-bold tabular-nums">{formatWholeINR(item.daily_wage_amount)}</p>
                   </div>
                 </div>
 
@@ -595,7 +596,7 @@ export function DailyWageEntry() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs text-muted-foreground">Daily total</p>
-            <p className="font-bold tabular-nums">{formatINR(dailyTotal)}</p>
+            <p className="font-bold tabular-nums">{formatWholeINR(dailyTotal)}</p>
             <p className="text-[11px] text-muted-foreground">{dirtyIds.size} unsaved</p>
           </div>
           <WorkerButton onClick={save} disabled={saving || loading || !dirtyIds.size || !canEdit}>

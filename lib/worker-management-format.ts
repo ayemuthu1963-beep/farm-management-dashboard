@@ -42,6 +42,15 @@ export function formatINR(value: string | number | null | undefined): string {
   }).format(money(value))
 }
 
+export function formatWholeINR(value: string | number | null | undefined): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(money(value))
+}
+
 export function formatSignedINR(value: string | number | null | undefined): string {
   const numeric = money(value)
   return `${numeric > 0 ? "+" : ""}${formatINR(numeric)}`
@@ -69,7 +78,13 @@ export function accountTypeLabel(value: AccountType): string {
 }
 
 export function attendanceLabel(value: AttendanceValue): string {
-  return { FULL: "Full", HALF: "Half", ONE_THIRD: "1/3", ABSENT: "Absent" }[value]
+  return {
+    FULL: "Full",
+    TWO_THIRDS: "2/3",
+    HALF: "Half",
+    ONE_THIRD: "1/3",
+    ABSENT: "Absent",
+  }[value]
 }
 
 export function weekStatusLabel(value: WeekStatus): string {
@@ -118,8 +133,8 @@ export function calculateDailyWage(
 ): number {
   const rateInPaise = Math.round(money(dailyRate) * 100)
   if (accountType === "GROUP") return Math.round(rateInPaise * Math.max(attendees ?? 0, 0)) / 100
-  const fraction = { FULL: 1, HALF: 0.5, ONE_THIRD: 1 / 3, ABSENT: 0 }[
-    attendance ?? "ABSENT"
-  ]
+  if (attendance === "TWO_THIRDS") return Math.floor((rateInPaise * 2) / 300)
+  if (attendance === "ONE_THIRD") return Math.floor(rateInPaise / 300)
+  const fraction = { FULL: 1, HALF: 0.5, ABSENT: 0 }[attendance ?? "ABSENT"]
   return Math.round(rateInPaise * fraction) / 100
 }

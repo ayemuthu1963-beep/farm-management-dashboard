@@ -50,7 +50,7 @@ function attendanceInput(attendance = "FULL", version = null) {
   }
 }
 
-function dailyResponse(attendance = "HALF", rowVersion = 9) {
+function dailyResponse(attendance = "TWO_THIRDS", rowVersion = 9) {
   return {
     work_date: "2026-08-10",
     week: {
@@ -75,7 +75,7 @@ function dailyResponse(attendance = "HALF", rowVersion = 9) {
         group_attendee_count: null,
         wage_rate_snapshot: "600.00",
         scheme_snapshot: "THREE_OPTION",
-        daily_wage_amount: attendance === "HALF" ? "300.00" : "600.00",
+        daily_wage_amount: attendance === "TWO_THIRDS" ? "400.00" : "600.00",
         notes: null,
         entry_status: "POSTED",
         row_version: rowVersion,
@@ -94,7 +94,7 @@ const firstQueue = await offline.queueAttendanceOperations(
 )
 const secondQueue = await offline.queueAttendanceOperations(
   "2026-08-10",
-  [attendanceInput("HALF")],
+  [attendanceInput("TWO_THIRDS")],
 )
 assert.equal(firstQueue[0].operation_id, secondQueue[0].operation_id, "offline edits must coalesce before sync")
 assert.equal((await offline.getWorkerOfflineSnapshot()).waiting, 1)
@@ -103,7 +103,7 @@ assert.equal(secondQueue[0].state, "SAVED_ON_DEVICE")
 await offline.resetWorkerOfflineConnectionForTests()
 const afterRestart = await offline.getWorkerOfflineSnapshot()
 assert.equal(afterRestart.waiting, 1, "queued data must survive an application restart")
-assert.equal(afterRestart.operations[0].payload.attendance, "HALF")
+assert.equal(afterRestart.operations[0].payload.attendance, "TWO_THIRDS")
 
 let pushCount = 0
 const successfulDependencies = {
@@ -170,7 +170,7 @@ assert.equal(conflictRun.conflicts, 1)
 const conflict = conflictRun.operations.find((operation) => operation.state === "CONFLICT")
 assert.ok(conflict)
 
-await offline.attachAttendanceServerSnapshots(dailyResponse("HALF", 9))
+await offline.attachAttendanceServerSnapshots(dailyResponse("TWO_THIRDS", 9))
 await offline.resolveAttendanceConflict(conflict.operation_id, "LOCAL")
 const retried = (await offline.getWorkerOfflineSnapshot()).operations.find(
   (operation) => operation.state === "WAITING_TO_SYNC" && operation.entity_type === "ATTENDANCE",
