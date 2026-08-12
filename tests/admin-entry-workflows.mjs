@@ -118,6 +118,8 @@ assert.match(motorManagementRoute, /getAuthenticatedUserAssertionHeaders/)
 assert.match(motorManagementRoute, /X-Content-Type-Options/)
 assert.match(motorManagementApi, /publishManagedSession/)
 assert.match(motorManagementApi, /voidManagedSession/)
+assert.match(motorManagementApi, /Array\.isArray\(payload\)/)
+assert.match(motorManagementApi, /Array\.isArray\(\(payload as \{ items\?: unknown \}\)\.items\)/)
 
 const wellPage = read("app/admin/well-water/page.tsx")
 const wellClient = read("components/admin/well-water-admin-client.tsx")

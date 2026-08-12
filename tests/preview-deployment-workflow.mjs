@@ -268,6 +268,7 @@ assert.deepEqual(manifest.protected_invariants, {
 const expectedReleasePaths = [
   "components/admin/motor-runtime-management-client.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/motor-runtime-management-api.ts",
   "tests/admin-entry-workflows.mjs",
   "tests/motor-runtime-import-ui-state.mjs",
   "tests/preview-deployment-workflow.mjs",

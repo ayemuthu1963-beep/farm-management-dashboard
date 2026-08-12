@@ -125,7 +125,12 @@ async function json<T>(response: Response): Promise<T> {
 const BASE = "/api/admin/motor-runtime/management"
 
 export async function loadPlotOptions(): Promise<PlotOption[]> {
-  return json(await fetch(`${BASE}/plot-options`, { cache: "no-store" }))
+  const payload = await json<unknown>(await fetch(`${BASE}/plot-options`, { cache: "no-store" }))
+  if (Array.isArray(payload)) return payload as PlotOption[]
+  if (payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)) {
+    return (payload as { items: PlotOption[] }).items
+  }
+  return []
 }
 
 export async function loadAllEvents(query: URLSearchParams): Promise<PageResult<AllEvent>> {
