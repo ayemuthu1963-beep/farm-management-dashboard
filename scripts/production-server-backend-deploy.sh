@@ -235,7 +235,7 @@ proxy_digest() {
 
 proxy_target_count() {
   docker exec "$proxy_container" sh -c \
-    "grep -R -F 'proxy_pass http://mfms-v0-preview-web:3000' /etc/nginx/conf.d 2>/dev/null | wc -l" \
+    "grep -R -F 'server mfms-v0-preview-web:3000;' /etc/nginx/conf.d 2>/dev/null | wc -l" \
     | tr -d '[:space:]'
 }
 
