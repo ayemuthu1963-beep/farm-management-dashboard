@@ -132,10 +132,12 @@ function validateOperationalPayload(value: unknown): FarmMapOperationalPayload {
 
 function treeLabelIcon(leaflet: LeafletApi, treeNo: string, classification: string | null) {
   const style = classificationStyle(classification)
+  const labelWidth = Math.max(26, treeNo.length * 7 + 9)
   return leaflet.divIcon({
     className: "farm-map-tree-label",
-    html: `<span style="pointer-events:none;display:inline-block;transform:translate(-50%,-145%);padding:1px 4px;border:1px solid ${style.border};border-radius:3px;background:${style.fill};color:${style.text};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap">${escapeHtml(treeNo)}</span>`,
-    iconSize: [1, 1],
+    html: `<span style="box-sizing:border-box;display:flex;width:100%;height:100%;align-items:center;justify-content:center;padding:1px 4px;border:1px solid ${style.border};border-radius:3px;background:${style.fill};color:${style.text};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap">${escapeHtml(treeNo)}</span>`,
+    iconSize: [labelWidth, 17],
+    iconAnchor: [labelWidth / 2, 25],
   })
 }
 
