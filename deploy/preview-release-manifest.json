@@ -3,10 +3,12 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Correct the Preview release scope for the full TreeNo label hit box",
-  "base_commit": "2b9d25e343145b1770fe41749e8d35886b55a37d",
+  "release_note": "Make the full visible TreeNo label box a first-click tree selection target",
+  "base_commit": "2ac9fa49f1bc20a89943da3e45d779b1a98667f3",
   "allowed_paths": [
+    "components/maps/farm-map-client.tsx",
     "deploy/preview-release-manifest.json",
+    "tests/farm-map-tree-click.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {

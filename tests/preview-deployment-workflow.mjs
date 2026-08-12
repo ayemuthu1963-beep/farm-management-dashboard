@@ -259,9 +259,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Correct the Preview release scope for the full TreeNo label hit box",
+  "Make the full visible TreeNo label box a first-click tree selection target",
 )
-assert.equal(manifest.base_commit, "2b9d25e343145b1770fe41749e8d35886b55a37d")
+assert.equal(manifest.base_commit, "2ac9fa49f1bc20a89943da3e45d779b1a98667f3")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -271,7 +271,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
+  "tests/farm-map-tree-click.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
