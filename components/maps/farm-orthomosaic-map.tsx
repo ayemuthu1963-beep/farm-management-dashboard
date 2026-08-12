@@ -2,69 +2,19 @@
 
 import type { ReactNode } from "react"
 import { useEffect, useRef, useState } from "react"
+import type Leaflet from "leaflet"
 import { Layers, MapPinned, Maximize2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { PMTiles, TileType, leafletRasterLayer } from "pmtiles"
+
 import { Panel } from "@/components/farm/panel"
+import { Button } from "@/components/ui/button"
 import { farmCombinedLayer, plotBounds, type Coordinate } from "@/lib/farm-map-data"
 
-export type LeafletMap = {
-  fitBounds: (bounds: Coordinate[], options?: Record<string, unknown>) => void
-  setView: (center: Coordinate, zoom: number, options?: Record<string, unknown>) => void
-  getZoom: () => number
-  hasLayer: (layer: LeafletLayerGroup) => boolean
-  on: (eventName: string, handler: () => void) => LeafletMap
-  off: (eventName: string, handler: () => void) => LeafletMap
-  remove: () => void
-}
-
-export type LeafletTileLayer = {
-  addTo: (map: LeafletMap) => LeafletTileLayer
-  remove: () => void
-}
-
-export type LeafletCircleMarker = {
-  addTo: (target: LeafletMap | LeafletLayerGroup) => LeafletCircleMarker
-  bindPopup: (content: string, options?: Record<string, unknown>) => LeafletCircleMarker
-  bindTooltip: (content: string, options?: Record<string, unknown>) => LeafletCircleMarker
-  openPopup: () => LeafletCircleMarker
-  setStyle: (options: Record<string, unknown>) => LeafletCircleMarker
-  on: (eventName: string, handler: () => void) => LeafletCircleMarker
-  getElement?: () => SVGElement | undefined
-}
-
-export type LeafletDivIcon = Record<string, unknown>
-
-export type LeafletMarker = {
-  addTo: (target: LeafletMap | LeafletLayerGroup) => LeafletMarker
-  bindPopup: (content: string, options?: Record<string, unknown>) => LeafletMarker
-  bindTooltip: (content: string, options?: Record<string, unknown>) => LeafletMarker
-  openPopup: () => LeafletMarker
-  on: (eventName: string, handler: () => void) => LeafletMarker
-  setIcon: (icon: LeafletDivIcon) => LeafletMarker
-  getElement?: () => HTMLElement | undefined
-}
-
-export type LeafletLayerGroup = {
-  addTo: (map: LeafletMap) => LeafletLayerGroup
-  addLayer: (layer: LeafletCircleMarker | LeafletMarker) => LeafletLayerGroup
-  clearLayers: () => void
-  remove: () => void
-}
-
-export type LeafletApi = {
-  map: (element: HTMLElement, options: Record<string, unknown>) => LeafletMap
-  tileLayer: (url: string, options: Record<string, unknown>) => LeafletTileLayer
-  circleMarker: (latlng: Coordinate, options: Record<string, unknown>) => LeafletCircleMarker
-  divIcon: (options: Record<string, unknown>) => LeafletDivIcon
-  marker: (latlng: Coordinate, options: Record<string, unknown>) => LeafletMarker
-  layerGroup: () => LeafletLayerGroup
-}
-
-declare global {
-  interface Window {
-    L?: LeafletApi
-  }
-}
+export type LeafletMap = Leaflet.Map
+export type LeafletApi = typeof Leaflet
+export type LeafletCircleMarker = Leaflet.CircleMarker
+export type LeafletMarker = Leaflet.Marker
+export type LeafletLayerGroup = Leaflet.LayerGroup
 
 interface FarmOrthomosaicMapProps {
   mapTitle?: ReactNode
@@ -80,38 +30,7 @@ interface FarmOrthomosaicMapProps {
   contentBelowMap?: ReactNode
 }
 
-const LEAFLET_CSS_ID = "mfms-leaflet-css"
-const LEAFLET_SCRIPT_ID = "mfms-leaflet-script"
 const FARM_FIT_PADDING: [number, number] = [8, 8]
-
-function loadLeaflet(): Promise<LeafletApi> {
-  if (window.L) return Promise.resolve(window.L)
-
-  return new Promise((resolve, reject) => {
-    if (!document.getElementById(LEAFLET_CSS_ID)) {
-      const link = document.createElement("link")
-      link.id = LEAFLET_CSS_ID
-      link.rel = "stylesheet"
-      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      document.head.appendChild(link)
-    }
-
-    const existingScript = document.getElementById(LEAFLET_SCRIPT_ID) as HTMLScriptElement | null
-    if (existingScript) {
-      existingScript.addEventListener("load", () => (window.L ? resolve(window.L) : reject(new Error("Leaflet unavailable"))))
-      existingScript.addEventListener("error", () => reject(new Error("Leaflet failed to load")))
-      return
-    }
-
-    const script = document.createElement("script")
-    script.id = LEAFLET_SCRIPT_ID
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    script.async = true
-    script.onload = () => (window.L ? resolve(window.L) : reject(new Error("Leaflet unavailable")))
-    script.onerror = () => reject(new Error("Leaflet failed to load"))
-    document.body.appendChild(script)
-  })
-}
 
 function fullBounds(): Coordinate[] {
   return farmCombinedLayer.bounds
@@ -119,7 +38,7 @@ function fullBounds(): Coordinate[] {
 
 export function FarmOrthomosaicMap({
   mapTitle = "Drone Orthomosaic Map",
-  note = "Drone orthomosaic preview. Tree points, wells, beetle traps, and pipeline overlays will be added later.",
+  note = "Approved GIS coordinates and live MFMS data are separate overlays over the protected orthomosaic.",
   className = "",
   mapHeightClassName = "h-[54vh] min-h-[360px]",
   showLayerControls = true,
@@ -132,45 +51,63 @@ export function FarmOrthomosaicMap({
 }: FarmOrthomosaicMapProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
-  const tileRef = useRef<LeafletTileLayer | null>(null)
+  const tileRef = useRef<Leaflet.GridLayer | null>(null)
   const [layerEnabled, setLayerEnabled] = useState(true)
-  const [status, setStatus] = useState("Loading map…")
+  const [opacity, setOpacity] = useState(100)
+  const [status, setStatus] = useState("Loading PMTiles orthomosaic…")
 
   useEffect(() => {
     let cancelled = false
     let overlayCleanup: void | (() => void)
 
-    loadLeaflet()
-      .then((leaflet) => {
-        if (cancelled || !mapElementRef.current) return
+    async function initializeMap() {
+      if (!mapElementRef.current) return
 
-        const map = leaflet.map(mapElementRef.current, {
-          center: farmCombinedLayer.center,
-          zoom: farmCombinedLayer.defaultZoom,
-          minZoom: farmCombinedLayer.minZoom,
-          maxZoom: farmCombinedLayer.maxZoom,
-          zoomControl: true,
-          zoomSnap: 0.1,
-          zoomDelta: 0.5,
-          attributionControl: Boolean(farmCombinedLayer.attribution),
-        })
-        mapRef.current = map
+      const { default: leaflet } = await import("leaflet")
+      // The official PMTiles Leaflet adapter expects Leaflet on the browser global.
+      ;(globalThis as typeof globalThis & { L: typeof Leaflet }).L = leaflet
+      const archive = new PMTiles(farmCombinedLayer.pmtilesUrl)
+      const header = await archive.getHeader()
+      if (header.tileType !== TileType.Webp || header.minZoom !== 16 || header.maxZoom !== 22) {
+        throw new Error("The orthomosaic PMTiles header does not match the approved archive")
+      }
+      if (cancelled || !mapElementRef.current) return
 
-        const tile = leaflet.tileLayer(farmCombinedLayer.tileUrl, {
-          minZoom: farmCombinedLayer.minZoom,
-          maxZoom: farmCombinedLayer.maxZoom,
-          tms: false,
-          opacity: 1,
-          attribution: farmCombinedLayer.attribution,
-        })
-        tileRef.current = tile
-        tile.addTo(map)
-
-        map.setView(farmCombinedLayer.center, farmCombinedLayer.initialPresentationZoom, { animate: false })
-        overlayCleanup = onMapReady?.(map, leaflet)
-        setStatus("Combined farm orthomosaic loaded.")
+      const map = leaflet.map(mapElementRef.current, {
+        center: farmCombinedLayer.center,
+        zoom: farmCombinedLayer.defaultZoom,
+        minZoom: farmCombinedLayer.minZoom,
+        maxZoom: farmCombinedLayer.maxZoom,
+        zoomControl: true,
+        zoomSnap: 0.1,
+        zoomDelta: 0.5,
+        attributionControl: Boolean(farmCombinedLayer.attribution),
       })
-      .catch(() => setStatus("Map library could not load. Please check internet connection and try again."))
+      mapRef.current = map
+
+      const tile = leafletRasterLayer(archive, {
+        minZoom: farmCombinedLayer.minZoom,
+        maxZoom: farmCombinedLayer.maxZoom,
+        maxNativeZoom: 22,
+        tileSize: 256,
+        opacity: 1,
+        attribution: farmCombinedLayer.attribution,
+      }) as Leaflet.GridLayer
+      tile.on("tileerror", () => setStatus("An orthomosaic tile request failed."))
+      tileRef.current = tile
+      tile.addTo(map)
+
+      map.setView(farmCombinedLayer.center, farmCombinedLayer.initialPresentationZoom, {
+        animate: false,
+      })
+      overlayCleanup = onMapReady?.(map, leaflet)
+      setStatus("Full-farm PMTiles orthomosaic loaded.")
+    }
+
+    void initializeMap().catch((error: unknown) => {
+      console.error("[farm-map-pmtiles]", error)
+      setStatus("Orthomosaic could not be loaded. Tree coordinates remain available when possible.")
+    })
 
     return () => {
       cancelled = true
@@ -179,19 +116,20 @@ export function FarmOrthomosaicMap({
       mapRef.current = null
       tileRef.current = null
     }
-  }, [])
+  }, [onMapReady])
 
   useEffect(() => {
     const map = mapRef.current
     const tile = tileRef.current
     if (!map || !tile) return
 
-    if (layerEnabled) {
-      tile.addTo(map)
-    } else {
-      tile.remove()
-    }
+    if (layerEnabled && !map.hasLayer(tile)) tile.addTo(map)
+    if (!layerEnabled && map.hasLayer(tile)) tile.remove()
   }, [layerEnabled])
+
+  useEffect(() => {
+    tileRef.current?.setOpacity(opacity / 100)
+  }, [opacity])
 
   function fitTo(bounds: Coordinate[]) {
     mapRef.current?.fitBounds(bounds, { padding: FARM_FIT_PADDING })
@@ -211,16 +149,30 @@ export function FarmOrthomosaicMap({
   )
 
   const layerControls = showLayerControls ? (
-    <Panel title="Layer Controls" icon={Layers}>
-      <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground">
-        <span>{farmCombinedLayer.name}</span>
-        <input
-          type="checkbox"
-          checked={layerEnabled}
-          onChange={() => setLayerEnabled((current) => !current)}
-          className="size-4 accent-primary"
-        />
-      </label>
+    <Panel title="Raster Layer" icon={Layers}>
+      <div className="grid gap-3">
+        <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground">
+          <span>{farmCombinedLayer.name}</span>
+          <input
+            type="checkbox"
+            checked={layerEnabled}
+            onChange={() => setLayerEnabled((current) => !current)}
+            className="size-4 accent-primary"
+          />
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium text-foreground">
+          Orthomosaic opacity: {opacity}%
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={opacity}
+            onChange={(event) => setOpacity(Number(event.target.value))}
+            className="w-full accent-primary"
+          />
+        </label>
+      </div>
     </Panel>
   ) : null
 
@@ -252,7 +204,11 @@ export function FarmOrthomosaicMap({
     </Panel>
   ) : null
 
-  const notePanel = note ? <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">{note}</div> : null
+  const notePanel = note ? (
+    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+      {note}
+    </div>
+  ) : null
 
   if (controlsPlacement === "below") {
     return (

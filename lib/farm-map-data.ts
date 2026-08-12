@@ -3,7 +3,8 @@ export type Coordinate = [number, number]
 export interface FarmCombinedLayer {
   id: "farm-combined"
   name: string
-  tileUrl: string
+  pmtilesUrl: string
+  coordinatesUrl: string
   bounds: Coordinate[]
   center: Coordinate
   minZoom: number
@@ -45,8 +46,11 @@ export const plotBounds: Record<"plot1" | "plot2", Coordinate[]> = {
 
 export const farmCombinedLayer: FarmCombinedLayer = {
   id: "farm-combined",
-  name: "Farm Combined Orthomosaic",
-  tileUrl: "/map-tiles/farm-combined-png/{z}/{x}/{y}.png",
+  name: "Muthu Farms Full Orthomosaic 2026",
+  pmtilesUrl:
+    "/map-tiles/farm-combined-png/phase2d-b/orthomosaic/Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles",
+  coordinatesUrl:
+    "/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
   bounds: [...plotBounds.plot1, ...plotBounds.plot2],
   center: [10.4812, 77.077],
   minZoom: 16,
@@ -55,10 +59,10 @@ export const farmCombinedLayer: FarmCombinedLayer = {
   initialPresentationZoom: 17.8,
   attribution: "",
   metadata: {
-    source: "Combined Plot 1 and Plot 2 XYZ tile package",
+    source: "Approved full-farm WebP raster PMTiles",
     webCrs: "EPSG:3857",
     zoomLevels: "16 to 22",
-    tileFormat: "PNG",
-    folder: "/home/muthu/mfms-map-data/web_tiles/farm-combined-png",
+    tileFormat: "WebP with alpha in PMTiles",
+    folder: "/map-data/orthomosaic/",
   },
 }
