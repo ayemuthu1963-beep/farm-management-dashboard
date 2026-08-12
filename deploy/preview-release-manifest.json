@@ -11,6 +11,7 @@
     "deploy/preview-release-manifest.json",
     "lib/farm-map/tree-hit-testing.ts",
     "package.json",
+    "scripts/preview-server-deploy.sh",
     "tests/farm-map-tree-click.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
