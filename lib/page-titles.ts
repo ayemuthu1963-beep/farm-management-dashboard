@@ -29,6 +29,7 @@ const exactPageTitles: Record<string, string> = {
   "/pipeline-layout": "MFMS-Pipeline Layout",
   "/under-construction": "MFMS-Coming Soon",
   "/well-water": "MFMS-Well Water Data",
+  "/worker-management/daily-attendance": "MFMS-Daily Attendance",
 }
 
 function humanizeRouteSegment(segment: string): string {
