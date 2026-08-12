@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const DEFAULT_TILE_ROOT = "C:\\MFMS_LOCAL\\map-data\\web_tiles\\farm-combined-png"
-const TILE_ROOT = path.resolve(process.env.MFMS_LOCAL_TILE_ROOT ?? DEFAULT_TILE_ROOT)
+const TILE_ROOT = path.resolve(
+  /* turbopackIgnore: true */ process.env.MFMS_LOCAL_TILE_ROOT ?? DEFAULT_TILE_ROOT,
+)
 const INTEGER_PATTERN = /^\d+$/
 const PNG_SIGNATURE = "89504e470d0a1a0a"
 
@@ -54,7 +56,7 @@ export async function GET(_request: Request, { params }: TileRouteParams) {
   }
 
   try {
-    const tile = await readFile(tilePath)
+    const tile = await readFile(/* turbopackIgnore: true */ tilePath)
 
     if (!isPng(tile)) {
       return notFound()
