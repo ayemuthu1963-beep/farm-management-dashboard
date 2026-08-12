@@ -174,6 +174,7 @@ assertions += 1
 
 const routeFiles = [
   "app/worker-management/page.tsx",
+  "app/worker-management/daily-attendance/page.tsx",
   "app/worker-management/workers/page.tsx",
   "app/worker-management/weekly-settlement/page.tsx",
   "app/worker-management/loan-register/page.tsx",
@@ -186,6 +187,7 @@ for (const route of routeFiles) check(existsSync(join(root, route)), `Missing Wo
 const moduleShell = read("components/worker-management/worker-module-shell.tsx")
 const expectedOrder = [
   'label: "Daily Wage Entry"',
+  'label: "Daily Attendance"',
   'label: "Worker Management"',
   'label: "Weekly Settlement"',
   'label: "Loan Register"',
@@ -201,6 +203,20 @@ for (const label of expectedOrder) {
 
 const mfmsNavigation = read("lib/mfms-navigation.ts")
 check(/id: "worker-management"[\s\S]*?href: "\/worker-management"[\s\S]*?status: "active"/.test(mfmsNavigation), "Global Worker navigation is not active")
+
+const dailyAttendance = read("components/worker-management/daily-attendance.tsx")
+check(dailyAttendance.includes('title="Full attendance"'), "Daily Attendance needs a green full-attendance tick")
+check(dailyAttendance.includes('title="Absent"'), "Daily Attendance needs a red absent mark")
+for (const fraction of ["1/3", "1/2", "2/3"]) {
+  check(dailyAttendance.includes(`"${fraction}"`), `Daily Attendance is missing the blue ${fraction} mark`)
+}
+check(dailyAttendance.includes("fetchAccounts({ isActive: true"), "Daily Attendance must load every active worker")
+check(dailyAttendance.includes("datesForWeek"), "Daily Attendance must show the full Saturday-Friday week")
+check(dailyAttendance.includes("No entry"), "Daily Attendance must distinguish a missing entry from an absence")
+check(dailyAttendance.includes("readCachedDailyWages"), "Daily Attendance must remain available from the offline roster cache")
+
+const workerServiceWorker = read("public/worker-management-sw.js")
+check(workerServiceWorker.includes('"/worker-management/daily-attendance"'), "Daily Attendance must be included in the Worker offline shell")
 
 const dailyEntry = read("components/worker-management/daily-wage-entry.tsx")
 check(/if \(item\.account_type === "OUTSIDE"\) return \["FULL", "ABSENT"\]/.test(dailyEntry), "Outside Workers must allow only Full or Absent")

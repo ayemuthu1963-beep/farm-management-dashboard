@@ -1,7 +1,7 @@
 {
   "name": "Muthu Farms Worker Management",
   "short_name": "Worker Management",
-  "description": "Offline-capable daily wage and worker loan entry for Muthu Farms.",
+  "description": "Offline-capable attendance, daily wage, and worker loan management for Muthu Farms.",
   "start_url": "/worker-management",
   "scope": "/worker-management",
   "display": "standalone",

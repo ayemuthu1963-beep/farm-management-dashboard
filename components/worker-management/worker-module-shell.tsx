@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   CalendarDays,
+  ClipboardCheck,
   Cloud,
   CloudOff,
   LayoutDashboard,
@@ -27,6 +28,7 @@ const moduleNavigation: ReadonlyArray<{
   icon: LucideIcon
 }> = [
   { href: "/worker-management", label: "Daily Wage Entry", icon: CalendarDays },
+  { href: "/worker-management/daily-attendance", label: "Daily Attendance", icon: ClipboardCheck },
   { href: "/worker-management/workers", label: "Worker Management", icon: Users },
   { href: "/worker-management/weekly-settlement", label: "Weekly Settlement", icon: WalletCards },
   { href: "/worker-management/loan-register", label: "Loan Register", icon: WalletCards },
@@ -158,7 +160,7 @@ function WorkerModuleContent({ children }: { children: ReactNode }) {
               <div className="flex items-start justify-between border-b border-border p-4">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Data Entry</p>
-                  <p className="mt-1 font-semibold">Worker Management</p>
+                  <p className="mt-1 font-semibold">Keep the week moving</p>
                 </div>
                 <button
                   type="button"
