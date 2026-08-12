@@ -109,6 +109,11 @@ for (const colour of Object.values(expectedColours)) {
 const proxyRoute = await readFile("app/api/farm-map/trees/route.ts", "utf8")
 assert.match(proxyRoute, /fetchFarmMapTrees/)
 assert.match(proxyRoute, /Farm Map operational data is temporarily unavailable/)
+assert.match(proxyRoute, /brotliCompressSync/)
+assert.match(proxyRoute, /gzipSync/)
+assert.match(proxyRoute, /Content-Encoding/)
+assert.match(proxyRoute, /Vary: "Accept-Encoding"/)
+assert.match(proxyRoute, /Cache-Control": "private, no-store"/)
 assert.doesNotMatch(proxyRoute, /Authorization|HARVEST_API_PASSWORD/)
 
 const serverFetch = await readFile("lib/farm-map/server.ts", "utf8")
