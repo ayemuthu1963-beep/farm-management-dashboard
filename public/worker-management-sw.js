@@ -1,6 +1,7 @@
-const CACHE_VERSION = "mfms-worker-shell-v1"
+const CACHE_VERSION = "mfms-worker-shell-v2"
 const WORKER_SHELL = [
   "/worker-management",
+  "/worker-management/daily-attendance",
   "/worker-management/workers",
   "/worker-management/weekly-settlement",
   "/worker-management/loan-register",
