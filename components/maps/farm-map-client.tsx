@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Trees } from "lucide-react"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { AlertTriangle, RefreshCw, Trees } from "lucide-react"
 
 import { Panel } from "@/components/farm/panel"
 import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
@@ -11,102 +11,40 @@ import {
   type LeafletCircleMarker,
   type LeafletLayerGroup,
   type LeafletMap,
-  type LeafletMarker,
 } from "@/components/maps/farm-orthomosaic-map"
+import { Button } from "@/components/ui/button"
+import { farmCombinedLayer } from "@/lib/farm-map-data"
 import {
-  treeNumberOptionKey,
-  type TreeNumberOption,
-} from "@/lib/tree-number-options"
+  CLASSIFICATION_STYLES,
+  PERFORMANCE_CLASSIFICATIONS,
+  UNKNOWN_CLASSIFICATION_STYLE,
+  classificationFilterKey,
+  classificationStyle,
+  type ClassificationFilter,
+} from "@/lib/farm-map/classification-styles"
+import { canonicalTreeNo } from "@/lib/farm-map/tree-number"
+import type {
+  FarmMapCoordinateCollection,
+  FarmMapCoordinateFeature,
+  FarmMapOperationalPayload,
+  FarmMapOperationalRecord,
+  PlotName,
+} from "@/lib/farm-map/types"
+import { treeNumberOptionKey, type TreeNumberOption } from "@/lib/tree-number-options"
 
-type PlotName = "Plot 1" | "Plot 2"
 type PlotFilter = "Plot 1 & Plot 2" | PlotName
-
-interface CoconutTreeFeature {
-  type: "Feature"
-  geometry: {
-    type: "Point"
-    coordinates: [number, number]
-  }
-  properties: {
-    TreeNo: string
-    Plot: PlotName
-  }
-}
-
-interface CoconutTreeCollection {
-  type: "FeatureCollection"
-  features: CoconutTreeFeature[]
-}
-
-interface TreeHarvestSummary {
-  treeNo: string
-  status: string | null
-  classification: string | null
-  lastHarvestDate: string | null
-  latestBunches: number | null
-  latestNuts: number | null
-  currentYearTotalNuts: number | null
-  missedHarvestCycles: number | null
-  hasHarvestData: boolean
-}
+type DataState = "loading" | "ready" | "stale" | "partial" | "error"
 
 interface TreeMapEntry {
-  feature: CoconutTreeFeature
+  feature: FarmMapCoordinateFeature
   marker: LeafletCircleMarker
-  label: LeafletMarker
 }
 
-interface TreeClassificationRow {
-  treeNo: string
-  classification: string | null
-}
-
-const TREE_SOURCES: Array<{ plot: PlotName; url: string }> = [
-  { plot: "Plot 1", url: "/map-data/vector/plot1-coconut-trees-v1.geojson" },
-  { plot: "Plot 2", url: "/map-data/vector/plot2-coconut-trees-v1.geojson" },
-]
 const MARKER_ZOOM = 18
 const LABEL_ZOOM = 20
-const SUMMARY_CACHE_MS = 5 * 60 * 1000
-
-const TREE_LABEL_COLOURS: Record<string, { background: string; text: string; shadow: string }> = {
-  "Century Maker": { background: "#166534", text: "#ffffff", shadow: "#14532d" },
-  "Match Winner": { background: "#15803d", text: "#ffffff", shadow: "#14532d" },
-  "Reliable Batter": { background: "#1d4ed8", text: "#ffffff", shadow: "#1e3a8a" },
-  "Tail Ender": { background: "#f59e0b", text: "#111827", shadow: "#fef3c7" },
-  "Bench Player": { background: "#b91c1c", text: "#ffffff", shadow: "#7f1d1d" },
-  "Future Better": { background: "#7e22ce", text: "#ffffff", shadow: "#581c87" },
-}
-
-const DEFAULT_TREE_LABEL_COLOUR = {
-  background: "rgba(255,255,255,.82)",
-  text: "#0f172a",
-  shadow: "#ffffff",
-}
-
-const TREE_CLASSIFICATION_LEGENDS = [
-  {
-    title: "Plot 1: Tree numbers 1 to 999",
-    rows: [
-      { badge: "💯", category: "Century Maker", criteria: "Over 400 nuts in last 10 harvests" },
-      { badge: "🔥", category: "Match Winner", criteria: "300 to 399 nuts in last 10 harvests" },
-      { badge: "👍", category: "Reliable Batter", criteria: "225 to 299 nuts in last 10 harvests" },
-      { badge: "😬", category: "Tail Ender", criteria: "175 to 224 nuts in last 10 harvests" },
-      { badge: "🪑", category: "Bench Player", criteria: "Less than 175 nuts in last 10 harvests" },
-      { badge: "🌱", category: "Future Better", criteria: "Saplings under 36 completed months" },
-    ],
-  },
-  {
-    title: "Plot 2: Tree numbers above 1000",
-    rows: [
-      { badge: "🔥", category: "Match Winner", criteria: "200 to 299 nuts in last 10 harvests" },
-      { badge: "👍", category: "Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests" },
-      { badge: "😬", category: "Tail Ender", criteria: "100 to 149 nuts in last 10 harvests" },
-      { badge: "🪑", category: "Bench Player", criteria: "Less than 100 nuts in last 10 harvests" },
-      { badge: "🌱", category: "Future Better", criteria: "Saplings under 36 completed months" },
-    ],
-  },
-] as const
+const OPERATIONAL_REFRESH_MS = 5 * 60 * 1000
+const EXPECTED_TREE_COUNT = 2_117
+const EXPECTED_PLOT_COUNTS: Record<PlotName, number> = { "Plot 1": 954, "Plot 2": 1_163 }
 
 function escapeHtml(value: string) {
   return value
@@ -117,144 +55,177 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;")
 }
 
-function display(value: string | number | null) {
-  if (value === null || value === "") return "—"
+function display(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") return "—"
   return typeof value === "number" ? value.toLocaleString("en-IN") : escapeHtml(value)
 }
 
-function treeLabelIcon(
-  leaflet: LeafletApi,
-  treeNo: string,
-  classification: string | null | undefined,
-) {
-  const colour = TREE_LABEL_COLOURS[classification ?? ""] ?? DEFAULT_TREE_LABEL_COLOUR
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "Unavailable"
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("en-IN")
+}
+
+function validateCoordinateCollection(value: unknown): FarmMapCoordinateCollection {
+  const collection = value as FarmMapCoordinateCollection
+  if (collection?.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
+    throw new Error("Coordinate GeoJSON is not a FeatureCollection")
+  }
+  if (collection.features.length !== EXPECTED_TREE_COUNT) {
+    throw new Error(`Expected ${EXPECTED_TREE_COUNT} coordinates, found ${collection.features.length}`)
+  }
+
+  const seen = new Set<string>()
+  const counts: Record<PlotName, number> = { "Plot 1": 0, "Plot 2": 0 }
+  for (const feature of collection.features) {
+    const treeNo = canonicalTreeNo(feature?.properties?.treeNo)
+    const plot = feature?.properties?.plot
+    const coordinates = feature?.geometry?.coordinates
+    if (
+      feature?.type !== "Feature" ||
+      feature?.geometry?.type !== "Point" ||
+      treeNo === null ||
+      treeNo !== feature.properties.treeNo ||
+      (plot !== "Plot 1" && plot !== "Plot 2") ||
+      !Array.isArray(coordinates) ||
+      coordinates.length !== 2 ||
+      !coordinates.every(Number.isFinite)
+    ) {
+      throw new Error("Coordinate GeoJSON contains an invalid feature")
+    }
+    if (seen.has(treeNo)) throw new Error(`Duplicate spatial TreeNo ${treeNo}`)
+    seen.add(treeNo)
+    counts[plot] += 1
+  }
+  for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
+    if (counts[plot] !== EXPECTED_PLOT_COUNTS[plot]) {
+      throw new Error(`${plot} coordinate count is ${counts[plot]}`)
+    }
+  }
+  return collection
+}
+
+function validateOperationalPayload(value: unknown): FarmMapOperationalPayload {
+  const payload = value as FarmMapOperationalPayload
+  if (
+    payload?.recordCount !== EXPECTED_TREE_COUNT ||
+    payload?.decimalTreeNoCount !== 15 ||
+    !Array.isArray(payload.records) ||
+    payload.records.length !== EXPECTED_TREE_COUNT
+  ) {
+    throw new Error("Operational Farm Map payload failed its count contract")
+  }
+
+  const seen = new Set<string>()
+  for (const record of payload.records) {
+    const treeNo = canonicalTreeNo(record?.treeNo)
+    if (treeNo === null || treeNo !== record.treeNo || seen.has(treeNo)) {
+      throw new Error("Operational Farm Map payload has an invalid or duplicate TreeNo")
+    }
+    seen.add(treeNo)
+  }
+  return payload
+}
+
+function treeLabelIcon(leaflet: LeafletApi, treeNo: string, classification: string | null) {
+  const style = classificationStyle(classification)
   return leaflet.divIcon({
     className: "",
-    html: `<span style="display:inline-block;transform:translate(-50%,-130%);padding:1px 3px;border-radius:3px;background:${colour.background};color:${colour.text};font:700 10px/1.2 sans-serif;text-shadow:0 0 2px ${colour.shadow};white-space:nowrap">${escapeHtml(treeNo)}</span>`,
+    html: `<span style="display:inline-block;transform:translate(-50%,-145%);padding:1px 4px;border:1px solid ${style.border};border-radius:3px;background:${style.fill};color:${style.text};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap">${escapeHtml(treeNo)}</span>`,
     iconSize: [1, 1],
   })
 }
 
-function TreeClassificationLegend() {
-  return (
-    <Panel title="Tree Classification Colour Legend" icon={Trees}>
-      <div className="grid gap-5 xl:grid-cols-2">
-        {TREE_CLASSIFICATION_LEGENDS.map((legend) => (
-          <section key={legend.title} className="min-w-0">
-            <h3 className="mb-2 text-sm font-bold text-foreground">{legend.title}</h3>
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full min-w-[540px] border-collapse text-sm">
-                <thead>
-                  <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-                    <th className="border-r border-border px-3 py-2">Category</th>
-                    <th className="border-r border-border px-3 py-2 text-center">Colour Code</th>
-                    <th className="px-3 py-2">Criteria</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {legend.rows.map((row) => {
-                    const colour = TREE_LABEL_COLOURS[row.category]
-                    return (
-                      <tr key={row.category} className="border-t border-border">
-                        <td className="whitespace-nowrap border-r border-border px-3 py-2 font-semibold text-foreground">
-                          <span aria-hidden="true">{row.badge}</span> {row.category}
-                        </td>
-                        <td className="border-r border-border px-3 py-2 text-center">
-                          <span
-                            className="inline-flex min-w-12 items-center justify-center rounded px-2 py-1 text-xs font-bold"
-                            style={{
-                              backgroundColor: colour.background,
-                              color: colour.text,
-                              textShadow: `0 0 2px ${colour.shadow}`,
-                            }}
-                          >
-                            1234
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">{row.criteria}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ))}
-      </div>
-    </Panel>
-  )
-}
-
-async function fetchTreeClassifications(): Promise<Map<string, string | null> | null> {
-  try {
-    const response = await fetch("/api/farm-map/tree-classifications", { cache: "no-store" })
-    if (!response.ok) return null
-
-    const data = (await response.json()) as { rows?: unknown }
-    if (!Array.isArray(data.rows)) return null
-
-    return new Map(
-      data.rows
-        .filter(
-          (row): row is TreeClassificationRow =>
-            typeof row === "object" &&
-            row !== null &&
-            typeof (row as TreeClassificationRow).treeNo === "string" &&
-            ((row as TreeClassificationRow).classification === null ||
-              typeof (row as TreeClassificationRow).classification === "string"),
-        )
-        .map((row) => [row.treeNo, row.classification]),
-    )
-  } catch {
-    return null
-  }
-}
-
-function popupHtml(feature: CoconutTreeFeature, summary?: TreeHarvestSummary, error?: string) {
-  const treeNo = escapeHtml(feature.properties.TreeNo)
-  const plot = escapeHtml(feature.properties.Plot)
-  const fullDetailsHref = `/coconut-harvest/tree-view?treeNo=${encodeURIComponent(feature.properties.TreeNo)}`
-
-  if (error) {
-    return `
-      <div style="min-width:230px;font-family:inherit">
-        <strong>Tree ${treeNo}</strong><div>${plot}</div>
-        <p style="margin:8px 0;color:#64748b">${escapeHtml(error)}</p>
-        <a href="${fullDetailsHref}" style="font-weight:700;color:#166534">View Full Harvest Details</a>
-      </div>`
-  }
-  if (!summary) {
-    return `<div style="min-width:210px;font-family:inherit"><strong>Tree ${treeNo}</strong><div>${plot}</div><p style="margin:8px 0">Loading Harvest data…</p></div>`
-  }
-
-  const rows = [
+function popupHtml(feature: FarmMapCoordinateFeature, record?: FarmMapOperationalRecord) {
+  const treeNo = escapeHtml(feature.properties.treeNo)
+  const plot = escapeHtml(feature.properties.plot)
+  const [longitude, latitude] = feature.geometry.coordinates
+  const detailsHref = `/coconut-harvest/tree-view?treeNo=${encodeURIComponent(feature.properties.treeNo)}`
+  const matchStatus = record ? "Matched to current MFMS record" : "Operational record unavailable/unmatched"
+  const harvest = record?.latestHarvest
+  const rows: Array<[string, string | number | null | undefined]> = [
     ["Tree Number", treeNo],
     ["Plot", plot],
-    ["Status", display(summary.status)],
-    ["Classification", display(summary.classification)],
-    ["Last Harvest Date", display(summary.lastHarvestDate)],
-    ["Latest Bunches", display(summary.latestBunches)],
-    ["Latest Nuts", display(summary.latestNuts)],
-    ["Current-Year Total Nuts", display(summary.currentYearTotalNuts)],
-    ["Missed Harvest Cycles", display(summary.missedHarvestCycles)],
+    ["Tree status", record?.status],
+    ["Lifecycle status", record?.lifecycleStatus],
+    ["Performance class", record?.classification ?? "Unknown"],
+    ["Classification reason", record?.classificationReason],
+    ["Classification period", record?.classificationPeriod],
+    ["Latest harvest date", harvest?.date],
+    ["Latest bunches", harvest?.totalBunches],
+    ["Latest nuts", harvest?.totalNuts],
+    ["Data as of", record?.lastUpdated],
+    ["Coordinate", `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`],
+    ["Coordinate version", feature.properties.coordinateVersion],
+    ["Operational match", matchStatus],
   ]
-  const noData = summary.hasHarvestData
-    ? ""
-    : `<p style="margin:8px 0;font-weight:700;color:#64748b">No Harvest data</p>`
 
   return `
-    <div style="min-width:250px;font-family:inherit">
-      ${noData}
+    <div style="min-width:280px;max-width:360px;font-family:inherit">
       <table style="width:100%;border-collapse:collapse">
         ${rows
           .map(
             ([label, value]) =>
-              `<tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">${label}</th><td style="padding:3px 0;text-align:right;font-weight:700">${value}</td></tr>`,
+              `<tr><th style="padding:3px 8px 3px 0;text-align:left;vertical-align:top;color:#475569">${label}</th><td style="padding:3px 0;text-align:right;font-weight:700">${display(value)}</td></tr>`,
           )
           .join("")}
       </table>
-      <a href="${fullDetailsHref}" style="display:inline-block;margin-top:10px;font-weight:700;color:#166534">View Full Harvest Details</a>
+      <p style="margin:8px 0 0;color:#64748b;font-size:11px">Spatial source: ${escapeHtml(feature.properties.coordinateSource)}</p>
+      <a href="${detailsHref}" style="display:inline-block;margin-top:10px;font-weight:700;color:#0f766e">View Full Harvest Details</a>
     </div>`
+}
+
+function ClassificationLegend({
+  counts,
+  activeFilter,
+  onFilter,
+}: {
+  counts: Record<string, number>
+  activeFilter: ClassificationFilter
+  onFilter: (filter: ClassificationFilter) => void
+}) {
+  const entries = [
+    ...PERFORMANCE_CLASSIFICATIONS.map((classification) => ({
+      classification,
+      style: CLASSIFICATION_STYLES[classification],
+    })),
+    { classification: "Unknown/unmatched" as const, style: UNKNOWN_CLASSIFICATION_STYLE },
+  ]
+
+  return (
+    <Panel title="Current Performance Classification" icon={Trees}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          onClick={() => onFilter("All")}
+          aria-pressed={activeFilter === "All"}
+          className={`rounded-lg border px-3 py-2 text-left text-sm ${activeFilter === "All" ? "border-primary bg-primary/10" : "border-border bg-background"}`}
+        >
+          <span className="font-bold">All</span>
+          <span className="ml-2 text-muted-foreground">{EXPECTED_TREE_COUNT.toLocaleString("en-IN")}</span>
+        </button>
+        {entries.map(({ classification, style }) => (
+          <button
+            key={classification}
+            type="button"
+            onClick={() => onFilter(classification)}
+            aria-pressed={activeFilter === classification}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm ${activeFilter === classification ? "border-primary bg-primary/10" : "border-border bg-background"}`}
+          >
+            <span
+              className="size-4 shrink-0 rounded-full border-2"
+              style={{ backgroundColor: style.fill, borderColor: style.border }}
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1 font-semibold">{classification}</span>
+            <span className="tabular-nums text-muted-foreground">
+              {(counts[classification] ?? 0).toLocaleString("en-IN")}
+            </span>
+          </button>
+        ))}
+      </div>
+    </Panel>
+  )
 }
 
 export function FarmMapClient() {
@@ -264,287 +235,373 @@ export function FarmMapClient() {
     "Plot 1": null,
     "Plot 2": null,
   })
-  const labelLayers = useRef<Record<PlotName, LeafletLayerGroup | null>>({
-    "Plot 1": null,
-    "Plot 2": null,
-  })
-  const treesByKey = useRef(new Map<string, TreeMapEntry>())
-  const treesByNumber = useRef(new Map<string, TreeMapEntry[]>())
-  const cache = useRef(new Map<string, { expiresAt: number; summary: TreeHarvestSummary }>())
-  const treeNumbersEnabledRef = useRef(true)
+  const labelLayer = useRef<LeafletLayerGroup | null>(null)
+  const treesByNumber = useRef(new Map<string, TreeMapEntry>())
+  const operationalByNumber = useRef(new Map<string, FarmMapOperationalRecord>())
+  const treeMarkersEnabledRef = useRef(true)
+  const treeLabelsEnabledRef = useRef(true)
   const plotFilterRef = useRef<PlotFilter>("Plot 1 & Plot 2")
+  const classificationFilterRef = useRef<ClassificationFilter>("All")
+  const selectedTreeNoRef = useRef<string | null>(null)
 
-  const [treeNumbersEnabled, setTreeNumbersEnabled] = useState(true)
+  const [treeMarkersEnabled, setTreeMarkersEnabled] = useState(true)
+  const [treeLabelsEnabled, setTreeLabelsEnabled] = useState(true)
   const [plotFilter, setPlotFilter] = useState<PlotFilter>("Plot 1 & Plot 2")
+  const [classificationFilter, setClassificationFilter] =
+    useState<ClassificationFilter>("All")
   const [searchTreeNo, setSearchTreeNo] = useState("")
-  const [status, setStatus] = useState("Loading coconut tree geometry…")
-  const [counts, setCounts] = useState<Record<PlotName, number>>({ "Plot 1": 0, "Plot 2": 0 })
+  const [status, setStatus] = useState("Loading approved tree coordinates…")
+  const [geometryState, setGeometryState] = useState<"loading" | "ready" | "error">("loading")
+  const [dataState, setDataState] = useState<DataState>("loading")
+  const [dataAsOf, setDataAsOf] = useState<string | null>(null)
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [unmatchedSpatial, setUnmatchedSpatial] = useState(0)
+  const [operationalWithoutSpatial, setOperationalWithoutSpatial] = useState(0)
   const [geometryOptions, setGeometryOptions] = useState<TreeNumberOption[]>([])
-  const [treeMasterNumbers, setTreeMasterNumbers] = useState<Set<string>>(new Set())
-  const [treeMasterState, setTreeMasterState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  )
 
-  const validMappedOptions = useMemo(
-    () => geometryOptions.filter((option) => treeMasterNumbers.has(option.treeNo)),
-    [geometryOptions, treeMasterNumbers],
-  )
   const availableOptions = useMemo(
     () =>
       plotFilter === "Plot 1 & Plot 2"
-        ? validMappedOptions
-        : validMappedOptions.filter((option) => option.plot === plotFilter),
-    [plotFilter, validMappedOptions],
+        ? geometryOptions
+        : geometryOptions.filter((option) => option.plot === plotFilter),
+    [geometryOptions, plotFilter],
   )
 
-  const applyVisibility = useCallback(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const zoom = map.getZoom()
-    for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
-      const plotAllowed =
-        plotFilterRef.current === "Plot 1 & Plot 2" || plotFilterRef.current === plot
-      const showPoints = treeNumbersEnabledRef.current && plotAllowed && zoom >= MARKER_ZOOM
-      const showLabels = treeNumbersEnabledRef.current && plotAllowed && zoom >= LABEL_ZOOM
-      const points = pointLayers.current[plot]
-      const labels = labelLayers.current[plot]
-
-      if (points) {
-        if (showPoints && !map.hasLayer(points)) points.addTo(map)
-        if (!showPoints && map.hasLayer(points)) points.remove()
-      }
-      if (labels) {
-        if (showLabels && !map.hasLayer(labels)) labels.addTo(map)
-        if (!showLabels && map.hasLayer(labels)) labels.remove()
-      }
-    }
+  const matchesActiveFilters = useCallback((entry: TreeMapEntry) => {
+    const plotAllowed =
+      plotFilterRef.current === "Plot 1 & Plot 2" ||
+      entry.feature.properties.plot === plotFilterRef.current
+    const classification = operationalByNumber.current.get(entry.feature.properties.treeNo)?.classification
+    const classAllowed =
+      classificationFilterRef.current === "All" ||
+      classificationFilterKey(classification) === classificationFilterRef.current
+    return plotAllowed && classAllowed
   }, [])
 
-  const selectTree = useCallback(async (entry: TreeMapEntry) => {
-    const treeNo = entry.feature.properties.TreeNo
-    const cacheKey = treeNumberOptionKey(treeNo, entry.feature.properties.Plot)
-    entry.marker.bindPopup(popupHtml(entry.feature), { maxWidth: 360 }).openPopup()
+  const refreshLabels = useCallback(() => {
+    const map = mapRef.current
+    const leaflet = leafletRef.current
+    const labels = labelLayer.current
+    if (!map || !leaflet || !labels) return
 
-    const cached = cache.current.get(cacheKey)
-    if (cached && cached.expiresAt > Date.now()) {
-      entry.marker.bindPopup(popupHtml(entry.feature, cached.summary), { maxWidth: 360 }).openPopup()
+    labels.clearLayers()
+    const canShow =
+      treeMarkersEnabledRef.current &&
+      treeLabelsEnabledRef.current &&
+      map.getZoom() >= LABEL_ZOOM
+    if (!canShow) {
+      if (map.hasLayer(labels)) labels.remove()
       return
     }
 
-    try {
-      const response = await fetch(
-        `/api/farm-map/trees/${encodeURIComponent(treeNo)}/harvest-summary`,
-        { cache: "no-store" },
+    const visibleBounds = map.getBounds().pad(0.08)
+    for (const entry of treesByNumber.current.values()) {
+      if (!matchesActiveFilters(entry)) continue
+      const [longitude, latitude] = entry.feature.geometry.coordinates
+      if (!visibleBounds.contains([latitude, longitude])) continue
+      const record = operationalByNumber.current.get(entry.feature.properties.treeNo)
+      labels.addLayer(
+        leaflet.marker([latitude, longitude], {
+          interactive: false,
+          icon: treeLabelIcon(
+            leaflet,
+            entry.feature.properties.treeNo,
+            record?.classification ?? null,
+          ),
+        }),
       )
-      if (response.status === 404) {
-        entry.marker.bindPopup(popupHtml(entry.feature, undefined, "No Harvest data"), { maxWidth: 360 }).openPopup()
-        return
-      }
-      if (!response.ok) throw new Error("Unable to load Harvest data")
-      const summary = (await response.json()) as TreeHarvestSummary
-      cache.current.set(cacheKey, { expiresAt: Date.now() + SUMMARY_CACHE_MS, summary })
-      entry.marker.bindPopup(popupHtml(entry.feature, summary), { maxWidth: 360 }).openPopup()
-    } catch {
-      entry.marker
-        .bindPopup(popupHtml(entry.feature, undefined, "Harvest information is temporarily unavailable."), {
-          maxWidth: 360,
-        })
-        .openPopup()
     }
-  }, [])
+    if (!map.hasLayer(labels)) labels.addTo(map)
+  }, [matchesActiveFilters])
 
-  const loadTreeMaster = useCallback(async () => {
-    setTreeMasterState("loading")
-    try {
-      const response = await fetch("/api/coconut-harvest/tree-master", {
-        cache: "force-cache",
+  const applyMapState = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) pointLayers.current[plot]?.clearLayers()
+    for (const entry of treesByNumber.current.values()) {
+      const treeNo = entry.feature.properties.treeNo
+      const record = operationalByNumber.current.get(treeNo)
+      const style = classificationStyle(record?.classification)
+      const selected = selectedTreeNoRef.current === treeNo
+      entry.marker.setRadius(selected ? 7 : 4.5)
+      entry.marker.setStyle({
+        color: selected ? style.selectedBorder : style.border,
+        fillColor: style.fill,
+        fillOpacity: 0.92,
+        opacity: 1,
+        weight: selected ? 4 : 1.5,
       })
-      if (!response.ok) throw new Error("Unable to load TREE MASTER")
-
-      const data = (await response.json()) as { treeNumbers?: unknown }
-      if (
-        !Array.isArray(data.treeNumbers) ||
-        !data.treeNumbers.every((treeNo) => typeof treeNo === "string")
-      ) {
-        throw new Error("Invalid TREE MASTER response")
+      if (matchesActiveFilters(entry)) {
+        pointLayers.current[entry.feature.properties.plot]?.addLayer(entry.marker)
       }
-
-      setTreeMasterNumbers(new Set(data.treeNumbers))
-      setTreeMasterState("ready")
-    } catch {
-      setTreeMasterNumbers(new Set())
-      setTreeMasterState("error")
     }
+
+    const canShowPoints = treeMarkersEnabledRef.current && map.getZoom() >= MARKER_ZOOM
+    for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
+      const layer = pointLayers.current[plot]
+      if (!layer) continue
+      const plotAllowed =
+        plotFilterRef.current === "Plot 1 & Plot 2" || plotFilterRef.current === plot
+      if (canShowPoints && plotAllowed && !map.hasLayer(layer)) layer.addTo(map)
+      if ((!canShowPoints || !plotAllowed) && map.hasLayer(layer)) layer.remove()
+    }
+    refreshLabels()
+  }, [matchesActiveFilters, refreshLabels])
+
+  const recalculateJoinState = useCallback(() => {
+    const nextCounts = Object.fromEntries([
+      ...PERFORMANCE_CLASSIFICATIONS.map((classification) => [classification, 0]),
+      ["Unknown/unmatched", 0],
+    ]) as Record<string, number>
+    let unmatched = 0
+
+    for (const treeNo of treesByNumber.current.keys()) {
+      const record = operationalByNumber.current.get(treeNo)
+      if (!record) unmatched += 1
+      nextCounts[classificationFilterKey(record?.classification)] += 1
+    }
+    let withoutSpatial = 0
+    for (const treeNo of operationalByNumber.current.keys()) {
+      if (!treesByNumber.current.has(treeNo)) withoutSpatial += 1
+    }
+    setCounts(nextCounts)
+    setUnmatchedSpatial(unmatched)
+    setOperationalWithoutSpatial(withoutSpatial)
+    return { unmatched, withoutSpatial }
   }, [])
 
-  useEffect(() => {
-    void loadTreeMaster()
-  }, [loadTreeMaster])
+  const loadOperationalData = useCallback(async () => {
+    setDataState((current) => (current === "ready" ? current : "loading"))
+    try {
+      const response = await fetch("/api/farm-map/trees", { cache: "no-store" })
+      if (!response.ok) throw new Error(`Farm Map API returned ${response.status}`)
+      const payload = validateOperationalPayload(await response.json())
+      operationalByNumber.current = new Map(payload.records.map((record) => [record.treeNo, record]))
+      setDataAsOf(payload.classificationAsOf ?? payload.generatedAt)
+      const join = recalculateJoinState()
+      const complete =
+        treesByNumber.current.size === 0 || (join.unmatched === 0 && join.withoutSpatial === 0)
+      const generatedAt = Date.parse(payload.generatedAt)
+      const stale = Number.isNaN(generatedAt) || Date.now() - generatedAt > OPERATIONAL_REFRESH_MS * 2
+      setDataState(complete ? (stale ? "stale" : "ready") : "partial")
+      applyMapState()
+    } catch (error) {
+      console.error("[farm-map-operational-data]", error)
+      operationalByNumber.current.clear()
+      setDataAsOf(null)
+      setDataState("error")
+      recalculateJoinState()
+      applyMapState()
+    }
+  }, [applyMapState, recalculateJoinState])
+
+  const selectTree = useCallback(
+    (entry: TreeMapEntry) => {
+      selectedTreeNoRef.current = entry.feature.properties.treeNo
+      applyMapState()
+      const record = operationalByNumber.current.get(entry.feature.properties.treeNo)
+      entry.marker.bindPopup(popupHtml(entry.feature, record), { maxWidth: 390 }).openPopup()
+    },
+    [applyMapState],
+  )
 
   const handleMapReady = useCallback(
     (map: LeafletMap, leaflet: LeafletApi) => {
       let cancelled = false
       mapRef.current = map
       leafletRef.current = leaflet
+      pointLayers.current = { "Plot 1": leaflet.layerGroup(), "Plot 2": leaflet.layerGroup() }
+      labelLayer.current = leaflet.layerGroup()
+      const canvasRenderer = leaflet.canvas({ padding: 0.5 })
 
-      const zoomHandler = () => applyVisibility()
-      map.on("zoomend", zoomHandler)
+      const mapChangeHandler = () => applyMapState()
+      map.on("zoomend moveend", mapChangeHandler)
 
-      let classifications: Map<string, string | null> | null = null
-      let treeGeometryLoaded = false
-      const applyClassificationColours = () => {
-        if (!classifications || !treeGeometryLoaded || cancelled) return
-
-        for (const entry of treesByKey.current.values()) {
-          const treeNo = entry.feature.properties.TreeNo
-          entry.label.setIcon(treeLabelIcon(leaflet, treeNo, classifications.get(treeNo)))
-        }
-      }
-
-      void fetchTreeClassifications().then((loadedClassifications) => {
-        classifications = loadedClassifications
-        applyClassificationColours()
-      })
-
-      Promise.all(
-        TREE_SOURCES.map(async ({ plot, url }) => {
-          const response = await fetch(url, { cache: "force-cache" })
-          if (!response.ok) throw new Error(`Unable to load ${plot} trees`)
-          const collection = (await response.json()) as CoconutTreeCollection
-          return { plot, collection }
-        }),
-      )
-        .then((sources) => {
-          if (cancelled) return
-
-          const nextCounts: Record<PlotName, number> = { "Plot 1": 0, "Plot 2": 0 }
-          const nextGeometryOptions: TreeNumberOption[] = []
-          for (const { plot, collection } of sources) {
-            const pointLayer = leaflet.layerGroup()
-            const labelLayer = leaflet.layerGroup()
-            pointLayers.current[plot] = pointLayer
-            labelLayers.current[plot] = labelLayer
-
-            for (const feature of collection.features) {
-              const [longitude, latitude] = feature.geometry.coordinates
-              const marker = leaflet.circleMarker([latitude, longitude], {
-                radius: 4,
-                weight: 1,
-                color: "#ffffff",
-                fillColor: "#0f766e",
-                fillOpacity: 0.9,
-              })
-              const treeNo = feature.properties.TreeNo
-              const label = leaflet.marker([latitude, longitude], {
-                interactive: false,
-                icon: treeLabelIcon(leaflet, treeNo, null),
-              })
-              const entry = { feature, marker, label }
-              marker
-                .bindTooltip(`Tree ${escapeHtml(treeNo)}`, { direction: "top" })
-                .on("click", () => void selectTree(entry))
-              pointLayer.addLayer(marker)
-              labelLayer.addLayer(label)
-              const option = {
-                key: treeNumberOptionKey(treeNo, plot),
-                treeNo,
-                plot,
-              }
-              treesByKey.current.set(option.key, entry)
-              const matchingEntries = treesByNumber.current.get(treeNo) ?? []
-              matchingEntries.push(entry)
-              treesByNumber.current.set(treeNo, matchingEntries)
-              nextGeometryOptions.push(option)
-              nextCounts[plot] += 1
-            }
-          }
-          setCounts(nextCounts)
-          setGeometryOptions(nextGeometryOptions)
-          setStatus(`${nextCounts["Plot 1"] + nextCounts["Plot 2"]} coconut trees loaded.`)
-          treeGeometryLoaded = true
-          applyClassificationColours()
-          applyVisibility()
+      void fetch(farmCombinedLayer.coordinatesUrl, { cache: "force-cache" })
+        .then(async (response) => {
+          if (!response.ok) throw new Error(`Coordinate GeoJSON returned ${response.status}`)
+          return validateCoordinateCollection(await response.json())
         })
-        .catch(() => setStatus("Coconut tree geometry could not be loaded."))
+        .then((collection) => {
+          if (cancelled) return
+          const nextOptions: TreeNumberOption[] = []
+          for (const feature of collection.features) {
+            const [longitude, latitude] = feature.geometry.coordinates
+            const marker = leaflet.circleMarker([latitude, longitude], {
+              renderer: canvasRenderer,
+              radius: 4.5,
+              weight: 1.5,
+              color: UNKNOWN_CLASSIFICATION_STYLE.border,
+              fillColor: UNKNOWN_CLASSIFICATION_STYLE.fill,
+              fillOpacity: 0.92,
+            })
+            const entry: TreeMapEntry = { feature, marker }
+            marker
+              .bindTooltip(`Tree ${escapeHtml(feature.properties.treeNo)}`, { direction: "top" })
+              .on("click", () => selectTree(entry))
+            treesByNumber.current.set(feature.properties.treeNo, entry)
+            nextOptions.push({
+              key: treeNumberOptionKey(feature.properties.treeNo, feature.properties.plot),
+              treeNo: feature.properties.treeNo,
+              plot: feature.properties.plot,
+            })
+          }
+          setGeometryOptions(nextOptions)
+          setGeometryState("ready")
+          setStatus(`${EXPECTED_TREE_COUNT.toLocaleString("en-IN")} approved coconut-tree coordinates loaded.`)
+          const join = recalculateJoinState()
+          if (operationalByNumber.current.size > 0) {
+            setDataState(join.unmatched === 0 && join.withoutSpatial === 0 ? "ready" : "partial")
+          }
+          applyMapState()
+        })
+        .catch((error: unknown) => {
+          console.error("[farm-map-coordinates]", error)
+          setGeometryState("error")
+          setStatus("Approved tree coordinates could not be loaded.")
+        })
+
+      void loadOperationalData()
+      const refreshTimer = window.setInterval(() => void loadOperationalData(), OPERATIONAL_REFRESH_MS)
 
       return () => {
         cancelled = true
-        map.off("zoomend", zoomHandler)
-        for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
-          pointLayers.current[plot]?.remove()
-          labelLayers.current[plot]?.remove()
-          pointLayers.current[plot] = null
-          labelLayers.current[plot] = null
-        }
-        treesByKey.current.clear()
+        window.clearInterval(refreshTimer)
+        map.off("zoomend moveend", mapChangeHandler)
+        pointLayers.current["Plot 1"]?.remove()
+        pointLayers.current["Plot 2"]?.remove()
+        labelLayer.current?.remove()
+        pointLayers.current = { "Plot 1": null, "Plot 2": null }
+        labelLayer.current = null
         treesByNumber.current.clear()
+        operationalByNumber.current.clear()
         setGeometryOptions([])
         mapRef.current = null
         leafletRef.current = null
       }
     },
-    [applyVisibility, selectTree],
+    [applyMapState, loadOperationalData, recalculateJoinState, selectTree],
   )
 
-  useEffect(() => {
-    treeNumbersEnabledRef.current = treeNumbersEnabled
-    plotFilterRef.current = plotFilter
-    applyVisibility()
-  }, [applyVisibility, plotFilter, treeNumbersEnabled])
+  function updateVisibilitySettings(settings: {
+    markers?: boolean
+    labels?: boolean
+    plot?: PlotFilter
+    classification?: ClassificationFilter
+  }) {
+    if (settings.markers !== undefined) {
+      treeMarkersEnabledRef.current = settings.markers
+      setTreeMarkersEnabled(settings.markers)
+    }
+    if (settings.labels !== undefined) {
+      treeLabelsEnabledRef.current = settings.labels
+      setTreeLabelsEnabled(settings.labels)
+    }
+    if (settings.plot !== undefined) {
+      plotFilterRef.current = settings.plot
+      setPlotFilter(settings.plot)
+    }
+    if (settings.classification !== undefined) {
+      classificationFilterRef.current = settings.classification
+      setClassificationFilter(settings.classification)
+    }
+    applyMapState()
+  }
 
   function selectMappedTree(option: TreeNumberOption) {
-    const entry = treesByKey.current.get(option.key)
-    if (!entry || !treeMasterNumbers.has(option.treeNo)) {
-      setStatus("Select a valid Tree Number from the available list.")
+    const canonical = canonicalTreeNo(option.treeNo)
+    const entry = canonical ? treesByNumber.current.get(canonical) : undefined
+    if (!entry) {
+      setStatus("TreeNo is absent from the approved coordinate layer.")
       return
     }
-    if (!treeNumbersEnabled) setTreeNumbersEnabled(true)
+    if (!treeMarkersEnabled) updateVisibilitySettings({ markers: true })
     const [longitude, latitude] = entry.feature.geometry.coordinates
     mapRef.current?.setView([latitude, longitude], 21)
-    setSearchTreeNo(option.treeNo)
-    setStatus(`Tree ${option.treeNo} selected in ${entry.feature.properties.Plot}.`)
-    void selectTree(entry)
+    setSearchTreeNo(entry.feature.properties.treeNo)
+    setStatus(`Tree ${entry.feature.properties.treeNo} selected in ${entry.feature.properties.plot}.`)
+    selectTree(entry)
   }
 
   function handleInvalidTreeNumber(value: string) {
-    const treeNo = value.trim()
-    const mappedEntries = treesByNumber.current.get(treeNo) ?? []
-    const treeIsValid = treeMasterNumbers.has(treeNo)
-
-    if (treeIsValid && plotFilter !== "Plot 1 & Plot 2") {
-      const otherPlotEntry = mappedEntries.find(
-        (entry) => entry.feature.properties.Plot !== plotFilter,
-      )
-      if (otherPlotEntry) {
-        const treePlot = otherPlotEntry.feature.properties.Plot
-        setStatus(`Tree found in ${treePlot}. Select ${treePlot} or Plot 1 & Plot 2.`)
+    const canonical = canonicalTreeNo(value)
+    if (canonical && treesByNumber.current.has(canonical)) {
+      const entry = treesByNumber.current.get(canonical)!
+      if (plotFilter !== "Plot 1 & Plot 2" && entry.feature.properties.plot !== plotFilter) {
+        setStatus(
+          `Tree found in ${entry.feature.properties.plot}. Select ${entry.feature.properties.plot} or Plot 1 & Plot 2.`,
+        )
         return
       }
     }
-
-    setStatus("Select a valid Tree Number from the available list.")
+    setStatus("Select an exact valid TreeNo, including its decimal where applicable.")
   }
 
-  const treeControls = (
-    <>
+  const warning =
+    dataState === "error"
+      ? "Operational data is unavailable. Coordinates remain visible in neutral grey; grey does not mean Sapling."
+      : dataState === "stale"
+        ? "Operational data loaded, but its generated-at time is stale. Marker colours may not reflect the latest classification refresh."
+      : dataState === "partial"
+        ? `Partial join: ${unmatchedSpatial} spatial trees unmatched; ${operationalWithoutSpatial} operational records lack approved coordinates.`
+        : null
+
+  return (
+    <FarmOrthomosaicMap
+      mapTitle={
+        <>
+          <span>MFMS Farm Map — Preview/UAT</span>
+          <span className="ml-2 normal-case tracking-normal text-red-600">
+            Markers from zoom {MARKER_ZOOM}; TreeNo labels from zoom {LABEL_ZOOM}.
+          </span>
+        </>
+      }
+      onMapReady={handleMapReady}
+      note="The orthomosaic contains no tree markers or classifications. Approved coordinates are joined by canonical TreeNo to current MFMS operational data and restyled after each refresh."
+      contentBelowMap={
+        <ClassificationLegend
+          counts={counts}
+          activeFilter={classificationFilter}
+          onFilter={(filter) => updateVisibilitySettings({ classification: filter })}
+        />
+      }
+    >
       <Panel title="Coconut Trees" icon={Trees}>
         <div className="grid gap-3">
+          {warning ? (
+            <div className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-950">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>{warning}</span>
+            </div>
+          ) : null}
+
           <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground">
-            <span>Tree Numbers</span>
+            <span>Tree markers</span>
             <input
               type="checkbox"
-              checked={treeNumbersEnabled}
-              onChange={(event) => setTreeNumbersEnabled(event.target.checked)}
+              checked={treeMarkersEnabled}
+              onChange={(event) => updateVisibilitySettings({ markers: event.target.checked })}
+              className="size-4 accent-primary"
+            />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground">
+            <span>TreeNo labels</span>
+            <input
+              type="checkbox"
+              checked={treeLabelsEnabled}
+              onChange={(event) => updateVisibilitySettings({ labels: event.target.checked })}
               className="size-4 accent-primary"
             />
           </label>
 
           <label className="grid gap-1.5 text-sm font-medium text-foreground">
-            Plot layer
+            Plot
             <select
               value={plotFilter}
-              onChange={(event) => setPlotFilter(event.target.value as PlotFilter)}
+              onChange={(event) =>
+                updateVisibilitySettings({ plot: event.target.value as PlotFilter })
+              }
               className="h-10 rounded-md border border-border bg-background px-3 text-sm"
             >
               <option>Plot 1</option>
@@ -553,55 +610,65 @@ export function FarmMapClient() {
             </select>
           </label>
 
+          <label className="grid gap-1.5 text-sm font-medium text-foreground">
+            Performance filter
+            <select
+              value={classificationFilter}
+              onChange={(event) =>
+                updateVisibilitySettings({
+                  classification: event.target.value as ClassificationFilter,
+                })
+              }
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+            >
+              <option>All</option>
+              {PERFORMANCE_CLASSIFICATIONS.map((classification) => (
+                <option key={classification}>{classification}</option>
+              ))}
+              <option>Unknown/unmatched</option>
+            </select>
+          </label>
+
           <div className="grid gap-1.5">
             <label htmlFor="farm-map-tree-search" className="text-sm font-medium text-foreground">
-              Tree Number
+              TreeNo search
             </label>
             <TreeNumberAutocomplete
               id="farm-map-tree-search"
               value={searchTreeNo}
               options={availableOptions}
-              loading={treeMasterState === "loading"}
-              loadError={treeMasterState === "error"}
-              placeholder="Type or select a Tree Number"
+              loading={geometryState === "loading"}
+              loadError={geometryState === "error"}
+              placeholder="Exact TreeNo, e.g. 141.1"
               showPlot={plotFilter === "Plot 1 & Plot 2"}
               onValueChange={setSearchTreeNo}
               onSelect={selectMappedTree}
               onInvalidCommit={handleInvalidTreeNumber}
-              onRetry={() => void loadTreeMaster()}
+              onRetry={() => window.location.reload()}
             />
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadOperationalData()}
+            disabled={dataState === "loading"}
+          >
+            <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+            Refresh current classifications
+          </Button>
 
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {status}
           </p>
           <p className="text-xs text-muted-foreground">
-            Plot 1: {counts["Plot 1"].toLocaleString("en-IN")} · Plot 2:{" "}
-            {counts["Plot 2"].toLocaleString("en-IN")}
+            Operational data as of: {formatTimestamp(dataAsOf)}
           </p>
           <p className="text-xs text-muted-foreground">
-            Points appear from zoom {MARKER_ZOOM}; labels from zoom {LABEL_ZOOM}.
+            Plot 1: 954 corrected coordinates · Plot 2: 1,163 unchanged coordinates
           </p>
         </div>
       </Panel>
-    </>
-  )
-
-  return (
-    <FarmOrthomosaicMap
-      mapTitle={
-        <>
-          <span>Drone Orthomosaic Map</span>
-          <span className="ml-2 normal-case tracking-normal text-red-600">
-            Zoom in to see tree numbers. Click a tree to view its data.
-          </span>
-        </>
-      }
-      onMapReady={handleMapReady}
-      note="Coconut tree points are a separate vector overlay. Harvest information is loaded only when a tree is selected."
-      contentBelowMap={<TreeClassificationLegend />}
-    >
-      {treeControls}
     </FarmOrthomosaicMap>
   )
 }

@@ -1,146 +1,118 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 
-const definitions = [
-  {
-    plot: "Plot 1",
-    path: "public/map-data/vector/plot1-coconut-trees-v1.geojson",
-    expectedCount: 954,
-    expectedDecimals: 9,
-    bounds: {
-      minLongitude: 77.07399777876941,
-      maxLongitude: 77.07702199218696,
-      minLatitude: 10.480233801779807,
-      maxLatitude: 10.482652551772594,
-    },
-  },
-  {
-    plot: "Plot 2",
-    path: "public/map-data/vector/plot2-coconut-trees-v1.geojson",
-    expectedCount: 1163,
-    expectedDecimals: 6,
-    bounds: {
-      minLongitude: 77.07669168370259,
-      maxLongitude: 77.08011760075026,
-      minLatitude: 10.479777736808021,
-      maxLatitude: 10.482307010368135,
-    },
-  },
-]
+import {
+  CLASSIFICATION_STYLES,
+  PERFORMANCE_CLASSIFICATIONS,
+  UNKNOWN_CLASSIFICATION_STYLE,
+  classificationFilterKey,
+} from "../lib/farm-map/classification-styles.ts"
+import { canonicalTreeNo } from "../lib/farm-map/tree-number.ts"
 
-const allTreeNumbers = new Set()
-const decimalTreeNumbersByPlot = new Map()
-
-for (const definition of definitions) {
-  const collection = JSON.parse(await readFile(definition.path, "utf8"))
-  assert.equal(collection.type, "FeatureCollection")
-  assert.equal(collection.features.length, definition.expectedCount)
-
-  const withinPlot = collection.features.filter((feature) => {
-    assert.equal(feature.type, "Feature")
-    assert.equal(feature.geometry.type, "Point")
-    assert.equal(typeof feature.properties.TreeNo, "string")
-    assert.equal(feature.properties.Plot, definition.plot)
-    assert.ok(feature.properties.TreeNo.length > 0)
-
-    const [longitude, latitude] = feature.geometry.coordinates
-    assert.ok(Number.isFinite(longitude) && Number.isFinite(latitude))
-    return (
-      longitude >= definition.bounds.minLongitude &&
-      longitude <= definition.bounds.maxLongitude &&
-      latitude >= definition.bounds.minLatitude &&
-      latitude <= definition.bounds.maxLatitude
-    )
-  })
-  assert.equal(withinPlot.length, definition.expectedCount)
-
-  const treeNumbers = collection.features.map((feature) => feature.properties.TreeNo)
-  assert.equal(new Set(treeNumbers).size, treeNumbers.length)
-  assert.equal(
-    treeNumbers.filter((treeNo) => treeNo.includes(".") && !/\.0+$/.test(treeNo)).length,
-    definition.expectedDecimals,
-  )
-  decimalTreeNumbersByPlot.set(
-    definition.plot,
-    treeNumbers.find((treeNo) => treeNo.includes(".") && !/\.0+$/.test(treeNo)),
-  )
-
-  for (const treeNo of treeNumbers) {
-    assert.ok(!allTreeNumbers.has(treeNo), `TreeNo ${treeNo} appears in both plots`)
-    allTreeNumbers.add(treeNo)
-  }
+const expectedColours = {
+  "Century Maker": "#166534",
+  "Match Winner": "#15803d",
+  "Reliable Batter": "#1d4ed8",
+  "Tail Ender": "#f59e0b",
+  "Bench Player": "#b91c1c",
+  "Future Better": "#7e22ce",
 }
 
-assert.equal(allTreeNumbers.size, 2117)
-assert.ok(allTreeNumbers.has(decimalTreeNumbersByPlot.get("Plot 1")))
-assert.ok(allTreeNumbers.has(decimalTreeNumbersByPlot.get("Plot 2")))
+assert.deepEqual([...PERFORMANCE_CLASSIFICATIONS], Object.keys(expectedColours))
+for (const [classification, colour] of Object.entries(expectedColours)) {
+  assert.equal(CLASSIFICATION_STYLES[classification].fill, colour)
+  assert.ok(CLASSIFICATION_STYLES[classification].border)
+  assert.ok(CLASSIFICATION_STYLES[classification].selectedBorder)
+}
+assert.notEqual(UNKNOWN_CLASSIFICATION_STYLE.fill, CLASSIFICATION_STYLES["Future Better"].fill)
+assert.equal(classificationFilterKey(null), "Unknown/unmatched")
+assert.equal(classificationFilterKey("Sapling"), "Unknown/unmatched")
+assert.equal(classificationFilterKey("Future Better"), "Future Better")
+
+for (const [source, expected] of [
+  ["123", "123"],
+  [" 123.0 ", "123"],
+  ["00035.1000", "35.1"],
+  ["35.1", "35.1"],
+]) {
+  assert.equal(canonicalTreeNo(source), expected)
+}
+for (const invalid of ["", "35A", "35..1", "35,1", "-1", null]) {
+  assert.equal(canonicalTreeNo(invalid), null)
+}
+
+const mapData = await readFile("lib/farm-map-data.ts", "utf8")
+assert.match(mapData, /Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88\.pmtiles/)
+assert.match(mapData, /Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026\.geojson/)
+assert.doesNotMatch(mapData, /farm-combined-png\/\{z\}/)
+
+const coordinateBytes = await readFile(
+  "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
+)
+assert.equal(
+  createHash("sha256").update(coordinateBytes).digest("hex"),
+  "9f2be88cb91df205a5e5a70625490ddcb11255d82808b167d45d368eb0ea77ce",
+)
+const coordinates = JSON.parse(coordinateBytes.toString("utf8"))
+assert.equal(coordinates.features.length, 2_117)
+assert.equal(coordinates.features.filter((feature) => feature.properties.plot === "Plot 1").length, 954)
+assert.equal(coordinates.features.filter((feature) => feature.properties.plot === "Plot 2").length, 1_163)
+assert.equal(new Set(coordinates.features.map((feature) => feature.properties.treeNo)).size, 2_117)
+assert.equal(
+  coordinates.features.filter((feature) => feature.properties.treeNo.includes(".")).length,
+  15,
+)
+for (const feature of coordinates.features) {
+  assert.deepEqual(Object.keys(feature.properties).sort(), [
+    "coordinateSource",
+    "coordinateVersion",
+    "plot",
+    "treeNo",
+  ])
+}
+
+const orthomosaicMap = await readFile("components/maps/farm-orthomosaic-map.tsx", "utf8")
+assert.match(orthomosaicMap, /new PMTiles\(farmCombinedLayer\.pmtilesUrl\)/)
+assert.match(orthomosaicMap, /leafletRasterLayer/)
+assert.match(orthomosaicMap, /TileType\.Webp/)
+assert.match(orthomosaicMap, /Orthomosaic opacity/)
+assert.match(orthomosaicMap, /maxNativeZoom: 22/)
 
 const mapClient = await readFile("components/maps/farm-map-client.tsx", "utf8")
 assert.match(mapClient, /const MARKER_ZOOM = 18/)
 assert.match(mapClient, /const LABEL_ZOOM = 20/)
-assert.match(mapClient, /Tree Numbers/)
-assert.match(mapClient, /Plot 1 &amp; Plot 2/)
-assert.doesNotMatch(mapClient, /All Plots/)
-assert.match(mapClient, /useState<PlotFilter>\("Plot 1 & Plot 2"\)/)
-assert.match(mapClient, /useRef<PlotFilter>\("Plot 1 & Plot 2"\)/)
-assert.match(
-  mapClient,
-  /Tree found in \$\{treePlot\}\. Select \$\{treePlot\} or Plot 1 & Plot 2\./,
-)
-assert.match(mapClient, /Plot 1/)
-assert.match(mapClient, /Plot 2/)
-assert.match(mapClient, /encodeURIComponent\(treeNo\)/)
+assert.match(mapClient, /const EXPECTED_TREE_COUNT = 2_117/)
+assert.match(mapClient, /"Plot 1": 954, "Plot 2": 1_163/)
+assert.match(mapClient, /leaflet\.canvas\(\{ padding: 0\.5 \}\)/)
+assert.match(mapClient, /getBounds\(\)\.pad\(0\.08\)/)
+assert.match(mapClient, /\/api\/farm-map\/trees/)
+assert.match(mapClient, /canonicalTreeNo/)
 assert.match(mapClient, /tree-view\?treeNo=/)
-assert.match(mapClient, /difference|Harvest data/i)
-assert.match(mapClient, /\/api\/farm-map\/tree-classifications/)
-assert.match(mapClient, /"Century Maker": \{ background: "#166534"/)
-assert.match(mapClient, /"Match Winner": \{ background: "#15803d"/)
-assert.match(mapClient, /"Reliable Batter": \{ background: "#1d4ed8"/)
-assert.match(mapClient, /"Tail Ender": \{ background: "#f59e0b", text: "#111827"/)
-assert.match(mapClient, /"Bench Player": \{ background: "#b91c1c"/)
-assert.match(mapClient, /"Future Better": \{ background: "#7e22ce"/)
-assert.match(mapClient, /fillColor: "#0f766e"/)
-assert.match(mapClient, /entry\.label\.setIcon\(treeLabelIcon\(leaflet, treeNo, classifications\.get\(treeNo\)\)\)/)
-assert.match(mapClient, /Tree Classification Colour Legend/)
-assert.match(mapClient, /Plot 1: Tree numbers 1 to 999/)
-assert.match(mapClient, /Plot 2: Tree numbers above 1000/)
-assert.match(mapClient, /Over 400 nuts in last 10 harvests/)
-assert.match(mapClient, /200 to 299 nuts in last 10 harvests/)
-assert.match(mapClient, /Saplings under 36 completed months/)
-assert.match(mapClient, />\s*1234\s*</)
-assert.match(mapClient, /contentBelowMap=\{<TreeClassificationLegend \/>\}/)
+assert.match(mapClient, /Refresh current classifications/)
+assert.match(mapClient, /Unknown\/unmatched/)
+assert.match(mapClient, /grey does not mean Sapling/)
+assert.match(mapClient, /Operational data as of/)
+assert.match(mapClient, /Plot 1: 954 corrected coordinates/)
+assert.doesNotMatch(mapClient, /Good|Inconsistent|Critical/)
+assert.doesNotMatch(mapClient, /fillColor: "#0f766e"/)
+for (const colour of Object.values(expectedColours)) {
+  assert.doesNotMatch(mapClient, new RegExp(colour, "i"))
+}
 
-const orthomosaicMap = await readFile(
-  "components/maps/farm-orthomosaic-map.tsx",
-  "utf8",
-)
-assert.match(
-  orthomosaicMap,
-  /detailsPanel \? <div className="xl:col-start-1">\{detailsPanel\}<\/div>/,
-)
-assert.match(
-  orthomosaicMap,
-  /notePanel \? <div className="xl:col-start-2 xl:self-start">\{notePanel\}<\/div>/,
-)
-const legendPosition = orthomosaicMap.indexOf(
-  '{contentBelowMap ? <div className="xl:col-span-2">',
-)
-const detailsPosition = orthomosaicMap.indexOf(
-  '{detailsPanel ? <div className="xl:col-start-1">',
-)
-assert.ok(legendPosition >= 0)
-assert.ok(detailsPosition > legendPosition)
+const proxyRoute = await readFile("app/api/farm-map/trees/route.ts", "utf8")
+assert.match(proxyRoute, /fetchFarmMapTrees/)
+assert.match(proxyRoute, /Farm Map operational data is temporarily unavailable/)
+assert.doesNotMatch(proxyRoute, /Authorization|HARVEST_API_PASSWORD/)
 
-const route = await readFile(
-  "app/api/farm-map/trees/[treeNo]/harvest-summary/route.ts",
-  "utf8",
-)
-assert.match(route, /fetchFarmMapTreeHarvestSummary/)
+const serverFetch = await readFile("lib/farm-map/server.ts", "utf8")
+assert.match(serverFetch, /PRODUCTION_LOOPBACK_PORT/)
+assert.match(serverFetch, /recordCount !== 2_117/)
+assert.match(serverFetch, /decimalTreeNoCount !== 15/)
+assert.doesNotMatch(serverFetch, /tree_master|gps_latitude|gps_longitude/)
 
-const classificationRoute = await readFile(
-  "app/api/farm-map/tree-classifications/route.ts",
-  "utf8",
-)
-assert.match(classificationRoute, /fetchFarmMapTreeClassifications/)
+const packageJson = JSON.parse(await readFile("package.json", "utf8"))
+assert.equal(packageJson.dependencies.leaflet, "1.9.4")
+assert.equal(packageJson.dependencies.pmtiles, "4.5.0")
 
-console.log(`Farm Map coconut-tree checks passed for ${allTreeNumbers.size} trees.`)
+console.log("Preview Farm Map PMTiles, coordinate, join, and style contracts: PASS")
