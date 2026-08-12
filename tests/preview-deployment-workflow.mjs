@@ -80,7 +80,7 @@ assert.match(preflightWorkflow, /^\s+needs: authorize$/m)
 assert.match(preflightWorkflow, /persist-credentials: false/)
 assert.match(
   preflightWorkflow,
-  /actions\/checkout@d23441a48e516b6c34aea4fa41551a30e30af803/,
+  /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/,
 )
 assert.match(
   preflightWorkflow,
