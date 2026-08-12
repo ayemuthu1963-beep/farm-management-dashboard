@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { LeafletMouseEvent } from "leaflet"
 import { AlertTriangle, RefreshCw, Trees } from "lucide-react"
 
@@ -252,6 +252,7 @@ export function FarmMapClient() {
   const plotFilterRef = useRef<PlotFilter>("Plot 1 & Plot 2")
   const classificationFilterRef = useRef<ClassificationFilter>("All")
   const selectedTreeNoRef = useRef<string | null>(null)
+  const selectAndOpenTreeRef = useRef<((entry: TreeMapEntry) => void) | null>(null)
 
   const [treeMarkersEnabled, setTreeMarkersEnabled] = useState(true)
   const [treeLabelsEnabled, setTreeLabelsEnabled] = useState(true)
@@ -309,17 +310,20 @@ export function FarmMapClient() {
       const [longitude, latitude] = entry.feature.geometry.coordinates
       if (!visibleBounds.contains([latitude, longitude])) continue
       const record = operationalByNumber.current.get(entry.feature.properties.treeNo)
-      labels.addLayer(
-        leaflet.marker([latitude, longitude], {
-          interactive: false,
+      const labelMarker = leaflet.marker([latitude, longitude], {
+          interactive: true,
           keyboard: false,
           icon: treeLabelIcon(
             leaflet,
             entry.feature.properties.treeNo,
             record?.classification ?? null,
           ),
-        }),
-      )
+        })
+      labelMarker.on("click", (event: LeafletMouseEvent) => {
+        leaflet.DomEvent.stopPropagation(event.originalEvent)
+        selectAndOpenTreeRef.current?.(entry)
+      })
+      labels.addLayer(labelMarker)
     }
     if (!map.hasLayer(labels)) labels.addTo(map)
   }, [matchesActiveFilters])
@@ -450,6 +454,13 @@ export function FarmMapClient() {
     },
     [applyMapState],
   )
+
+  useEffect(() => {
+    selectAndOpenTreeRef.current = selectAndOpenTree
+    return () => {
+      selectAndOpenTreeRef.current = null
+    }
+  }, [selectAndOpenTree])
 
   const handleTreeHit = useCallback(
     (event: LeafletMouseEvent) => {

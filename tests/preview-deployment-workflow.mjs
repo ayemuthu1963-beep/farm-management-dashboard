@@ -259,9 +259,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Open Farm Map tree data on the first click or tap and enlarge the interactive target",
+  "Make visible TreeNo labels part of the same first-click tree selection target",
 )
-assert.equal(manifest.base_commit, "a79ba32261966c860349870fe5da18305e2525ec")
+assert.equal(manifest.base_commit, "00b1a935028c242f1d191c3c431aad3c0e2574fa")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -274,9 +274,6 @@ const expectedReleasePaths = [
   "app/globals.css",
   "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/farm-map/tree-hit-testing.ts",
-  "package.json",
-  "scripts/preview-server-deploy.sh",
   "tests/farm-map-tree-click.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
