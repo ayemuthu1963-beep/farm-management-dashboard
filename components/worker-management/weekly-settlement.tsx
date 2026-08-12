@@ -13,6 +13,7 @@ import {
 import {
   accountTypeLabel,
   addDays,
+  compareAccountCodes,
   defaultSettlementDate,
   formatDate,
   formatINR,
@@ -71,7 +72,7 @@ export function WeeklySettlement() {
 
   const rows = useMemo(
     () =>
-      (data?.items ?? []).map((item) => {
+      (data?.items ?? []).toSorted(compareAccountCodes).map((item) => {
         const weeklyPayment = Math.max(0, money(payments[item.account_id]))
         return {
           ...item,

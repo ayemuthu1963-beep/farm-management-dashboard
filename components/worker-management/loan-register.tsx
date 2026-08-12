@@ -9,10 +9,12 @@ import {
 } from "@/lib/worker-management-api"
 import {
   accountStateLabel,
+  compareAccountCodes,
   formatDate,
   formatSignedINR,
   money,
   toDateInput,
+  workerAccountOptionLabel,
 } from "@/lib/worker-management-format"
 import {
   cacheWorkerAccounts,
@@ -106,10 +108,6 @@ export function LoanRegister() {
       setWeek(currentWeek)
       setTransactions(ledgerResult.items)
       setPendingOperations(await getPendingLedgerOperations())
-      setForm((current) => ({
-        ...current,
-        accountId: current.accountId || String(accountResult.items.find((account) => account.is_active)?.account_id ?? ""),
-      }))
     } catch (loadError) {
       const cachedAccounts = await readCachedWorkerAccounts()
       const localOperations = await getPendingLedgerOperations()
@@ -119,10 +117,6 @@ export function LoanRegister() {
         setTransactions([])
         setWeek(null)
         setNotice("Offline account list loaded. New transactions will be saved on this device.")
-        setForm((current) => ({
-          ...current,
-          accountId: current.accountId || String(cachedAccounts.find((account) => account.is_active)?.account_id ?? ""),
-        }))
       } else {
         setError(loadError instanceof Error ? loadError.message : "Unable to load the Loan Register.")
       }
@@ -137,7 +131,7 @@ export function LoanRegister() {
 
   const summaries = useMemo(
     () =>
-      accounts.map((account) => {
+      accounts.toSorted(compareAccountCodes).map((account) => {
         const movements = transactions
           .filter((transaction) => transaction.account_id === account.account_id)
           .toSorted((left, right) =>
@@ -165,6 +159,11 @@ export function LoanRegister() {
     [accounts, transactions],
   )
 
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => account.is_active).toSorted(compareAccountCodes),
+    [accounts],
+  )
+
   const addTransaction = async () => {
     if (!form.accountId || !form.date || Number(form.amount) <= 0) {
       setError("Date, worker/group account, and a positive amount are required.")
@@ -185,7 +184,13 @@ export function LoanRegister() {
       })
       queued = true
       setNotice("Loan Register transaction saved on this device.")
-      setForm((current) => ({ ...current, amount: "", reference: "", notes: "" }))
+      setForm((current) => ({
+        ...current,
+        accountId: "",
+        amount: "",
+        reference: "",
+        notes: "",
+      }))
       setFormOpen(false)
       await refreshStatus()
       if (online) {
@@ -245,7 +250,7 @@ export function LoanRegister() {
             <WorkerInput label="Date" type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} />
             <WorkerSelect label="Worker / Group account" value={form.accountId} onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}>
               <option value="">Select account</option>
-              {accounts.filter((account) => account.is_active).map((account) => <option key={account.account_id} value={account.account_id}>{account.display_name} · {account.account_code}</option>)}
+              {activeAccounts.map((account) => <option key={account.account_id} value={account.account_id}>{workerAccountOptionLabel(account)}</option>)}
             </WorkerSelect>
             <WorkerSelect label="Transaction type" value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as ManualTransactionType }))}>
               {transactionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -254,7 +259,7 @@ export function LoanRegister() {
             <WorkerInput label="Reference" value={form.reference} onChange={(event) => setForm((current) => ({ ...current, reference: event.target.value }))} placeholder="Medical advance, cash repayment…" />
             <WorkerInput label="Notes (optional)" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
           </div>
-          <div className="mt-4 flex gap-2"><WorkerButton onClick={addTransaction} disabled={saving}>{saving ? "Saving…" : "Save Transaction"}</WorkerButton><WorkerButton variant="ghost" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</WorkerButton></div>
+          <div className="mt-4 flex gap-2"><WorkerButton onClick={addTransaction} disabled={saving || !form.accountId || !form.date || Number(form.amount) <= 0}>{saving ? "Saving…" : "Save Transaction"}</WorkerButton><WorkerButton variant="ghost" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</WorkerButton></div>
         </div>
       ) : null}
 
