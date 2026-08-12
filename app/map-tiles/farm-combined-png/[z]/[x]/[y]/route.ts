@@ -56,7 +56,7 @@ export async function GET(_request: Request, { params }: TileRouteParams) {
   }
 
   try {
-    const tile = await readFile(tilePath)
+    const tile = await readFile(/* turbopackIgnore: true */ tilePath)
 
     if (!isPng(tile)) {
       return notFound()
