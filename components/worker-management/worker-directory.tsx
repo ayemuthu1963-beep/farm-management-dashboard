@@ -66,6 +66,7 @@ function formFromAccount(account: WorkerAccount): WorkerForm {
 
 export function WorkerDirectory() {
   const [accounts, setAccounts] = useState<WorkerAccount[]>([])
+  const [showInactive, setShowInactive] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -81,8 +82,11 @@ export function WorkerDirectory() {
     setLoading(true)
     setError("")
     try {
-      const result = await fetchAccounts({ pageSize: 200 })
-      setAccounts(result.items)
+      const [activeResult, inactiveResult] = await Promise.all([
+        fetchAccounts({ isActive: true, pageSize: 200 }),
+        fetchAccounts({ isActive: false, pageSize: 200 }),
+      ])
+      setAccounts([...activeResult.items, ...inactiveResult.items])
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load workers.")
     } finally {
@@ -98,14 +102,20 @@ export function WorkerDirectory() {
     const query = search.trim().toLowerCase()
     return accounts.filter(
       (account) =>
-        !query ||
-        `${account.account_code} ${account.display_name} ${account.group_leader_name ?? ""} ${account.account_type}`
-          .toLowerCase()
-          .includes(query),
+        account.is_active === !showInactive &&
+        (!query ||
+          `${account.account_code} ${account.display_name} ${account.group_leader_name ?? ""} ${account.account_type}`
+            .toLowerCase()
+            .includes(query)),
     )
-  }, [accounts, search])
+  }, [accounts, search, showInactive])
+
+  const activeCount = useMemo(() => accounts.filter((account) => account.is_active).length, [accounts])
+  const inactiveCount = accounts.length - activeCount
 
   const openNew = (accountType: AccountType) => {
+    setShowInactive(false)
+    setSearch("")
     setEditing(null)
     setForm(blankForm(accountType))
     setFormOpen(true)
@@ -216,6 +226,21 @@ export function WorkerDirectory() {
         <WorkerButton onClick={() => openNew("FARM")}><Plus className="size-4" aria-hidden="true" />Add Farm Worker</WorkerButton>
         <WorkerButton variant="secondary" onClick={() => openNew("OUTSIDE")}><Plus className="size-4" aria-hidden="true" />Add Outside Worker</WorkerButton>
         <WorkerButton variant="secondary" onClick={() => openNew("GROUP")}><Plus className="size-4" aria-hidden="true" />Add Group</WorkerButton>
+        <WorkerButton
+          variant={showInactive ? "primary" : "ghost"}
+          className="sm:ml-auto"
+          aria-pressed={showInactive}
+          onClick={() => {
+            setShowInactive((current) => !current)
+            setSearch("")
+            setFormOpen(false)
+            setEditing(null)
+            setStateChangeAccount(null)
+          }}
+        >
+          {showInactive ? <RotateCcw className="size-4" aria-hidden="true" /> : <UserX className="size-4" aria-hidden="true" />}
+          {showInactive ? `Active Workers (${activeCount})` : `Inactive Workers (${inactiveCount})`}
+        </WorkerButton>
       </div>
 
       {error ? <div className="mt-4"><Notice tone="error">{error}</Notice></div> : null}
@@ -321,7 +346,7 @@ export function WorkerDirectory() {
 
       <div className="mt-5 rounded-xl border border-border bg-card p-3">
         <label className="block text-sm font-semibold">
-          Search workers and groups
+          Search {showInactive ? "inactive" : "active"} workers and groups
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -333,7 +358,13 @@ export function WorkerDirectory() {
 
       <div className="mt-5">
         {loading ? <LoadingState label="Loading worker directory…" /> : null}
-        {!loading && !filteredAccounts.length ? <EmptyState>No worker accounts match this search.</EmptyState> : null}
+        {!loading && !filteredAccounts.length ? (
+          <EmptyState>
+            {search.trim()
+              ? `No ${showInactive ? "inactive" : "active"} worker accounts match this search.`
+              : `No ${showInactive ? "inactive" : "active"} worker accounts.`}
+          </EmptyState>
+        ) : null}
         {!loading && filteredAccounts.length ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {filteredAccounts.map((account) => (
