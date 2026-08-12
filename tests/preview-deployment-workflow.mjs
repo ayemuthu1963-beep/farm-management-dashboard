@@ -259,9 +259,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Make visible TreeNo labels part of the same first-click tree selection target",
+  "Make the full visible TreeNo label box a first-click tree selection target",
 )
-assert.equal(manifest.base_commit, "00b1a935028c242f1d191c3c431aad3c0e2574fa")
+assert.equal(manifest.base_commit, "2ac9fa49f1bc20a89943da3e45d779b1a98667f3")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
