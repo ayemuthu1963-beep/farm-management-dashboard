@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useRef, useState } from "react"
+import type { LeafletMouseEvent } from "leaflet"
 import { AlertTriangle, RefreshCw, Trees } from "lucide-react"
 
 import { Panel } from "@/components/farm/panel"
@@ -23,6 +24,7 @@ import {
   type ClassificationFilter,
 } from "@/lib/farm-map/classification-styles"
 import { canonicalTreeNo } from "@/lib/farm-map/tree-number"
+import { nearestTreeHit, treeHitRadiusPx } from "@/lib/farm-map/tree-hit-testing"
 import type {
   FarmMapCoordinateCollection,
   FarmMapCoordinateFeature,
@@ -38,6 +40,7 @@ type DataState = "loading" | "ready" | "stale" | "partial" | "error"
 interface TreeMapEntry {
   feature: FarmMapCoordinateFeature
   marker: LeafletCircleMarker
+  hitMarker: LeafletCircleMarker
 }
 
 const MARKER_ZOOM = 18
@@ -130,8 +133,8 @@ function validateOperationalPayload(value: unknown): FarmMapOperationalPayload {
 function treeLabelIcon(leaflet: LeafletApi, treeNo: string, classification: string | null) {
   const style = classificationStyle(classification)
   return leaflet.divIcon({
-    className: "",
-    html: `<span style="display:inline-block;transform:translate(-50%,-145%);padding:1px 4px;border:1px solid ${style.border};border-radius:3px;background:${style.fill};color:${style.text};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap">${escapeHtml(treeNo)}</span>`,
+    className: "farm-map-tree-label",
+    html: `<span style="pointer-events:none;display:inline-block;transform:translate(-50%,-145%);padding:1px 4px;border:1px solid ${style.border};border-radius:3px;background:${style.fill};color:${style.text};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap">${escapeHtml(treeNo)}</span>`,
     iconSize: [1, 1],
   })
 }
@@ -235,9 +238,15 @@ export function FarmMapClient() {
     "Plot 1": null,
     "Plot 2": null,
   })
+  const hitLayers = useRef<Record<PlotName, LeafletLayerGroup | null>>({
+    "Plot 1": null,
+    "Plot 2": null,
+  })
   const labelLayer = useRef<LeafletLayerGroup | null>(null)
   const treesByNumber = useRef(new Map<string, TreeMapEntry>())
   const operationalByNumber = useRef(new Map<string, FarmMapOperationalRecord>())
+  const activePopupRef = useRef<ReturnType<LeafletApi["popup"]> | null>(null)
+  const hitRadiusRef = useRef(14)
   const treeMarkersEnabledRef = useRef(true)
   const treeLabelsEnabledRef = useRef(true)
   const plotFilterRef = useRef<PlotFilter>("Plot 1 & Plot 2")
@@ -303,6 +312,7 @@ export function FarmMapClient() {
       labels.addLayer(
         leaflet.marker([latitude, longitude], {
           interactive: false,
+          keyboard: false,
           icon: treeLabelIcon(
             leaflet,
             entry.feature.properties.treeNo,
@@ -318,7 +328,11 @@ export function FarmMapClient() {
     const map = mapRef.current
     if (!map) return
 
-    for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) pointLayers.current[plot]?.clearLayers()
+    for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
+      pointLayers.current[plot]?.clearLayers()
+      hitLayers.current[plot]?.clearLayers()
+    }
+    let selectedEntry: TreeMapEntry | null = null
     for (const entry of treesByNumber.current.values()) {
       const treeNo = entry.feature.properties.treeNo
       const record = operationalByNumber.current.get(treeNo)
@@ -332,8 +346,10 @@ export function FarmMapClient() {
         opacity: 1,
         weight: selected ? 4 : 1.5,
       })
+      if (selected) selectedEntry = entry
       if (matchesActiveFilters(entry)) {
         pointLayers.current[entry.feature.properties.plot]?.addLayer(entry.marker)
+        hitLayers.current[entry.feature.properties.plot]?.addLayer(entry.hitMarker)
       }
     }
 
@@ -346,6 +362,15 @@ export function FarmMapClient() {
       if (canShowPoints && plotAllowed && !map.hasLayer(layer)) layer.addTo(map)
       if ((!canShowPoints || !plotAllowed) && map.hasLayer(layer)) layer.remove()
     }
+    for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
+      const layer = hitLayers.current[plot]
+      if (!layer) continue
+      const plotAllowed =
+        plotFilterRef.current === "Plot 1 & Plot 2" || plotFilterRef.current === plot
+      if (canShowPoints && plotAllowed && !map.hasLayer(layer)) layer.addTo(map)
+      if ((!canShowPoints || !plotAllowed) && map.hasLayer(layer)) layer.remove()
+    }
+    selectedEntry?.marker.bringToFront()
     refreshLabels()
   }, [matchesActiveFilters, refreshLabels])
 
@@ -396,14 +421,65 @@ export function FarmMapClient() {
     }
   }, [applyMapState, recalculateJoinState])
 
-  const selectTree = useCallback(
+  const selectAndOpenTree = useCallback(
     (entry: TreeMapEntry) => {
-      selectedTreeNoRef.current = entry.feature.properties.treeNo
+      const treeNo = entry.feature.properties.treeNo
+      const map = mapRef.current
+      const leaflet = leafletRef.current
+      if (!map || !leaflet) return
+
+      selectedTreeNoRef.current = treeNo
       applyMapState()
-      const record = operationalByNumber.current.get(entry.feature.properties.treeNo)
-      entry.marker.bindPopup(popupHtml(entry.feature, record), { maxWidth: 390 }).openPopup()
+      const record = operationalByNumber.current.get(treeNo)
+      const [longitude, latitude] = entry.feature.geometry.coordinates
+      const popup =
+        activePopupRef.current ??
+        leaflet.popup({
+          autoClose: true,
+          closeButton: true,
+          closeOnClick: false,
+          maxWidth: 390,
+          offset: leaflet.point(0, -8),
+        })
+      popup
+        .setLatLng([latitude, longitude])
+        .setContent(popupHtml(entry.feature, record))
+        .openOn(map)
+      activePopupRef.current = popup
+      setStatus(`Tree ${treeNo} selected in ${entry.feature.properties.plot}.`)
     },
     [applyMapState],
+  )
+
+  const handleTreeHit = useCallback(
+    (event: LeafletMouseEvent) => {
+      const map = mapRef.current
+      const leaflet = leafletRef.current
+      if (!map || !leaflet) return
+
+      const candidates = Array.from(treesByNumber.current.values())
+        .filter(matchesActiveFilters)
+        .map((entry) => {
+          const [longitude, latitude] = entry.feature.geometry.coordinates
+          const point = map.latLngToContainerPoint([latitude, longitude])
+          return {
+            id: entry.feature.properties.treeNo,
+            value: entry,
+            x: point.x,
+            y: point.y,
+          }
+        })
+      const nearest = nearestTreeHit(
+        candidates,
+        { x: event.containerPoint.x, y: event.containerPoint.y },
+        hitRadiusRef.current,
+      )
+      if (!nearest) return
+
+      leaflet.DomEvent.stopPropagation(event.originalEvent)
+      selectAndOpenTree(nearest.value)
+    },
+    [matchesActiveFilters, selectAndOpenTree],
   )
 
   const handleMapReady = useCallback(
@@ -412,8 +488,20 @@ export function FarmMapClient() {
       mapRef.current = map
       leafletRef.current = leaflet
       pointLayers.current = { "Plot 1": leaflet.layerGroup(), "Plot 2": leaflet.layerGroup() }
+      hitLayers.current = { "Plot 1": leaflet.layerGroup(), "Plot 2": leaflet.layerGroup() }
       labelLayer.current = leaflet.layerGroup()
       const canvasRenderer = leaflet.canvas({ padding: 0.5 })
+      const updateHitRadius = () => {
+        hitRadiusRef.current = treeHitRadiusPx({
+          coarsePointer: window.matchMedia?.("(pointer: coarse)").matches ?? false,
+          viewportWidth: window.innerWidth,
+        })
+        for (const entry of treesByNumber.current.values()) {
+          entry.hitMarker.setRadius(hitRadiusRef.current)
+        }
+      }
+      updateHitRadius()
+      window.addEventListener("resize", updateHitRadius)
 
       const mapChangeHandler = () => applyMapState()
       map.on("zoomend moveend", mapChangeHandler)
@@ -435,11 +523,22 @@ export function FarmMapClient() {
               color: UNKNOWN_CLASSIFICATION_STYLE.border,
               fillColor: UNKNOWN_CLASSIFICATION_STYLE.fill,
               fillOpacity: 0.92,
+              interactive: false,
+              bubblingMouseEvents: false,
             })
-            const entry: TreeMapEntry = { feature, marker }
-            marker
+            const hitMarker = leaflet.circleMarker([latitude, longitude], {
+              renderer: canvasRenderer,
+              radius: hitRadiusRef.current,
+              stroke: false,
+              fill: true,
+              fillOpacity: 0,
+              interactive: true,
+              bubblingMouseEvents: false,
+            })
+            const entry: TreeMapEntry = { feature, marker, hitMarker }
+            hitMarker
               .bindTooltip(`Tree ${escapeHtml(feature.properties.treeNo)}`, { direction: "top" })
-              .on("click", () => selectTree(entry))
+              .on("click", handleTreeHit)
             treesByNumber.current.set(feature.properties.treeNo, entry)
             nextOptions.push({
               key: treeNumberOptionKey(feature.properties.treeNo, feature.properties.plot),
@@ -468,11 +567,17 @@ export function FarmMapClient() {
       return () => {
         cancelled = true
         window.clearInterval(refreshTimer)
+        window.removeEventListener("resize", updateHitRadius)
         map.off("zoomend moveend", mapChangeHandler)
+        activePopupRef.current?.remove()
+        activePopupRef.current = null
         pointLayers.current["Plot 1"]?.remove()
         pointLayers.current["Plot 2"]?.remove()
+        hitLayers.current["Plot 1"]?.remove()
+        hitLayers.current["Plot 2"]?.remove()
         labelLayer.current?.remove()
         pointLayers.current = { "Plot 1": null, "Plot 2": null }
+        hitLayers.current = { "Plot 1": null, "Plot 2": null }
         labelLayer.current = null
         treesByNumber.current.clear()
         operationalByNumber.current.clear()
@@ -481,7 +586,7 @@ export function FarmMapClient() {
         leafletRef.current = null
       }
     },
-    [applyMapState, loadOperationalData, recalculateJoinState, selectTree],
+    [applyMapState, handleTreeHit, loadOperationalData, recalculateJoinState],
   )
 
   function updateVisibilitySettings(settings: {
@@ -521,7 +626,7 @@ export function FarmMapClient() {
     mapRef.current?.setView([latitude, longitude], 21)
     setSearchTreeNo(entry.feature.properties.treeNo)
     setStatus(`Tree ${entry.feature.properties.treeNo} selected in ${entry.feature.properties.plot}.`)
-    selectTree(entry)
+    selectAndOpenTree(entry)
   }
 
   function handleInvalidTreeNumber(value: string) {
