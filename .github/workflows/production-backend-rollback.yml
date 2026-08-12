@@ -1,0 +1,157 @@
+name: Roll back Production backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_revision:
+        description: Exact 40-character revision currently running in Production
+        required: true
+        type: string
+      confirmation:
+        description: Type ROLL BACK PRODUCTION BACKEND to restore the retained prior API
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-production-server
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      current_revision: ${{ steps.release.outputs.current_revision }}
+    steps:
+      - name: Require the exact Production-only backend rollback request
+        id: release
+        shell: bash
+        env:
+          CURRENT_INPUT: ${{ inputs.current_revision }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]] || {
+            echo "Production backend rollback must execute from trusted main" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "ROLL BACK PRODUCTION BACKEND" ]] || {
+            echo "Confirmation did not match ROLL BACK PRODUCTION BACKEND" >&2
+            exit 1
+          }
+          [[ "$CURRENT_INPUT" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Current backend revision is not an exact lowercase commit SHA" >&2
+            exit 1
+          }
+
+          echo "current_revision=$CURRENT_INPUT" >> "$GITHUB_OUTPUT"
+
+  rollback:
+    needs: authorize
+    environment:
+      name: Production
+      url: https://muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Validate and install the dedicated Production backend deploy identity
+        id: ssh
+        shell: bash
+        env:
+          PRODUCTION_BACKEND_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_BACKEND_DEPLOY_SSH_PRIVATE_KEY }}
+          PRODUCTION_SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+          PRODUCTION_SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          for required_name in \
+            PRODUCTION_BACKEND_DEPLOY_SSH_PRIVATE_KEY \
+            PRODUCTION_SSH_HOST \
+            PRODUCTION_SSH_KNOWN_HOSTS \
+            PRODUCTION_SSH_USER
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Missing required Production environment setting: $required_name" >&2
+              exit 1
+            fi
+          done
+
+          [[ "$PRODUCTION_SSH_HOST" == "168.144.179.221" ]] || {
+            echo "The configured host is not the approved Production server" >&2
+            exit 1
+          }
+          [[ "$PRODUCTION_SSH_USER" == "muthu" ]] || {
+            echo "The configured user is not the approved Production account" >&2
+            exit 1
+          }
+
+          ssh_dir="$RUNNER_TEMP/mfms-production-backend-rollback-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PRODUCTION_BACKEND_DEPLOY_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$PRODUCTION_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the retained Production backend revision
+        shell: bash
+        env:
+          CURRENT_REVISION: ${{ needs.authorize.outputs.current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          PRODUCTION_SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+          PRODUCTION_SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/production-backend-rollback.txt"
+          : > "$report"
+
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
+            "rollback-production-backend $CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee "$report"
+
+          grep -Fqx 'rollback_environment=Production' "$report"
+          grep -Fqx 'rollback_component=backend' "$report"
+          grep -Fqx 'rollback_url=https://muthufarms.com' "$report"
+          grep -Fqx 'database_migrations=none' "$report"
+          grep -Fqx 'frontend_unchanged=true' "$report"
+          grep -Fqx 'odk_unchanged=true' "$report"
+          grep -Fqx 'schedules_unchanged=true' "$report"
+          grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          grep -Fqx 'test_touched=0' "$report"
+          grep -Fqx 'preview_touched=0' "$report"
+          grep -Fqx 'PRODUCTION_BACKEND_ROLLBACK=PASS' "$report"
+
+      - name: Upload sanitized Production backend rollback report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: production-backend-rollback-${{ github.run_id }}
+          path: ${{ runner.temp }}/production-backend-rollback.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-production-backend-rollback-ssh"
