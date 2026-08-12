@@ -1,6 +1,6 @@
 export type AccountType = "FARM" | "OUTSIDE" | "GROUP"
 export type FarmScheme = "TWO_OPTION" | "THREE_OPTION"
-export type AttendanceValue = "ABSENT" | "ONE_THIRD" | "HALF" | "FULL"
+export type AttendanceValue = "ABSENT" | "ONE_THIRD" | "HALF" | "TWO_THIRDS" | "FULL"
 export type AccountState = "LOAN_OUTSTANDING" | "SETTLED" | "DEPOSIT_HELD"
 export type WeekStatus = "NOT_STARTED" | "DRAFT" | "CLOSED" | "PAID" | "REOPENED"
 export type SettlementStatus = "DRAFT" | "CLOSED" | "PAID" | null
