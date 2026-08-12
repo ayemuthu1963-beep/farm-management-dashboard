@@ -10,6 +10,14 @@ const nextConfig = {
     return [
       {
         source:
+          '/map-data/orthomosaic/Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles',
+        headers: [
+          { key: 'Content-Type', value: 'application/octet-stream' },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source:
           '/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson',
         headers: [
           { key: 'Content-Type', value: 'application/geo+json; charset=utf-8' },

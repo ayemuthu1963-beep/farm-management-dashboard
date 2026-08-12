@@ -48,7 +48,7 @@ export const farmCombinedLayer: FarmCombinedLayer = {
   id: "farm-combined",
   name: "Muthu Farms Full Orthomosaic 2026",
   pmtilesUrl:
-    "/map-tiles/farm-combined-png/phase2d-b/orthomosaic/Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles",
+    "/map-data/orthomosaic/Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles",
   coordinatesUrl:
     "/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
   bounds: [...plotBounds.plot1, ...plotBounds.plot2],

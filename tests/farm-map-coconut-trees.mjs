@@ -45,7 +45,13 @@ for (const invalid of ["", "35A", "35..1", "35,1", "-1", null]) {
 const mapData = await readFile("lib/farm-map-data.ts", "utf8")
 assert.match(mapData, /Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88\.pmtiles/)
 assert.match(mapData, /Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026\.geojson/)
+assert.match(mapData, /\/map-data\/orthomosaic\//)
 assert.doesNotMatch(mapData, /farm-combined-png\/\{z\}/)
+
+const nextConfig = await readFile("next.config.mjs", "utf8")
+assert.match(nextConfig, /application\/octet-stream/)
+assert.match(nextConfig, /application\/geo\+json/)
+assert.match(nextConfig, /max-age=31536000, immutable/)
 
 const coordinateBytes = await readFile(
   "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
