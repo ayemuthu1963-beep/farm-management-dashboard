@@ -3,13 +3,16 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Show each worker's daily earnings beneath attendance",
-  "base_commit": "e1ce67fa1d454e3d3d46342344611fb8ee7a7209",
+  "release_note": "Open Farm Map tree data on the first click or tap and enlarge the interactive target",
+  "base_commit": "a79ba32261966c860349870fe5da18305e2525ec",
   "allowed_paths": [
-    "components/worker-management/daily-attendance.tsx",
+    "app/globals.css",
+    "components/maps/farm-map-client.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/worker-management.mjs"
+    "lib/farm-map/tree-hit-testing.ts",
+    "package.json",
+    "tests/farm-map-tree-click.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

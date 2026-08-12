@@ -254,9 +254,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Show each worker's daily earnings beneath attendance",
+  "Open Farm Map tree data on the first click or tap and enlarge the interactive target",
 )
-assert.equal(manifest.base_commit, "e1ce67fa1d454e3d3d46342344611fb8ee7a7209")
+assert.equal(manifest.base_commit, "a79ba32261966c860349870fe5da18305e2525ec")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -266,10 +266,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/daily-attendance.tsx",
+  "app/globals.css",
+  "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/farm-map/tree-hit-testing.ts",
+  "package.json",
+  "tests/farm-map-tree-click.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
