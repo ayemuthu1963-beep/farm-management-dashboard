@@ -30,6 +30,10 @@ readonly preview_url="https://preview.muthufarms.com"
 readonly central_login_url="https://auth.muthufarms.com/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
+readonly orthomosaic_host_dir="/home/muthu/mfms-preview-map-data/orthomosaic"
+readonly orthomosaic_container_dir="/app/public/map-data/orthomosaic"
+readonly orthomosaic_archive="Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles"
+readonly orthomosaic_sha256="0db33c684af256b0c121201c449125c2becb109a6d1f83ec40e1acb259a12849"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
@@ -105,9 +109,10 @@ network_ip_for_container() {
 
 disconnect_preview_network() {
   local container=$1
-  if [[ -n "$(network_ip_for_container "$container")" ]]; then
-    docker network disconnect "$preview_network" "$container"
-  fi
+  # A stopped container can retain a network endpoint while Docker reports an
+  # empty IP address. Always request disconnection so the fixed Preview IP is
+  # released before a replacement is attached.
+  docker network disconnect "$preview_network" "$container" >/dev/null 2>&1 || true
 }
 
 ensure_preview_network_ip() {
@@ -188,6 +193,33 @@ wait_for_version() {
     sleep 2
   done
   return 1
+}
+
+orthomosaic_mount_for_container() {
+  docker inspect --format \
+    '{{range .Mounts}}{{if eq .Destination "/app/public/map-data/orthomosaic"}}{{.Type}}|{{.Source}}|{{.Destination}}|{{.RW}}{{end}}{{end}}' \
+    "$1"
+}
+
+assert_pmtiles_range() {
+  local base_url=$1 headers result
+  headers=$(mktemp "$work_dir/pmtiles-range.XXXXXX")
+  result=$(curl -sS --max-time 20 \
+    -H 'Range: bytes=0-511' \
+    -D "$headers" \
+    -o /dev/null \
+    -w '%{http_code}|%{size_download}' \
+    "$base_url/map-data/orthomosaic/$orthomosaic_archive") || {
+      rm -f "$headers"
+      return 1
+    }
+  if [[ "$result" != "206|512" ]] \
+    || ! grep -Eiq '^Accept-Ranges:[[:space:]]*bytes[[:space:]]*$' "$headers" \
+    || ! grep -Eiq '^Content-Range:[[:space:]]*bytes[[:space:]]+0-511/[0-9]+[[:space:]]*$' "$headers"; then
+    rm -f "$headers"
+    return 1
+  fi
+  rm -f "$headers"
 }
 
 assert_preview_environment_banner() {
@@ -349,12 +381,15 @@ start_candidate() {
     --network "$preview_network" \
     --restart no \
     -p "127.0.0.1:$candidate_port:3000" \
+    --mount "type=bind,src=$orthomosaic_host_dir,dst=$orthomosaic_container_dir,readonly" \
     --env-file "$environment_file" \
     "$image" >/dev/null
   wait_for_version "http://127.0.0.1:$candidate_port" "$revision" \
     || blocked "candidate /api/version did not report the approved revision"
   smoke_routes "http://127.0.0.1:$candidate_port" \
     || blocked "candidate route smoke test failed"
+  assert_pmtiles_range "http://127.0.0.1:$candidate_port" \
+    || blocked "candidate PMTiles range request failed"
 }
 
 remove_candidate() {
@@ -383,8 +418,11 @@ assert_live_contract() {
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$live_container")" == \
       '{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3015"}]}' ]] \
     || blocked "Preview frontend host port changed"
-  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "0" ]] \
-    || blocked "Preview frontend mounts changed"
+  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "1" ]] \
+    || blocked "Preview frontend mount count changed"
+  [[ "$(orthomosaic_mount_for_container "$live_container")" == \
+      "bind|$orthomosaic_host_dir|$orthomosaic_container_dir|false" ]] \
+    || blocked "Preview orthomosaic mount changed"
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$live_container" \
     | grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_uat' \
     || blocked "Preview frontend no longer targets the UAT database"
@@ -488,6 +526,16 @@ validate_common_live_state() {
     || blocked "live frontend is not bound to the approved Preview port"
   [[ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^mfms-pilot-web-candidate-' || true)" -eq 0 ]] \
     || blocked "a stale Preview candidate container exists"
+  [[ -f "$orthomosaic_host_dir/$orthomosaic_archive" ]] \
+    || blocked "approved Preview PMTiles archive is missing"
+  [[ "$(sha256sum "$orthomosaic_host_dir/$orthomosaic_archive" | awk '{print $1}')" == \
+      "$orthomosaic_sha256" ]] \
+    || blocked "approved Preview PMTiles hash changed"
+  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "1" ]] \
+    || blocked "live frontend mount count is invalid"
+  [[ "$(orthomosaic_mount_for_container "$live_container")" == \
+      "bind|$orthomosaic_host_dir|$orthomosaic_container_dir|false" ]] \
+    || blocked "live frontend orthomosaic mount is invalid"
 
   original_container_id=$(docker inspect --format '{{.Id}}' "$live_container")
   original_image_id=$(docker inspect --format '{{.Image}}' "$live_container")
@@ -670,12 +718,15 @@ deploy_preview() {
     --ip "$original_network_ip" \
     --restart unless-stopped \
     -p "127.0.0.1:$live_port:3000" \
+    --mount "type=bind,src=$orthomosaic_host_dir,dst=$orthomosaic_container_dir,readonly" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 
   wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
     || blocked "replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
+  assert_pmtiles_range "http://127.0.0.1:$live_port" \
+    || blocked "replacement PMTiles range request failed"
   assert_preview_environment_banner "http://127.0.0.1:$live_port" \
     || blocked "replacement Preview environment banner is invalid"
   wait_for_public_preview_guard || blocked "public Preview authentication guard failed"

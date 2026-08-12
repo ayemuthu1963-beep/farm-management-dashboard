@@ -230,6 +230,11 @@ assert.doesNotMatch(deployScript, /docker\s+compose\b/)
 assert.doesNotMatch(deployScript, /\bsudo\b/)
 assert.doesNotMatch(deployScript, /nginx\s+-s\s+reload/)
 assert.doesNotMatch(deployScript, /crontab\s+-[er]/)
+assert.match(deployScript, /orthomosaic_host_dir="\/home\/muthu\/mfms-preview-map-data\/orthomosaic"/)
+assert.match(deployScript, /orthomosaic_sha256="0db33c684af256b0c121201c449125c2becb109a6d1f83ec40e1acb259a12849"/)
+assert.match(deployScript, /--mount "type=bind,src=\$orthomosaic_host_dir,dst=\$orthomosaic_container_dir,readonly"/)
+assert.match(deployScript, /assert_pmtiles_range "http:\/\/127\.0\.0\.1:\$candidate_port"/)
+assert.match(deployScript, /docker network disconnect "\$preview_network" "\$container"/)
 
 assert.equal(
   (previewDockerfile.match(/ARG NEXT_PUBLIC_MFMS_ENV=preview/g) ?? []).length,
@@ -271,6 +276,7 @@ const expectedReleasePaths = [
   "deploy/preview-release-manifest.json",
   "lib/farm-map/tree-hit-testing.ts",
   "package.json",
+  "scripts/preview-server-deploy.sh",
   "tests/farm-map-tree-click.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
