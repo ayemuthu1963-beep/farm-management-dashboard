@@ -254,9 +254,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the weekly Daily Attendance table to Worker Management",
+  "Show each worker's daily earnings beneath attendance",
 )
-assert.equal(manifest.base_commit, "59a9367eb46f174c0a1224c9d873759dfc83726b")
+assert.equal(manifest.base_commit, "e1ce67fa1d454e3d3d46342344611fb8ee7a7209")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -266,13 +266,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/worker-management/daily-attendance/page.tsx",
   "components/worker-management/daily-attendance.tsx",
-  "components/worker-management/worker-module-shell.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/page-titles.ts",
-  "public/worker-management-sw.js",
-  "public/worker-management.webmanifest",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",
 ]

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   Check,
@@ -18,6 +18,7 @@ import {
   addDays,
   compareAccountCodes,
   formatDate,
+  formatWholeINR,
   toDateInput,
 } from "@/lib/worker-management-format"
 import {
@@ -175,6 +176,29 @@ function AttendanceMark({ item, workerName }: { item: DailyWageItem | null; work
       {label}
     </span>
   ) : null
+}
+
+function DailyEarnings({ item, workerName }: { item: DailyWageItem | null; workerName: string }) {
+  if (!item) {
+    return (
+      <span className="text-muted-foreground" aria-label={`No earnings entered for ${workerName}`}>
+        —
+      </span>
+    )
+  }
+
+  const amount = formatWholeINR(item.daily_wage_amount)
+  return (
+    <span
+      className={cn(
+        "font-bold tabular-nums",
+        Number(item.daily_wage_amount) > 0 ? "text-emerald-700" : "text-muted-foreground",
+      )}
+      aria-label={`${workerName} earned ${amount}`}
+    >
+      {amount}
+    </span>
+  )
 }
 
 function accountTone(accountType: AccountType): "green" | "blue" | "muted" {
@@ -366,27 +390,43 @@ export function DailyAttendance() {
               </thead>
               <tbody>
                 {visibleAccounts.map((account) => (
-                  <tr key={account.account_id} className="border-b border-border last:border-b-0 hover:bg-muted/35">
-                    <th scope="row" className="sticky left-0 z-10 bg-card px-4 py-3 text-left shadow-[8px_0_12px_-12px_rgba(0,0,0,0.45)]">
-                      <span className="block font-bold text-foreground">{account.display_name}</span>
-                      <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                        <span>{account.account_code}</span>
-                        <span className={cn(
-                          "rounded-full px-2 py-0.5",
-                          accountTone(account.account_type) === "green" && "bg-primary/10 text-primary",
-                          accountTone(account.account_type) === "blue" && "bg-blue-100 text-blue-700",
-                          accountTone(account.account_type) === "muted" && "bg-muted text-muted-foreground",
-                        )}>
-                          {accountTypeLabel(account.account_type)}
+                  <Fragment key={account.account_id}>
+                    <tr className="border-b border-border/60 hover:bg-muted/35">
+                      <th scope="row" className="sticky left-0 z-10 bg-card px-4 py-3 text-left shadow-[8px_0_12px_-12px_rgba(0,0,0,0.45)]">
+                        <span className="block font-bold text-foreground">{account.display_name}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+                          <span>{account.account_code}</span>
+                          <span className={cn(
+                            "rounded-full px-2 py-0.5",
+                            accountTone(account.account_type) === "green" && "bg-primary/10 text-primary",
+                            accountTone(account.account_type) === "blue" && "bg-blue-100 text-blue-700",
+                            accountTone(account.account_type) === "muted" && "bg-muted text-muted-foreground",
+                          )}>
+                            {accountTypeLabel(account.account_type)}
+                          </span>
                         </span>
-                      </span>
-                    </th>
-                    {dates.map((date) => (
-                      <td key={date} className={cn("px-2 py-3 text-center", date === today && "bg-primary/[0.035]")}>
-                        <AttendanceMark item={attendanceItem(responses[date], account.account_id)} workerName={account.display_name} />
-                      </td>
-                    ))}
-                  </tr>
+                      </th>
+                      {dates.map((date) => (
+                        <td key={date} className={cn("px-2 py-3 text-center", date === today && "bg-primary/[0.035]")}>
+                          <AttendanceMark item={attendanceItem(responses[date], account.account_id)} workerName={account.display_name} />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="border-b border-border bg-emerald-50/45 last:border-b-0">
+                      <th
+                        scope="row"
+                        className="sticky left-0 z-10 bg-emerald-50 px-4 py-2.5 text-left text-xs font-bold text-emerald-800 shadow-[8px_0_12px_-12px_rgba(0,0,0,0.45)]"
+                        aria-label={`${account.display_name} amount earned`}
+                      >
+                        Amount earned
+                      </th>
+                      {dates.map((date) => (
+                        <td key={date} className={cn("px-2 py-2.5 text-center text-xs", date === today && "bg-primary/[0.05]")}>
+                          <DailyEarnings item={attendanceItem(responses[date], account.account_id)} workerName={account.display_name} />
+                        </td>
+                      ))}
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

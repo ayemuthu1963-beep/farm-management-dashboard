@@ -214,6 +214,9 @@ check(dailyAttendance.includes("fetchAccounts({ isActive: true"), "Daily Attenda
 check(dailyAttendance.includes("datesForWeek"), "Daily Attendance must show the full Saturday-Friday week")
 check(dailyAttendance.includes("No entry"), "Daily Attendance must distinguish a missing entry from an absence")
 check(dailyAttendance.includes("readCachedDailyWages"), "Daily Attendance must remain available from the offline roster cache")
+check(dailyAttendance.includes("Amount earned"), "Daily Attendance must add an earnings row beneath every worker")
+check(dailyAttendance.includes("formatWholeINR(item.daily_wage_amount)"), "Daily earnings must use the saved daily wage amount")
+check(dailyAttendance.includes("No earnings entered"), "Daily earnings must distinguish a missing wage from zero earnings")
 
 const workerServiceWorker = read("public/worker-management-sw.js")
 check(workerServiceWorker.includes('"/worker-management/daily-attendance"'), "Daily Attendance must be included in the Worker offline shell")
