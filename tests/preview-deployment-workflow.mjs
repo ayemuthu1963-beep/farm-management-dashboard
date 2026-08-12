@@ -7,6 +7,7 @@ const preflightWorkflow = readText(".github/workflows/preview-server-preflight.y
 const deployWorkflow = readText(".github/workflows/preview-server-deploy.yml")
 const rollbackWorkflow = readText(".github/workflows/preview-server-rollback.yml")
 const releaseSignalWorkflow = readText(".github/workflows/preview-release-candidate.yml")
+const previewDockerfile = readText("Dockerfile.preview")
 const preflightScript = readText("scripts/preview-server-preflight.sh")
 const deployScript = readText("scripts/preview-server-deploy.sh")
 const manifest = JSON.parse(
@@ -19,6 +20,15 @@ if (process.platform !== "win32") {
   assert.equal(statSync("scripts/preview-server-preflight.sh").mode & 0o777, 0o755)
   assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
 }
+
+assert.match(
+  previewDockerfile,
+  /COPY package\.json pnpm-lock\.yaml pnpm-workspace\.yaml \.\//,
+)
+assert.match(
+  previewDockerfile,
+  /COPY --from=builder \/app\/pnpm-workspace\.yaml \.\/pnpm-workspace\.yaml/,
+)
 
 for (const workflow of manualWorkflows) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
