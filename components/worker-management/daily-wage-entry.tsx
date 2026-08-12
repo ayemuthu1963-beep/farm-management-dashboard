@@ -7,10 +7,12 @@ import { fetchAccounts, fetchDailyWages } from "@/lib/worker-management-api"
 import {
   addDays,
   calculateDailyWage,
+  compareAccountCodes,
   formatDayDate,
   formatINR,
   money,
   toDateInput,
+  workerAccountOptionLabel,
 } from "@/lib/worker-management-format"
 import {
   attachAttendanceServerSnapshots,
@@ -54,9 +56,8 @@ function availableAttendance(item: DailyWageItem): AttendanceValue[] {
 }
 
 function addAvailableAccount(account: AvailableDailyAccount, workDate: string): DailyWageItem {
-  const group = account.account_type === "GROUP"
-  const attendees = group ? Math.max(account.default_group_size ?? 0, 0) : null
-  const attendance: AttendanceValue | null = group ? null : "FULL"
+  const attendees = null
+  const attendance: AttendanceValue | null = null
   return {
     attendance_id: null,
     account_id: account.account_id,
@@ -99,7 +100,16 @@ function mergeLocalAttendance(
   value: DailyWageResponse,
   operations: WorkerLocalOperation[],
 ): DailyWageResponse {
-  const items = value.items.map((item) => ({ ...item }))
+  const items = value.items.map((item) =>
+    item.is_default
+      ? {
+          ...item,
+          attendance_value: null,
+          group_attendee_count: null,
+          daily_wage_amount: "0.00",
+        }
+      : { ...item },
+  )
   const available = value.available_accounts.map((account) => ({ ...account }))
   latestAttendanceStates(operations).forEach((operation, accountId) => {
     if (operation.state === "SYNCED" || operation.entity_type !== "ATTENDANCE") return
@@ -170,11 +180,7 @@ export function DailyWageEntry() {
       setData(merged)
       setItems(merged.items)
       setSyncStates(states)
-      setDirtyIds(new Set(
-        merged.items
-          .filter((item) => item.is_default && !states.has(item.account_id))
-          .map((item) => item.account_id),
-      ))
+      setDirtyIds(new Set())
       setAvailableAccountId("")
     } catch (loadError) {
       const cached = await readCachedDailyWages(workDate)
@@ -185,11 +191,7 @@ export function DailyWageEntry() {
         setData(merged)
         setItems(merged.items)
         setSyncStates(states)
-        setDirtyIds(new Set(
-          merged.items
-            .filter((item) => item.is_default && !states.has(item.account_id))
-            .map((item) => item.account_id),
-        ))
+        setDirtyIds(new Set())
         setNotice("Offline roster loaded. New entries will be saved on this device.")
       } else {
         setError(loadError instanceof Error ? loadError.message : "Unable to load daily wages.")
@@ -228,11 +230,18 @@ export function DailyWageEntry() {
 
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return items.filter((item) => {
-      if (changedOnly && !dirtyIds.has(item.account_id) && !syncStates.has(item.account_id)) return false
-      return !query || `${item.account_code} ${item.display_name}`.toLowerCase().includes(query)
-    })
+    return items
+      .filter((item) => {
+        if (changedOnly && !dirtyIds.has(item.account_id) && !syncStates.has(item.account_id)) return false
+        return !query || `${item.account_code} ${item.display_name}`.toLowerCase().includes(query)
+      })
+      .toSorted(compareAccountCodes)
   }, [changedOnly, dirtyIds, items, search, syncStates])
+
+  const availableAccounts = useMemo(
+    () => (data?.available_accounts ?? []).toSorted(compareAccountCodes),
+    [data?.available_accounts],
+  )
 
   const dailyTotal = items.reduce((sum, item) => sum + money(item.daily_wage_amount), 0)
   const canEdit = data?.week.status === "NOT_STARTED" || data?.week.status === "DRAFT" || data?.week.status === "REOPENED"
@@ -243,13 +252,21 @@ export function DailyWageEntry() {
     )
     if (!account || items.some((item) => item.account_id === account.account_id)) return
     setItems((current) => [...current, addAvailableAccount(account, workDate)])
-    setDirtyIds((current) => new Set(current).add(account.account_id))
     setAvailableAccountId("")
   }
 
   const save = async () => {
     const changedItems = items.filter((item) => dirtyIds.has(item.account_id))
     if (!changedItems.length || !canEdit) return
+    const incomplete = changedItems.find((item) =>
+      item.account_type === "GROUP"
+        ? item.group_attendee_count === null
+        : item.attendance_value === null,
+    )
+    if (incomplete) {
+      setError(`Select attendance for ${incomplete.account_code} · ${incomplete.display_name} before saving.`)
+      return
+    }
     setSaving(true)
     setError("")
     setNotice("")
@@ -331,7 +348,7 @@ export function DailyWageEntry() {
         title={formatDayDate(workDate)}
         description={
           data
-            ? `${data.week.start_date} – ${data.week.end_date} · Farm workers start at Full Day; alter only when required.`
+            ? `${data.week.start_date} – ${data.week.end_date} · Select attendance explicitly for every entry you save.`
             : "Saturday–Friday work week · accounts close Friday evening and payment is made Saturday."
         }
         actions={
@@ -391,7 +408,7 @@ export function DailyWageEntry() {
         </div>
       </div>
 
-      {data?.available_accounts.length ? (
+      {availableAccounts.length ? (
         <div className="mt-4 rounded-xl border border-border bg-card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="flex-1 text-sm font-semibold">
@@ -403,9 +420,9 @@ export function DailyWageEntry() {
                 className="mt-1 h-11 w-full rounded-lg border border-input bg-background px-3 font-normal"
               >
                 <option value="">Select an account</option>
-                {data.available_accounts.map((account) => (
+                {availableAccounts.map((account) => (
                   <option key={account.account_id} value={account.account_id}>
-                    {account.display_name} · {account.account_type === "GROUP" ? "Group" : "Outside"}
+                    {workerAccountOptionLabel(account)} · {account.account_type === "GROUP" ? "Group" : "Outside"}
                   </option>
                 ))}
               </select>
@@ -426,6 +443,11 @@ export function DailyWageEntry() {
             {visibleItems.map((item) => {
               const syncState = syncStates.get(item.account_id)
               const itemCanEdit = canEdit && syncState?.state !== "CONFLICT"
+              const selectionRequired = item.is_default && !syncState && (
+                item.account_type === "GROUP"
+                  ? item.group_attendee_count === null
+                  : item.attendance_value === null
+              )
               return (
                 <article key={item.account_id} className="rounded-xl border border-border bg-card p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -437,7 +459,8 @@ export function DailyWageEntry() {
                       {!dirtyIds.has(item.account_id) && syncState?.state === "WAITING_TO_SYNC" ? <Badge tone="amber">Waiting to Sync</Badge> : null}
                       {!dirtyIds.has(item.account_id) && syncState?.state === "CONFLICT" ? <Badge tone="red">Conflict</Badge> : null}
                       {!dirtyIds.has(item.account_id) && syncState?.state === "SYNCED" ? <Badge tone="green">Synced</Badge> : null}
-                      {!dirtyIds.has(item.account_id) && !syncState ? <Badge tone="green">Saved</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && selectionRequired ? <Badge tone="amber">Selection required</Badge> : null}
+                      {!dirtyIds.has(item.account_id) && !syncState && !selectionRequired ? <Badge tone="green">Saved</Badge> : null}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {item.account_code} · {formatINR(item.wage_rate_snapshot)}/day
@@ -476,9 +499,13 @@ export function DailyWageEntry() {
                         type="number"
                         min="0"
                         inputMode="numeric"
-                        value={item.group_attendee_count ?? 0}
+                        value={item.group_attendee_count ?? ""}
                         disabled={!itemCanEdit}
-                        onChange={(event) => changeItem(item.account_id, { group_attendee_count: Math.max(0, Number(event.target.value) || 0) })}
+                        onChange={(event) => changeItem(item.account_id, {
+                          group_attendee_count: event.target.value === ""
+                            ? null
+                            : Math.max(0, Number(event.target.value) || 0),
+                        })}
                         className="h-11 w-16 rounded-lg border border-input bg-background text-center text-lg font-bold"
                       />
                       <WorkerButton

@@ -254,9 +254,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Hide inactive workers by default and reset the Preview Worker offline cache",
+  "Sort Worker Management by labour account code and require explicit daily selections",
 )
-assert.equal(manifest.base_commit, "0e8ee2def00762be6d66c03623bdfe11d0d4d70d")
+assert.equal(manifest.base_commit, "f2d0dd95b843f38e9c51eecbb0d6eceaf3b5e96c")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -266,11 +266,15 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  ".github/workflows/preview-baseline.yml",
+  ".github/workflows/preview-server-preflight.yml",
+  "components/worker-management/daily-wage-entry.tsx",
+  "components/worker-management/loan-register.tsx",
+  "components/worker-management/weekly-settlement.tsx",
   "components/worker-management/worker-directory.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-offline.ts",
+  "lib/worker-management-format.ts",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management-offline.mjs",
   "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

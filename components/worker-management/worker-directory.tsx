@@ -12,6 +12,7 @@ import {
 import {
   accountStateLabel,
   accountTypeLabel,
+  compareAccountCodes,
   formatINR,
   toDateInput,
 } from "@/lib/worker-management-format"
@@ -100,14 +101,16 @@ export function WorkerDirectory() {
 
   const filteredAccounts = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return accounts.filter(
-      (account) =>
-        account.is_active === !showInactive &&
-        (!query ||
-          `${account.account_code} ${account.display_name} ${account.group_leader_name ?? ""} ${account.account_type}`
-            .toLowerCase()
-            .includes(query)),
-    )
+    return accounts
+      .filter(
+        (account) =>
+          account.is_active === !showInactive &&
+          (!query ||
+            `${account.account_code} ${account.display_name} ${account.group_leader_name ?? ""} ${account.account_type}`
+              .toLowerCase()
+              .includes(query)),
+      )
+      .toSorted(compareAccountCodes)
   }, [accounts, search, showInactive])
 
   const activeCount = useMemo(() => accounts.filter((account) => account.is_active).length, [accounts])

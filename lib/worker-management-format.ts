@@ -1,5 +1,33 @@
 import type { AccountState, AccountType, AttendanceValue, WeekStatus } from "./worker-management-types"
 
+type AccountIdentity = {
+  account_code: string
+  account_id?: number
+  display_name?: string
+}
+
+const accountCodeCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+})
+
+export function compareAccountCodes(left: AccountIdentity, right: AccountIdentity): number {
+  const codeOrder = accountCodeCollator.compare(left.account_code.trim(), right.account_code.trim())
+  if (codeOrder !== 0) return codeOrder
+
+  const nameOrder = accountCodeCollator.compare(
+    left.display_name?.trim() ?? "",
+    right.display_name?.trim() ?? "",
+  )
+  if (nameOrder !== 0) return nameOrder
+
+  return (left.account_id ?? 0) - (right.account_id ?? 0)
+}
+
+export function workerAccountOptionLabel(account: AccountIdentity): string {
+  return `${account.account_code} · ${account.display_name ?? ""}`.trim()
+}
+
 export function money(value: string | number | null | undefined): number {
   const parsed = Number(value ?? 0)
   return Number.isFinite(parsed) ? parsed : 0

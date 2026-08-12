@@ -11,7 +11,11 @@ import {
   signActorAssertion,
   WorkerBffError,
 } from "../lib/worker-management-signing.ts"
-import { defaultSettlementDate } from "../lib/worker-management-format.ts"
+import {
+  compareAccountCodes,
+  defaultSettlementDate,
+  workerAccountOptionLabel,
+} from "../lib/worker-management-format.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(join(root, path), "utf8")
@@ -24,6 +28,18 @@ const check = (condition, message) => {
 
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
+assertions += 2
+
+const naturallySortedAccounts = [
+  { account_id: 10, account_code: "FW-10", display_name: "Ten" },
+  { account_id: 2, account_code: "FW-2", display_name: "Two" },
+  { account_id: 1, account_code: "FW-001", display_name: "One" },
+].toSorted(compareAccountCodes)
+assert.deepEqual(
+  naturallySortedAccounts.map((account) => account.account_code),
+  ["FW-001", "FW-2", "FW-10"],
+)
+assert.equal(workerAccountOptionLabel(naturallySortedAccounts[0]), "FW-001 · One")
 assertions += 2
 
 const body = '{"weekly_payment":"500.00"}'
@@ -178,7 +194,12 @@ check(/id: "worker-management"[\s\S]*?href: "\/worker-management"[\s\S]*?status:
 const dailyEntry = read("components/worker-management/daily-wage-entry.tsx")
 check(/if \(item\.account_type === "OUTSIDE"\) return \["FULL", "ABSENT"\]/.test(dailyEntry), "Outside Workers must allow only Full or Absent")
 check(/item\.scheme_snapshot === "THREE_OPTION"[\s\S]*?"ONE_THIRD"/.test(dailyEntry), "Three-option Farm Workers must allow one-third day")
-check(/filter\(\(item\) => item\.is_default && !states\.has\(item\.account_id\)\)/.test(dailyEntry), "Unsynced default Farm rows must be ready to save")
+check(dailyEntry.includes("attendance_value: null"), "New Daily Wage rows must not default attendance")
+check(dailyEntry.includes("group_attendee_count: null"), "New Group rows must require an explicit attendee count")
+check(dailyEntry.includes("Selection required"), "Unselected Daily Wage rows need a visible required state")
+check(dailyEntry.includes("Select attendance explicitly for every entry you save"), "Daily Wage Entry must explain explicit selection")
+check(dailyEntry.includes(".toSorted(compareAccountCodes)"), "Daily Wage rows must use natural account-code order")
+check(dailyEntry.includes("workerAccountOptionLabel(account)"), "Daily Wage account options must show code before name")
 check(dailyEntry.includes("queueAttendanceOperations"), "Daily entry must save through the durable offline queue")
 check(dailyEntry.includes("Offline roster loaded"), "Daily entry must load its cached roster offline")
 check(dailyEntry.includes("Retry Device Entry"), "Attendance conflicts need an explicit device retry action")
@@ -191,6 +212,7 @@ check(workerDirectory.includes("account.is_active === !showInactive"), "Worker D
 check(workerDirectory.includes("Inactive Workers (${inactiveCount})"), "Worker Directory needs an Inactive Workers control")
 check(workerDirectory.includes("Active Workers (${activeCount})"), "Inactive view needs a return to Active Workers")
 check(workerDirectory.includes("aria-pressed={showInactive}"), "Inactive Workers control must expose its selected state")
+check(workerDirectory.includes(".toSorted(compareAccountCodes)"), "Worker Directory must use natural account-code order")
 
 const settlement = read("components/worker-management/weekly-settlement.tsx")
 for (const heading of ["Wages", "Cash Paid During Week", "Weekly Payment", "Balance to Loan"]) {
@@ -201,6 +223,7 @@ check(settlement.includes("read-only from the Loan Register"), "Cash Paid During
 check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
 check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
 check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
+check(settlement.includes(".toSorted(compareAccountCodes)"), "Weekly Settlement must use natural account-code order")
 
 const query = read("components/worker-management/worker-query.tsx")
 check(query.includes("weekDate"), "Query must expose a work-week filter")
@@ -217,6 +240,11 @@ check(loanRegister.includes("SETTLEMENT_TRANSFER"), "Loan Register must identify
 check(loanRegister.includes("Other movements"), "Loan Register must disclose deposit and cash-repayment variations")
 check(loanRegister.includes("queueLedgerOperation"), "Loan advances must use unique durable offline operations")
 check(loanRegister.includes("Device transaction queue"), "Loan Register must show queued device transactions")
+check(loanRegister.includes("accounts.toSorted(compareAccountCodes)"), "Signed worker accounts must use natural account-code order")
+check(loanRegister.includes("workerAccountOptionLabel(account)"), "Loan Register options must show code before name")
+check(!loanRegister.includes("accountId: current.accountId ||"), "Loan Register must not select an account by default")
+check(loanRegister.includes('accountId: ""'), "Loan Register must clear the account after each saved transaction")
+check(loanRegister.includes("!form.accountId"), "Loan Register must require an explicit account before saving")
 
 const offlineStore = read("lib/worker-management-offline.ts")
 check(offlineStore.includes("const DATABASE_VERSION = 2"), "Preview pilot must reset legacy Worker offline storage")
