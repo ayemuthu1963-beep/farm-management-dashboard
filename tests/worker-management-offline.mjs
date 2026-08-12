@@ -4,7 +4,41 @@ import { IDBKeyRange, indexedDB } from "fake-indexeddb"
 globalThis.indexedDB = indexedDB
 globalThis.IDBKeyRange = IDBKeyRange
 
+const legacyDatabase = await new Promise((resolve, reject) => {
+  const request = indexedDB.open("mfms-worker-management", 1)
+  request.onupgradeneeded = () => {
+    const database = request.result
+    database.createObjectStore("rosters", { keyPath: "work_date" })
+    database.createObjectStore("accounts", { keyPath: "key" })
+    const operations = database.createObjectStore("operations", { keyPath: "operation_id" })
+    operations.createIndex("by_entity_key", "entity_key", { unique: false })
+    operations.createIndex("by_state", "state", { unique: false })
+    operations.createIndex("by_entity_type", "entity_type", { unique: false })
+    database.createObjectStore("meta", { keyPath: "key" })
+  }
+  request.onsuccess = () => resolve(request.result)
+  request.onerror = () => reject(request.error)
+})
+await new Promise((resolve, reject) => {
+  const transaction = legacyDatabase.transaction("operations", "readwrite")
+  transaction.objectStore("operations").put({
+    operation_id: "legacy-uat-operation",
+    entity_key: "legacy",
+    entity_type: "ATTENDANCE",
+    state: "WAITING_TO_SYNC",
+  })
+  transaction.oncomplete = () => resolve()
+  transaction.onerror = () => reject(transaction.error)
+})
+legacyDatabase.close()
+
 const offline = await import("../lib/worker-management-offline.ts")
+
+assert.equal(
+  (await offline.getWorkerOfflineSnapshot()).operations.length,
+  0,
+  "the Preview pilot upgrade must remove legacy UAT operations",
+)
 
 function attendanceInput(attendance = "FULL", version = null) {
   return {

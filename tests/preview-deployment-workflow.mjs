@@ -254,9 +254,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add guarded manual motor runtime entry to the Preview frontend",
+  "Hide inactive workers by default and reset the Preview Worker offline cache",
 )
-assert.equal(manifest.base_commit, "d342468b402f1d2ebf24ab6d043d7223f55e7eae")
+assert.equal(manifest.base_commit, "0e8ee2def00762be6d66c03623bdfe11d0d4d70d")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -266,12 +266,12 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/admin/motor-runtime-management-client.tsx",
+  "components/worker-management/worker-directory.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/motor-runtime-management-api.ts",
-  "tests/admin-entry-workflows.mjs",
-  "tests/motor-runtime-import-ui-state.mjs",
+  "lib/worker-management-offline.ts",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management-offline.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

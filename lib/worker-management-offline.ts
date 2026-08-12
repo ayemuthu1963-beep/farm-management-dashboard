@@ -64,7 +64,7 @@ type SyncDependencies = {
 }
 
 const DATABASE_NAME = "mfms-worker-management"
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 const ROSTERS = "rosters"
 const ACCOUNTS = "accounts"
 const OPERATIONS = "operations"
@@ -102,8 +102,15 @@ function openDatabase(): Promise<IDBDatabase> {
   if (databasePromise) return databasePromise
   databasePromise = new Promise((resolve, reject) => {
     const request = requireIndexedDb().open(DATABASE_NAME, DATABASE_VERSION)
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result
+      if (event.oldVersion > 0 && event.oldVersion < DATABASE_VERSION) {
+        for (const storeName of [ROSTERS, ACCOUNTS, OPERATIONS, META]) {
+          if (database.objectStoreNames.contains(storeName)) {
+            database.deleteObjectStore(storeName)
+          }
+        }
+      }
       if (!database.objectStoreNames.contains(ROSTERS)) {
         database.createObjectStore(ROSTERS, { keyPath: "work_date" })
       }

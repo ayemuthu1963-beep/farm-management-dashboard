@@ -183,6 +183,15 @@ check(dailyEntry.includes("queueAttendanceOperations"), "Daily entry must save t
 check(dailyEntry.includes("Offline roster loaded"), "Daily entry must load its cached roster offline")
 check(dailyEntry.includes("Retry Device Entry"), "Attendance conflicts need an explicit device retry action")
 
+const workerDirectory = read("components/worker-management/worker-directory.tsx")
+check(workerDirectory.includes("const [showInactive, setShowInactive] = useState(false)"), "Worker Directory must default to active accounts")
+check(workerDirectory.includes("fetchAccounts({ isActive: true"), "Worker Directory must request active accounts explicitly")
+check(workerDirectory.includes("fetchAccounts({ isActive: false"), "Worker Directory must request inactive accounts explicitly")
+check(workerDirectory.includes("account.is_active === !showInactive"), "Worker Directory must separate active and inactive accounts")
+check(workerDirectory.includes("Inactive Workers (${inactiveCount})"), "Worker Directory needs an Inactive Workers control")
+check(workerDirectory.includes("Active Workers (${activeCount})"), "Inactive view needs a return to Active Workers")
+check(workerDirectory.includes("aria-pressed={showInactive}"), "Inactive Workers control must expose its selected state")
+
 const settlement = read("components/worker-management/weekly-settlement.tsx")
 for (const heading of ["Wages", "Cash Paid During Week", "Weekly Payment", "Balance to Loan"]) {
   check(settlement.includes(heading), `Settlement is missing ${heading}`)
@@ -210,6 +219,8 @@ check(loanRegister.includes("queueLedgerOperation"), "Loan advances must use uni
 check(loanRegister.includes("Device transaction queue"), "Loan Register must show queued device transactions")
 
 const offlineStore = read("lib/worker-management-offline.ts")
+check(offlineStore.includes("const DATABASE_VERSION = 2"), "Preview pilot must reset legacy Worker offline storage")
+check(offlineStore.includes("database.deleteObjectStore(storeName)"), "Worker offline upgrade must remove legacy UAT stores")
 for (const state of ["SAVED_ON_DEVICE", "WAITING_TO_SYNC", "SYNCED", "CONFLICT"]) {
   check(offlineStore.includes(`"${state}"`), `Offline store is missing ${state}`)
 }
