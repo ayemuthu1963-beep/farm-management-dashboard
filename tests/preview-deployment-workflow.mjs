@@ -254,9 +254,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Bake and verify the Preview UAT environment identity during frontend builds",
+  "Add guarded manual motor runtime entry to the Preview frontend",
 )
-assert.equal(manifest.base_commit, "ce417c956ba7b00a3c31360e438a478e66122706")
+assert.equal(manifest.base_commit, "d342468b402f1d2ebf24ab6d043d7223f55e7eae")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -266,9 +266,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "Dockerfile.preview",
+  "components/admin/motor-runtime-management-client.tsx",
   "deploy/preview-release-manifest.json",
-  "scripts/preview-server-deploy.sh",
+  "tests/admin-entry-workflows.mjs",
+  "tests/motor-runtime-import-ui-state.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

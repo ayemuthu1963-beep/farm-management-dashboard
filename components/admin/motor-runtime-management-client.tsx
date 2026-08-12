@@ -9,6 +9,7 @@ import {
   History,
   ListChecks,
   LoaderCircle,
+  PencilLine,
   Plus,
   RefreshCw,
   Save,
@@ -36,7 +37,7 @@ import {
 } from "@/lib/motor-runtime-management-api"
 import { cn } from "@/lib/utils"
 
-type Tab = "import" | "events" | "review" | "history" | "summary"
+type Tab = "import" | "events" | "review" | "history" | "summary" | "manual"
 type ImportFile = { file: File; motorId: MotorId; inferred: boolean }
 type EditableAllocation = {
   id: string
@@ -90,6 +91,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof Upload }> = [
   { id: "review", label: "Review Runs", icon: CheckCircle2 },
   { id: "history", label: "Runtime History", icon: History },
   { id: "summary", label: "Daily Summary", icon: CalendarDays },
+  { id: "manual", label: "Manual Entry", icon: PencilLine },
 ]
 const MOTORS: Array<{ id: MotorId; name: string }> = [
   { id: "motor-1", name: "Motor 1" },
@@ -139,6 +141,40 @@ function hhmm(minutes: number | null | undefined): string {
 
 function newAllocation(startTime = "", endTime = ""): EditableAllocation {
   return { id: crypto.randomUUID(), plot: "", valveNo: 0, startTime, endTime, startNextDay: false, endNextDay: false }
+}
+
+function farmTodayIso(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date())
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
+  return `${value("year")}-${value("month")}-${value("day")}`
+}
+
+function newManualRun(operationDate: string, runNo: number): EditableRun {
+  return {
+    key: `manual-${crypto.randomUUID()}`,
+    sourceImportId: null,
+    sourceRuntimeSessionId: null,
+    motorId: "motor-1",
+    operationDate,
+    runNo,
+    sourceOnAt: null,
+    sourceOffAt: null,
+    sourceRuntimeSeconds: null,
+    onTime: "",
+    offTime: "",
+    offNextDay: false,
+    reason: "Manual entry",
+    allocations: [newAllocation()],
+    warnings: [],
+    conflicts: [],
+    saving: false,
+    saved: false,
+  }
 }
 
 function workbookRunWarnings(parserWarning: string | null): string[] {
@@ -270,6 +306,7 @@ export function MotorRuntimeManagementClient() {
   const [files, setFiles] = useState<ImportFile[]>([])
   const [imports, setImports] = useState<UploadDetail[]>([])
   const [runs, setRuns] = useState<EditableRun[]>([])
+  const [manualRun, setManualRun] = useState<EditableRun | null>(null)
   const [importDiscrepancyCount, setImportDiscrepancyCount] = useState(0)
   const [events, setEvents] = useState<AllEvent[]>([])
   const [sessions, setSessions] = useState<ManagedSession[]>([])
@@ -428,9 +465,34 @@ export function MotorRuntimeManagementClient() {
     }))
   }
 
-  async function saveRun(run: EditableRun, publish: boolean) {
+  function patchManualRun(key: string, patch: Partial<EditableRun>) {
+    setManualRun((current) => current?.key === key ? { ...current, ...patch, saved: patch.saved ?? false } : current)
+  }
+
+  function patchManualAllocation(runKey: string, allocationId: string, patch: Partial<EditableAllocation>) {
+    setManualRun((current) => current?.key !== runKey ? current : {
+      ...current,
+      saved: false,
+      allocations: current.allocations.map((allocation) => allocation.id === allocationId ? { ...allocation, ...patch } : allocation),
+    })
+  }
+
+  function startManualEntry(replaceCurrent = false) {
+    if (replaceCurrent && manualRun && !manualRun.saved && !window.confirm("Start a new manual entry? The unsaved values currently shown will be cleared.")) return
+    const operationDate = farmTodayIso()
+    const knownRuns = [
+      ...sessions.filter((session) => session.operation_date === operationDate && session.motor_id === "motor-1").map((session) => session.run_no),
+      ...runs.filter((run) => run.operationDate === operationDate && run.motorId === "motor-1").map((run) => run.runNo),
+    ]
+    setManualRun(newManualRun(operationDate, Math.max(0, ...knownRuns) + 1))
+    setMessage(null)
     setError(null)
-    patchRun(run.key, { saving: true, warnings: [], conflicts: [] })
+    setTab("manual")
+  }
+
+  async function saveRun(run: EditableRun, publish: boolean, patch: (key: string, value: Partial<EditableRun>) => void = patchRun) {
+    setError(null)
+    patch(run.key, { saving: true, warnings: [], conflicts: [] })
     try {
       const saved = await saveManagedSession(sessionPayload(run), run.sessionId)
       const conflicts = saved.conflicts.map((item) => (
@@ -439,11 +501,11 @@ export function MotorRuntimeManagementClient() {
           : `${run.motorId.replace("motor-", "Motor ")} is already allocated to another plot during this time.`
       ))
       if (publish && (saved.warnings.length || conflicts.length)) {
-        patchRun(run.key, { sessionId: saved.session.id, saving: false, saved: true, warnings: saved.warnings, conflicts })
+        patch(run.key, { sessionId: saved.session.id, saving: false, saved: true, warnings: saved.warnings, conflicts })
         return
       }
       if (publish) await publishManagedSession(saved.session.id)
-      patchRun(run.key, {
+      patch(run.key, {
         sessionId: saved.session.id,
         originalStatus: publish ? "published" : "draft",
         saving: false,
@@ -455,7 +517,7 @@ export function MotorRuntimeManagementClient() {
       if (publish) await refreshSessions()
     } catch (value) {
       const detail = (value as Error & { detail?: { warnings?: string[]; conflicts?: Array<{ conflict_type?: string }> } }).detail
-      patchRun(run.key, {
+      patch(run.key, {
         saving: false,
         warnings: detail?.warnings ?? [value instanceof Error ? value.message : "Run could not be saved."],
         conflicts: detail?.conflicts?.map((item) => item.conflict_type?.replaceAll("_", " ") ?? "Physical conflict") ?? [],
@@ -505,9 +567,18 @@ export function MotorRuntimeManagementClient() {
         <p className="mt-2 text-xs font-semibold text-primary">Drafts may retain discrepancies. Save to History is blocked until the full motor runtime is allocated without impossible overlaps.</p>
       </div>
 
-      <div role="tablist" aria-label="Motor Runtime Management" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <div role="tablist" aria-label="Motor Runtime Management" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cn("flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold", tab === id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
+          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => id === "manual" ? (manualRun ? setTab("manual") : startManualEntry()) : setTab(id)} className={cn(
+            "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold",
+            id === "manual"
+              ? tab === id
+                ? "border-emerald-800 bg-emerald-800 text-white"
+                : "border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800"
+              : tab === id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:text-foreground",
+          )}>
             <Icon className="size-4" /> {label}{id === "review" && runs.length ? ` (${runs.length})` : ""}
           </button>
         ))}
@@ -560,6 +631,13 @@ export function MotorRuntimeManagementClient() {
       )}
 
       {tab === "events" && <AllEventsTable events={events} busy={busy} />}
+      {tab === "manual" && <>
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div><h2 className="font-serif text-lg font-bold text-emerald-950">Manual Motor Runtime Entry</h2><p className="text-sm text-emerald-900/80">Enter the complete motor run and every irrigated plot below. The same runtime, allocation and physical-conflict checks used for Excel imports apply.</p></div>
+          <Button type="button" variant="outline" className="border-emerald-700 bg-white text-emerald-800 hover:bg-emerald-100" onClick={() => startManualEntry(true)}><Plus className="size-4" /> Start Another Manual Entry</Button>
+        </section>
+        {manualRun && <ReviewRuns runs={[manualRun]} plotOptions={plotOptions} onPatch={patchManualRun} onPatchAllocation={patchManualAllocation} onSave={(run, publish) => saveRun(run, publish, patchManualRun)} />}
+      </>}
       {tab === "review" && <>
         {importDiscrepancyCount > 0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p className="flex items-center gap-2 font-bold"><AlertTriangle className="size-4" /> {importDiscrepancyCount} notification-event discrepancies require separate review</p><p className="mt-1">They remain visible in All Events and Motor Screenshot Analysis, but are not treated as additional workbook runs.</p></div>}
         <ReviewRuns runs={runs} plotOptions={plotOptions} onPatch={patchRun} onPatchAllocation={patchAllocation} onSave={saveRun} />

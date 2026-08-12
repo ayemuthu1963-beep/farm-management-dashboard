@@ -3,12 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Bake and verify the Preview UAT environment identity during frontend builds",
-  "base_commit": "ce417c956ba7b00a3c31360e438a478e66122706",
+  "release_note": "Add guarded manual motor runtime entry to the Preview frontend",
+  "base_commit": "d342468b402f1d2ebf24ab6d043d7223f55e7eae",
   "allowed_paths": [
-    "Dockerfile.preview",
+    "components/admin/motor-runtime-management-client.tsx",
     "deploy/preview-release-manifest.json",
-    "scripts/preview-server-deploy.sh",
+    "tests/admin-entry-workflows.mjs",
+    "tests/motor-runtime-import-ui-state.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
