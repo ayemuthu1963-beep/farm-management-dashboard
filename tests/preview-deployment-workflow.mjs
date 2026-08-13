@@ -220,6 +220,12 @@ assert.match(deployScript, /MFMS_TARGET_DATABASE=mfms_server_uat/)
 assert.match(deployScript, /proxy configuration changed/)
 assert.match(deployScript, /Preview schedules changed/)
 assert.match(deployScript, /readonly worker_secret_file="\$state_dir\/worker-management-signing\.env"/)
+assert.match(deployScript, /readonly installed_deploy_script="\/home\/muthu\/bin\/mfms-preview-github-deploy"/)
+assert.match(
+  deployScript,
+  /cmp -s "\$installed_deploy_script" "\$source_dir\/scripts\/preview-server-deploy\.sh"/,
+)
+assert.match(deployScript, /installed Preview deploy script does not match the approved candidate/)
 assert.match(deployScript, /MFMS_ACTOR_ASSERTION_SECRET=\[0-9a-f\]\{64\}/)
 assert.match(deployScript, /worker_actor_assertion=server-local/)
 assert.match(deployScript, /proxy_target_count_before=\$\(proxy_target_count\)/)
@@ -259,9 +265,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Show every Preview ODK link and the correct Field Collector name",
+  "Restore the Preview map mount and enforce deploy-wrapper parity",
 )
-assert.equal(manifest.base_commit, "636c9bc10ad6e87591a4056c338207e07afc4196")
+assert.equal(manifest.base_commit, "dba9f30e6774e56b6b7a62e3236569ce3bf71616")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -271,10 +277,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/beetle-trap/page.tsx",
-  "components/odk/preview-odk-source-card.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/odk-preview-links.mjs",
+  "scripts/preview-server-deploy.sh",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
