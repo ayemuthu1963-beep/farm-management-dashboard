@@ -38,6 +38,7 @@ readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
+readonly installed_deploy_script="/home/muthu/bin/mfms-preview-github-deploy"
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
   || blocked "the public target is not Preview"
@@ -682,6 +683,8 @@ deploy_preview() {
   git -C "$source_dir" merge-base --is-ancestor "$original_revision" "$candidate_revision" \
     || blocked "candidate does not contain the live Preview baseline"
   [[ -z "$(git -C "$source_dir" status --short)" ]] || blocked "candidate checkout is not clean"
+  cmp -s "$installed_deploy_script" "$source_dir/scripts/preview-server-deploy.sh" \
+    || blocked "installed Preview deploy script does not match the approved candidate"
   validate_release_manifest
 
   new_image="mfms-v0-preview:github-${candidate_revision:0:7}-$timestamp"
