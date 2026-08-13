@@ -45,6 +45,7 @@ for (const invalid of ["", "35A", "35..1", "35,1", "-1", null]) {
 const mapData = await readFile("lib/farm-map-data.ts", "utf8")
 assert.match(mapData, /Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88\.pmtiles/)
 assert.match(mapData, /Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026\.geojson/)
+assert.match(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026\.geojson/)
 assert.match(mapData, /\/map-data\/orthomosaic\//)
 assert.doesNotMatch(mapData, /farm-combined-png\/\{z\}/)
 
@@ -78,6 +79,44 @@ for (const feature of coordinates.features) {
   ])
 }
 
+const jackfruitBytes = await readFile(
+  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson",
+)
+assert.equal(
+  createHash("sha256").update(jackfruitBytes).digest("hex"),
+  "c3964898cc53729d71fd509f79421d12c8e962110ea4e83084f633d1d66714f9",
+)
+const jackfruitCoordinates = JSON.parse(jackfruitBytes.toString("utf8"))
+assert.equal(jackfruitCoordinates.type, "FeatureCollection")
+assert.equal(jackfruitCoordinates.features.length, 582)
+assert.equal(
+  new Set(jackfruitCoordinates.features.map((feature) => feature.properties.canonicalId)).size,
+  582,
+)
+assert.equal(
+  Math.min(...jackfruitCoordinates.features.map((feature) => Number(feature.properties.treeNo))),
+  1,
+)
+assert.equal(
+  Math.max(...jackfruitCoordinates.features.map((feature) => Number(feature.properties.treeNo))),
+  582,
+)
+for (const feature of jackfruitCoordinates.features) {
+  assert.deepEqual(Object.keys(feature.properties).sort(), ["canonicalId", "crop", "treeNo"])
+  assert.equal(feature.properties.crop, "Jackfruit")
+  assert.equal(feature.properties.canonicalId, `jackfruit:${feature.properties.treeNo}`)
+  assert.match(feature.properties.treeNo, /^[1-9]\d*$/)
+  assert.equal(feature.geometry.type, "Point")
+  assert.equal(feature.geometry.coordinates.length, 2)
+  assert.ok(feature.geometry.coordinates.every(Number.isFinite))
+}
+const cropSafeIds = new Set([
+  ...coordinates.features.map((feature) => `coconut:${feature.properties.treeNo}`),
+  ...jackfruitCoordinates.features.map((feature) => feature.properties.canonicalId),
+])
+assert.equal(cropSafeIds.size, 2_117 + 582)
+assert.doesNotMatch(jackfruitBytes.toString("utf8"), /classification|harvest|status|remark/i)
+
 const orthomosaicMap = await readFile("components/maps/farm-orthomosaic-map.tsx", "utf8")
 assert.match(orthomosaicMap, /new PMTiles\(farmCombinedLayer\.pmtilesUrl\)/)
 assert.match(orthomosaicMap, /leafletRasterLayer/)
@@ -89,6 +128,7 @@ const mapClient = await readFile("components/maps/farm-map-client.tsx", "utf8")
 assert.match(mapClient, /const MARKER_ZOOM = 18/)
 assert.match(mapClient, /const LABEL_ZOOM = 20/)
 assert.match(mapClient, /const EXPECTED_TREE_COUNT = 2_117/)
+assert.match(mapClient, /const EXPECTED_JACKFRUIT_COUNT = 582/)
 assert.match(mapClient, /"Plot 1": 954, "Plot 2": 1_163/)
 assert.match(mapClient, /leaflet\.canvas\(\{ padding: 0\.5 \}\)/)
 assert.match(mapClient, /getBounds\(\)\.pad\(0\.08\)/)
@@ -100,6 +140,18 @@ assert.match(mapClient, /Unknown\/unmatched/)
 assert.match(mapClient, /grey does not mean Sapling/)
 assert.match(mapClient, /Operational data as of/)
 assert.match(mapClient, /Plot 1: 954 corrected coordinates/)
+assert.match(mapClient, /Jackfruit alignment check/)
+assert.match(mapClient, /farmCombinedLayer\.jackfruitAuditCoordinatesUrl/)
+assert.match(mapClient, /validateJackfruitAuditCollection/)
+assert.match(mapClient, /jackfruit:\$\{treeNo\}/)
+assert.match(mapClient, /color: "#ff00ff"/)
+assert.match(mapClient, /fillOpacity: selected \? 0\.14 : 0/)
+assert.match(mapClient, /map\.getZoom\(\) >= MARKER_ZOOM/)
+assert.match(mapClient, /map\.getZoom\(\) >= LABEL_ZOOM/)
+assert.match(mapClient, /Jackfruit Tree Number/)
+assert.match(mapClient, /Coordinate status/)
+assert.match(mapClient, /Audit only/)
+assert.match(mapClient, /not joined to MFMS operational data/)
 assert.doesNotMatch(mapClient, /Good|Inconsistent|Critical/)
 assert.doesNotMatch(mapClient, /fillColor: "#0f766e"/)
 for (const colour of Object.values(expectedColours)) {
