@@ -102,6 +102,7 @@ frontend:app/worker-management/workers/page.tsx
 frontend:components/worker-management/daily-wage-entry.tsx
 frontend:components/worker-management/loan-register.tsx
 frontend:components/worker-management/weekly-settlement.tsx
+frontend:components/worker-management/weekly-wage-table-preview.tsx
 frontend:components/worker-management/worker-dashboard.tsx
 frontend:components/worker-management/worker-directory.tsx
 frontend:components/worker-management/worker-module-shell.tsx

@@ -27,7 +27,7 @@ const moduleNavigation: ReadonlyArray<{
   label: string
   icon: LucideIcon
 }> = [
-  { href: "/worker-management", label: "Daily Wage Entry", icon: CalendarDays },
+  { href: "/worker-management", label: "Weekly Wage Table", icon: CalendarDays },
   { href: "/worker-management/daily-attendance", label: "Daily Attendance", icon: ClipboardCheck },
   { href: "/worker-management/workers", label: "Worker Management", icon: Users },
   { href: "/worker-management/weekly-settlement", label: "Weekly Settlement", icon: WalletCards },

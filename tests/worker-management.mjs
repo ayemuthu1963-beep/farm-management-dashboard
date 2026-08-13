@@ -186,7 +186,7 @@ for (const route of routeFiles) check(existsSync(join(root, route)), `Missing Wo
 
 const moduleShell = read("components/worker-management/worker-module-shell.tsx")
 const expectedOrder = [
-  'label: "Daily Wage Entry"',
+  'label: "Weekly Wage Table"',
   'label: "Daily Attendance"',
   'label: "Worker Management"',
   'label: "Weekly Settlement"',
@@ -203,6 +203,14 @@ for (const label of expectedOrder) {
 
 const mfmsNavigation = read("lib/mfms-navigation.ts")
 check(/id: "worker-management"[\s\S]*?href: "\/worker-management"[\s\S]*?status: "active"/.test(mfmsNavigation), "Global Worker navigation is not active")
+
+const workerManagementPage = read("app/worker-management/page.tsx")
+const weeklyWagePreview = read("components/worker-management/weekly-wage-table-preview.tsx")
+check(workerManagementPage.includes("WeeklyWageTablePreview"), "Worker Management must show the weekly wage-table redesign")
+check(weeklyWagePreview.includes("fullWeek(worker.fullWage)"), "Every worker day must start with the full wage")
+check(weeklyWagePreview.includes("Array.from({ length: 3 }"), "Weekly wage table must include three custom-entry rows")
+check(weeklyWagePreview.includes("Daily full wage · operator editable"), "Weekly wage headers must explain operator editing")
+check(weeklyWagePreview.includes("Static design preview"), "The wage-table prototype must clearly state that it does not save")
 
 const dailyAttendance = read("components/worker-management/daily-attendance.tsx")
 check(dailyAttendance.includes('title="Full attendance"'), "Daily Attendance needs a green full-attendance tick")
