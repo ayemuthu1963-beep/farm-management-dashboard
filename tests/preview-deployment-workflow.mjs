@@ -270,7 +270,7 @@ assert.equal(
   manifest.release_note,
   "Add Jackfruit affine coordinate comparison on Preview",
 )
-assert.equal(manifest.base_commit, "f3bc666bc162504534323f0ae24af90c25b3cb50")
+assert.equal(manifest.base_commit, "f3bc66611953f9dbd20f39896596250dbc1113c8")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",

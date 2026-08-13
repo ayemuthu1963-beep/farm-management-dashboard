@@ -4,7 +4,7 @@
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
   "release_note": "Add Jackfruit affine coordinate comparison on Preview",
-  "base_commit": "f3bc666bc162504534323f0ae24af90c25b3cb50",
+  "base_commit": "f3bc66611953f9dbd20f39896596250dbc1113c8",
   "allowed_paths": [
     "components/maps/farm-map-client.tsx",
     "deploy/preview-release-manifest.json",
