@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Repair the Preview map mount from the actual live revision",
+  "Remove obsolete Farm Map popup metadata rows on Preview",
 )
-assert.equal(manifest.base_commit, "dba9f30e6774e56b6b7a62e3236569ce3bf71616")
+assert.equal(manifest.base_commit, "b32933397c582efced22d29b08e8eb7be6b049a8")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,8 +280,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
-  "scripts/preview-server-deploy.sh",
+  "tests/farm-map-tree-click.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
