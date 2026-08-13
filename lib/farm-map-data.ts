@@ -6,6 +6,7 @@ export interface FarmCombinedLayer {
   pmtilesUrl: string
   coordinatesUrl: string
   jackfruitAuditCoordinatesUrl: string
+  jackfruitTranslatedCoordinatesUrl: string
   bounds: Coordinate[]
   center: Coordinate
   minZoom: number
@@ -59,6 +60,8 @@ export const farmCombinedLayer: FarmCombinedLayer = {
     "/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
   jackfruitAuditCoordinatesUrl:
     "/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson",
+  jackfruitTranslatedCoordinatesUrl:
+    "/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026.geojson",
   bounds: [...plotBounds.plot1, ...plotBounds.plot2],
   center: [10.4812, 77.077],
   minZoom: 16,

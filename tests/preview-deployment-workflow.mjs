@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add temporary Jackfruit coordinate audit overlay on Preview",
+  "Add original-versus-translated Jackfruit coordinate comparison on Preview",
 )
-assert.equal(manifest.base_commit, "08ad4887a82c9ec6fff4416423d72be48786105f")
+assert.equal(manifest.base_commit, "5234354fc91f5227d6f075d65fce54a55465ea71")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -284,7 +284,7 @@ const expectedReleasePaths = [
   "deploy/preview-release-manifest.json",
   "lib/farm-map-data.ts",
   "next.config.mjs",
-  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson",
+  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026.geojson",
   "tests/farm-map-coconut-trees.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
