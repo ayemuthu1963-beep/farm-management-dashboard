@@ -17,6 +17,7 @@ import {
 import { HarvestReviewSections } from "@/components/admin/harvest-review-sections"
 import { Panel } from "@/components/farm/panel"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
+import { previewOdkForms } from "@/lib/odk-preview"
 import {
   buildReviewBuckets,
   conflictGroupResolved,
@@ -1298,8 +1299,8 @@ export function HarvestManualReviewWorkspace() {
           </label>
           <div className="rounded-xl border bg-background p-3">
             <p className="text-xs font-bold uppercase text-muted-foreground">ODK Source</p>
-            <p className="mt-1 font-black">Project {status?.projectId ?? 17}</p>
-            <p className="break-all text-xs">{status?.formId ?? "mfms_preview_harvest_test_v1"}</p>
+            <p className="mt-1 font-black">Project {status?.projectId ?? previewOdkForms.harvest.projectId}</p>
+            <p className="break-all text-xs">{status?.formId ?? previewOdkForms.harvest.formId}</p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">

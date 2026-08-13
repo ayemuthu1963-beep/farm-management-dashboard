@@ -4,6 +4,7 @@ import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { HarvestManualReviewWorkspace } from "@/components/admin/harvest-manual-review-workspace"
 import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
 import { PreviewOdkSourceCard } from "@/components/odk/preview-odk-source-card"
+import { previewOdkForms } from "@/lib/odk-preview"
 
 export const dynamic = "force-dynamic"
 
@@ -29,8 +30,8 @@ export default function HarvestSyncAdminPage() {
             <p><span className="font-extrabold">Mode:</span> Manual Review &amp; Import</p>
             <p><span className="font-extrabold">Environment:</span> Preview / UAT</p>
             <p><span className="font-extrabold">Database:</span> mfms_server_uat</p>
-            <p><span className="font-extrabold">ODK Project:</span> 17</p>
-            <p><span className="font-extrabold">Form:</span> mfms_preview_harvest_test_v1</p>
+            <p><span className="font-extrabold">ODK Project:</span> {previewOdkForms.harvest.projectId}</p>
+            <p><span className="font-extrabold">Form:</span> {previewOdkForms.harvest.formId}</p>
           </div>
         </section>
         <PreviewOdkSourceCard form="harvest" />

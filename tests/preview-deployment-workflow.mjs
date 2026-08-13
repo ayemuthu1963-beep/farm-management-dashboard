@@ -259,9 +259,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Map Field Collector projects and published form versions by environment",
+  "Use the Preview Field Collector project in all Harvest admin labels",
 )
-assert.equal(manifest.base_commit, "8b0cb2de265b093a4e8951f1368984b888f3a04e")
+assert.equal(manifest.base_commit, "8a271a03393aa90aea94d2d444f15ca6196cd455")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -271,8 +271,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/admin/harvest-sync/page.tsx",
+  "components/admin/harvest-manual-review-workspace.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/odk-preview.ts",
+  "tests/harvest-sync-exact-duplicates.mjs",
   "tests/odk-preview-links.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
