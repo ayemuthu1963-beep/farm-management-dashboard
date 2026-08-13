@@ -3,7 +3,7 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Approve affine Jackfruit coordinates on Preview",
+  "release_note": "Activate approved affine Jackfruit coordinates on Preview",
   "base_commit": "a79c669f97c210a6c54f01a6cb614b88f9afd8c5",
   "allowed_paths": [
     "components/maps/farm-map-client.tsx",
