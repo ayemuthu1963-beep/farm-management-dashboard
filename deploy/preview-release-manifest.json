@@ -3,12 +3,15 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Remove obsolete Farm Map popup metadata rows on Preview",
-  "base_commit": "b32933397c582efced22d29b08e8eb7be6b049a8",
+  "release_note": "Add temporary Jackfruit coordinate audit overlay on Preview",
+  "base_commit": "08ad4887a82c9ec6fff4416423d72be48786105f",
   "allowed_paths": [
     "components/maps/farm-map-client.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/farm-map-tree-click.mjs",
+    "lib/farm-map-data.ts",
+    "next.config.mjs",
+    "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson",
+    "tests/farm-map-coconut-trees.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
