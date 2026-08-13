@@ -46,6 +46,10 @@ const mapData = await readFile("lib/farm-map-data.ts", "utf8")
 assert.match(mapData, /Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88\.pmtiles/)
 assert.match(mapData, /Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026\.geojson/)
 assert.match(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026\.geojson/)
+assert.match(
+  mapData,
+  /Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026\.geojson/,
+)
 assert.match(mapData, /\/map-data\/orthomosaic\//)
 assert.doesNotMatch(mapData, /farm-combined-png\/\{z\}/)
 
@@ -117,6 +121,38 @@ const cropSafeIds = new Set([
 assert.equal(cropSafeIds.size, 2_117 + 582)
 assert.doesNotMatch(jackfruitBytes.toString("utf8"), /classification|harvest|status|remark/i)
 
+const translatedJackfruitBytes = await readFile(
+  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026.geojson",
+)
+assert.equal(
+  createHash("sha256").update(translatedJackfruitBytes).digest("hex"),
+  "8bb62d4f9912256344469cf23a1f1407f7d89dbec510db14b988626f45da87a7",
+)
+const translatedJackfruitCoordinates = JSON.parse(translatedJackfruitBytes.toString("utf8"))
+assert.equal(translatedJackfruitCoordinates.features.length, 582)
+assert.equal(
+  new Set(
+    translatedJackfruitCoordinates.features.map((feature) => feature.properties.canonicalId),
+  ).size,
+  582,
+)
+assert.deepEqual(
+  translatedJackfruitCoordinates.features.map((feature) => feature.properties.treeNo),
+  jackfruitCoordinates.features.map((feature) => feature.properties.treeNo),
+)
+for (const feature of translatedJackfruitCoordinates.features) {
+  assert.deepEqual(Object.keys(feature.properties).sort(), ["canonicalId", "crop", "treeNo"])
+  assert.equal(feature.properties.crop, "Jackfruit")
+  assert.equal(feature.properties.canonicalId, `jackfruit:${feature.properties.treeNo}`)
+  assert.equal(feature.geometry.type, "Point")
+  assert.equal(feature.geometry.coordinates.length, 2)
+  assert.ok(feature.geometry.coordinates.every(Number.isFinite))
+}
+assert.doesNotMatch(
+  translatedJackfruitBytes.toString("utf8"),
+  /classification|harvest|status|remark/i,
+)
+
 const orthomosaicMap = await readFile("components/maps/farm-orthomosaic-map.tsx", "utf8")
 assert.match(orthomosaicMap, /new PMTiles\(farmCombinedLayer\.pmtilesUrl\)/)
 assert.match(orthomosaicMap, /leafletRasterLayer/)
@@ -140,17 +176,24 @@ assert.match(mapClient, /Unknown\/unmatched/)
 assert.match(mapClient, /grey does not mean Sapling/)
 assert.match(mapClient, /Operational data as of/)
 assert.match(mapClient, /Plot 1: 954 corrected coordinates/)
-assert.match(mapClient, /Jackfruit alignment check/)
+assert.match(mapClient, /Original Jackfruit coordinates — magenta rings/)
+assert.match(mapClient, /Translated Jackfruit proposal — cyan rings/)
 assert.match(mapClient, /farmCombinedLayer\.jackfruitAuditCoordinatesUrl/)
+assert.match(mapClient, /farmCombinedLayer\.jackfruitTranslatedCoordinatesUrl/)
 assert.match(mapClient, /validateJackfruitAuditCollection/)
 assert.match(mapClient, /jackfruit:\$\{treeNo\}/)
 assert.match(mapClient, /color: "#ff00ff"/)
+assert.match(mapClient, /color: "#00f5d4"/)
 assert.match(mapClient, /fillOpacity: selected \? 0\.14 : 0/)
 assert.match(mapClient, /map\.getZoom\(\) >= MARKER_ZOOM/)
 assert.match(mapClient, /map\.getZoom\(\) >= LABEL_ZOOM/)
 assert.match(mapClient, /Jackfruit Tree Number/)
 assert.match(mapClient, /Coordinate status/)
 assert.match(mapClient, /Audit only/)
+assert.match(mapClient, /Translated proposal \(\+2\.957 m E, \+4\.667 m N\)/)
+assert.match(mapClient, /translatedJackfruitEnabledRef/)
+assert.match(mapClient, /applyJackfruitMapState\("original"\)/)
+assert.match(mapClient, /applyJackfruitMapState\("translated"\)/)
 assert.match(mapClient, /not joined to MFMS operational data/)
 assert.doesNotMatch(mapClient, /Good|Inconsistent|Critical/)
 assert.doesNotMatch(mapClient, /fillColor: "#0f766e"/)
