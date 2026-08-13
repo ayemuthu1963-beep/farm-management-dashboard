@@ -268,7 +268,7 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Approve affine Jackfruit coordinates on Preview",
+  "Activate approved affine Jackfruit coordinates on Preview",
 )
 assert.equal(manifest.base_commit, "a79c669f97c210a6c54f01a6cb614b88f9afd8c5")
 assert.deepEqual(manifest.protected_invariants, {
