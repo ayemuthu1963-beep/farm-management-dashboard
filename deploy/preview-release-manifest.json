@@ -3,15 +3,16 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote approved Jackfruit coordinates on Preview",
-  "base_commit": "5a659835dd46b4fdeab7130a46d8d21f01a1973b",
+  "release_note": "Connect the approved weekly wage table to the Preview database",
+  "base_commit": "f58bf9f578a5a35b7da6e89a6c44bc38e514455b",
   "allowed_paths": [
-    "components/maps/farm-map-client.tsx",
+    "app/globals.css",
+    "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/farm-map-data.ts",
-    "next.config.mjs",
-    "tests/farm-map-coconut-trees.mjs",
-    "tests/preview-deployment-workflow.mjs"
+    "lib/worker-management-api.ts",
+    "lib/worker-management-types.ts",
+    "tests/preview-deployment-workflow.mjs",
+    "tests/worker-management.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
