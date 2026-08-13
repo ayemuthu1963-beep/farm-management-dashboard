@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add Jackfruit affine coordinate comparison on Preview",
+  "Approve affine Jackfruit coordinates on Preview",
 )
-assert.equal(manifest.base_commit, "f3bc66611953f9dbd20f39896596250dbc1113c8")
+assert.equal(manifest.base_commit, "a79c669f97c210a6c54f01a6cb614b88f9afd8c5")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -283,8 +283,6 @@ const expectedReleasePaths = [
   "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
   "lib/farm-map-data.ts",
-  "next.config.mjs",
-  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026.geojson",
   "tests/farm-map-coconut-trees.mjs",
   "tests/farm-map-jackfruit-affine-review.mjs",
   "tests/preview-deployment-workflow.mjs",

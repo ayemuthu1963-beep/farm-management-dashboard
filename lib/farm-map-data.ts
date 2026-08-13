@@ -5,9 +5,7 @@ export interface FarmCombinedLayer {
   name: string
   pmtilesUrl: string
   coordinatesUrl: string
-  jackfruitOriginalCoordinatesUrl: string
-  jackfruitTranslatedCoordinatesUrl: string
-  jackfruitAffineCoordinatesUrl: string
+  jackfruitCoordinatesUrl: string
   bounds: Coordinate[]
   center: Coordinate
   minZoom: number
@@ -59,11 +57,7 @@ export const farmCombinedLayer: FarmCombinedLayer = {
     "/map-data/orthomosaic/Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles",
   coordinatesUrl:
     "/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
-  jackfruitOriginalCoordinatesUrl:
-    "/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson",
-  jackfruitTranslatedCoordinatesUrl:
-    "/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026.geojson",
-  jackfruitAffineCoordinatesUrl:
+  jackfruitCoordinatesUrl:
     "/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026.geojson",
   bounds: [...plotBounds.plot1, ...plotBounds.plot2],
   center: [10.4812, 77.077],
