@@ -10,6 +10,11 @@ import {
 } from "../lib/farm-map/classification-styles.ts"
 import { canonicalTreeNo } from "../lib/farm-map/tree-number.ts"
 
+const normalizedAssetHash = (bytes) =>
+  createHash("sha256")
+    .update(bytes.toString("utf8").replaceAll("\r\n", "\n"))
+    .digest("hex")
+
 const expectedColours = {
   "Century Maker": "#166534",
   "Match Winner": "#15803d",
@@ -45,11 +50,12 @@ for (const invalid of ["", "35A", "35..1", "35,1", "-1", null]) {
 const mapData = await readFile("lib/farm-map-data.ts", "utf8")
 assert.match(mapData, /Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88\.pmtiles/)
 assert.match(mapData, /Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026\.geojson/)
-assert.doesNotMatch(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026\.geojson/)
+assert.match(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026\.geojson/)
 assert.match(
   mapData,
   /Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026\.geojson/,
 )
+assert.match(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026\.geojson/)
 assert.match(mapData, /\/map-data\/orthomosaic\//)
 assert.doesNotMatch(mapData, /farm-combined-png\/\{z\}/)
 
@@ -58,13 +64,14 @@ assert.match(nextConfig, /application\/octet-stream/)
 assert.match(nextConfig, /application\/geo\+json/)
 assert.match(nextConfig, /max-age=31536000, immutable/)
 assert.match(nextConfig, /Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026\.geojson/)
-assert.doesNotMatch(nextConfig, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026\.geojson/)
+assert.match(nextConfig, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026\.geojson/)
+assert.match(nextConfig, /Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026\.geojson/)
 
 const coordinateBytes = await readFile(
   "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
 )
 assert.equal(
-  createHash("sha256").update(coordinateBytes).digest("hex"),
+  normalizedAssetHash(coordinateBytes),
   "9f2be88cb91df205a5e5a70625490ddcb11255d82808b167d45d368eb0ea77ce",
 )
 const coordinates = JSON.parse(coordinateBytes.toString("utf8"))
@@ -89,7 +96,7 @@ const jackfruitBytes = await readFile(
   "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson",
 )
 assert.equal(
-  createHash("sha256").update(jackfruitBytes).digest("hex"),
+  normalizedAssetHash(jackfruitBytes),
   "c3964898cc53729d71fd509f79421d12c8e962110ea4e83084f633d1d66714f9",
 )
 const jackfruitCoordinates = JSON.parse(jackfruitBytes.toString("utf8"))
@@ -122,7 +129,7 @@ const translatedJackfruitBytes = await readFile(
   "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026.geojson",
 )
 assert.equal(
-  createHash("sha256").update(translatedJackfruitBytes).digest("hex"),
+  normalizedAssetHash(translatedJackfruitBytes),
   "8bb62d4f9912256344469cf23a1f1407f7d89dbec510db14b988626f45da87a7",
 )
 const translatedJackfruitCoordinates = JSON.parse(translatedJackfruitBytes.toString("utf8"))
@@ -178,21 +185,22 @@ assert.match(mapClient, /Unknown\/unmatched/)
 assert.match(mapClient, /grey does not mean Sapling/)
 assert.match(mapClient, /Operational data as of/)
 assert.match(mapClient, /Plot 1: 954 corrected coordinates/)
-assert.match(mapClient, /Panel title="Jackfruit Trees"/)
-assert.match(mapClient, /<span>Jackfruit trees<\/span>/)
-assert.match(mapClient, /farmCombinedLayer\.jackfruitCoordinatesUrl/)
+assert.match(mapClient, /Panel title="Jackfruit Coordinate Comparison"/)
+assert.match(mapClient, /Jackfruit affine correction — review only/)
+assert.match(mapClient, /farmCombinedLayer\.jackfruitOriginalCoordinatesUrl/)
+assert.match(mapClient, /farmCombinedLayer\.jackfruitTranslatedCoordinatesUrl/)
+assert.match(mapClient, /farmCombinedLayer\.jackfruitAffineCoordinatesUrl/)
 assert.match(mapClient, /validateJackfruitCoordinateCollection/)
 assert.match(mapClient, /jackfruit:\$\{treeNo\}/)
-assert.match(mapClient, /color: "#00f5d4"/)
-assert.match(mapClient, /fillOpacity: selected \? 0\.14 : 0/)
+assert.match(mapClient, /#ff00ff/)
+assert.match(mapClient, /#00e5ff/)
+assert.match(mapClient, /#dfff00/)
 assert.match(mapClient, /map\.getZoom\(\) >= MARKER_ZOOM/)
 assert.match(mapClient, /map\.getZoom\(\) >= LABEL_ZOOM/)
 assert.match(mapClient, /Jackfruit Tree Number/)
-assert.match(mapClient, /approved Jackfruit coordinates loaded/)
+assert.match(mapClient, /approval revoked/)
 assert.match(mapClient, /not joined to coconut performance classifications/)
-assert.doesNotMatch(mapClient, /#ff00ff|magenta|Coordinate Audit|audit only|Translated Jackfruit proposal/)
-assert.doesNotMatch(mapClient, /jackfruitAuditCoordinatesUrl|jackfruitTranslatedCoordinatesUrl/)
-assert.doesNotMatch(mapClient, /translatedJackfruit|JackfruitCoordinateVariant/)
+assert.match(mapClient, /JackfruitCoordinateVariant/)
 assert.doesNotMatch(mapClient, /Good|Inconsistent|Critical/)
 assert.doesNotMatch(mapClient, /fillColor: "#0f766e"/)
 for (const colour of Object.values(expectedColours)) {

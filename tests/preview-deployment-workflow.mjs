@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Connect the approved weekly wage table to the Preview database",
+  "Add Jackfruit affine coordinate comparison on Preview",
 )
-assert.equal(manifest.base_commit, "f58bf9f578a5a35b7da6e89a6c44bc38e514455b")
+assert.equal(manifest.base_commit, "f3bc666bc162504534323f0ae24af90c25b3cb50")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,13 +280,14 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/globals.css",
-  "components/worker-management/weekly-wage-table-preview.tsx",
+  "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-api.ts",
-  "lib/worker-management-types.ts",
+  "lib/farm-map-data.ts",
+  "next.config.mjs",
+  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026.geojson",
+  "tests/farm-map-coconut-trees.mjs",
+  "tests/farm-map-jackfruit-affine-review.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

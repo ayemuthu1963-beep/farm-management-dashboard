@@ -61,10 +61,13 @@ interface JackfruitCollection {
   features: JackfruitFeature[]
 }
 
+type JackfruitCoordinateVariant = "original" | "translated" | "affine"
+
 interface JackfruitMapEntry {
   feature: JackfruitFeature
   marker: LeafletCircleMarker
   hitMarker: LeafletCircleMarker
+  variant: JackfruitCoordinateVariant
 }
 
 const MARKER_ZOOM = 18
@@ -201,13 +204,18 @@ function treeLabelIcon(leaflet: LeafletApi, treeNo: string, classification: stri
   })
 }
 
-function jackfruitLabelIcon(leaflet: LeafletApi, treeNo: string) {
-  const label = `JF:${treeNo}`
+function jackfruitLabelIcon(
+  leaflet: LeafletApi,
+  treeNo: string,
+  variant: JackfruitCoordinateVariant,
+) {
+  const prefix = variant === "original" ? "O" : variant === "translated" ? "T" : "A"
+  const label = `${prefix}:JF:${treeNo}`
   const labelWidth = Math.max(38, label.length * 7 + 9)
-  const colour = "#00bfa5"
-  const textColour = "#00594f"
+  const colour = variant === "original" ? "#ff00ff" : variant === "translated" ? "#00e5ff" : "#dfff00"
+  const textColour = variant === "original" ? "#8a005d" : variant === "translated" ? "#004e64" : "#374400"
   return leaflet.divIcon({
-    className: "farm-map-jackfruit-label",
+    className: `farm-map-jackfruit-label farm-map-jackfruit-label-${variant}`,
     html: `<span style="box-sizing:border-box;display:flex;width:100%;height:100%;align-items:center;justify-content:center;padding:1px 4px;border:2px solid ${colour};border-radius:3px;background:rgba(255,255,255,.9);color:${textColour};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap;cursor:pointer">${label}</span>`,
     iconSize: [labelWidth, 18],
     iconAnchor: [labelWidth / 2, 26],
@@ -246,12 +254,19 @@ function popupHtml(feature: FarmMapCoordinateFeature, record?: FarmMapOperationa
     </div>`
 }
 
-function jackfruitPopupHtml(feature: JackfruitFeature) {
+function jackfruitPopupHtml(feature: JackfruitFeature, variant: JackfruitCoordinateVariant) {
+  const coordinateStatus =
+    variant === "original"
+      ? "Original coordinates — review only"
+      : variant === "translated"
+        ? "Previous translated baseline — not approved"
+        : "Affine correction — review only"
   return `
     <div style="min-width:230px;max-width:320px;font-family:inherit">
       <table style="width:100%;border-collapse:collapse">
         <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Jackfruit Tree Number</th><td style="padding:3px 0;text-align:right;font-weight:700">${escapeHtml(feature.properties.treeNo)}</td></tr>
         <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Crop</th><td style="padding:3px 0;text-align:right;font-weight:700">Jackfruit</td></tr>
+        <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Coordinate status</th><td style="padding:3px 0;text-align:right;font-weight:700">${coordinateStatus}</td></tr>
       </table>
     </div>`
 }
@@ -324,8 +339,16 @@ export function FarmMapClient() {
   const jackfruitPointLayer = useRef<LeafletLayerGroup | null>(null)
   const jackfruitHitLayer = useRef<LeafletLayerGroup | null>(null)
   const jackfruitLabelLayer = useRef<LeafletLayerGroup | null>(null)
+  const translatedJackfruitPointLayer = useRef<LeafletLayerGroup | null>(null)
+  const translatedJackfruitHitLayer = useRef<LeafletLayerGroup | null>(null)
+  const translatedJackfruitLabelLayer = useRef<LeafletLayerGroup | null>(null)
+  const affineJackfruitPointLayer = useRef<LeafletLayerGroup | null>(null)
+  const affineJackfruitHitLayer = useRef<LeafletLayerGroup | null>(null)
+  const affineJackfruitLabelLayer = useRef<LeafletLayerGroup | null>(null)
   const treesByNumber = useRef(new Map<string, TreeMapEntry>())
   const jackfruitByCanonicalId = useRef(new Map<string, JackfruitMapEntry>())
+  const translatedJackfruitByCanonicalId = useRef(new Map<string, JackfruitMapEntry>())
+  const affineJackfruitByCanonicalId = useRef(new Map<string, JackfruitMapEntry>())
   const operationalByNumber = useRef(new Map<string, FarmMapOperationalRecord>())
   const activePopupRef = useRef<ReturnType<LeafletApi["popup"]> | null>(null)
   const hitRadiusRef = useRef(14)
@@ -336,14 +359,22 @@ export function FarmMapClient() {
   const selectedTreeNoRef = useRef<string | null>(null)
   const selectedJackfruitIdRef = useRef<string | null>(null)
   const jackfruitEnabledRef = useRef(true)
+  const translatedJackfruitEnabledRef = useRef(true)
+  const affineJackfruitEnabledRef = useRef(true)
   const selectAndOpenTreeRef = useRef<((entry: TreeMapEntry) => void) | null>(null)
   const selectAndOpenJackfruitRef = useRef<((entry: JackfruitMapEntry) => void) | null>(null)
 
   const [treeMarkersEnabled, setTreeMarkersEnabled] = useState(true)
   const [treeLabelsEnabled, setTreeLabelsEnabled] = useState(true)
   const [jackfruitEnabled, setJackfruitEnabled] = useState(true)
+  const [translatedJackfruitEnabled, setTranslatedJackfruitEnabled] = useState(true)
+  const [affineJackfruitEnabled, setAffineJackfruitEnabled] = useState(true)
   const [jackfruitState, setJackfruitState] = useState<"loading" | "ready" | "error">("loading")
+  const [translatedJackfruitState, setTranslatedJackfruitState] = useState<"loading" | "ready" | "error">("loading")
+  const [affineJackfruitState, setAffineJackfruitState] = useState<"loading" | "ready" | "error">("loading")
   const [jackfruitCount, setJackfruitCount] = useState(0)
+  const [translatedJackfruitCount, setTranslatedJackfruitCount] = useState(0)
+  const [affineJackfruitCount, setAffineJackfruitCount] = useState(0)
   const [plotFilter, setPlotFilter] = useState<PlotFilter>("Plot 1 & Plot 2")
   const [classificationFilter, setClassificationFilter] =
     useState<ClassificationFilter>("All")
@@ -416,27 +447,44 @@ export function FarmMapClient() {
     if (!map.hasLayer(labels)) labels.addTo(map)
   }, [matchesActiveFilters])
 
-  const refreshJackfruitLabels = useCallback(() => {
+  const refreshJackfruitLabels = useCallback((variant: JackfruitCoordinateVariant) => {
     const map = mapRef.current
     const leaflet = leafletRef.current
-    const labels = jackfruitLabelLayer.current
+    const labels =
+      variant === "original"
+        ? jackfruitLabelLayer.current
+        : variant === "translated"
+          ? translatedJackfruitLabelLayer.current
+          : affineJackfruitLabelLayer.current
     if (!map || !leaflet || !labels) return
 
     labels.clearLayers()
-    const canShow = jackfruitEnabledRef.current && map.getZoom() >= LABEL_ZOOM
+    const enabled =
+      variant === "original"
+        ? jackfruitEnabledRef.current
+        : variant === "translated"
+          ? translatedJackfruitEnabledRef.current
+          : affineJackfruitEnabledRef.current
+    const canShow = enabled && map.getZoom() >= LABEL_ZOOM
     if (!canShow) {
       if (map.hasLayer(labels)) labels.remove()
       return
     }
 
     const visibleBounds = map.getBounds().pad(0.08)
-    for (const entry of jackfruitByCanonicalId.current.values()) {
+    const entries =
+      variant === "original"
+        ? jackfruitByCanonicalId.current.values()
+        : variant === "translated"
+          ? translatedJackfruitByCanonicalId.current.values()
+          : affineJackfruitByCanonicalId.current.values()
+    for (const entry of entries) {
       const [longitude, latitude] = entry.feature.geometry.coordinates
       if (!visibleBounds.contains([latitude, longitude])) continue
       const labelMarker = leaflet.marker([latitude, longitude], {
         interactive: true,
         keyboard: false,
-        icon: jackfruitLabelIcon(leaflet, entry.feature.properties.treeNo),
+        icon: jackfruitLabelIcon(leaflet, entry.feature.properties.treeNo, variant),
       })
       labelMarker.on("click", (event: LeafletMouseEvent) => {
         leaflet.DomEvent.stopPropagation(event.originalEvent)
@@ -447,23 +495,39 @@ export function FarmMapClient() {
     if (!map.hasLayer(labels)) labels.addTo(map)
   }, [])
 
-  const applyJackfruitMapState = useCallback(() => {
+  const applyJackfruitMapState = useCallback((variant: JackfruitCoordinateVariant) => {
     const map = mapRef.current
-    const points = jackfruitPointLayer.current
-    const hits = jackfruitHitLayer.current
+    const points =
+      variant === "original"
+        ? jackfruitPointLayer.current
+        : variant === "translated"
+          ? translatedJackfruitPointLayer.current
+          : affineJackfruitPointLayer.current
+    const hits =
+      variant === "original"
+        ? jackfruitHitLayer.current
+        : variant === "translated"
+          ? translatedJackfruitHitLayer.current
+          : affineJackfruitHitLayer.current
     if (!map || !points || !hits) return
 
     points.clearLayers()
     hits.clearLayers()
     let selectedEntry: JackfruitMapEntry | null = null
-    const colour = "#00f5d4"
-    for (const entry of jackfruitByCanonicalId.current.values()) {
-      const selected = selectedJackfruitIdRef.current === entry.feature.properties.canonicalId
+    const colour = variant === "original" ? "#ff00ff" : variant === "translated" ? "#00e5ff" : "#dfff00"
+    const entries =
+      variant === "original"
+        ? jackfruitByCanonicalId.current.values()
+        : variant === "translated"
+          ? translatedJackfruitByCanonicalId.current.values()
+          : affineJackfruitByCanonicalId.current.values()
+    for (const entry of entries) {
+      const selected = selectedJackfruitIdRef.current === `${variant}:${entry.feature.properties.canonicalId}`
       entry.marker.setRadius(selected ? 7 : 5)
       entry.marker.setStyle({
         color: colour,
         fillColor: colour,
-        fillOpacity: selected ? 0.14 : 0,
+        fillOpacity: variant === "affine" ? 0.9 : selected ? 0.14 : 0,
         opacity: 1,
         weight: selected ? 4 : 2.5,
       })
@@ -472,13 +536,19 @@ export function FarmMapClient() {
       hits.addLayer(entry.hitMarker)
     }
 
-    const canShow = jackfruitEnabledRef.current && map.getZoom() >= MARKER_ZOOM
+    const enabled =
+      variant === "original"
+        ? jackfruitEnabledRef.current
+        : variant === "translated"
+          ? translatedJackfruitEnabledRef.current
+          : affineJackfruitEnabledRef.current
+    const canShow = enabled && map.getZoom() >= MARKER_ZOOM
     if (canShow && !map.hasLayer(points)) points.addTo(map)
     if (!canShow && map.hasLayer(points)) points.remove()
     if (canShow && !map.hasLayer(hits)) hits.addTo(map)
     if (!canShow && map.hasLayer(hits)) hits.remove()
     selectedEntry?.marker.bringToFront()
-    refreshJackfruitLabels()
+    refreshJackfruitLabels(variant)
   }, [refreshJackfruitLabels])
 
   const applyMapState = useCallback(() => {
@@ -587,7 +657,9 @@ export function FarmMapClient() {
 
       selectedJackfruitIdRef.current = null
       selectedTreeNoRef.current = treeNo
-      applyJackfruitMapState()
+      applyJackfruitMapState("original")
+      applyJackfruitMapState("translated")
+      applyJackfruitMapState("affine")
       applyMapState()
       const record = operationalByNumber.current.get(treeNo)
       const [longitude, latitude] = entry.feature.geometry.coordinates
@@ -617,9 +689,11 @@ export function FarmMapClient() {
       if (!map || !leaflet) return
 
       selectedTreeNoRef.current = null
-      selectedJackfruitIdRef.current = entry.feature.properties.canonicalId
+      selectedJackfruitIdRef.current = `${entry.variant}:${entry.feature.properties.canonicalId}`
       applyMapState()
-      applyJackfruitMapState()
+      applyJackfruitMapState("original")
+      applyJackfruitMapState("translated")
+      applyJackfruitMapState("affine")
       const [longitude, latitude] = entry.feature.geometry.coordinates
       const popup =
         activePopupRef.current ??
@@ -632,10 +706,10 @@ export function FarmMapClient() {
         })
       popup
         .setLatLng([latitude, longitude])
-        .setContent(jackfruitPopupHtml(entry.feature))
+        .setContent(jackfruitPopupHtml(entry.feature, entry.variant))
         .openOn(map)
       activePopupRef.current = popup
-      setStatus(`Jackfruit tree ${entry.feature.properties.treeNo} selected.`)
+      setStatus(`Jackfruit tree ${entry.feature.properties.treeNo} selected (${entry.variant} coordinates).`)
     },
     [applyJackfruitMapState, applyMapState],
   )
@@ -691,14 +765,16 @@ export function FarmMapClient() {
       const leaflet = leafletRef.current
       if (!map || !leaflet) return
 
-      const entries = jackfruitEnabledRef.current
-        ? jackfruitByCanonicalId.current.values()
-        : []
+      const entries = [
+        ...(jackfruitEnabledRef.current ? jackfruitByCanonicalId.current.values() : []),
+        ...(translatedJackfruitEnabledRef.current ? translatedJackfruitByCanonicalId.current.values() : []),
+        ...(affineJackfruitEnabledRef.current ? affineJackfruitByCanonicalId.current.values() : []),
+      ]
       const candidates = Array.from(entries).map((entry) => {
         const [longitude, latitude] = entry.feature.geometry.coordinates
         const point = map.latLngToContainerPoint([latitude, longitude])
         return {
-          id: entry.feature.properties.canonicalId,
+          id: `${entry.variant}:${entry.feature.properties.canonicalId}`,
           value: entry,
           x: point.x,
           y: point.y,
@@ -728,6 +804,12 @@ export function FarmMapClient() {
       jackfruitPointLayer.current = leaflet.layerGroup()
       jackfruitHitLayer.current = leaflet.layerGroup()
       jackfruitLabelLayer.current = leaflet.layerGroup()
+      translatedJackfruitPointLayer.current = leaflet.layerGroup()
+      translatedJackfruitHitLayer.current = leaflet.layerGroup()
+      translatedJackfruitLabelLayer.current = leaflet.layerGroup()
+      affineJackfruitPointLayer.current = leaflet.layerGroup()
+      affineJackfruitHitLayer.current = leaflet.layerGroup()
+      affineJackfruitLabelLayer.current = leaflet.layerGroup()
       const canvasRenderer = leaflet.canvas({ padding: 0.5 })
       const updateHitRadius = () => {
         hitRadiusRef.current = treeHitRadiusPx({
@@ -740,13 +822,21 @@ export function FarmMapClient() {
         for (const entry of jackfruitByCanonicalId.current.values()) {
           entry.hitMarker.setRadius(hitRadiusRef.current)
         }
+        for (const entry of translatedJackfruitByCanonicalId.current.values()) {
+          entry.hitMarker.setRadius(hitRadiusRef.current)
+        }
+        for (const entry of affineJackfruitByCanonicalId.current.values()) {
+          entry.hitMarker.setRadius(hitRadiusRef.current)
+        }
       }
       updateHitRadius()
       window.addEventListener("resize", updateHitRadius)
 
       const mapChangeHandler = () => {
         applyMapState()
-        applyJackfruitMapState()
+        applyJackfruitMapState("original")
+        applyJackfruitMapState("translated")
+        applyJackfruitMapState("affine")
       }
       map.on("zoomend moveend", mapChangeHandler)
 
@@ -805,22 +895,28 @@ export function FarmMapClient() {
           setStatus("Approved tree coordinates could not be loaded.")
         })
 
-      void fetch(farmCombinedLayer.jackfruitCoordinatesUrl, { cache: "force-cache" })
-        .then(async (response) => {
-          if (!response.ok) throw new Error(`Jackfruit coordinate GeoJSON returned ${response.status}`)
-          return validateJackfruitCoordinateCollection(await response.json())
-        })
-        .then((collection) => {
+      const loadJackfruitVariant = async (
+        variant: JackfruitCoordinateVariant,
+        url: string,
+        collectionTarget: Map<string, JackfruitMapEntry>,
+        setVariantCount: (count: number) => void,
+        setVariantState: (state: "loading" | "ready" | "error") => void,
+      ) => {
+        try {
+          const response = await fetch(url, { cache: "force-cache" })
+          if (!response.ok) throw new Error(`Jackfruit ${variant} GeoJSON returned ${response.status}`)
+          const collection = validateJackfruitCoordinateCollection(await response.json())
           if (cancelled) return
+          const colour = variant === "original" ? "#ff00ff" : variant === "translated" ? "#00e5ff" : "#dfff00"
           for (const feature of collection.features) {
             const [longitude, latitude] = feature.geometry.coordinates
             const marker = leaflet.circleMarker([latitude, longitude], {
               renderer: canvasRenderer,
-              radius: 5,
-              weight: 2.5,
-              color: "#00f5d4",
-              fillColor: "#00f5d4",
-              fillOpacity: 0,
+              radius: variant === "affine" ? 3.5 : 5,
+              weight: variant === "affine" ? 1.5 : 2.5,
+              color: variant === "affine" ? "#374400" : colour,
+              fillColor: colour,
+              fillOpacity: variant === "affine" ? 0.9 : 0,
               interactive: false,
               bubblingMouseEvents: false,
             })
@@ -833,23 +929,42 @@ export function FarmMapClient() {
               interactive: true,
               bubblingMouseEvents: false,
             })
-            const entry: JackfruitMapEntry = { feature, marker, hitMarker }
+            const entry: JackfruitMapEntry = { feature, marker, hitMarker, variant }
             hitMarker
-              .bindTooltip(`Jackfruit tree ${escapeHtml(feature.properties.treeNo)}`, {
-                direction: "top",
-              })
+              .bindTooltip(`${variant} Jackfruit tree ${escapeHtml(feature.properties.treeNo)}`, { direction: "top" })
               .on("click", handleJackfruitHit)
-            jackfruitByCanonicalId.current.set(feature.properties.canonicalId, entry)
+            collectionTarget.set(feature.properties.canonicalId, entry)
           }
-          setJackfruitCount(collection.features.length)
-          setJackfruitState("ready")
-          applyJackfruitMapState()
-        })
-        .catch((error: unknown) => {
-          console.error("[farm-map-jackfruit-coordinates]", error)
-          setJackfruitState("error")
-        })
+          setVariantCount(collection.features.length)
+          setVariantState("ready")
+          applyJackfruitMapState(variant)
+        } catch (error) {
+          console.error(`[farm-map-jackfruit-${variant}-coordinates]`, error)
+          setVariantState("error")
+        }
+      }
 
+      void loadJackfruitVariant(
+        "original",
+        farmCombinedLayer.jackfruitOriginalCoordinatesUrl,
+        jackfruitByCanonicalId.current,
+        setJackfruitCount,
+        setJackfruitState,
+      )
+      void loadJackfruitVariant(
+        "translated",
+        farmCombinedLayer.jackfruitTranslatedCoordinatesUrl,
+        translatedJackfruitByCanonicalId.current,
+        setTranslatedJackfruitCount,
+        setTranslatedJackfruitState,
+      )
+      void loadJackfruitVariant(
+        "affine",
+        farmCombinedLayer.jackfruitAffineCoordinatesUrl,
+        affineJackfruitByCanonicalId.current,
+        setAffineJackfruitCount,
+        setAffineJackfruitState,
+      )
       void loadOperationalData()
       const refreshTimer = window.setInterval(() => void loadOperationalData(), OPERATIONAL_REFRESH_MS)
 
@@ -868,14 +983,28 @@ export function FarmMapClient() {
         jackfruitPointLayer.current?.remove()
         jackfruitHitLayer.current?.remove()
         jackfruitLabelLayer.current?.remove()
+        translatedJackfruitPointLayer.current?.remove()
+        translatedJackfruitHitLayer.current?.remove()
+        translatedJackfruitLabelLayer.current?.remove()
+        affineJackfruitPointLayer.current?.remove()
+        affineJackfruitHitLayer.current?.remove()
+        affineJackfruitLabelLayer.current?.remove()
         pointLayers.current = { "Plot 1": null, "Plot 2": null }
         hitLayers.current = { "Plot 1": null, "Plot 2": null }
         labelLayer.current = null
         jackfruitPointLayer.current = null
         jackfruitHitLayer.current = null
         jackfruitLabelLayer.current = null
+        translatedJackfruitPointLayer.current = null
+        translatedJackfruitHitLayer.current = null
+        translatedJackfruitLabelLayer.current = null
+        affineJackfruitPointLayer.current = null
+        affineJackfruitHitLayer.current = null
+        affineJackfruitLabelLayer.current = null
         treesByNumber.current.clear()
         jackfruitByCanonicalId.current.clear()
+        translatedJackfruitByCanonicalId.current.clear()
+        affineJackfruitByCanonicalId.current.clear()
         operationalByNumber.current.clear()
         setGeometryOptions([])
         mapRef.current = null
@@ -917,10 +1046,18 @@ export function FarmMapClient() {
     applyMapState()
   }
 
-  function updateJackfruitVisibility(enabled: boolean) {
-    jackfruitEnabledRef.current = enabled
-    setJackfruitEnabled(enabled)
-    applyJackfruitMapState()
+  function updateJackfruitVisibility(variant: JackfruitCoordinateVariant, enabled: boolean) {
+    if (variant === "original") {
+      jackfruitEnabledRef.current = enabled
+      setJackfruitEnabled(enabled)
+    } else if (variant === "translated") {
+      translatedJackfruitEnabledRef.current = enabled
+      setTranslatedJackfruitEnabled(enabled)
+    } else {
+      affineJackfruitEnabledRef.current = enabled
+      setAffineJackfruitEnabled(enabled)
+    }
+    applyJackfruitMapState(variant)
   }
 
   function fitToJackfruitArea() {
@@ -1089,15 +1226,33 @@ export function FarmMapClient() {
         </div>
       </Panel>
 
-      <Panel title="Jackfruit Trees" icon={Trees}>
+      <Panel title="Jackfruit Coordinate Comparison" icon={Trees}>
         <div className="grid gap-3">
-          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-teal-300 bg-teal-50 px-3 py-2.5 text-sm font-medium text-teal-950">
-            <span>Jackfruit trees</span>
+          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-fuchsia-300 bg-fuchsia-50 px-3 py-2.5 text-sm font-medium text-fuchsia-950">
+            <span>Original Jackfruit points — magenta</span>
             <input
               type="checkbox"
               checked={jackfruitEnabled}
-              onChange={(event) => updateJackfruitVisibility(event.target.checked)}
-              className="size-4 accent-teal-600"
+              onChange={(event) => updateJackfruitVisibility("original", event.target.checked)}
+              className="size-4 accent-fuchsia-600"
+            />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-2.5 text-sm font-medium text-cyan-950">
+            <span>Previous translation — cyan baseline</span>
+            <input
+              type="checkbox"
+              checked={translatedJackfruitEnabled}
+              onChange={(event) => updateJackfruitVisibility("translated", event.target.checked)}
+              className="size-4 accent-cyan-600"
+            />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-lime-400 bg-lime-50 px-3 py-2.5 text-sm font-medium text-lime-950">
+            <span>Jackfruit affine correction — review only</span>
+            <input
+              type="checkbox"
+              checked={affineJackfruitEnabled}
+              onChange={(event) => updateJackfruitVisibility("affine", event.target.checked)}
+              className="size-4 accent-lime-600"
             />
           </label>
           <Button type="button" variant="outline" onClick={fitToJackfruitArea}>
@@ -1108,10 +1263,24 @@ export function FarmMapClient() {
               ? "Loading Jackfruit coordinates…"
               : jackfruitState === "error"
                 ? "Jackfruit coordinates could not be loaded."
-                : `${jackfruitCount.toLocaleString("en-IN")} approved Jackfruit coordinates loaded.`}
+                : `${jackfruitCount.toLocaleString("en-IN")} original coordinates loaded.`}
           </p>
-          <p className="text-xs font-medium text-teal-800">
-            Jackfruit coordinates are a separate crop layer and are not joined to coconut performance classifications.
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {translatedJackfruitState === "loading"
+              ? "Loading previous translated baseline…"
+              : translatedJackfruitState === "error"
+                ? "Previous translated baseline could not be loaded."
+                : `${translatedJackfruitCount.toLocaleString("en-IN")} previous translated coordinates loaded; approval revoked.`}
+          </p>
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {affineJackfruitState === "loading"
+              ? "Loading affine correction proposal…"
+              : affineJackfruitState === "error"
+                ? "Affine correction proposal could not be loaded."
+                : `${affineJackfruitCount.toLocaleString("en-IN")} affine-proposal coordinates loaded for manual review.`}
+          </p>
+          <p className="text-xs font-medium text-amber-800">
+            Comparison only. No Jackfruit coordinate layer is approved. These layers are not joined to coconut performance classifications.
           </p>
         </div>
       </Panel>
