@@ -28,6 +28,7 @@ assert.match(config, /NEXT_PUBLIC_ODK_HARVEST_FORM_VERSION/)
 
 const expectedPlacements = [
   ["app/well-water/page.tsx", 'form="wellWater"'],
+  ["app/beetle-trap/page.tsx", 'form="beetleTrap"'],
   ["components/beetle/beetle-trap-header-actions.tsx", 'form="beetleTrap"'],
   ["app/admin/well-water/page.tsx", 'form="wellWater"'],
   ["app/admin/beetle-trap/page.tsx", 'form="beetleTrap"'],
@@ -49,9 +50,16 @@ assert.doesNotMatch(harvestSyncWorkspace, /status\?\.projectId \?\? 17/)
 
 const link = read("components/odk/odk-central-link.tsx")
 const card = read("components/odk/preview-odk-source-card.tsx")
+const beetlePage = read("app/beetle-trap/page.tsx")
 assert.match(link, /target="_blank"/)
 assert.match(link, /rel="noopener noreferrer"/)
+assert.match(card, /FIELD_COLLECTOR_PROJECT_NAME/)
+assert.doesNotMatch(card, />\s*Muthu Field Collector/)
 assert.match(card, /ODK Collect App User/)
 assert.match(card, /authorised administration and submission review/)
+assert.match(
+  beetlePage,
+  /manualSyncAvailable \? <BeetleTrapHeaderActions \/> : <OdkCentralLink form="beetleTrap" \/>/,
+)
 
 console.log("ODK Preview link contract passed")

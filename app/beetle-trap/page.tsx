@@ -5,6 +5,7 @@ import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { BeetleTrapMapArea } from "@/components/beetle/beetle-trap-map-area"
 import { BeetleTrapHeaderActions } from "@/components/beetle/beetle-trap-header-actions"
+import { OdkCentralLink } from "@/components/odk/odk-central-link"
 import { BeetleDailyChart, type BeetleDailyCountRow } from "@/components/beetle/beetle-daily-chart"
 import { BeetleDailyExcelExport } from "@/components/beetle/beetle-daily-excel-export"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
@@ -393,7 +394,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
               <p className="text-sm text-muted-foreground">Traps are inspected every 2 days</p>
             </div>
           </div>
-          {manualSyncAvailable ? <BeetleTrapHeaderActions /> : null}
+          {manualSyncAvailable ? <BeetleTrapHeaderActions /> : <OdkCentralLink form="beetleTrap" />}
         </div>
 
         {!data && (
