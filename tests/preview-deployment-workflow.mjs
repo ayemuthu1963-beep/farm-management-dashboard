@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Permit the guarded zero-mount Preview map repair",
+  "Repair the Preview map mount from the actual live revision",
 )
-assert.equal(manifest.base_commit, "53e4ff22e5b8b6b4d49c09d951f273b62d17c3f6")
+assert.equal(manifest.base_commit, "dba9f30e6774e56b6b7a62e3236569ce3bf71616")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
