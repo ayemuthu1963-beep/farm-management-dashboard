@@ -226,6 +226,9 @@ assert.match(
   /cmp -s "\$installed_deploy_script" "\$source_dir\/scripts\/preview-server-deploy\.sh"/,
 )
 assert.match(deployScript, /installed Preview deploy script does not match the approved candidate/)
+assert.match(deployScript, /live_mount_count=\$\(docker inspect --format '\{\{len \.Mounts\}\}' "\$live_container"\)/)
+assert.match(deployScript, /"\$operation" == "deploy" && "\$live_mount_count" == "0"/)
+assert.match(deployScript, /PREVIEW_PM_TILES_REPAIR=required/)
 assert.match(deployScript, /MFMS_ACTOR_ASSERTION_SECRET=\[0-9a-f\]\{64\}/)
 assert.match(deployScript, /worker_actor_assertion=server-local/)
 assert.match(deployScript, /proxy_target_count_before=\$\(proxy_target_count\)/)
@@ -265,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Restore the Preview map mount and enforce deploy-wrapper parity",
+  "Permit the guarded zero-mount Preview map repair",
 )
-assert.equal(manifest.base_commit, "dba9f30e6774e56b6b7a62e3236569ce3bf71616")
+assert.equal(manifest.base_commit, "53e4ff22e5b8b6b4d49c09d951f273b62d17c3f6")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",

@@ -513,6 +513,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 validate_common_live_state() {
+  local live_mount_count
   container_exists "$live_container" || blocked "Preview frontend container is missing"
   container_running "$live_container" || blocked "Preview frontend container is not running"
   container_exists "$backend_container" || blocked "Preview backend container is missing"
@@ -532,11 +533,16 @@ validate_common_live_state() {
   [[ "$(sha256sum "$orthomosaic_host_dir/$orthomosaic_archive" | awk '{print $1}')" == \
       "$orthomosaic_sha256" ]] \
     || blocked "approved Preview PMTiles hash changed"
-  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "1" ]] \
-    || blocked "live frontend mount count is invalid"
-  [[ "$(orthomosaic_mount_for_container "$live_container")" == \
-      "bind|$orthomosaic_host_dir|$orthomosaic_container_dir|false" ]] \
-    || blocked "live frontend orthomosaic mount is invalid"
+  live_mount_count=$(docker inspect --format '{{len .Mounts}}' "$live_container")
+  if [[ "$live_mount_count" == "1" ]]; then
+    [[ "$(orthomosaic_mount_for_container "$live_container")" == \
+        "bind|$orthomosaic_host_dir|$orthomosaic_container_dir|false" ]] \
+      || blocked "live frontend orthomosaic mount is invalid"
+  elif [[ "$operation" == "deploy" && "$live_mount_count" == "0" ]]; then
+    echo "PREVIEW_PM_TILES_REPAIR=required"
+  else
+    blocked "live frontend mount count is invalid"
+  fi
 
   original_container_id=$(docker inspect --format '{{.Id}}' "$live_container")
   original_image_id=$(docker inspect --format '{{.Image}}' "$live_container")
