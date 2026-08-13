@@ -258,10 +258,10 @@ assert.equal(manifest.environment, "Preview")
 assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
+  "Simplify Farm Map popup content by removing metadata rows while preserving single-click behavior",
   manifest.release_note,
-  "Make the full visible TreeNo label box a first-click tree selection target",
 )
-assert.equal(manifest.base_commit, "2ac9fa49f1bc20a89943da3e45d779b1a98667f3")
+assert.equal(manifest.base_commit, "8b0cb2de265b093a4e8951f1368984b888f3a04e")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",

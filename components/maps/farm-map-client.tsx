@@ -144,9 +144,7 @@ function treeLabelIcon(leaflet: LeafletApi, treeNo: string, classification: stri
 function popupHtml(feature: FarmMapCoordinateFeature, record?: FarmMapOperationalRecord) {
   const treeNo = escapeHtml(feature.properties.treeNo)
   const plot = escapeHtml(feature.properties.plot)
-  const [longitude, latitude] = feature.geometry.coordinates
   const detailsHref = `/coconut-harvest/tree-view?treeNo=${encodeURIComponent(feature.properties.treeNo)}`
-  const matchStatus = record ? "Matched to current MFMS record" : "Operational record unavailable/unmatched"
   const harvest = record?.latestHarvest
   const rows: Array<[string, string | number | null | undefined]> = [
     ["Tree Number", treeNo],
@@ -159,23 +157,18 @@ function popupHtml(feature: FarmMapCoordinateFeature, record?: FarmMapOperationa
     ["Latest harvest date", harvest?.date],
     ["Latest bunches", harvest?.totalBunches],
     ["Latest nuts", harvest?.totalNuts],
-    ["Data as of", record?.lastUpdated],
-    ["Coordinate", `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`],
-    ["Coordinate version", feature.properties.coordinateVersion],
-    ["Operational match", matchStatus],
   ]
 
   return `
     <div style="min-width:280px;max-width:360px;font-family:inherit">
       <table style="width:100%;border-collapse:collapse">
-        ${rows
-          .map(
-            ([label, value]) =>
-              `<tr><th style="padding:3px 8px 3px 0;text-align:left;vertical-align:top;color:#475569">${label}</th><td style="padding:3px 0;text-align:right;font-weight:700">${display(value)}</td></tr>`,
-          )
-          .join("")}
+      ${rows
+        .map(
+          ([label, value]) =>
+            `<tr><th style="padding:3px 8px 3px 0;text-align:left;vertical-align:top;color:#475569">${label}</th><td style="padding:3px 0;text-align:right;font-weight:700">${display(value)}</td></tr>`,
+        )
+        .join("")}
       </table>
-      <p style="margin:8px 0 0;color:#64748b;font-size:11px">Spatial source: ${escapeHtml(feature.properties.coordinateSource)}</p>
       <a href="${detailsHref}" style="display:inline-block;margin-top:10px;font-weight:700;color:#0f766e">View Full Harvest Details</a>
     </div>`
 }
