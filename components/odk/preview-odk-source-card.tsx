@@ -1,5 +1,6 @@
 import { Database, ExternalLink } from "lucide-react"
 import {
+  FIELD_COLLECTOR_PROJECT_NAME,
   odkFormSubmissionsUrl,
   previewOdkForms,
   type PreviewOdkFormKey,
@@ -16,7 +17,7 @@ export function PreviewOdkSourceCard({ form }: { form: PreviewOdkFormKey }) {
           <div>
             <p className="font-extrabold text-foreground">ODK source: {source.label}</p>
             <p className="mt-1 text-muted-foreground">
-              Muthu Field Collector · Project {source.projectId} · Form {source.formId}
+              {FIELD_COLLECTOR_PROJECT_NAME} · Project {source.projectId} · Form {source.formId}
               {source.publishedVersion ? ` · Published version ${source.publishedVersion}` : ""}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
