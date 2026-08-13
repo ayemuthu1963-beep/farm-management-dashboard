@@ -38,6 +38,15 @@ for (const [path, marker] of expectedPlacements) {
   assert.ok(read(path).includes(marker), `${path} must use the central ODK source configuration`)
 }
 
+const harvestSyncPage = read("app/admin/harvest-sync/page.tsx")
+const harvestSyncWorkspace = read("components/admin/harvest-manual-review-workspace.tsx")
+assert.match(harvestSyncPage, /ODK Project:<\/span> \{previewOdkForms\.harvest\.projectId\}/)
+assert.match(harvestSyncPage, /Form:<\/span> \{previewOdkForms\.harvest\.formId\}/)
+assert.match(harvestSyncWorkspace, /status\?\.projectId \?\? previewOdkForms\.harvest\.projectId/)
+assert.match(harvestSyncWorkspace, /status\?\.formId \?\? previewOdkForms\.harvest\.formId/)
+assert.doesNotMatch(harvestSyncPage, /ODK Project:<\/span> 17/)
+assert.doesNotMatch(harvestSyncWorkspace, /status\?\.projectId \?\? 17/)
+
 const link = read("components/odk/odk-central-link.tsx")
 const card = read("components/odk/preview-odk-source-card.tsx")
 assert.match(link, /target="_blank"/)
