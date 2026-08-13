@@ -17,11 +17,16 @@ interface TreeNumberAutocompleteProps {
   placeholder?: string
   maxSuggestions?: number
   showPlot?: boolean
+  formatTreeNo?: (treeNo: string) => string
+  normalizeInput?: (value: string) => string | null
   onValueChange: (value: string) => void
   onSelect: (option: TreeNumberOption) => void
   onInvalidCommit: (value: string) => void
   onRetry?: () => void
 }
+
+const identityTreeNo = (treeNo: string) => treeNo
+const trimTreeNumberInput = (value: string) => value.trim()
 
 export function TreeNumberAutocomplete({
   id,
@@ -33,6 +38,8 @@ export function TreeNumberAutocomplete({
   placeholder = "Type or select a Tree Number",
   maxSuggestions = 25,
   showPlot = false,
+  formatTreeNo = identityTreeNo,
+  normalizeInput = trimTreeNumberInput,
   onValueChange,
   onSelect,
   onInvalidCommit,
@@ -46,8 +53,8 @@ export function TreeNumberAutocomplete({
   const [activeIndex, setActiveIndex] = useState(-1)
 
   const suggestions = useMemo(
-    () => rankTreeNumberOptions(options, value, maxSuggestions),
-    [maxSuggestions, options, value],
+    () => rankTreeNumberOptions(options, normalizeInput(value) ?? "", maxSuggestions),
+    [maxSuggestions, normalizeInput, options, value],
   )
 
   useEffect(() => {
@@ -59,15 +66,17 @@ export function TreeNumberAutocomplete({
   }, [activeIndex])
 
   function choose(option: TreeNumberOption) {
-    onValueChange(option.treeNo)
+    onValueChange(formatTreeNo(option.treeNo))
     onSelect(option)
     setOpen(false)
     setActiveIndex(-1)
   }
 
   function commitCurrentValue() {
-    const cleanValue = value.trim()
-    const exactOptions = options.filter((option) => option.treeNo === cleanValue)
+    const cleanValue = normalizeInput(value)
+    const exactOptions = cleanValue
+      ? options.filter((option) => option.treeNo === cleanValue)
+      : []
 
     if (activeIndex >= 0 && suggestions[activeIndex]) {
       choose(suggestions[activeIndex])
@@ -83,7 +92,7 @@ export function TreeNumberAutocomplete({
       return
     }
 
-    onInvalidCommit(cleanValue)
+    onInvalidCommit(value.trim())
     setOpen(false)
   }
 
@@ -176,7 +185,7 @@ export function TreeNumberAutocomplete({
                   index === activeIndex ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
                 }`}
               >
-                <span className="font-semibold">{option.treeNo}</span>
+                <span className="font-semibold">{formatTreeNo(option.treeNo)}</span>
                 {showPlot && option.plot ? (
                   <span className="text-xs text-muted-foreground">{option.plot}</span>
                 ) : null}

@@ -3,14 +3,16 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Activate approved affine Jackfruit coordinates on Preview",
-  "base_commit": "a79c669f97c210a6c54f01a6cb614b88f9afd8c5",
+  "release_note": "Use J prefix for Jackfruit identifiers on Preview",
+  "base_commit": "049760dc16ef89267d79cce04c87d1cf97a5cfdb",
   "allowed_paths": [
+    "components/harvest/tree-number-autocomplete.tsx",
     "components/maps/farm-map-client.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/farm-map-data.ts",
-    "tests/farm-map-coconut-trees.mjs",
+    "lib/farm-map/jackfruit-tree-number.ts",
+    "package.json",
     "tests/farm-map-jackfruit-affine-review.mjs",
+    "tests/farm-map-jackfruit-prefix.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
