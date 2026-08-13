@@ -108,6 +108,7 @@ export function createAccount(payload: {
   display_name: string
   group_leader_name: string | null
   default_group_size: number | null
+  operator_reference?: string | null
   daily_rate: string
   farm_scheme: FarmScheme | null
   effective_from: string
@@ -122,6 +123,7 @@ export function updateAccount(accountId: number, payload: {
   display_name: string
   group_leader_name: string | null
   default_group_size: number | null
+  operator_reference?: string | null
   expected_row_version: number
 }) {
   return requestJson<WorkerAccountRecord>(`accounts/${accountId}`, {
@@ -162,6 +164,7 @@ export function saveDailyWageBatch(workDate: string, items: Array<{
   client_operation_id: string
   attendance: string | null
   group_attendee_count: number | null
+  wage_rate: string
   notes: string | null
   expected_row_version: number | null
 }>) {

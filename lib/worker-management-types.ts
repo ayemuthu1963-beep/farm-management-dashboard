@@ -25,6 +25,7 @@ export type WorkerAccount = {
   display_name: string
   group_leader_name: string | null
   default_group_size: number | null
+  operator_reference: string | null
   is_active: boolean
   inactive_at: string | null
   inactive_reason: string | null
