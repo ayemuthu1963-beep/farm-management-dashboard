@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote approved Jackfruit coordinates on Preview",
+  "Connect the approved weekly wage table to the Preview database",
 )
-assert.equal(manifest.base_commit, "5a659835dd46b4fdeab7130a46d8d21f01a1973b")
+assert.equal(manifest.base_commit, "f58bf9f578a5a35b7da6e89a6c44bc38e514455b")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,12 +280,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/maps/farm-map-client.tsx",
+  "app/globals.css",
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/farm-map-data.ts",
-  "next.config.mjs",
-  "tests/farm-map-coconut-trees.mjs",
+  "lib/worker-management-api.ts",
+  "lib/worker-management-types.ts",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
