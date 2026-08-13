@@ -26,14 +26,6 @@ const nextConfig = {
       },
       {
         source:
-          '/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson',
-        headers: [
-          { key: 'Content-Type', value: 'application/geo+json; charset=utf-8' },
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-        ],
-      },
-      {
-        source:
           '/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026.geojson',
         headers: [
           { key: 'Content-Type', value: 'application/geo+json; charset=utf-8' },
