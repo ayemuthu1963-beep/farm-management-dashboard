@@ -1,5 +1,5 @@
-import { DailyWageEntry } from "@/components/worker-management/daily-wage-entry"
+import { WeeklyWageTablePreview } from "@/components/worker-management/weekly-wage-table-preview"
 
-export default function DailyWageEntryPage() {
-  return <DailyWageEntry />
+export default function WorkerManagementPage() {
+  return <WeeklyWageTablePreview />
 }
