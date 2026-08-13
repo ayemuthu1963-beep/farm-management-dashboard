@@ -55,6 +55,8 @@ assert.match(mapClient, /applyJackfruitMapState\("translated"\)/)
 assert.match(mapClient, /applyJackfruitMapState\("affine"\)/)
 assert.match(mapClient, /map\.getZoom\(\) >= MARKER_ZOOM/)
 assert.match(mapClient, /map\.getZoom\(\) >= LABEL_ZOOM/)
+assert.match(mapData, /\[10\.47854017, 77\.0774657851768\]/)
+assert.match(mapData, /\[10\.4800019819104, 77\.07927326\]/)
 
 const coconutBytes = await readFile(
   "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",

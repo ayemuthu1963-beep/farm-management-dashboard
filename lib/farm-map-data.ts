@@ -48,8 +48,8 @@ export const plotBounds: Record<"plot1" | "plot2", Coordinate[]> = {
 }
 
 export const jackfruitBounds: Coordinate[] = [
-  [10.47853851318359, 77.07746887207031],
-  [10.47991847991943, 77.0792465209961],
+  [10.47854017, 77.0774657851768],
+  [10.4800019819104, 77.07927326],
 ]
 
 export const farmCombinedLayer: FarmCombinedLayer = {
