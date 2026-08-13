@@ -25,6 +25,10 @@ import {
 } from "@/lib/farm-map/classification-styles"
 import { canonicalTreeNo } from "@/lib/farm-map/tree-number"
 import { nearestTreeHit, treeHitRadiusPx } from "@/lib/farm-map/tree-hit-testing"
+import {
+  formatJackfruitTreeNo,
+  parseJackfruitTreeSearch,
+} from "@/lib/farm-map/jackfruit-tree-number"
 import type {
   FarmMapCoordinateCollection,
   FarmMapCoordinateFeature,
@@ -209,13 +213,13 @@ function jackfruitLabelIcon(
   treeNo: string,
   variant: JackfruitCoordinateVariant,
 ) {
-  const label = `JF:${treeNo}`
+  const label = formatJackfruitTreeNo(treeNo)
   const labelWidth = Math.max(38, label.length * 7 + 9)
   const colour = "#dfff00"
   const textColour = "#374400"
   return leaflet.divIcon({
     className: `farm-map-jackfruit-label farm-map-jackfruit-label-${variant}`,
-    html: `<span style="box-sizing:border-box;display:flex;width:100%;height:100%;align-items:center;justify-content:center;padding:1px 4px;border:2px solid ${colour};border-radius:3px;background:rgba(255,255,255,.9);color:${textColour};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap;cursor:pointer">${label}</span>`,
+    html: `<span aria-label="Jackfruit tree ${label}" style="box-sizing:border-box;display:flex;width:100%;height:100%;align-items:center;justify-content:center;padding:1px 4px;border:2px solid ${colour};border-radius:3px;background:rgba(255,255,255,.9);color:${textColour};font:800 10px/1.25 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.55);white-space:nowrap;cursor:pointer">${label}</span>`,
     iconSize: [labelWidth, 18],
     iconAnchor: [labelWidth / 2, 26],
   })
@@ -255,10 +259,11 @@ function popupHtml(feature: FarmMapCoordinateFeature, record?: FarmMapOperationa
 
 function jackfruitPopupHtml(feature: JackfruitFeature) {
   const coordinateStatus = "Approved Preview/UAT coordinates"
+  const displayTreeNo = formatJackfruitTreeNo(feature.properties.treeNo)
   return `
     <div style="min-width:230px;max-width:320px;font-family:inherit">
       <table style="width:100%;border-collapse:collapse">
-        <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Jackfruit Tree Number</th><td style="padding:3px 0;text-align:right;font-weight:700">${escapeHtml(feature.properties.treeNo)}</td></tr>
+        <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Jackfruit Tree Number</th><td style="padding:3px 0;text-align:right;font-weight:700">${escapeHtml(displayTreeNo)}</td></tr>
         <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Crop</th><td style="padding:3px 0;text-align:right;font-weight:700">Jackfruit</td></tr>
         <tr><th style="padding:3px 8px 3px 0;text-align:left;color:#475569">Coordinate status</th><td style="padding:3px 0;text-align:right;font-weight:700">${coordinateStatus}</td></tr>
       </table>
@@ -357,6 +362,7 @@ export function FarmMapClient() {
   const [classificationFilter, setClassificationFilter] =
     useState<ClassificationFilter>("All")
   const [searchTreeNo, setSearchTreeNo] = useState("")
+  const [jackfruitSearchTreeNo, setJackfruitSearchTreeNo] = useState("")
   const [status, setStatus] = useState("Loading approved tree coordinates…")
   const [geometryState, setGeometryState] = useState<"loading" | "ready" | "error">("loading")
   const [dataState, setDataState] = useState<DataState>("loading")
@@ -365,6 +371,7 @@ export function FarmMapClient() {
   const [unmatchedSpatial, setUnmatchedSpatial] = useState(0)
   const [operationalWithoutSpatial, setOperationalWithoutSpatial] = useState(0)
   const [geometryOptions, setGeometryOptions] = useState<TreeNumberOption[]>([])
+  const [jackfruitOptions, setJackfruitOptions] = useState<TreeNumberOption[]>([])
 
   const availableOptions = useMemo(
     () =>
@@ -648,7 +655,7 @@ export function FarmMapClient() {
         .setContent(jackfruitPopupHtml(entry.feature))
         .openOn(map)
       activePopupRef.current = popup
-      setStatus(`Jackfruit tree ${entry.feature.properties.treeNo} selected.`)
+      setStatus(`Jackfruit tree ${formatJackfruitTreeNo(entry.feature.properties.treeNo)} selected.`)
     },
     [applyJackfruitMapState, applyMapState],
   )
@@ -854,11 +861,17 @@ export function FarmMapClient() {
             })
             const entry: JackfruitMapEntry = { feature, marker, hitMarker, variant }
             hitMarker
-              .bindTooltip(`${variant} Jackfruit tree ${escapeHtml(feature.properties.treeNo)}`, { direction: "top" })
+              .bindTooltip(`Jackfruit tree ${escapeHtml(formatJackfruitTreeNo(feature.properties.treeNo))}`, { direction: "top" })
               .on("click", handleJackfruitHit)
             collectionTarget.set(feature.properties.canonicalId, entry)
           }
           setVariantCount(collection.features.length)
+          setJackfruitOptions(
+            collection.features.map((feature) => ({
+              key: feature.properties.canonicalId,
+              treeNo: feature.properties.treeNo,
+            })),
+          )
           setVariantState("ready")
           applyJackfruitMapState(variant)
         } catch (error) {
@@ -902,6 +915,7 @@ export function FarmMapClient() {
         affineJackfruitByCanonicalId.current.clear()
         operationalByNumber.current.clear()
         setGeometryOptions([])
+        setJackfruitOptions([])
         mapRef.current = null
         leafletRef.current = null
       }
@@ -949,6 +963,29 @@ export function FarmMapClient() {
 
   function fitToJackfruitArea() {
     mapRef.current?.fitBounds(jackfruitBounds, { padding: [12, 12], maxZoom: 20 })
+  }
+
+  function selectJackfruitTree(option: TreeNumberOption) {
+    const canonicalId = `jackfruit:${option.treeNo}`
+    const entry = affineJackfruitByCanonicalId.current.get(canonicalId)
+    if (!entry) {
+      setStatus(`${formatJackfruitTreeNo(option.treeNo)} is absent from the approved Jackfruit layer.`)
+      return
+    }
+    if (!affineJackfruitEnabled) updateJackfruitVisibility("affine", true)
+    const [longitude, latitude] = entry.feature.geometry.coordinates
+    mapRef.current?.setView([latitude, longitude], 21)
+    setJackfruitSearchTreeNo(formatJackfruitTreeNo(entry.feature.properties.treeNo))
+    selectAndOpenJackfruit(entry)
+  }
+
+  function handleInvalidJackfruitTreeNumber(value: string) {
+    const treeNo = parseJackfruitTreeSearch(value)
+    setStatus(
+      treeNo
+        ? `${formatJackfruitTreeNo(treeNo)} is absent from the approved Jackfruit layer.`
+        : "Use the Jackfruit format J:<TreeNo>, for example J:186.",
+    )
   }
 
   function selectMappedTree(option: TreeNumberOption) {
@@ -1127,6 +1164,31 @@ export function FarmMapClient() {
           <Button type="button" variant="outline" onClick={fitToJackfruitArea}>
             Fit to Jackfruit area
           </Button>
+          <div className="grid gap-1.5">
+            <label
+              htmlFor="farm-map-jackfruit-search"
+              className="text-sm font-medium text-foreground"
+            >
+              Jackfruit Tree Number search
+            </label>
+            <TreeNumberAutocomplete
+              id="farm-map-jackfruit-search"
+              value={jackfruitSearchTreeNo}
+              options={jackfruitOptions}
+              loading={affineJackfruitState === "loading"}
+              loadError={affineJackfruitState === "error"}
+              placeholder="J:<TreeNo>, e.g. J:186"
+              formatTreeNo={formatJackfruitTreeNo}
+              normalizeInput={parseJackfruitTreeSearch}
+              onValueChange={setJackfruitSearchTreeNo}
+              onSelect={selectJackfruitTree}
+              onInvalidCommit={handleInvalidJackfruitTreeNumber}
+              onRetry={() => window.location.reload()}
+            />
+            <p className="text-xs text-muted-foreground">
+              Search as J:&lt;TreeNo&gt;. Legacy JF:&lt;TreeNo&gt; input is also accepted.
+            </p>
+          </div>
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {affineJackfruitState === "loading"
               ? "Loading approved Jackfruit coordinates…"

@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Activate approved affine Jackfruit coordinates on Preview",
+  "Use J prefix for Jackfruit identifiers on Preview",
 )
-assert.equal(manifest.base_commit, "a79c669f97c210a6c54f01a6cb614b88f9afd8c5")
+assert.equal(manifest.base_commit, "049760dc16ef89267d79cce04c87d1cf97a5cfdb")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,11 +280,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/harvest/tree-number-autocomplete.tsx",
   "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/farm-map-data.ts",
-  "tests/farm-map-coconut-trees.mjs",
+  "lib/farm-map/jackfruit-tree-number.ts",
+  "package.json",
   "tests/farm-map-jackfruit-affine-review.mjs",
+  "tests/farm-map-jackfruit-prefix.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
