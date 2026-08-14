@@ -31,6 +31,11 @@ frontend:scripts/preview-server-deploy.sh
 frontend:scripts/preview-server-preflight.sh
 frontend:tests/preview-deployment-workflow.mjs
 
+# Motor Runtime editable settings and Irrigation Management target tiles.
+frontend:components/irrigation/zone-status-cards.tsx
+frontend:tests/irrigation-management-corrections.mjs
+frontend:tests/motor-runtime-water-pumped.mjs
+
 # Farm Map tree-number label classification colours.
 frontend:app/api/farm-map/tree-classifications/route.ts
 frontend:components/maps/farm-map-client.tsx
