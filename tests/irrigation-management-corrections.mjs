@@ -285,6 +285,10 @@ for (const source of [zoneStatusCards, map]) {
 assert.doesNotMatch(zoneStatusCards, /\{zone\.abbr\}/)
 assert.match(zoneStatusCards, /Overlay: Plot 1 East \+ Plot 2 West/)
 assert.doesNotMatch(zoneStatusCards, /Overlay: P1E \+ P2W/)
+assert.match(zoneStatusCards, />Irrigation Target</)
+assert.match(zoneStatusCards, /type="text"/)
+assert.match(zoneStatusCards, /placeholder="\*{16}"/)
+assert.match(zoneStatusCards, /aria-label=\{`\$\{zone\.name\} irrigation target`\}/)
 for (const icon of ["LandPlot", "TreePine", "Leaf"]) {
   assert.match(zoneStatusCards, new RegExp(`\\b${icon}\\b`))
 }
