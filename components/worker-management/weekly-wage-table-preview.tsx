@@ -10,6 +10,7 @@ import {
   fetchAccounts,
   fetchCurrentWeek,
   fetchDailyWages,
+  fetchLedger,
   fetchSettlements,
   saveDailyWageBatch,
   updateAccount,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/worker-management-api"
 import { formatWholeINR } from "@/lib/worker-management-format"
 import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
-import type { DailyWageResponse, FarmScheme, SettlementRow, WorkerAccount } from "@/lib/worker-management-types"
+import type { DailyWageResponse, FarmScheme, LedgerTransaction, SettlementRow, WorkerAccount } from "@/lib/worker-management-types"
 import { Badge, SectionTitle, WorkerButton } from "./worker-ui"
 
 const daySlots = [
@@ -352,13 +353,23 @@ function CombinedWeekWage({ value, addend }: { value: number; addend: number | n
 }
 
 const approvedRosterOrder = new Map(workerRates.map((worker, index) => [worker.name.toLocaleLowerCase(), index]))
+const openingBalanceReference = "OPEN-BAL"
 
 function databaseRows(
   accounts: WorkerAccount[],
   dailyResponses: DailyWageResponse[],
   settlements: SettlementRow[],
+  ledgerTransactions: LedgerTransaction[],
 ): WageRow[] {
   const settlementByAccount = new Map(settlements.map((row) => [row.account_id, row]))
+  const openingAdjustmentsByAccount = ledgerTransactions.reduce((balances, transaction) => {
+    if (transaction.reference !== openingBalanceReference) return balances
+    balances.set(
+      transaction.account_id,
+      (balances.get(transaction.account_id) ?? 0) + Number(transaction.signed_amount),
+    )
+    return balances
+  }, new Map<number, number>())
   const sortedAccounts = [...accounts].sort((left, right) => {
     const leftOrder = approvedRosterOrder.get(left.display_name.toLocaleLowerCase()) ?? 1000
     const rightOrder = approvedRosterOrder.get(right.display_name.toLocaleLowerCase()) ?? 1000
@@ -382,9 +393,11 @@ function databaseRows(
     )
     const settlement = settlementByAccount.get(account.account_id)
     const signedCash = Number(settlement?.cash_paid_during_week ?? 0)
+    const openingAdjustment = openingAdjustmentsByAccount.get(account.account_id) ?? 0
+    const weeklySignedCash = signedCash - openingAdjustment
     const currentSignedBalance = Number(settlement?.current_signed_balance ?? account.signed_balance ?? 0)
-    const openingSignedBalance = currentSignedBalance - signedCash
-    const cashPaid = Math.abs(signedCash)
+    const openingSignedBalance = currentSignedBalance - signedCash + openingAdjustment
+    const cashPaid = Math.max(0, -weeklySignedCash)
 
     return {
       id: `account-${account.account_id}`,
@@ -472,8 +485,18 @@ export function WeeklyWageTablePreview() {
         ...selectedWeek.days.map((day) => fetchDailyWages(day.isoDate)),
       ])
       const week = await fetchCurrentWeek(selectedWeek.startDate)
-      const settlementResponse = week.week_id ? await fetchSettlements(week.week_id) : null
-      setRows(databaseRows(accountResponse.items, dailyResponses, settlementResponse?.items ?? []))
+      const [settlementResponse, ledgerResponse] = week.week_id
+        ? await Promise.all([
+            fetchSettlements(week.week_id),
+            fetchLedger({ weekId: week.week_id, pageSize: 200 }),
+          ])
+        : [null, null]
+      setRows(databaseRows(
+        accountResponse.items,
+        dailyResponses,
+        settlementResponse?.items ?? [],
+        ledgerResponse?.items ?? [],
+      ))
       setWeekId(week.week_id)
       setWeekStatus(week.status)
       setMessageTone("success")

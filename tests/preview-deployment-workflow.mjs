@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Consolidate guardian wages and show signed opening balances",
+  "Separate opening balances from editable weekly advances",
 )
-assert.equal(manifest.base_commit, "2778874f73c2a36b24c47463a4549449287144f6")
+assert.equal(manifest.base_commit, "083547a4ebd25066228c61416a86774bd6acf8ba")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
