@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CalendarRange, Database, Download, Info, LoaderCircle, Printer, RefreshCw, Save } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -193,7 +193,7 @@ function MoneyInput({
   onChange: (value: EditableAmount) => void
 }) {
   return (
-    <div className="relative min-w-24">
+    <div className="relative min-w-0">
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
         ₹
       </span>
@@ -232,8 +232,8 @@ function LabourCountInput({
   onChange: (value: EditableAmount) => void
 }) {
   return (
-    <label className="block min-w-28 px-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-violet-700">
-      No. of labourers
+    <label className="block min-w-0 px-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-violet-700">
+      No
       <input
         type="number"
         min="0"
@@ -347,6 +347,8 @@ function databaseRows(
 }
 
 export function WeeklyWageTablePreview() {
+  const topScrollRef = useRef<HTMLDivElement>(null)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
   const [rows, setRows] = useState<WageRow[]>(createInitialRows)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -562,7 +564,7 @@ export function WeeklyWageTablePreview() {
         return [[row.name, row.baseWage, row.reference, "Daily wage", ...workDays.map((day) => row.days[day.key]), ...financials]]
       }
       return [
-        [row.name || row.rateNote, row.baseWage, row.reference, "No. of labourers", ...workDays.map((day) => row.labourers[day.key]), "", "", "", "", "", ""],
+        [row.name || row.rateNote, row.baseWage, row.reference, "No", ...workDays.map((day) => row.labourers[day.key]), "", "", "", "", "", ""],
         [
           row.name || row.rateNote,
           row.baseWage,
@@ -737,7 +739,7 @@ export function WeeklyWageTablePreview() {
         </div>
       </div>
 
-      <section className="overflow-hidden border border-slate-300 bg-white shadow-sm" aria-label="Weekly worker wage table">
+      <section className="w-fit max-w-full overflow-hidden border border-slate-300 bg-white shadow-sm" aria-label="Weekly worker wage table">
         <div className="flex flex-col gap-3 border-b border-slate-300 bg-slate-950 px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="flex size-9 items-center justify-center rounded-full bg-white/10">
@@ -753,41 +755,73 @@ export function WeeklyWageTablePreview() {
           </p>
         </div>
 
-        <div className="weekly-wage-table-scroll overflow-x-auto">
-          <table className="weekly-wage-table min-w-[2100px] w-full border-collapse text-left">
+        <div
+          ref={topScrollRef}
+          role="region"
+          aria-label="Horizontal table scroll"
+          tabIndex={0}
+          className="weekly-wage-no-print weekly-wage-top-scroll overflow-x-scroll overflow-y-hidden border-b border-slate-300 bg-slate-100"
+          onScroll={(event) => {
+            if (tableScrollRef.current && tableScrollRef.current.scrollLeft !== event.currentTarget.scrollLeft) {
+              tableScrollRef.current.scrollLeft = event.currentTarget.scrollLeft
+            }
+          }}
+        >
+          <div className="h-2 w-[1480px]" aria-hidden="true" />
+        </div>
+
+        <div
+          ref={tableScrollRef}
+          className="weekly-wage-table-scroll overflow-x-auto"
+          onScroll={(event) => {
+            if (topScrollRef.current && topScrollRef.current.scrollLeft !== event.currentTarget.scrollLeft) {
+              topScrollRef.current.scrollLeft = event.currentTarget.scrollLeft
+            }
+          }}
+        >
+          <table className="weekly-wage-table w-[1480px] min-w-[1480px] table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[168px]" />
+              {workDays.map((workDay) => (
+                <col key={workDay.key} className="w-[100px]" />
+              ))}
+              {Array.from({ length: 6 }, (_, index) => (
+                <col key={index} className="w-[102px]" />
+              ))}
+            </colgroup>
             <thead className="relative z-20 text-xs">
               <tr>
                 <th
                   rowSpan={2}
                   scope="col"
-                  className="sticky left-0 z-30 w-48 min-w-48 border-b border-r border-slate-300 bg-slate-100 px-3 py-3 font-bold uppercase tracking-[0.1em] text-slate-700"
+                  className="sticky left-0 z-30 border-b border-r border-slate-300 bg-slate-100 px-2 py-3 font-bold uppercase tracking-[0.1em] text-slate-700"
                 >
                   Worker name
                 </th>
                 <th colSpan={7} scope="colgroup" className="border-b border-r border-emerald-300 bg-emerald-700 px-3 py-2 text-center font-bold uppercase tracking-[0.12em] text-white">
                   Daily wage · groups show labour count × editable rate
                 </th>
-                <th rowSpan={2} scope="col" className="w-32 border-b border-r border-sky-300 bg-sky-700 px-3 py-3 text-center font-bold text-white">
+                <th rowSpan={2} scope="col" className="border-b border-r border-sky-300 bg-sky-700 px-1.5 py-3 text-center text-[11px] font-bold leading-tight text-white">
                   Week wages
                   <span className="mt-1 block font-normal text-sky-100">7-day total</span>
                 </th>
-                <th rowSpan={2} scope="col" className="w-36 border-b border-r border-sky-300 bg-sky-700 px-3 py-3 text-center font-bold text-white">
+                <th rowSpan={2} scope="col" className="border-b border-r border-sky-300 bg-sky-700 px-1.5 py-3 text-center text-[11px] font-bold leading-tight text-white">
                   Wage cash paid
                   <span className="mt-1 block font-normal text-sky-100">Enter manually</span>
                 </th>
-                <th rowSpan={2} scope="col" className="w-36 border-b border-r border-amber-300 bg-amber-600 px-3 py-3 text-center font-bold text-white">
+                <th rowSpan={2} scope="col" className="border-b border-r border-amber-300 bg-amber-600 px-1.5 py-3 text-center text-[11px] font-bold leading-tight text-white">
                   To loan repayment
                   <span className="mt-1 block font-normal text-amber-100">Wages less cash</span>
                 </th>
-                <th rowSpan={2} scope="col" className="w-36 border-b border-r border-amber-300 bg-amber-600 px-3 py-3 text-center font-bold text-white">
+                <th rowSpan={2} scope="col" className="border-b border-r border-amber-300 bg-amber-600 px-1.5 py-3 text-center text-[11px] font-bold leading-tight text-white">
                   Earlier loan balance
                   <span className="mt-1 block font-normal text-amber-100">Previous week</span>
                 </th>
-                <th rowSpan={2} scope="col" className="w-36 border-b border-r border-rose-300 bg-rose-700 px-3 py-3 text-center font-bold text-white">
+                <th rowSpan={2} scope="col" className="border-b border-r border-rose-300 bg-rose-700 px-1.5 py-3 text-center text-[11px] font-bold leading-tight text-white">
                   Cash paid in week
                   <span className="mt-1 block font-normal text-rose-100">Advance wages</span>
                 </th>
-                <th rowSpan={2} scope="col" className="w-36 border-b border-slate-500 bg-slate-800 px-3 py-3 text-center font-bold text-white">
+                <th rowSpan={2} scope="col" className="border-b border-slate-500 bg-slate-800 px-1.5 py-3 text-center text-[11px] font-bold leading-tight text-white">
                   Present balance
                   <span className="mt-1 block font-normal text-slate-300">Calculated</span>
                 </th>
@@ -797,7 +831,7 @@ export function WeeklyWageTablePreview() {
                   <th
                     key={workDay.key}
                     scope="col"
-                    className="w-40 border-b border-r border-emerald-300 bg-emerald-50 px-2 py-2 text-center text-emerald-950"
+                    className="border-b border-r border-emerald-300 bg-emerald-50 px-1 py-2 text-center text-emerald-950"
                   >
                     <span className="block font-bold">{workDay.date}</span>
                     <span className="mt-0.5 block font-medium text-emerald-700">{workDay.day}</span>
@@ -827,7 +861,7 @@ export function WeeklyWageTablePreview() {
                         const multipliedWage = groupDayWage(row, workDay.key)
                         return (
                           <td key={workDay.key} className="border-b border-r border-t border-slate-200 p-1.5 align-top">
-                            <p className="px-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Wage / labourer</p>
+                            <p className="px-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Wage</p>
                             <MoneyInput
                               value={row.days[workDay.key]}
                               label={`${row.name || row.rateNote}, ${workDay.date} ${workDay.day} wage per labourer`}

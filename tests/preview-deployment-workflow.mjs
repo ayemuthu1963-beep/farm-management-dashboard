@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Use J prefix for Jackfruit identifiers on Preview",
+  "Compact the weekly wage table and add a top scrollbar",
 )
-assert.equal(manifest.base_commit, "049760dc16ef89267d79cce04c87d1cf97a5cfdb")
+assert.equal(manifest.base_commit, "d36a760b225566919e57262568c3f7737f739bc9")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,14 +280,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/harvest/tree-number-autocomplete.tsx",
-  "components/maps/farm-map-client.tsx",
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/farm-map/jackfruit-tree-number.ts",
-  "package.json",
-  "tests/farm-map-jackfruit-affine-review.mjs",
-  "tests/farm-map-jackfruit-prefix.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
