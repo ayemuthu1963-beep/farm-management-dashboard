@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add editable motor settings and irrigation targets",
+  "Preserve zero wages and edit loan payments",
 )
-assert.equal(manifest.base_commit, "ef32f3720cc21086001c52bc2d9c4fd19fdf9b36")
+assert.equal(manifest.base_commit, "0126ab2eee4239252c50b3d95227c5d0c6d72ef5")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,13 +280,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/irrigation/zone-status-cards.tsx",
-  "components/motor/motor-status-cards.tsx",
-  "deploy/approved-change-scope.txt",
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/motor-runtime-water-pumped.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
