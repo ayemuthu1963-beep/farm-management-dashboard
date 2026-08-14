@@ -188,15 +188,26 @@ function weekWages(row: WageRow) {
   return daySlots.reduce((total, day) => total + dailyWage(row, day.key), 0)
 }
 
-function loanRepayment(row: WageRow): number | null {
-  if (row.wageCashPaid === "") return null
-  return weekWages(row) - amount(row.wageCashPaid)
+const dependentWorkerNames = new Set(["Rani", "Chitra"])
+
+function isDependentWorker(row: WageRow) {
+  return dependentWorkerNames.has(row.loadedName)
 }
 
-function presentBalance(row: WageRow): number | null {
-  const repayment = loanRepayment(row)
+function pairedDependent(rows: WageRow[], row: WageRow): WageRow | null {
+  const dependentName = row.loadedName === "Tiruma" ? "Rani" : row.loadedName === "Sivan" ? "Chitra" : null
+  return dependentName ? rows.find((candidate) => candidate.loadedName === dependentName) ?? null : null
+}
+
+function loanRepayment(row: WageRow, dependent: WageRow | null = null): number | null {
+  if (row.wageCashPaid === "") return null
+  return weekWages(row) + (dependent ? weekWages(dependent) : 0) - amount(row.wageCashPaid)
+}
+
+function presentBalance(row: WageRow, dependent: WageRow | null = null): number | null {
+  const repayment = loanRepayment(row, dependent)
   if (repayment === null || row.earlierLoanBalance === "") return null
-  return amount(row.earlierLoanBalance) - repayment + amount(row.cashPaidInWeek)
+  return amount(row.earlierLoanBalance) + repayment - amount(row.cashPaidInWeek)
 }
 
 function readAmount(rawValue: string | number | null | undefined): EditableAmount {
@@ -313,6 +324,22 @@ function CalculatedAmount({
   )
 }
 
+function SignedCalculatedAmount({ value }: { value: number | null }) {
+  const display = value === null ? null : value > 0 ? `+${formatWholeINR(value)}` : formatWholeINR(value)
+  return (
+    <span
+      className={cn(
+        "block whitespace-nowrap px-3 py-2.5 text-right text-sm font-bold tabular-nums",
+        value !== null && value < 0 && "text-red-700",
+        value !== null && value > 0 && "text-emerald-700",
+        value === 0 && "text-slate-950",
+      )}
+    >
+      {display === null ? <span className="text-slate-400">—</span> : display}
+    </span>
+  )
+}
+
 function CombinedWeekWage({ value, addend }: { value: number; addend: number | null }) {
   if (addend === null) return <CalculatedAmount value={value} tone="green" />
   return (
@@ -403,7 +430,7 @@ function databaseRows(
         }),
       ) as Record<DayKey, EditableAmount>,
       wageCashPaid: readAmount(settlement?.weekly_payment ?? ""),
-      earlierLoanBalance: Math.max(0, -openingSignedBalance),
+      earlierLoanBalance: openingSignedBalance,
       cashPaidInWeek: cashPaid || "",
       loadedCashPaidInWeek: cashPaid,
       settlementRowVersion: settlement?.row_version ?? null,
@@ -467,8 +494,8 @@ export function WeeklyWageTablePreview() {
   const totals = useMemo(
     () => ({
       wages: rows.reduce((total, row) => total + weekWages(row), 0),
-      cash: rows.reduce((total, row) => total + amount(row.wageCashPaid), 0),
-      advances: rows.reduce((total, row) => total + amount(row.cashPaidInWeek), 0),
+      cash: rows.filter((row) => !isDependentWorker(row)).reduce((total, row) => total + amount(row.wageCashPaid), 0),
+      advances: rows.filter((row) => !isDependentWorker(row)).reduce((total, row) => total + amount(row.cashPaidInWeek), 0),
     }),
     [rows],
   )
@@ -797,14 +824,17 @@ export function WeeklyWageTablePreview() {
       "Present balance",
     ]
     const exportRows = rows.flatMap((row) => {
-      const financials = [
-        weekWages(row),
-        row.wageCashPaid,
-        loanRepayment(row),
-        row.earlierLoanBalance,
-        row.cashPaidInWeek,
-        presentBalance(row),
-      ]
+      const dependent = pairedDependent(rows, row)
+      const financials = isDependentWorker(row)
+        ? [weekWages(row), "", "", "", "", ""]
+        : [
+            weekWages(row),
+            row.wageCashPaid,
+            loanRepayment(row, dependent),
+            row.earlierLoanBalance,
+            row.cashPaidInWeek,
+            presentBalance(row, dependent),
+          ]
       if (!row.group) {
         return [[row.name, row.baseWage, row.reference, "Daily wage", ...workDays.map((day) => row.days[day.key]), ...financials]]
       }
@@ -890,39 +920,51 @@ export function WeeklyWageTablePreview() {
   }
 
   function renderFinancialCells(row: WageRow, rowSpan = 1) {
-    const pairedWorkerName = row.loadedName === "Tiruma" ? "Rani" : row.loadedName === "Sivan" ? "Chitra" : null
-    const pairedWorker = pairedWorkerName ? rows.find((candidate) => candidate.loadedName === pairedWorkerName) : null
+    const pairedWorker = pairedDependent(rows, row)
+    const dependent = isDependentWorker(row)
     return (
       <>
         <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-sky-50/80">
           <CombinedWeekWage value={weekWages(row)} addend={pairedWorker ? weekWages(pairedWorker) : null} />
         </td>
-        <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-sky-50/40 p-1">
-          <MoneyInput
-            value={row.wageCashPaid}
-            label={`${row.name || row.rateNote}, wage cash paid`}
-            tone="green"
-            onChange={(value) => updateRow(row.id, (current) => ({ ...current, wageCashPaid: value }))}
-          />
-        </td>
-        <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-amber-50/80">
-          <CalculatedAmount value={loanRepayment(row)} tone="green" />
-        </td>
-        <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-amber-50/40 p-1">
-          <CalculatedAmount value={amount(row.earlierLoanBalance)} tone="red" negative />
-        </td>
-        <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-rose-50/50 p-1">
-          <MoneyInput
-            value={row.cashPaidInWeek}
-            label={`${row.name || row.rateNote}, cash paid in week`}
-            tone="red"
-            negative
-            onChange={(value) => updateRow(row.id, (current) => ({ ...current, cashPaidInWeek: value }))}
-          />
-        </td>
-        <td rowSpan={rowSpan} className="border-b border-slate-200 bg-slate-100">
-          <CalculatedAmount value={presentBalance(row)} tone="red" negative />
-        </td>
+        {dependent ? (
+          <>
+            <td rowSpan={rowSpan} aria-label={`${row.loadedName} wage cash paid blank`} className="border-b border-r border-slate-200 bg-sky-50/40" />
+            <td rowSpan={rowSpan} aria-label={`${row.loadedName} loan repayment blank`} className="border-b border-r border-slate-200 bg-amber-50/80" />
+            <td rowSpan={rowSpan} aria-label={`${row.loadedName} earlier balance blank`} className="border-b border-r border-slate-200 bg-amber-50/40" />
+            <td rowSpan={rowSpan} aria-label={`${row.loadedName} cash paid blank`} className="border-b border-r border-slate-200 bg-rose-50/50" />
+            <td rowSpan={rowSpan} aria-label={`${row.loadedName} present balance blank`} className="border-b border-slate-200 bg-slate-100" />
+          </>
+        ) : (
+          <>
+            <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-sky-50/40 p-1">
+              <MoneyInput
+                value={row.wageCashPaid}
+                label={`${row.name || row.rateNote}, wage cash paid`}
+                tone="green"
+                onChange={(value) => updateRow(row.id, (current) => ({ ...current, wageCashPaid: value }))}
+              />
+            </td>
+            <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-amber-50/80">
+              <CalculatedAmount value={loanRepayment(row, pairedWorker)} tone="green" />
+            </td>
+            <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-amber-50/40 p-1">
+              <SignedCalculatedAmount value={row.earlierLoanBalance === "" ? null : amount(row.earlierLoanBalance)} />
+            </td>
+            <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-rose-50/50 p-1">
+              <MoneyInput
+                value={row.cashPaidInWeek}
+                label={`${row.name || row.rateNote}, cash paid in week`}
+                tone="red"
+                negative
+                onChange={(value) => updateRow(row.id, (current) => ({ ...current, cashPaidInWeek: value }))}
+              />
+            </td>
+            <td rowSpan={rowSpan} className="border-b border-slate-200 bg-slate-100">
+              <SignedCalculatedAmount value={presentBalance(row, pairedWorker)} />
+            </td>
+          </>
+        )}
       </>
     )
   }
@@ -1141,9 +1183,7 @@ export function WeeklyWageTablePreview() {
                                 multipliedWage === null ? "text-sm leading-5" : "text-[11px] leading-4",
                               )}
                             >
-                              {multipliedWage === null
-                                ? "Enter count and wage"
-                                : formatWholeINR(multipliedWage)}
+                              {multipliedWage === null ? null : formatWholeINR(multipliedWage)}
                             </p>
                           </td>
                         )
@@ -1180,14 +1220,26 @@ export function WeeklyWageTablePreview() {
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.wages)}</td>
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.cash)}</td>
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">
-                  {formatWholeINR(rows.reduce((total, row) => total + (loanRepayment(row) ?? 0), 0))}
+                  {formatWholeINR(
+                    rows
+                      .filter((row) => !isDependentWorker(row))
+                      .reduce((total, row) => total + (loanRepayment(row, pairedDependent(rows, row)) ?? 0), 0),
+                  )}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">
-                  {formatWholeINR(rows.reduce((total, row) => total + amount(row.earlierLoanBalance), 0))}
+                  {formatWholeINR(
+                    rows
+                      .filter((row) => !isDependentWorker(row))
+                      .reduce((total, row) => total + amount(row.earlierLoanBalance), 0),
+                  )}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.advances)}</td>
                 <td className="px-3 py-3 text-right text-sm font-bold tabular-nums">
-                  {formatWholeINR(rows.reduce((total, row) => total + (presentBalance(row) ?? 0), 0))}
+                  {formatWholeINR(
+                    rows
+                      .filter((row) => !isDependentWorker(row))
+                      .reduce((total, row) => total + (presentBalance(row, pairedDependent(rows, row)) ?? 0), 0),
+                  )}
                 </td>
               </tr>
             </tfoot>
@@ -1196,7 +1248,7 @@ export function WeeklyWageTablePreview() {
       </section>
 
       <p className="mt-3 text-xs leading-5 text-slate-500">
-        Present balance = earlier loan balance − loan repayment + cash advance paid during the week.
+        Present balance = signed earlier balance + loan repayment − cash advance paid during the week.
       </p>
     </div>
   )
