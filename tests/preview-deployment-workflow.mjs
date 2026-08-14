@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Refine motor settings layout and make irrigation targets editable",
+  "Enforce side-by-side motor settings at narrow desktop widths",
 )
-assert.equal(manifest.base_commit, "22b620e0f511b04b642e7ae249f0437113846fd3")
+assert.equal(manifest.base_commit, "a2856c8005faf54ae5d4584b9e2871cf524c8f64")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,10 +280,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/irrigation/zone-status-cards.tsx",
   "components/motor/motor-status-cards.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/irrigation-management-corrections.mjs",
   "tests/motor-runtime-water-pumped.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
