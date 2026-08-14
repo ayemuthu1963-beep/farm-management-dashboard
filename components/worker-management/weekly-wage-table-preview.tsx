@@ -17,6 +17,7 @@ import {
   WorkerApiError,
 } from "@/lib/worker-management-api"
 import { formatWholeINR } from "@/lib/worker-management-format"
+import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
 import type { DailyWageResponse, FarmScheme, SettlementRow, WorkerAccount } from "@/lib/worker-management-types"
 import { Badge, SectionTitle, WorkerButton } from "./worker-ui"
 
@@ -380,6 +381,7 @@ function databaseRows(
           const entered = Boolean(
             entry &&
               !entry.is_default &&
+              entry.notes !== MOVED_WAGE_PLACEHOLDER_NOTE &&
               (group ? entry.group_attendee_count !== null : entry.attendance_value !== null),
           )
           return [day.key, entered ? readAmount(entry?.wage_rate_snapshot ?? baseWage) : ""]
@@ -391,7 +393,12 @@ function databaseRows(
       labourers: Object.fromEntries(
         daySlots.map((day) => {
           const entry = entries[day.key]
-          const entered = Boolean(entry && !entry.is_default && entry.group_attendee_count !== null)
+          const entered = Boolean(
+            entry &&
+              !entry.is_default &&
+              entry.notes !== MOVED_WAGE_PLACEHOLDER_NOTE &&
+              entry.group_attendee_count !== null,
+          )
           return [day.key, group && entered ? entry?.group_attendee_count ?? "" : ""]
         }),
       ) as Record<DayKey, EditableAmount>,
@@ -560,13 +567,20 @@ export function WeeklyWageTablePreview() {
           const blankEntry = row.group
             ? row.days[day.key] === "" || row.labourers[day.key] === ""
             : row.days[day.key] === ""
+          const movedBlank = selectedWeekId === "current" && blankEntry && row.dailyRowVersions[day.key] !== null
           return {
             account_id: row.accountId as number,
             client_operation_id: crypto.randomUUID(),
-            attendance: row.group || blankEntry ? null : "FULL",
-            group_attendee_count: row.group && !blankEntry ? Math.max(0, Math.round(amount(row.labourers[day.key]))) : null,
-            wage_rate: String(enteredRate),
-            notes: blankEntry ? null : "Weekly wage sheet",
+            attendance: row.group ? null : movedBlank ? "FULL" : blankEntry ? null : "FULL",
+            group_attendee_count: row.group
+              ? movedBlank
+                ? 0
+                : !blankEntry
+                  ? Math.max(0, Math.round(amount(row.labourers[day.key])))
+                  : null
+              : null,
+            wage_rate: String(movedBlank ? 0 : enteredRate),
+            notes: movedBlank ? MOVED_WAGE_PLACEHOLDER_NOTE : blankEntry ? null : "Weekly wage sheet",
             expected_row_version: row.dailyRowVersions[day.key],
           }
         })
@@ -720,10 +734,10 @@ export function WeeklyWageTablePreview() {
         const blankItems = items.map((item) => ({
           account_id: item.account_id,
           client_operation_id: crypto.randomUUID(),
-          attendance: null,
-          group_attendee_count: null,
-          wage_rate: item.wage_rate_snapshot,
-          notes: "Moved to 8–14 Aug 2026",
+          attendance: item.account_type === "GROUP" ? null : "FULL",
+          group_attendee_count: item.account_type === "GROUP" ? 0 : null,
+          wage_rate: "0",
+          notes: MOVED_WAGE_PLACEHOLDER_NOTE,
           expected_row_version: item.row_version,
         }))
         if (blankItems.length) await saveDailyWageBatch(sourceWeek.days[index].isoDate, blankItems)

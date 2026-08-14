@@ -3,11 +3,14 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Correct the worker wage week and financial presentation",
-  "base_commit": "2d2bb69bc520ae593a3884063e0fc30d0f023b48",
+  "release_note": "Persist the cleared current wage week after moving its entries",
+  "base_commit": "5ae68d037abc1b9474829ed391b17e86d0976615",
   "allowed_paths": [
+    "components/worker-management/daily-attendance.tsx",
+    "components/worker-management/daily-wage-entry.tsx",
     "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
+    "lib/worker-management-constants.ts",
     "tests/preview-deployment-workflow.mjs",
     "tests/worker-management.mjs"
   ],

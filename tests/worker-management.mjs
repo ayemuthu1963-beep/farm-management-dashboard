@@ -218,8 +218,9 @@ check(weeklyWagePreview.includes("createLedgerTransaction"), "Weekly wage table 
 check(weeklyWagePreview.includes("Save week"), "Weekly wage table must provide an operator save action")
 check(weeklyWagePreview.includes('value="previous"'), "Weekly wage table must let the operator view 8–14 August")
 check(weeklyWagePreview.includes("moveCurrentWeekToPrevious"), "Weekly wage table must support the approved week correction")
-check(weeklyWagePreview.includes("Moved to 8–14 Aug 2026"), "The corrected current-week rows must retain an audit note")
-check(weeklyWagePreview.includes("attendance: row.group || blankEntry ? null : \"FULL\""), "Blank daily wage cells must save as blank attendance")
+check(weeklyWagePreview.includes("MOVED_WAGE_PLACEHOLDER_NOTE"), "The corrected current-week rows must retain an audit note")
+check(weeklyWagePreview.includes('attendance: item.account_type === "GROUP" ? null : "FULL"'), "Moved daily wage rows must use a database-valid placeholder")
+check(weeklyWagePreview.includes('wage_rate: "0"'), "Moved current-week rows must persist with zero wages")
 check(weeklyWagePreview.includes("Horizontal table scroll"), "Weekly wage table must provide a horizontal scrollbar above the table")
 check(weeklyWagePreview.includes("w-[1480px] min-w-[1480px] table-fixed"), "Weekly wage table must keep compact fixed-width columns")
 check(/\r?\n\s+No\r?\n\s+<input/.test(weeklyWagePreview), "Group wage rows must label the daily labour count as No")
@@ -261,6 +262,7 @@ check(dailyAttendance.includes("readCachedDailyWages"), "Daily Attendance must r
 check(dailyAttendance.includes("Amount earned"), "Daily Attendance must add an earnings row beneath every worker")
 check(dailyAttendance.includes("formatWholeINR(item.daily_wage_amount)"), "Daily earnings must use the saved daily wage amount")
 check(dailyAttendance.includes("No earnings entered"), "Daily earnings must distinguish a missing wage from zero earnings")
+check(dailyAttendance.includes("item.notes === MOVED_WAGE_PLACEHOLDER_NOTE"), "Moved wage placeholders must remain blank in Daily Attendance")
 
 const workerServiceWorker = read("public/worker-management-sw.js")
 check(workerServiceWorker.includes('"/worker-management/daily-attendance"'), "Daily Attendance must be included in the Worker offline shell")
@@ -279,6 +281,7 @@ check(dailyEntry.includes("workerAccountOptionLabel(account)"), "Daily Wage acco
 check(dailyEntry.includes("queueAttendanceOperations"), "Daily entry must save through the durable offline queue")
 check(dailyEntry.includes("Offline roster loaded"), "Daily entry must load its cached roster offline")
 check(dailyEntry.includes("Retry Device Entry"), "Attendance conflicts need an explicit device retry action")
+check(dailyEntry.includes("item.notes === MOVED_WAGE_PLACEHOLDER_NOTE"), "Moved wage placeholders must remain unselected in Daily Wage Entry")
 
 const workerDirectory = read("components/worker-management/worker-directory.tsx")
 check(workerDirectory.includes("const [showInactive, setShowInactive] = useState(false)"), "Worker Directory must default to active accounts")
