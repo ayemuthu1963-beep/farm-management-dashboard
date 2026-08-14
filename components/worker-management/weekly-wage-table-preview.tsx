@@ -20,18 +20,41 @@ import { formatWholeINR } from "@/lib/worker-management-format"
 import type { DailyWageResponse, FarmScheme, SettlementRow, WorkerAccount } from "@/lib/worker-management-types"
 import { Badge, SectionTitle, WorkerButton } from "./worker-ui"
 
-const workDays = [
-  { key: "sat", date: "15.08", day: "Sat" },
-  { key: "sun", date: "16.08", day: "Sun" },
-  { key: "mon", date: "17.08", day: "Mon" },
-  { key: "tue", date: "18.08", day: "Tue" },
-  { key: "wed", date: "19.08", day: "Wed" },
-  { key: "thu", date: "20.08", day: "Thu" },
-  { key: "fri", date: "21.08", day: "Fri" },
+const daySlots = [
+  { key: "sat", day: "Sat" },
+  { key: "sun", day: "Sun" },
+  { key: "mon", day: "Mon" },
+  { key: "tue", day: "Tue" },
+  { key: "wed", day: "Wed" },
+  { key: "thu", day: "Thu" },
+  { key: "fri", day: "Fri" },
 ] as const
 
-type DayKey = (typeof workDays)[number]["key"]
+type DayKey = (typeof daySlots)[number]["key"]
 type EditableAmount = number | ""
+
+const wageWeeks = {
+  current: {
+    id: "current",
+    label: "15–21 Aug 2026 · current week",
+    heading: "15 Aug – 21 Aug 2026",
+    startDate: "2026-08-15",
+    endDate: "2026-08-21",
+    exportFile: "worker-wages-15-21-Aug-2026.csv",
+    days: daySlots.map((day, index) => ({ ...day, date: `${15 + index}.08`, isoDate: `2026-08-${15 + index}` })),
+  },
+  previous: {
+    id: "previous",
+    label: "8–14 Aug 2026 · last week",
+    heading: "8 Aug – 14 Aug 2026",
+    startDate: "2026-08-08",
+    endDate: "2026-08-14",
+    exportFile: "worker-wages-08-14-Aug-2026.csv",
+    days: daySlots.map((day, index) => ({ ...day, date: `${String(8 + index).padStart(2, "0")}.08`, isoDate: `2026-08-${String(8 + index).padStart(2, "0")}` })),
+  },
+} as const
+
+type WageWeekId = keyof typeof wageWeeks
 
 type WageRow = {
   id: string
@@ -73,20 +96,12 @@ const workerRates = [
   { name: "Outside Ladies", fullWage: 320, rateNote: "₹320 / ₹160" },
 ] as const
 
-function fullWeek(fullWage: number): Record<DayKey, number> {
-  return Object.fromEntries(workDays.map(({ key }) => [key, fullWage])) as Record<DayKey, number>
-}
-
 function blankWeek(): Record<DayKey, ""> {
-  return Object.fromEntries(workDays.map(({ key }) => [key, ""])) as Record<DayKey, "">
-}
-
-function countWeek(count: number): Record<DayKey, number> {
-  return Object.fromEntries(workDays.map(({ key }) => [key, count])) as Record<DayKey, number>
+  return Object.fromEntries(daySlots.map(({ key }) => [key, ""])) as Record<DayKey, "">
 }
 
 function emptyVersions(): Record<DayKey, null> {
-  return Object.fromEntries(workDays.map(({ key }) => [key, null])) as Record<DayKey, null>
+  return Object.fromEntries(daySlots.map(({ key }) => [key, null])) as Record<DayKey, null>
 }
 
 function createInitialRows(): WageRow[] {
@@ -109,9 +124,9 @@ function createInitialRows(): WageRow[] {
         loadedReference: "",
         custom: false,
         group,
-        days: fullWeek(worker.fullWage),
+        days: blankWeek(),
         dailyRowVersions: emptyVersions(),
-        labourers: group ? countWeek(1) : blankWeek(),
+        labourers: blankWeek(),
         wageCashPaid: "" as const,
         earlierLoanBalance: "" as const,
         cashPaidInWeek: "" as const,
@@ -160,8 +175,16 @@ function dailyWage(row: WageRow, day: DayKey) {
   return row.group ? (groupDayWage(row, day) ?? 0) : amount(row.days[day])
 }
 
+function enteredDailyItems(response: DailyWageResponse) {
+  return response.items.filter(
+    (item) =>
+      !item.is_default &&
+      (item.attendance_value !== null || item.group_attendee_count !== null),
+  )
+}
+
 function weekWages(row: WageRow) {
-  return workDays.reduce((total, day) => total + dailyWage(row, day.key), 0)
+  return daySlots.reduce((total, day) => total + dailyWage(row, day.key), 0)
 }
 
 function loanRepayment(row: WageRow): number | null {
@@ -185,17 +208,28 @@ function MoneyInput({
   value,
   label,
   compact = false,
+  tone = "black",
+  negative = false,
   onChange,
 }: {
   value: EditableAmount
   label: string
   compact?: boolean
+  tone?: "black" | "green" | "red"
+  negative?: boolean
   onChange: (value: EditableAmount) => void
 }) {
   return (
     <div className="relative min-w-0">
-      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
-        ₹
+      <span
+        className={cn(
+          "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold",
+          tone === "green" && "text-emerald-600",
+          tone === "red" && "text-red-700",
+          tone === "black" && "text-slate-500",
+        )}
+      >
+        {negative && value !== "" ? "−₹" : "₹"}
       </span>
       <input
         type="number"
@@ -208,7 +242,11 @@ function MoneyInput({
         onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => onChange(readAmount(event.target.value))}
         className={cn(
-          "h-10 w-full rounded-md border border-transparent bg-transparent pl-6 pr-2 text-right font-semibold tabular-nums text-slate-900 outline-none transition hover:border-slate-300 hover:bg-white focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/15",
+          "h-10 w-full rounded-md border border-transparent bg-transparent pr-2 text-right font-semibold tabular-nums outline-none transition hover:border-slate-300 hover:bg-white focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/15",
+          negative ? "pl-9" : "pl-6",
+          tone === "green" && "text-emerald-700",
+          tone === "red" && "text-red-700",
+          tone === "black" && "text-slate-950",
           compact ? "text-xs" : "text-sm",
         )}
       />
@@ -250,15 +288,37 @@ function LabourCountInput({
   )
 }
 
-function CalculatedAmount({ value, signed = false }: { value: number | null; signed?: boolean }) {
+function CalculatedAmount({
+  value,
+  tone = "black",
+  negative = false,
+}: {
+  value: number | null
+  tone?: "black" | "green" | "red"
+  negative?: boolean
+}) {
+  const displayedValue = value === null ? null : negative ? -Math.abs(value) : value
   return (
     <span
       className={cn(
         "block whitespace-nowrap px-3 py-2.5 text-right text-sm font-bold tabular-nums",
-        signed && value !== null && value < 0 ? "text-red-700" : "text-slate-900",
+        tone === "green" && "text-emerald-700",
+        tone === "red" && "text-red-700",
+        tone === "black" && "text-slate-950",
       )}
     >
-      {value === null ? <span className="text-slate-400">—</span> : formatWholeINR(value)}
+      {displayedValue === null ? <span className="text-slate-400">—</span> : formatWholeINR(displayedValue)}
+    </span>
+  )
+}
+
+function CombinedWeekWage({ value, addend }: { value: number; addend: number | null }) {
+  if (addend === null) return <CalculatedAmount value={value} tone="green" />
+  return (
+    <span className="block px-2 py-2 text-right text-xs font-bold tabular-nums text-emerald-700">
+      <span className="block">{formatWholeINR(value)}</span>
+      <span className="block">+ {formatWholeINR(addend)}</span>
+      <span className="mt-1 block border-t border-sky-200 pt-1">= {formatWholeINR(value + addend)}</span>
     </span>
   )
 }
@@ -281,7 +341,7 @@ function databaseRows(
     const group = account.account_type === "GROUP"
     const custom = account.account_code.startsWith("WG-CUSTOM-")
     const entries = Object.fromEntries(
-      workDays.map((day, index) => [
+      daySlots.map((day, index) => [
         day.key,
         dailyResponses[index]?.items.find((item) => item.account_id === account.account_id) ?? null,
       ]),
@@ -315,18 +375,25 @@ function databaseRows(
       custom,
       group,
       days: Object.fromEntries(
-        workDays.map((day) => [day.key, readAmount(entries[day.key]?.wage_rate_snapshot ?? baseWage)]),
+        daySlots.map((day) => {
+          const entry = entries[day.key]
+          const entered = Boolean(
+            entry &&
+              !entry.is_default &&
+              (group ? entry.group_attendee_count !== null : entry.attendance_value !== null),
+          )
+          return [day.key, entered ? readAmount(entry?.wage_rate_snapshot ?? baseWage) : ""]
+        }),
       ) as Record<DayKey, EditableAmount>,
       dailyRowVersions: Object.fromEntries(
-        workDays.map((day) => [day.key, entries[day.key]?.row_version ?? null]),
+        daySlots.map((day) => [day.key, entries[day.key]?.row_version ?? null]),
       ) as Record<DayKey, number | null>,
       labourers: Object.fromEntries(
-        workDays.map((day) => [
-          day.key,
-          group
-            ? entries[day.key]?.group_attendee_count ?? account.default_group_size ?? (custom ? "" : 1)
-            : "",
-        ]),
+        daySlots.map((day) => {
+          const entry = entries[day.key]
+          const entered = Boolean(entry && !entry.is_default && entry.group_attendee_count !== null)
+          return [day.key, group && entered ? entry?.group_attendee_count ?? "" : ""]
+        }),
       ) as Record<DayKey, EditableAmount>,
       wageCashPaid: readAmount(settlement?.weekly_payment ?? ""),
       earlierLoanBalance: Math.max(0, -openingSignedBalance),
@@ -349,13 +416,17 @@ function databaseRows(
 export function WeeklyWageTablePreview() {
   const topScrollRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
+  const [selectedWeekId, setSelectedWeekId] = useState<WageWeekId>("current")
   const [rows, setRows] = useState<WageRow[]>(createInitialRows)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [moving, setMoving] = useState(false)
   const [message, setMessage] = useState("Loading the approved roster and week from Preview…")
   const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info")
   const [weekId, setWeekId] = useState<number | null>(null)
   const [weekStatus, setWeekStatus] = useState("NOT_STARTED")
+  const selectedWeek = wageWeeks[selectedWeekId]
+  const workDays = selectedWeek.days
 
   const loadWeek = useCallback(async () => {
     setLoading(true)
@@ -364,22 +435,22 @@ export function WeeklyWageTablePreview() {
     try {
       const [accountResponse, ...dailyResponses] = await Promise.all([
         fetchAccounts({ isActive: true, pageSize: 200 }),
-        ...workDays.map((day) => fetchDailyWages(`2026-08-${day.date.slice(0, 2)}`)),
+        ...selectedWeek.days.map((day) => fetchDailyWages(day.isoDate)),
       ])
-      const week = await fetchCurrentWeek("2026-08-15")
+      const week = await fetchCurrentWeek(selectedWeek.startDate)
       const settlementResponse = week.week_id ? await fetchSettlements(week.week_id) : null
       setRows(databaseRows(accountResponse.items, dailyResponses, settlementResponse?.items ?? []))
       setWeekId(week.week_id)
       setWeekStatus(week.status)
       setMessageTone("success")
-      setMessage(week.week_id ? `Saved week loaded · ${week.status.toLocaleLowerCase()}` : "Roster loaded · this week has not been saved yet")
+      setMessage(week.week_id ? `${selectedWeek.heading} loaded · ${week.status.toLocaleLowerCase()}` : `${selectedWeek.heading} loaded · no entries saved`)
     } catch (error) {
       setMessageTone("error")
       setMessage(error instanceof Error ? error.message : "The weekly wage sheet could not be loaded.")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedWeek])
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => void loadWeek(), 0)
@@ -444,7 +515,7 @@ export function WeeklyWageTablePreview() {
             operator_reference: row.reference.trim() || null,
             daily_rate: String(amount(row.baseWage)),
             farm_scheme: null,
-            effective_from: "2026-08-15",
+            effective_from: selectedWeek.startDate,
           })
           row = {
             ...row,
@@ -476,7 +547,7 @@ export function WeeklyWageTablePreview() {
             await addWageRate(row.accountId as number, {
               daily_rate: String(amount(row.baseWage)),
               farm_scheme: row.accountType === "FARM" ? row.farmScheme ?? "THREE_OPTION" : null,
-              effective_from: "2026-08-15",
+              effective_from: selectedWeek.startDate,
             })
           }
         }
@@ -486,21 +557,23 @@ export function WeeklyWageTablePreview() {
       for (const [dayIndex, day] of workDays.entries()) {
         const items = persistedRows.map((row) => {
           const enteredRate = amount(row.days[day.key]) || amount(row.baseWage)
-          if (enteredRate <= 0) throw new Error(`Enter the ${day.date} wage for ${row.name}.`)
+          const blankEntry = row.group
+            ? row.days[day.key] === "" || row.labourers[day.key] === ""
+            : row.days[day.key] === ""
           return {
             account_id: row.accountId as number,
             client_operation_id: crypto.randomUUID(),
-            attendance: row.group ? null : "FULL",
-            group_attendee_count: row.group ? Math.max(0, Math.round(amount(row.labourers[day.key]))) : null,
+            attendance: row.group || blankEntry ? null : "FULL",
+            group_attendee_count: row.group && !blankEntry ? Math.max(0, Math.round(amount(row.labourers[day.key]))) : null,
             wage_rate: String(enteredRate),
-            notes: "Weekly wage sheet",
+            notes: blankEntry ? null : "Weekly wage sheet",
             expected_row_version: row.dailyRowVersions[day.key],
           }
         })
-        if (items.length) await saveDailyWageBatch(`2026-08-${workDays[dayIndex].date.slice(0, 2)}`, items)
+        if (items.length) await saveDailyWageBatch(workDays[dayIndex].isoDate, items)
       }
 
-      const activeWeek = await fetchCurrentWeek("2026-08-15")
+      const activeWeek = await fetchCurrentWeek(selectedWeek.startDate)
       if (!activeWeek.week_id) throw new Error("The work week was not created after saving daily wages.")
 
       for (const row of persistedRows) {
@@ -515,7 +588,7 @@ export function WeeklyWageTablePreview() {
           await createLedgerTransaction({
             client_operation_id: crypto.randomUUID(),
             account_id: row.accountId as number,
-            transaction_date: "2026-08-21",
+            transaction_date: selectedWeek.endDate,
             transaction_type: cashDifference > 0 ? "CASH_ADVANCE" : "CASH_REPAYMENT",
             amount: String(Math.abs(cashDifference)),
             reference: "WAGE-SHEET",
@@ -534,6 +607,164 @@ export function WeeklyWageTablePreview() {
       setMessage(error instanceof WorkerApiError && error.status === 409 ? `${detail} Reload the sheet and try again.` : detail)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function moveCurrentWeekToPrevious() {
+    const sourceWeek = wageWeeks.current
+    const targetWeek = wageWeeks.previous
+
+    setMoving(true)
+    setMessageTone("info")
+    setMessage("Moving the saved 15–21 August entries to 8–14 August…")
+    try {
+      const [sourceDaily, targetDaily, sourceWeekRecord, targetWeekRecord] = await Promise.all([
+        Promise.all(sourceWeek.days.map((day) => fetchDailyWages(day.isoDate))),
+        Promise.all(targetWeek.days.map((day) => fetchDailyWages(day.isoDate))),
+        fetchCurrentWeek(sourceWeek.startDate),
+        fetchCurrentWeek(targetWeek.startDate),
+      ])
+
+      if (!sourceWeekRecord.week_id) throw new Error("The 15–21 August week has no saved entries to move.")
+      if (["CLOSED", "PAID"].includes(sourceWeekRecord.status)) {
+        throw new Error(`The 15–21 August week is ${sourceWeekRecord.status.toLocaleLowerCase()} and cannot be moved.`)
+      }
+      if (["CLOSED", "PAID"].includes(targetWeekRecord.status)) {
+        throw new Error(`The 8–14 August week is ${targetWeekRecord.status.toLocaleLowerCase()} and cannot receive the entries.`)
+      }
+
+      const sourceItemsByDay = sourceDaily.map(enteredDailyItems)
+      const targetItemsByDay = targetDaily.map(enteredDailyItems)
+      if (!sourceItemsByDay.some((items) => items.length > 0)) {
+        throw new Error("The 15–21 August week is already blank.")
+      }
+      if (targetItemsByDay.some((items) => items.length > 0)) {
+        throw new Error("The 8–14 August week already contains wage entries, so it was not overwritten.")
+      }
+
+      if (targetWeekRecord.week_id) {
+        const targetSettlementCheck = await fetchSettlements(targetWeekRecord.week_id)
+        const hasTargetMoney = targetSettlementCheck.items.some(
+          (item) => Number(item.weekly_payment) !== 0 || Number(item.cash_paid_during_week) !== 0,
+        )
+        if (hasTargetMoney) {
+          throw new Error("The 8–14 August week already contains payment or cash entries, so it was not overwritten.")
+        }
+      }
+
+      for (const [index] of sourceDaily.entries()) {
+        const items = sourceItemsByDay[index].map((item) => ({
+          account_id: item.account_id,
+          client_operation_id: crypto.randomUUID(),
+          attendance: item.attendance_value,
+          group_attendee_count: item.group_attendee_count,
+          wage_rate: item.wage_rate_snapshot,
+          notes: item.notes || "Moved from 15–21 Aug 2026",
+          expected_row_version:
+            targetDaily[index].items.find((target) => target.account_id === item.account_id)?.row_version ?? null,
+        }))
+        if (items.length) await saveDailyWageBatch(targetWeek.days[index].isoDate, items)
+      }
+
+      const [sourceSettlements, movedTargetWeek] = await Promise.all([
+        fetchSettlements(sourceWeekRecord.week_id),
+        fetchCurrentWeek(targetWeek.startDate),
+      ])
+      if (!movedTargetWeek.week_id) throw new Error("The 8–14 August week was not created after copying the daily wages.")
+      const targetSettlements = await fetchSettlements(movedTargetWeek.week_id)
+      const targetSettlementByAccount = new Map(targetSettlements.items.map((item) => [item.account_id, item]))
+
+      for (const sourceSettlement of sourceSettlements.items) {
+        const payment = Number(sourceSettlement.weekly_payment)
+        if (payment === 0) continue
+        const targetSettlement = targetSettlementByAccount.get(sourceSettlement.account_id)
+        if (Number(targetSettlement?.weekly_payment ?? 0) !== 0) {
+          throw new Error(`${sourceSettlement.display_name} already has a payment in the 8–14 August week.`)
+        }
+        await updateWeeklyPayment(
+          movedTargetWeek.week_id,
+          sourceSettlement.account_id,
+          String(payment),
+          targetSettlement?.row_version ?? null,
+        )
+      }
+
+      for (const sourceSettlement of sourceSettlements.items) {
+        const cash = Number(sourceSettlement.cash_paid_during_week)
+        if (cash === 0) continue
+        const targetCash = Number(targetSettlementByAccount.get(sourceSettlement.account_id)?.cash_paid_during_week ?? 0)
+        if (targetCash !== 0) {
+          throw new Error(`${sourceSettlement.display_name} already has a cash entry in the 8–14 August week.`)
+        }
+        await createLedgerTransaction({
+          client_operation_id: crypto.randomUUID(),
+          account_id: sourceSettlement.account_id,
+          transaction_date: targetWeek.endDate,
+          transaction_type: cash > 0 ? "CASH_ADVANCE" : "CASH_REPAYMENT",
+          amount: String(Math.abs(cash)),
+          reference: "WAGE-WEEK-MOVE",
+          notes: "Moved from 15–21 Aug 2026",
+        })
+        await createLedgerTransaction({
+          client_operation_id: crypto.randomUUID(),
+          account_id: sourceSettlement.account_id,
+          transaction_date: sourceWeek.endDate,
+          transaction_type: cash > 0 ? "CASH_REPAYMENT" : "CASH_ADVANCE",
+          amount: String(Math.abs(cash)),
+          reference: "WAGE-WEEK-MOVE",
+          notes: "Offset after moving to 8–14 Aug 2026",
+        })
+      }
+
+      for (const [index, items] of sourceItemsByDay.entries()) {
+        const blankItems = items.map((item) => ({
+          account_id: item.account_id,
+          client_operation_id: crypto.randomUUID(),
+          attendance: null,
+          group_attendee_count: null,
+          wage_rate: item.wage_rate_snapshot,
+          notes: "Moved to 8–14 Aug 2026",
+          expected_row_version: item.row_version,
+        }))
+        if (blankItems.length) await saveDailyWageBatch(sourceWeek.days[index].isoDate, blankItems)
+      }
+
+      const refreshedSourceSettlements = await fetchSettlements(sourceWeekRecord.week_id)
+      for (const sourceSettlement of refreshedSourceSettlements.items) {
+        if (Number(sourceSettlement.weekly_payment) === 0) continue
+        await updateWeeklyPayment(
+          sourceWeekRecord.week_id,
+          sourceSettlement.account_id,
+          "0",
+          sourceSettlement.row_version,
+        )
+      }
+
+      const [verifiedSourceDaily, verifiedTargetDaily, verifiedSourceSettlements] = await Promise.all([
+        Promise.all(sourceWeek.days.map((day) => fetchDailyWages(day.isoDate))),
+        Promise.all(targetWeek.days.map((day) => fetchDailyWages(day.isoDate))),
+        fetchSettlements(sourceWeekRecord.week_id),
+      ])
+      if (verifiedSourceDaily.some((response) => enteredDailyItems(response).length > 0)) {
+        throw new Error("The 15–21 August week still contains a daily wage entry. Reload before trying again.")
+      }
+      if (verifiedTargetDaily.reduce((total, response) => total + enteredDailyItems(response).length, 0) !== sourceItemsByDay.reduce((total, items) => total + items.length, 0)) {
+        throw new Error("The 8–14 August week did not receive every daily wage entry.")
+      }
+      if (verifiedSourceSettlements.items.some((item) => Number(item.weekly_payment) !== 0 || Number(item.cash_paid_during_week) !== 0)) {
+        throw new Error("The 15–21 August week still contains a payment or cash entry.")
+      }
+
+      setSelectedWeekId("current")
+      await loadWeek()
+      setMessageTone("success")
+      setMessage("Saved: 8–14 August now contains the moved entries, and 15–21 August is blank.")
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The wage week could not be moved."
+      setMessageTone("error")
+      setMessage(error instanceof WorkerApiError && error.status === 409 ? `${detail} Reload the sheet and try again.` : detail)
+    } finally {
+      setMoving(false)
     }
   }
 
@@ -572,9 +803,7 @@ export function WeeklyWageTablePreview() {
           "Group wage (rate × labourers)",
           ...workDays.map((day) => {
             const multiplied = groupDayWage(row, day.key)
-            return multiplied === null
-              ? ""
-              : `${amount(row.days[day.key])} × ${amount(row.labourers[day.key])} = ${multiplied}`
+            return multiplied === null ? "" : multiplied
           }),
           ...financials,
         ],
@@ -584,7 +813,7 @@ export function WeeklyWageTablePreview() {
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }))
     const link = document.createElement("a")
     link.href = url
-    link.download = "worker-wages-15-21-Aug-2026.csv"
+    link.download = selectedWeek.exportFile
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -647,33 +876,38 @@ export function WeeklyWageTablePreview() {
   }
 
   function renderFinancialCells(row: WageRow, rowSpan = 1) {
+    const pairedWorkerName = row.loadedName === "Tiruma" ? "Rani" : row.loadedName === "Sivan" ? "Chitra" : null
+    const pairedWorker = pairedWorkerName ? rows.find((candidate) => candidate.loadedName === pairedWorkerName) : null
     return (
       <>
         <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-sky-50/80">
-          <CalculatedAmount value={weekWages(row)} />
+          <CombinedWeekWage value={weekWages(row)} addend={pairedWorker ? weekWages(pairedWorker) : null} />
         </td>
         <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-sky-50/40 p-1">
           <MoneyInput
             value={row.wageCashPaid}
             label={`${row.name || row.rateNote}, wage cash paid`}
+            tone="green"
             onChange={(value) => updateRow(row.id, (current) => ({ ...current, wageCashPaid: value }))}
           />
         </td>
         <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-amber-50/80">
-          <CalculatedAmount value={loanRepayment(row)} />
+          <CalculatedAmount value={loanRepayment(row)} tone="green" />
         </td>
         <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-amber-50/40 p-1">
-          <CalculatedAmount value={amount(row.earlierLoanBalance)} />
+          <CalculatedAmount value={amount(row.earlierLoanBalance)} tone="red" negative />
         </td>
         <td rowSpan={rowSpan} className="border-b border-r border-slate-200 bg-rose-50/50 p-1">
           <MoneyInput
             value={row.cashPaidInWeek}
             label={`${row.name || row.rateNote}, cash paid in week`}
+            tone="red"
+            negative
             onChange={(value) => updateRow(row.id, (current) => ({ ...current, cashPaidInWeek: value }))}
           />
         </td>
         <td rowSpan={rowSpan} className="border-b border-slate-200 bg-slate-100">
-          <CalculatedAmount value={presentBalance(row)} signed />
+          <CalculatedAmount value={presentBalance(row)} tone="red" negative />
         </td>
       </>
     )
@@ -687,11 +921,30 @@ export function WeeklyWageTablePreview() {
         description="Enter each worker's daily wage. For groups, enter the number of labourers above and the wage per labourer below; the multiplied wage updates immediately."
         actions={
           <div className="weekly-wage-no-print flex flex-wrap gap-2">
-            <WorkerButton onClick={() => void saveWeek()} disabled={loading || saving}>
+            <label className="flex h-10 items-center rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-700">
+              <span className="sr-only">Wage week</span>
+              <select
+                aria-label="Wage week"
+                value={selectedWeekId}
+                disabled={loading || saving || moving}
+                onChange={(event) => setSelectedWeekId(event.target.value as WageWeekId)}
+                className="bg-transparent pr-1 outline-none"
+              >
+                <option value="current">{wageWeeks.current.label}</option>
+                <option value="previous">{wageWeeks.previous.label}</option>
+              </select>
+            </label>
+            <WorkerButton onClick={() => void saveWeek()} disabled={loading || saving || moving}>
               {saving ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {saving ? "Saving…" : "Save week"}
             </WorkerButton>
-            <WorkerButton variant="secondary" onClick={() => void loadWeek()} disabled={loading || saving}>
+            {selectedWeekId === "current" && totals.wages > 0 ? (
+              <WorkerButton variant="secondary" onClick={() => void moveCurrentWeekToPrevious()} disabled={loading || saving || moving}>
+                {moving ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <CalendarRange className="size-4" aria-hidden="true" />}
+                {moving ? "Moving…" : "Move to 8–14 Aug"}
+              </WorkerButton>
+            ) : null}
+            <WorkerButton variant="secondary" onClick={() => void loadWeek()} disabled={loading || saving || moving}>
               <RefreshCw className={cn("size-4", loading && "animate-spin")} aria-hidden="true" />
               Reload
             </WorkerButton>
@@ -747,7 +1000,7 @@ export function WeeklyWageTablePreview() {
             </span>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-300">Work week</p>
-              <h2 className="text-lg font-bold">15 Aug – 21 Aug 2026</h2>
+              <h2 className="text-lg font-bold">{selectedWeek.heading}</h2>
             </div>
           </div>
           <p className="text-xs text-slate-300">
@@ -870,13 +1123,13 @@ export function WeeklyWageTablePreview() {
                             />
                             <p
                               className={cn(
-                                "mt-1 min-h-6 whitespace-nowrap border-t border-emerald-200 px-1 pt-1 text-right font-bold tabular-nums text-emerald-900",
+                                "mt-1 min-h-6 whitespace-nowrap border-t border-emerald-200 px-1 pt-1 text-right font-bold tabular-nums text-slate-950",
                                 multipliedWage === null ? "text-sm leading-5" : "text-[11px] leading-4",
                               )}
                             >
                               {multipliedWage === null
                                 ? "Enter count and wage"
-                                : `${formatWholeINR(row.days[workDay.key])} × ${amount(row.labourers[workDay.key])} = ${formatWholeINR(multipliedWage)}`}
+                                : formatWholeINR(multipliedWage)}
                             </p>
                           </td>
                         )

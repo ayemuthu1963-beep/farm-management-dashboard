@@ -3,8 +3,8 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Compact the weekly wage table and add a top scrollbar",
-  "base_commit": "d36a760b225566919e57262568c3f7737f739bc9",
+  "release_note": "Correct the worker wage week and financial presentation",
+  "base_commit": "2d2bb69bc520ae593a3884063e0fc30d0f023b48",
   "allowed_paths": [
     "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
