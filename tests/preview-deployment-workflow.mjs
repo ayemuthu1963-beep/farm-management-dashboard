@@ -268,7 +268,7 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Align Weekly Settlement with the Weekly Wage Sheet",
+  "Persist Motor Runtime settings and Irrigation Targets",
 )
 assert.equal(manifest.base_commit, "b52d5a4dce8135d33908e550365dbb9f044c7f56")
 assert.deepEqual(manifest.protected_invariants, {
@@ -280,8 +280,15 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/api/operator-settings/[[...path]]/route.ts",
+  "components/irrigation/zone-status-cards.tsx",
+  "components/motor/motor-status-cards.tsx",
   "components/worker-management/weekly-settlement.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/operator-settings.ts",
+  "package.json",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/operator-settings-persistence.mjs",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",
 ]
