@@ -220,7 +220,7 @@ check(weeklyWagePreview.includes('value="previous"'), "Weekly wage table must le
 check(weeklyWagePreview.includes("moveCurrentWeekToPrevious"), "Weekly wage table must support the approved week correction")
 check(weeklyWagePreview.includes("MOVED_WAGE_PLACEHOLDER_NOTE"), "The corrected current-week rows must retain an audit note")
 check(weeklyWagePreview.includes('attendance: item.account_type === "GROUP" ? null : "FULL"'), "Moved daily wage rows must use a database-valid placeholder")
-check(weeklyWagePreview.includes('wage_rate: "0"'), "Moved current-week rows must persist with zero wages")
+check(weeklyWagePreview.includes("wage_rate: item.wage_rate_snapshot"), "Moved current-week rows must retain an API-valid historical rate")
 check(weeklyWagePreview.includes("Horizontal table scroll"), "Weekly wage table must provide a horizontal scrollbar above the table")
 check(weeklyWagePreview.includes("w-[1480px] min-w-[1480px] table-fixed"), "Weekly wage table must keep compact fixed-width columns")
 check(/\r?\n\s+No\r?\n\s+<input/.test(weeklyWagePreview), "Group wage rows must label the daily labour count as No")

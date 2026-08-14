@@ -579,7 +579,7 @@ export function WeeklyWageTablePreview() {
                   ? Math.max(0, Math.round(amount(row.labourers[day.key])))
                   : null
               : null,
-            wage_rate: String(movedBlank ? 0 : enteredRate),
+            wage_rate: String(enteredRate),
             notes: movedBlank ? MOVED_WAGE_PLACEHOLDER_NOTE : blankEntry ? null : "Weekly wage sheet",
             expected_row_version: row.dailyRowVersions[day.key],
           }
@@ -736,7 +736,7 @@ export function WeeklyWageTablePreview() {
           client_operation_id: crypto.randomUUID(),
           attendance: item.account_type === "GROUP" ? null : "FULL",
           group_attendee_count: item.account_type === "GROUP" ? 0 : null,
-          wage_rate: "0",
+          wage_rate: item.wage_rate_snapshot,
           notes: MOVED_WAGE_PLACEHOLDER_NOTE,
           expected_row_version: item.row_version,
         }))
