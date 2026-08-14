@@ -131,7 +131,7 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
 
   return (
     <div className="mt-4 border-t border-foreground/10 pt-4">
-      <div className="grid grid-cols-1 gap-5 @min-[30rem]:grid-cols-[minmax(0,1.45fr)_minmax(9rem,0.75fr)]">
+      <div className="grid grid-cols-1 gap-5 min-[520px]:grid-cols-[minmax(0,1.45fr)_minmax(9rem,0.75fr)]">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-bold text-foreground">Max Run Time :</span>
@@ -164,7 +164,7 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
           </fieldset>
         </div>
 
-        <fieldset className="border-t border-foreground/10 pt-4 @min-[30rem]:border-l @min-[30rem]:border-t-0 @min-[30rem]:pl-4 @min-[30rem]:pt-0">
+        <fieldset className="border-t border-foreground/10 pt-4 min-[520px]:border-l min-[520px]:border-t-0 min-[520px]:pl-4 min-[520px]:pt-0">
           <legend className="mb-3 text-xs font-bold text-foreground">Current Setting :</legend>
           <div className="space-y-3 text-xs">
             <div className="space-y-2">
@@ -223,7 +223,7 @@ function StatusCard({ motor }: { motor: MotorStatus }) {
   const running = motor.status === "Running"
   const styles = motorCardStyles[motor.id]
   return (
-    <div className={cn("@container relative overflow-hidden rounded-xl border p-4 shadow-sm", styles.card)}>
+    <div className={cn("relative overflow-hidden rounded-xl border p-4 shadow-sm", styles.card)}>
       <div className={cn("absolute inset-x-0 top-0 h-1", styles.bar)} />
       <div className="flex items-start gap-3">
         <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-lg", running ? "bg-chart-2/15 text-chart-2" : styles.icon)}>
