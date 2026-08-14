@@ -1,8 +1,18 @@
 "use client"
 
-import { useState } from "react"
-import { Clock, Gauge, Power, Zap } from "lucide-react"
-import type { MotorStatus } from "@/lib/motor-data"
+import { useEffect, useState } from "react"
+import { CheckCircle2, Clock, Gauge, LoaderCircle, Power, Save, Zap } from "lucide-react"
+import type { MotorId, MotorStatus } from "@/lib/motor-data"
+import {
+  emptyMotorSettingsById,
+  motorSettingsPayload,
+  operatorSettingsError,
+  parseMotorSettings,
+  type MotorSettingsValues,
+  type OperatorSettingsResponse,
+  type RtcTimerFields,
+  type TimeFields,
+} from "@/lib/operator-settings"
 import { cn } from "@/lib/utils"
 
 const statusStyles: Record<MotorStatus["status"], string> = {
@@ -17,40 +27,6 @@ const motorCardStyles: Record<MotorStatus["id"], { card: string; icon: string; a
   M3: { card: "border-emerald-200/80 bg-emerald-50/75", icon: "bg-emerald-500/15 text-emerald-700", accent: "text-emerald-700", bar: "bg-emerald-500" },
 }
 
-interface TimeFields {
-  hours: string
-  minutes: string
-}
-
-interface RtcTimerFields {
-  from: TimeFields
-  to: TimeFields
-}
-
-interface MotorSettingsValues {
-  maxRunTime: TimeFields
-  rtcTimers: RtcTimerFields[]
-  threePhaseDryRun: string
-  threePhaseOverLoad: string
-  twoPhaseDryRun: string
-  twoPhaseOverLoad: string
-}
-
-function emptyTimeFields(): TimeFields {
-  return { hours: "", minutes: "" }
-}
-
-function emptyMotorSettings(): MotorSettingsValues {
-  return {
-    maxRunTime: emptyTimeFields(),
-    rtcTimers: Array.from({ length: 4 }, () => ({ from: emptyTimeFields(), to: emptyTimeFields() })),
-    threePhaseDryRun: "",
-    threePhaseOverLoad: "",
-    twoPhaseDryRun: "",
-    twoPhaseOverLoad: "",
-  }
-}
-
 const inputClassName = "h-8 rounded-md border border-input bg-background/90 px-1.5 text-center font-mono text-xs font-semibold text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/25"
 
 function TimeInputGroup({
@@ -58,11 +34,13 @@ function TimeInputGroup({
   onChange,
   label,
   maxHours = 23,
+  disabled = false,
 }: {
   value: TimeFields
   onChange: (value: TimeFields) => void
   label: string
   maxHours?: number
+  disabled?: boolean
 }) {
   return (
     <div className="flex min-w-0 items-center gap-1">
@@ -74,6 +52,7 @@ function TimeInputGroup({
         value={value.hours}
         placeholder="HH"
         aria-label={`${label} hours`}
+        disabled={disabled}
         onChange={(event) => onChange({ ...value, hours: event.target.value })}
         className={cn(inputClassName, "w-11")}
       />
@@ -86,6 +65,7 @@ function TimeInputGroup({
         value={value.minutes}
         placeholder="MM"
         aria-label={`${label} minutes`}
+        disabled={disabled}
         onChange={(event) => onChange({ ...value, minutes: event.target.value })}
         className={cn(inputClassName, "w-11")}
       />
@@ -97,10 +77,12 @@ function SettingInput({
   value,
   onChange,
   label,
+  disabled = false,
 }: {
   value: string
   onChange: (value: string) => void
   label: string
+  disabled?: boolean
 }) {
   return (
     <input
@@ -111,22 +93,37 @@ function SettingInput({
       value={value}
       placeholder="**.*"
       aria-label={label}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       className={cn(inputClassName, "w-full")}
     />
   )
 }
 
-function MotorSettings({ motor }: { motor: MotorStatus }) {
-  const [settings, setSettings] = useState<MotorSettingsValues>(emptyMotorSettings)
+type SaveState = "idle" | "saving" | "saved" | "error"
 
+function MotorSettings({
+  motor,
+  settings,
+  disabled,
+  saveState,
+  onChange,
+  onSave,
+}: {
+  motor: MotorStatus
+  settings: MotorSettingsValues
+  disabled: boolean
+  saveState: SaveState
+  onChange: (values: MotorSettingsValues) => void
+  onSave: () => void
+}) {
   function updateRtcTimer(index: number, edge: keyof RtcTimerFields, value: TimeFields) {
-    setSettings((current) => ({
-      ...current,
-      rtcTimers: current.rtcTimers.map((timer, timerIndex) => (
+    onChange({
+      ...settings,
+      rtcTimers: settings.rtcTimers.map((timer, timerIndex) => (
         timerIndex === index ? { ...timer, [edge]: value } : timer
       )),
-    }))
+    })
   }
 
   return (
@@ -139,7 +136,8 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
               value={settings.maxRunTime}
               label={`${motor.name} max run time`}
               maxHours={99}
-              onChange={(maxRunTime) => setSettings((current) => ({ ...current, maxRunTime }))}
+              disabled={disabled}
+              onChange={(maxRunTime) => onChange({ ...settings, maxRunTime })}
             />
           </div>
 
@@ -151,12 +149,14 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
                 <TimeInputGroup
                   value={timer.from}
                   label={`${motor.name} RTC timer ${index + 1} start`}
+                  disabled={disabled}
                   onChange={(value) => updateRtcTimer(index, "from", value)}
                 />
                 <span className="text-[11px] font-semibold text-muted-foreground">to</span>
                 <TimeInputGroup
                   value={timer.to}
                   label={`${motor.name} RTC timer ${index + 1} end`}
+                  disabled={disabled}
                   onChange={(value) => updateRtcTimer(index, "to", value)}
                 />
               </div>
@@ -177,7 +177,8 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
                 <SettingInput
                   value={settings.threePhaseDryRun}
                   label={`${motor.name} 3 Phase dry run setting`}
-                  onChange={(threePhaseDryRun) => setSettings((current) => ({ ...current, threePhaseDryRun }))}
+                  disabled={disabled}
+                  onChange={(threePhaseDryRun) => onChange({ ...settings, threePhaseDryRun })}
                 />
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
@@ -185,7 +186,8 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
                 <SettingInput
                   value={settings.twoPhaseDryRun}
                   label={`${motor.name} 2 Phase dry run setting`}
-                  onChange={(twoPhaseDryRun) => setSettings((current) => ({ ...current, twoPhaseDryRun }))}
+                  disabled={disabled}
+                  onChange={(twoPhaseDryRun) => onChange({ ...settings, twoPhaseDryRun })}
                 />
               </div>
             </div>
@@ -200,7 +202,8 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
                 <SettingInput
                   value={settings.threePhaseOverLoad}
                   label={`${motor.name} 3 Phase overload setting`}
-                  onChange={(threePhaseOverLoad) => setSettings((current) => ({ ...current, threePhaseOverLoad }))}
+                  disabled={disabled}
+                  onChange={(threePhaseOverLoad) => onChange({ ...settings, threePhaseOverLoad })}
                 />
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
@@ -208,18 +211,50 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
                 <SettingInput
                   value={settings.twoPhaseOverLoad}
                   label={`${motor.name} 2 Phase overload setting`}
-                  onChange={(twoPhaseOverLoad) => setSettings((current) => ({ ...current, twoPhaseOverLoad }))}
+                  disabled={disabled}
+                  onChange={(twoPhaseOverLoad) => onChange({ ...settings, twoPhaseOverLoad })}
                 />
               </div>
             </div>
           </div>
         </fieldset>
       </div>
+      <div className="mt-3 flex min-h-7 items-center justify-end gap-2 border-t border-foreground/10 pt-3">
+        {saveState === "error" ? <span className="text-[11px] font-medium text-destructive">Could not save</span> : null}
+        {saveState === "saved" ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+            <CheckCircle2 className="size-3" aria-hidden="true" /> Saved
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={disabled || saveState === "saving"}
+          className="inline-flex h-7 items-center gap-1 rounded-md border border-input bg-background/90 px-2.5 text-[11px] font-bold text-foreground shadow-sm transition hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {saveState === "saving" ? <LoaderCircle className="size-3 animate-spin" aria-hidden="true" /> : <Save className="size-3" aria-hidden="true" />}
+          {saveState === "saving" ? "Saving" : "Save"}
+        </button>
+      </div>
     </div>
   )
 }
 
-function StatusCard({ motor }: { motor: MotorStatus }) {
+function StatusCard({
+  motor,
+  settings,
+  disabled,
+  saveState,
+  onSettingsChange,
+  onSave,
+}: {
+  motor: MotorStatus
+  settings: MotorSettingsValues
+  disabled: boolean
+  saveState: SaveState
+  onSettingsChange: (settings: MotorSettingsValues) => void
+  onSave: () => void
+}) {
   const running = motor.status === "Running"
   const styles = motorCardStyles[motor.id]
   return (
@@ -245,15 +280,93 @@ function StatusCard({ motor }: { motor: MotorStatus }) {
           <p className="text-[11px] text-muted-foreground">Latest entry: {motor.lastStart}</p>
         </div>
       </div>
-      <MotorSettings motor={motor} />
+      <MotorSettings
+        motor={motor}
+        settings={settings}
+        disabled={disabled}
+        saveState={saveState}
+        onChange={onSettingsChange}
+        onSave={onSave}
+      />
     </div>
   )
 }
 
 export function MotorStatusCards({ motors }: { motors: MotorStatus[] }) {
+  const [settingsByMotor, setSettingsByMotor] = useState<Record<MotorId, MotorSettingsValues>>(emptyMotorSettingsById)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveStates, setSaveStates] = useState<Record<MotorId, SaveState>>({ M1: "idle", M2: "idle", M3: "idle" })
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadSettings() {
+      try {
+        const response = await fetch("/api/operator-settings", { cache: "no-store" })
+        const payload = (await response.json().catch(() => ({}))) as OperatorSettingsResponse
+        if (!response.ok) throw new Error(operatorSettingsError(payload, "Motor settings could not be loaded."))
+        if (!isActive) return
+
+        const loaded = emptyMotorSettingsById()
+        for (const motorId of ["M1", "M2", "M3"] as const) {
+          loaded[motorId] = parseMotorSettings(payload.motorSettings?.[motorId]?.values)
+        }
+        setSettingsByMotor(loaded)
+        setLoadError(null)
+      } catch (error) {
+        if (isActive) setLoadError(error instanceof Error ? error.message : "Motor settings could not be loaded.")
+      } finally {
+        if (isActive) setIsLoadingSettings(false)
+      }
+    }
+
+    void loadSettings()
+    return () => { isActive = false }
+  }, [])
+
+  function updateMotorSettings(motorId: MotorId, values: MotorSettingsValues) {
+    setSettingsByMotor((current) => ({ ...current, [motorId]: values }))
+    setSaveStates((current) => ({ ...current, [motorId]: "idle" }))
+  }
+
+  async function saveMotorSettings(motorId: MotorId) {
+    setSaveStates((current) => ({ ...current, [motorId]: "saving" }))
+    try {
+      const response = await fetch(`/api/operator-settings/motors/${motorId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(motorSettingsPayload(settingsByMotor[motorId])),
+      })
+      const payload = (await response.json().catch(() => ({}))) as OperatorSettingsResponse & { ok?: boolean; values?: unknown }
+      if (!response.ok || payload.ok !== true) {
+        throw new Error(operatorSettingsError(payload, `${motorId} settings could not be saved.`))
+      }
+      setSettingsByMotor((current) => ({ ...current, [motorId]: parseMotorSettings(payload.values) }))
+      setSaveStates((current) => ({ ...current, [motorId]: "saved" }))
+    } catch {
+      setSaveStates((current) => ({ ...current, [motorId]: "error" }))
+    }
+  }
+
+  const settingsDisabled = isLoadingSettings || Boolean(loadError)
+
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-      {motors.map((motor) => <StatusCard key={motor.id} motor={motor} />)}
+    <div>
+      {loadError ? <p className="mb-2 text-xs font-semibold text-destructive">{loadError} Refresh the page to try again.</p> : null}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+        {motors.map((motor) => (
+          <StatusCard
+            key={motor.id}
+            motor={motor}
+            settings={settingsByMotor[motor.id]}
+            disabled={settingsDisabled}
+            saveState={saveStates[motor.id]}
+            onSettingsChange={(values) => updateMotorSettings(motor.id, values)}
+            onSave={() => { void saveMotorSettings(motor.id) }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
