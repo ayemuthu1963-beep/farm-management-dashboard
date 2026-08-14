@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetchAccounts, fetchCurrentWeek, fetchDailyWages } from "@/lib/worker-management-api"
+import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
 import {
   accountTypeLabel,
   addDays,
@@ -102,7 +103,7 @@ function mergeRoster(
 
 function attendanceItem(response: DailyWageResponse | undefined, accountId: number): DailyWageItem | null {
   const item = response?.items.find((candidate) => candidate.account_id === accountId)
-  if (!item || item.is_default) return null
+  if (!item || item.is_default || item.notes === MOVED_WAGE_PLACEHOLDER_NOTE) return null
   if (item.account_type === "GROUP") return item.group_attendee_count === null ? null : item
   return item.attendance_value === null ? null : item
 }

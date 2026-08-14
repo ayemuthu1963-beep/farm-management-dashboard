@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Check, ChevronLeft, ChevronRight, Minus, Plus, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetchAccounts, fetchDailyWages } from "@/lib/worker-management-api"
+import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
 import {
   addDays,
   calculateDailyWage,
@@ -102,12 +103,13 @@ function mergeLocalAttendance(
   operations: WorkerLocalOperation[],
 ): DailyWageResponse {
   const items = value.items.map((item) =>
-    item.is_default
+    item.is_default || item.notes === MOVED_WAGE_PLACEHOLDER_NOTE
       ? {
           ...item,
           attendance_value: null,
           group_attendee_count: null,
           daily_wage_amount: "0.00",
+          is_default: true,
         }
       : { ...item },
   )
