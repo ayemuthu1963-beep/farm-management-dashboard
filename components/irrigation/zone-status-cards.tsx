@@ -1,12 +1,19 @@
-﻿"use client"
+"use client"
 
+import { useState } from "react"
 import { CheckCircle2, CircleAlert, CircleMinus, LandPlot, Leaf, TreePine, Waves, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatWaterLitres, statusColors, type Zone, type ZoneId } from "@/lib/irrigation-data"
 
-interface ZoneStatusCardsProps { zones: Zone[]; selectedZoneId: ZoneId; onSelectZone: (zoneId: ZoneId) => void }
+interface ZoneStatusCardsProps {
+  zones: Zone[]
+  selectedZoneId: ZoneId
+  onSelectZone: (zoneId: ZoneId) => void
+}
+
 const statusIcon = { irrigated: CheckCircle2, "no-record": CircleMinus, partial: CircleAlert, issue: CircleAlert }
 const DISPLAY_ZONE_ORDER: ZoneId[] = ["P1W", "P1E", "P2W", "P2E", "JF", "NM"]
+const emptyIrrigationTargets: Record<ZoneId, string> = { P1E: "", P1W: "", P2E: "", P2W: "", JF: "", NM: "" }
 const zoneAppearance: Record<ZoneId, { icon: LucideIcon; card: string; iconTile: string }> = {
   P1W: { icon: LandPlot, card: "border-chart-1/30 bg-chart-1/10", iconTile: "bg-chart-1/15 text-chart-1" },
   P1E: { icon: LandPlot, card: "border-chart-2/30 bg-chart-2/10", iconTile: "bg-chart-2/15 text-chart-2" },
@@ -17,17 +24,84 @@ const zoneAppearance: Record<ZoneId, { icon: LucideIcon; card: string; iconTile:
 }
 
 export function ZoneStatusCards({ zones, selectedZoneId, onSelectZone }: ZoneStatusCardsProps) {
+  const [irrigationTargets, setIrrigationTargets] = useState<Record<ZoneId, string>>(emptyIrrigationTargets)
   const displayZones = [...zones].sort((left, right) => DISPLAY_ZONE_ORDER.indexOf(left.id) - DISPLAY_ZONE_ORDER.indexOf(right.id))
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">{displayZones.map((zone) => {
-    const Icon = statusIcon[zone.status]
-    const palette = statusColors[zone.status]
-    const ZoneIcon = zoneAppearance[zone.id].icon
-    const appearance = zoneAppearance[zone.id]
-    const selected = selectedZoneId === zone.id
-    return <button key={zone.id} type="button" onClick={() => onSelectZone(zone.id)} aria-pressed={selected} className={cn("rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/50", appearance.card, selected ? "border-primary ring-2 ring-primary/20" : null)}>
-      <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-2.5"><span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", appearance.iconTile)}><ZoneIcon className="size-5" aria-hidden="true" /></span><div><div className="font-bold text-foreground">{zone.name}</div><div className="text-xs text-muted-foreground">{zone.crop}</div></div></div><span className={cn("rounded-full border p-2", palette.bg, palette.border, palette.text)} title={zone.statusLabel}><Icon className="size-4" aria-hidden="true" /></span></div>
-      <div className="mt-4 space-y-1 text-sm"><div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Status</span><span className={cn("font-semibold", palette.text)}>{zone.statusLabel}</span></div><div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Runtime</span><span className="font-medium text-foreground">{zone.valveOpenTime}</span></div><div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Water</span><span className="font-medium text-foreground">{formatWaterLitres(zone.totalWaterSupplied)}</span></div><div className="flex items-center justify-between gap-2 border-t border-foreground/10 pt-1"><span className="text-muted-foreground">Irrigation Target</span><span className="font-mono font-semibold text-foreground">****************</span></div></div>
-      {zone.id === "NM" ? <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2 py-1 text-[11px] font-semibold text-fuchsia-700"><Waves className="size-3" aria-hidden="true" /> Overlay: Plot 1 East + Plot 2 West</div> : null}
-    </button>
-  })}</div>
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+      {displayZones.map((zone) => {
+        const Icon = statusIcon[zone.status]
+        const palette = statusColors[zone.status]
+        const appearance = zoneAppearance[zone.id]
+        const ZoneIcon = appearance.icon
+        const selected = selectedZoneId === zone.id
+
+        return (
+          <div
+            key={zone.id}
+            className={cn(
+              "overflow-hidden rounded-xl border text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+              appearance.card,
+              selected ? "border-primary ring-2 ring-primary/20" : null,
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => onSelectZone(zone.id)}
+              aria-pressed={selected}
+              className="w-full p-4 pb-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", appearance.iconTile)}>
+                    <ZoneIcon className="size-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <div className="font-bold text-foreground">{zone.name}</div>
+                    <div className="text-xs text-muted-foreground">{zone.crop}</div>
+                  </div>
+                </div>
+                <span className={cn("rounded-full border p-2", palette.bg, palette.border, palette.text)} title={zone.statusLabel}>
+                  <Icon className="size-4" aria-hidden="true" />
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-1 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className={cn("font-semibold", palette.text)}>{zone.statusLabel}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Runtime</span>
+                  <span className="font-medium text-foreground">{zone.valveOpenTime}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Water</span>
+                  <span className="font-medium text-foreground">{formatWaterLitres(zone.totalWaterSupplied)}</span>
+                </div>
+              </div>
+            </button>
+
+            <label className="mx-4 flex items-center justify-between gap-2 border-t border-foreground/10 py-1 text-sm">
+              <span className="shrink-0 text-muted-foreground">Irrigation Target</span>
+              <input
+                type="text"
+                value={irrigationTargets[zone.id]}
+                placeholder="****************"
+                aria-label={`${zone.name} irrigation target`}
+                onChange={(event) => setIrrigationTargets((current) => ({ ...current, [zone.id]: event.target.value }))}
+                className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-right font-mono font-semibold text-foreground outline-none transition placeholder:text-foreground hover:border-input focus:border-ring focus:bg-background/80 focus:ring-2 focus:ring-ring/20"
+              />
+            </label>
+
+            {zone.id === "NM" ? (
+              <div className="mx-4 mb-4 mt-2 inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2 py-1 text-[11px] font-semibold text-fuchsia-700">
+                <Waves className="size-3" aria-hidden="true" /> Overlay: Plot 1 East + Plot 2 West
+              </div>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
 }

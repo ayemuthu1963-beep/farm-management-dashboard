@@ -130,69 +130,91 @@ function MotorSettings({ motor }: { motor: MotorStatus }) {
   }
 
   return (
-    <div className="mt-4 space-y-4 border-t border-foreground/10 pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-bold text-foreground">Max Run Time :</span>
-        <TimeInputGroup
-          value={settings.maxRunTime}
-          label={`${motor.name} max run time`}
-          maxHours={99}
-          onChange={(maxRunTime) => setSettings((current) => ({ ...current, maxRunTime }))}
-        />
-      </div>
-
-      <fieldset className="space-y-2">
-        <legend className="mb-2 text-xs font-bold text-foreground">RTC timer :</legend>
-        {settings.rtcTimers.map((timer, index) => (
-          <div key={`${motor.id}-rtc-${index + 1}`} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-muted-foreground">{index + 1}.</span>
+    <div className="mt-4 border-t border-foreground/10 pt-4">
+      <div className="grid grid-cols-1 gap-5 @min-[30rem]:grid-cols-[minmax(0,1.45fr)_minmax(9rem,0.75fr)]">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold text-foreground">Max Run Time :</span>
             <TimeInputGroup
-              value={timer.from}
-              label={`${motor.name} RTC timer ${index + 1} start`}
-              onChange={(value) => updateRtcTimer(index, "from", value)}
-            />
-            <span className="text-[11px] font-semibold text-muted-foreground">to</span>
-            <TimeInputGroup
-              value={timer.to}
-              label={`${motor.name} RTC timer ${index + 1} end`}
-              onChange={(value) => updateRtcTimer(index, "to", value)}
+              value={settings.maxRunTime}
+              label={`${motor.name} max run time`}
+              maxHours={99}
+              onChange={(maxRunTime) => setSettings((current) => ({ ...current, maxRunTime }))}
             />
           </div>
-        ))}
-      </fieldset>
 
-      <fieldset>
-        <legend className="mb-2 text-xs font-bold text-foreground">Current Setting :</legend>
-        <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] items-center gap-x-2 gap-y-2 text-xs">
-          <span aria-hidden="true" />
-          <span className="text-center font-semibold text-muted-foreground">Dry Run</span>
-          <span className="text-center font-semibold text-muted-foreground">Over Load</span>
-
-          <span className="font-semibold text-foreground">3 Phase</span>
-          <SettingInput
-            value={settings.threePhaseDryRun}
-            label={`${motor.name} 3 Phase dry run setting`}
-            onChange={(threePhaseDryRun) => setSettings((current) => ({ ...current, threePhaseDryRun }))}
-          />
-          <SettingInput
-            value={settings.threePhaseOverLoad}
-            label={`${motor.name} 3 Phase overload setting`}
-            onChange={(threePhaseOverLoad) => setSettings((current) => ({ ...current, threePhaseOverLoad }))}
-          />
-
-          <span className="font-semibold text-foreground">2 Phase</span>
-          <SettingInput
-            value={settings.twoPhaseDryRun}
-            label={`${motor.name} 2 Phase dry run setting`}
-            onChange={(twoPhaseDryRun) => setSettings((current) => ({ ...current, twoPhaseDryRun }))}
-          />
-          <SettingInput
-            value={settings.twoPhaseOverLoad}
-            label={`${motor.name} 2 Phase overload setting`}
-            onChange={(twoPhaseOverLoad) => setSettings((current) => ({ ...current, twoPhaseOverLoad }))}
-          />
+          <fieldset className="space-y-2">
+            <legend className="mb-2 text-xs font-bold text-foreground">RTC timer :</legend>
+            {settings.rtcTimers.map((timer, index) => (
+              <div key={`${motor.id}-rtc-${index + 1}`} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground">{index + 1}.</span>
+                <TimeInputGroup
+                  value={timer.from}
+                  label={`${motor.name} RTC timer ${index + 1} start`}
+                  onChange={(value) => updateRtcTimer(index, "from", value)}
+                />
+                <span className="text-[11px] font-semibold text-muted-foreground">to</span>
+                <TimeInputGroup
+                  value={timer.to}
+                  label={`${motor.name} RTC timer ${index + 1} end`}
+                  onChange={(value) => updateRtcTimer(index, "to", value)}
+                />
+              </div>
+            ))}
+          </fieldset>
         </div>
-      </fieldset>
+
+        <fieldset className="border-t border-foreground/10 pt-4 @min-[30rem]:border-l @min-[30rem]:border-t-0 @min-[30rem]:pl-4 @min-[30rem]:pt-0">
+          <legend className="mb-3 text-xs font-bold text-foreground">Current Setting :</legend>
+          <div className="space-y-3 text-xs">
+            <div className="space-y-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
+                <span aria-hidden="true" />
+                <span className="text-center font-semibold text-muted-foreground">Dry Run</span>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
+                <span className="font-semibold text-foreground">3 Phase</span>
+                <SettingInput
+                  value={settings.threePhaseDryRun}
+                  label={`${motor.name} 3 Phase dry run setting`}
+                  onChange={(threePhaseDryRun) => setSettings((current) => ({ ...current, threePhaseDryRun }))}
+                />
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
+                <span className="font-semibold text-foreground">2 Phase</span>
+                <SettingInput
+                  value={settings.twoPhaseDryRun}
+                  label={`${motor.name} 2 Phase dry run setting`}
+                  onChange={(twoPhaseDryRun) => setSettings((current) => ({ ...current, twoPhaseDryRun }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
+                <span aria-hidden="true" />
+                <span className="text-center font-semibold text-muted-foreground">Over Load</span>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
+                <span className="font-semibold text-foreground">3 Phase</span>
+                <SettingInput
+                  value={settings.threePhaseOverLoad}
+                  label={`${motor.name} 3 Phase overload setting`}
+                  onChange={(threePhaseOverLoad) => setSettings((current) => ({ ...current, threePhaseOverLoad }))}
+                />
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
+                <span className="font-semibold text-foreground">2 Phase</span>
+                <SettingInput
+                  value={settings.twoPhaseOverLoad}
+                  label={`${motor.name} 2 Phase overload setting`}
+                  onChange={(twoPhaseOverLoad) => setSettings((current) => ({ ...current, twoPhaseOverLoad }))}
+                />
+              </div>
+            </div>
+          </div>
+        </fieldset>
+      </div>
     </div>
   )
 }
@@ -201,7 +223,7 @@ function StatusCard({ motor }: { motor: MotorStatus }) {
   const running = motor.status === "Running"
   const styles = motorCardStyles[motor.id]
   return (
-    <div className={cn("relative overflow-hidden rounded-xl border p-4 shadow-sm", styles.card)}>
+    <div className={cn("@container relative overflow-hidden rounded-xl border p-4 shadow-sm", styles.card)}>
       <div className={cn("absolute inset-x-0 top-0 h-1", styles.bar)} />
       <div className="flex items-start gap-3">
         <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-lg", running ? "bg-chart-2/15 text-chart-2" : styles.icon)}>
@@ -230,7 +252,7 @@ function StatusCard({ motor }: { motor: MotorStatus }) {
 
 export function MotorStatusCards({ motors }: { motors: MotorStatus[] }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
       {motors.map((motor) => <StatusCard key={motor.id} motor={motor} />)}
     </div>
   )
