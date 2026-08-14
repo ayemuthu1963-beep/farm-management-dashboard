@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Carry previous present balances into the current wage week",
+  "Align Weekly Settlement with the Weekly Wage Sheet",
 )
-assert.equal(manifest.base_commit, "d43294853f787f2346c23a9c41ff4ca6088a062d")
+assert.equal(manifest.base_commit, "b52d5a4dce8135d33908e550365dbb9f044c7f56")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,7 +280,7 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
+  "components/worker-management/weekly-settlement.tsx",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",

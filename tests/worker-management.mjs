@@ -316,15 +316,23 @@ check(workerDirectory.includes("aria-pressed={showInactive}"), "Inactive Workers
 check(workerDirectory.includes(".toSorted(compareAccountCodes)"), "Worker Directory must use natural account-code order")
 
 const settlement = read("components/worker-management/weekly-settlement.tsx")
-for (const heading of ["Wages", "Cash Paid During Week", "Weekly Payment", "Balance to Loan"]) {
+for (const heading of ["Week wages", "To loan payment", "Wage to be paid", "Earlier loan balance", "Cash paid in week", "Present balance"]) {
   check(settlement.includes(heading), `Settlement is missing ${heading}`)
 }
-check(settlement.includes("money(item.wages) - weeklyPayment"), "Balance to Loan must equal Wages minus Weekly Payment")
-check(settlement.includes("read-only from the Loan Register"), "Cash Paid During Week must be documented as read-only")
+check(settlement.includes("fetchLedger"), "Weekly Settlement must classify opening balances from the same ledger data as the wage sheet")
+check(settlement.includes('const openingBalanceReference = "OPEN-BAL"'), "Weekly Settlement must use the approved opening-balance reference")
+check(settlement.includes('row.display_name === "Tiruma" ? "Rani"'), "Weekly Settlement must add Rani's wages to Tiruma")
+check(settlement.includes('row.display_name === "Sivan" ? "Chitra"'), "Weekly Settlement must add Chitra's wages to Sivan")
+check(settlement.includes('const dependentWorkerNames = new Set(["Rani", "Chitra"])'), "Weekly Settlement must leave dependent financial columns blank")
+check(settlement.includes("totalWeekWages - toLoanPayment"), "Wage to be paid must equal combined week wages less loan payment")
+check(settlement.includes("earlierLoanBalance + toLoanPayment - cashPaidInWeek"), "Present balance must match the wage sheet formula")
+check(settlement.includes("signedCash - openingAdjustment"), "Opening balances must not appear as cash paid in the week")
+check(settlement.includes("row.wageToBePaid ?? 0"), "Saving loan payments must persist the calculated wage to be paid")
+check(settlement.includes("To loan payment for ${row.display_name}"), "To loan payment must be editable under the matching wage-sheet heading")
 check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
 check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
 check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
-check(settlement.includes(".toSorted(compareAccountCodes)"), "Weekly Settlement must use natural account-code order")
+check(settlement.includes(".toSorted(compareSettlementRows)"), "Weekly Settlement must follow the wage-sheet roster order")
 
 const query = read("components/worker-management/worker-query.tsx")
 check(query.includes("weekDate"), "Query must expose a work-week filter")
