@@ -213,6 +213,24 @@ function presentBalance(row: WageRow): number | null {
   return amount(row.earlierLoanBalance) + amount(row.loanPayment) - amount(row.cashPaidInWeek)
 }
 
+function carryForwardPreviousBalances(currentRows: WageRow[], previousRows: WageRow[]) {
+  const previousBalanceByAccount = new Map<number, number>()
+
+  for (const row of previousRows) {
+    if (row.accountId === null || isDependentWorker(row)) continue
+    const balance = presentBalance(row)
+    if (balance !== null) previousBalanceByAccount.set(row.accountId, balance)
+  }
+
+  return currentRows.map((row) => {
+    if (row.accountId === null || isDependentWorker(row)) return row
+    const previousBalance = previousBalanceByAccount.get(row.accountId)
+    return previousBalance === undefined
+      ? row
+      : { ...row, earlierLoanBalance: previousBalance }
+  })
+}
+
 function readAmount(rawValue: string | number | null | undefined): EditableAmount {
   if (rawValue === "" || rawValue === null || rawValue === undefined) return ""
   const value = Number(rawValue)
@@ -500,23 +518,50 @@ export function WeeklyWageTablePreview() {
     setMessageTone("info")
     setMessage("Loading the approved roster and saved wages…")
     try {
-      const [accountResponse, ...dailyResponses] = await Promise.all([
+      const previousWeek = wageWeeks.previous
+      const [accountResponse, dailyResponses, week, previousDailyResponses, previousWeekRecord] = await Promise.all([
         fetchAccounts({ isActive: true, pageSize: 200 }),
-        ...selectedWeek.days.map((day) => fetchDailyWages(day.isoDate)),
+        Promise.all(selectedWeek.days.map((day) => fetchDailyWages(day.isoDate))),
+        fetchCurrentWeek(selectedWeek.startDate),
+        selectedWeekId === "current"
+          ? Promise.all(previousWeek.days.map((day) => fetchDailyWages(day.isoDate)))
+          : Promise.resolve(null),
+        selectedWeekId === "current"
+          ? fetchCurrentWeek(previousWeek.startDate)
+          : Promise.resolve(null),
       ])
-      const week = await fetchCurrentWeek(selectedWeek.startDate)
-      const [settlementResponse, ledgerResponse] = week.week_id
-        ? await Promise.all([
-            fetchSettlements(week.week_id),
-            fetchLedger({ weekId: week.week_id, pageSize: 200 }),
-          ])
-        : [null, null]
-      setRows(databaseRows(
+      const [currentWeekDetails, previousWeekDetails] = await Promise.all([
+        week.week_id
+          ? Promise.all([
+              fetchSettlements(week.week_id),
+              fetchLedger({ weekId: week.week_id, pageSize: 200 }),
+            ])
+          : Promise.resolve([null, null] as const),
+        previousWeekRecord?.week_id
+          ? Promise.all([
+              fetchSettlements(previousWeekRecord.week_id),
+              fetchLedger({ weekId: previousWeekRecord.week_id, pageSize: 200 }),
+            ])
+          : Promise.resolve([null, null] as const),
+      ])
+      const [settlementResponse, ledgerResponse] = currentWeekDetails
+      let loadedRows = databaseRows(
         accountResponse.items,
         dailyResponses,
         settlementResponse?.items ?? [],
         ledgerResponse?.items ?? [],
-      ))
+      )
+      if (previousDailyResponses) {
+        const [previousSettlementResponse, previousLedgerResponse] = previousWeekDetails
+        const previousRows = databaseRows(
+          accountResponse.items,
+          previousDailyResponses,
+          previousSettlementResponse?.items ?? [],
+          previousLedgerResponse?.items ?? [],
+        )
+        loadedRows = carryForwardPreviousBalances(loadedRows, previousRows)
+      }
+      setRows(loadedRows)
       setWeekId(week.week_id)
       setWeekStatus(week.status)
       setMessageTone("success")
@@ -527,7 +572,7 @@ export function WeeklyWageTablePreview() {
     } finally {
       setLoading(false)
     }
-  }, [selectedWeek])
+  }, [selectedWeek, selectedWeekId])
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => void loadWeek(), 0)

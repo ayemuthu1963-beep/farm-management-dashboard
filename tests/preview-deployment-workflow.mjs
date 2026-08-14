@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Enforce side-by-side motor settings at narrow desktop widths",
+  "Carry previous present balances into the current wage week",
 )
-assert.equal(manifest.base_commit, "a2856c8005faf54ae5d4584b9e2871cf524c8f64")
+assert.equal(manifest.base_commit, "d43294853f787f2346c23a9c41ff4ca6088a062d")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,10 +280,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/motor/motor-status-cards.tsx",
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/motor-runtime-water-pumped.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
