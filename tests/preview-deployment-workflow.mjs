@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Compact the weekly wage table and add a top scrollbar",
+  "Correct the worker wage week and financial presentation",
 )
-assert.equal(manifest.base_commit, "d36a760b225566919e57262568c3f7737f739bc9")
+assert.equal(manifest.base_commit, "2d2bb69bc520ae593a3884063e0fc30d0f023b48")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
