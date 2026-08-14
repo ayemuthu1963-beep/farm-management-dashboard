@@ -3,8 +3,8 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Consolidate guardian wages and show signed opening balances",
-  "base_commit": "2778874f73c2a36b24c47463a4549449287144f6",
+  "release_note": "Separate opening balances from editable weekly advances",
+  "base_commit": "083547a4ebd25066228c61416a86774bd6acf8ba",
   "allowed_paths": [
     "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
