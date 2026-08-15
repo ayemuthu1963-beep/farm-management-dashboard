@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Roll back Farm Calendar after failed authenticated embed validation",
+  "Add simple external Farm Calendar homepage tile",
 )
-assert.equal(manifest.base_commit, "517cb7e7cb055ca71abb2913ee4a211457879481")
+assert.equal(manifest.base_commit, "cd81691966672bdd4d9207efc93db3c6b0af40ad")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -284,6 +284,7 @@ const expectedReleasePaths = [
   "components/home/farm-calendar-card.tsx",
   "deploy/preview-release-manifest.json",
   "lib/farm-calendar.ts",
+  "package.json",
   "tests/farm-calendar-homepage.mjs",
   "tests/motor-screenshot-analysis-real-workflow.mjs",
   "tests/preview-deployment-workflow.mjs",
