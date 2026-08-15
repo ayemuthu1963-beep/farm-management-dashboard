@@ -1,6 +1,6 @@
 export const FARM_CALENDAR_ID = "admin.muthufarms@gmail.com"
 export const FARM_CALENDAR_TIME_ZONE = "Asia/Kolkata"
-export const FARM_CALENDAR_AUTHORIZED_ACCOUNT = "ayemuthu1963@gmail.com"
+export const FARM_CALENDAR_MONTH_ACCOUNT = FARM_CALENDAR_ID
 
 function buildGoogleCalendarUrl(
   pathname: string,
@@ -33,11 +33,12 @@ export const FARM_CALENDAR_WEEKLY_EMBED_URL = buildGoogleCalendarUrl(
 )
 
 // The Google Calendar application is intentionally used for all writes. The
-// calendar ID matches the read-only weekly embed, and Month view is explicit.
+// calendar ID and signed-in account both point to the dedicated farm account,
+// so the Month action does not open an authorized user's personal workspace.
 export const FARM_CALENDAR_MONTH_URL = buildGoogleCalendarUrl(
   "/calendar/r/month",
   {
     cid: FARM_CALENDAR_ID,
-    authuser: FARM_CALENDAR_AUTHORIZED_ACCOUNT,
+    authuser: FARM_CALENDAR_MONTH_ACCOUNT,
   },
 )
