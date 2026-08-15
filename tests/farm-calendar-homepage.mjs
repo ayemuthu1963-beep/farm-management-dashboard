@@ -4,8 +4,8 @@ import { extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import {
+  FARM_CALENDAR_AUTHORIZED_ACCOUNT,
   FARM_CALENDAR_ID,
-  FARM_CALENDAR_MONTH_ACCOUNT,
   FARM_CALENDAR_MONTH_URL,
   FARM_CALENDAR_TIME_ZONE,
   FARM_CALENDAR_WEEKLY_EMBED_URL,
@@ -33,7 +33,7 @@ const monthlyUrl = new URL(FARM_CALENDAR_MONTH_URL)
 
 assert.equal(FARM_CALENDAR_ID, "admin.muthufarms@gmail.com")
 assert.equal(FARM_CALENDAR_TIME_ZONE, "Asia/Kolkata")
-assert.equal(FARM_CALENDAR_MONTH_ACCOUNT, FARM_CALENDAR_ID)
+assert.equal(FARM_CALENDAR_AUTHORIZED_ACCOUNT, "ayemuthu1963@gmail.com")
 assert.equal(weeklyUrl.hostname, "calendar.google.com")
 assert.equal(weeklyUrl.pathname, "/calendar/embed")
 assert.equal(weeklyUrl.searchParams.get("src"), FARM_CALENDAR_ID)
@@ -44,7 +44,7 @@ assert.equal(monthlyUrl.pathname, "/calendar/r/month")
 assert.equal(monthlyUrl.searchParams.get("cid"), FARM_CALENDAR_ID)
 assert.equal(
   monthlyUrl.searchParams.get("authuser"),
-  FARM_CALENDAR_ID,
+  FARM_CALENDAR_AUTHORIZED_ACCOUNT,
 )
 
 assert.match(calendarCard, />\s*Open Monthly Calendar\s*/)
