@@ -23,6 +23,7 @@ done
 readonly repo_url="https://github.com/ayemuthu1963-beep/farm-management-dashboard.git"
 readonly release_ref="refs/heads/production-release"
 readonly live_container="mfms-v0-preview-web"
+readonly preview_container="mfms-pilot-web"
 readonly backend_container="harvest-api"
 readonly proxy_container="central-nginx-1"
 readonly production_network="harvest-net"
@@ -90,6 +91,10 @@ worker_secret_loaded=0
 transaction_active=0
 automatic_restore_result="not-required"
 public_guard_result=""
+preview_approved_revision=""
+preview_approved_image_id=""
+preview_feature_revision=""
+preview_verified_file_count=""
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -654,11 +659,14 @@ PY
 validate_release_manifest() {
   local manifest="$source_dir/deploy/production-release-manifest.json"
   local actual_paths="$work_dir/actual-paths.txt"
+  local preview_contract="$work_dir/preview-contract.txt"
+  local preview_path
+  local -a preview_contract_lines
   [[ -f "$manifest" ]] || blocked "Production release manifest is missing"
   git -C "$source_dir" diff --name-only "$original_revision..$candidate_revision" \
     | LC_ALL=C sort -u > "$actual_paths"
   [[ -s "$actual_paths" ]] || blocked "candidate contains no changes from live Production"
-  python3 - "$manifest" "$actual_paths" "$original_revision" <<'PY'
+  python3 - "$manifest" "$actual_paths" "$original_revision" > "$preview_contract" <<'PY'
 import json
 import pathlib
 import re
@@ -689,6 +697,27 @@ if data.get("base_commit") != current:
     raise SystemExit("manifest base does not match live Production")
 if data.get("protected_invariants") != expected_invariants:
     raise SystemExit("manifest protected invariants are incomplete")
+
+preview = data.get("preview_approved")
+if not isinstance(preview, dict):
+    raise SystemExit("Preview approval contract is missing")
+preview_revision = preview.get("revision")
+preview_image_id = preview.get("image_id")
+feature_revision = preview.get("feature_revision")
+verified_files = preview.get("verified_files")
+if not isinstance(preview_revision, str) or re.fullmatch(r"[0-9a-f]{40}", preview_revision) is None:
+    raise SystemExit("Preview approval revision is invalid")
+if not isinstance(preview_image_id, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", preview_image_id) is None:
+    raise SystemExit("Preview approval image ID is invalid")
+if not isinstance(feature_revision, str) or re.fullmatch(r"[0-9a-f]{40}", feature_revision) is None:
+    raise SystemExit("Preview feature revision is invalid")
+if not isinstance(verified_files, list) or not verified_files:
+    raise SystemExit("Preview verified file list is empty")
+if len(verified_files) != len(set(verified_files)):
+    raise SystemExit("Preview verified file list contains duplicates")
+for path in verified_files:
+    if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
+        raise SystemExit("Preview verified file path is invalid")
 
 allowed = data.get("allowed_paths")
 if not isinstance(allowed, list) or not allowed:
@@ -721,7 +750,44 @@ if unexpected or missing:
     for path in missing:
         print(f"missing={path}", file=sys.stderr)
     raise SystemExit(1)
+
+if not set(verified_files).issubset(set(actual)):
+    raise SystemExit("Preview verified files must be changed by the Production candidate")
+
+print(preview_revision)
+print(preview_image_id)
+print(feature_revision)
+for path in verified_files:
+    print(path)
 PY
+
+  mapfile -t preview_contract_lines < "$preview_contract"
+  [[ "${#preview_contract_lines[@]}" -ge 4 ]] \
+    || blocked "Preview approval contract is incomplete"
+  preview_approved_revision=${preview_contract_lines[0]}
+  preview_approved_image_id=${preview_contract_lines[1]}
+  preview_feature_revision=${preview_contract_lines[2]}
+  preview_verified_file_count=$((${#preview_contract_lines[@]} - 3))
+
+  container_exists "$preview_container" || blocked "Preview frontend container is missing"
+  container_running "$preview_container" || blocked "Preview frontend container is not running"
+  [[ "$(docker inspect --format '{{.Image}}' "$preview_container")" == "$preview_approved_image_id" ]] \
+    || blocked "live Preview image differs from the approved artifact"
+  [[ "$(image_revision_for_container "$preview_container")" == "$preview_approved_revision" ]] \
+    || blocked "live Preview revision differs from the approved artifact"
+
+  git -C "$source_dir" fetch --no-tags origin \
+    "$preview_approved_revision" "$preview_feature_revision" >/dev/null 2>&1
+  git -C "$source_dir" merge-base --is-ancestor \
+    "$preview_feature_revision" "$preview_approved_revision" \
+    || blocked "Preview approval does not contain the verified feature revision"
+  for preview_path in "${preview_contract_lines[@]:3}"; do
+    git -C "$source_dir" cat-file -e "$preview_approved_revision:$preview_path" \
+      || blocked "Preview-approved file is unavailable: $preview_path"
+    cmp "$source_dir/$preview_path" \
+      <(git -C "$source_dir" show "$preview_approved_revision:$preview_path") \
+      || blocked "Production source differs from Preview-approved file: $preview_path"
+  done
 }
 
 write_state() {
@@ -827,6 +893,11 @@ deploy_production() {
   echo "deployed_revision=$candidate_revision"
   echo "deployed_image=$new_image"
   echo "deployed_image_id=$new_image_id"
+  echo "preview_approved_revision=$preview_approved_revision"
+  echo "preview_approved_image_id=$preview_approved_image_id"
+  echo "preview_feature_revision=$preview_feature_revision"
+  echo "preview_verified_file_count=$preview_verified_file_count"
+  echo "production_source_matches_preview=true"
   echo "rollback_container=$transaction_backup"
   if [[ "$worker_secret_loaded" -eq 1 ]]; then
     echo "worker_actor_assertion=server-local"
