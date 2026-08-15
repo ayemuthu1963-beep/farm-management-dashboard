@@ -239,8 +239,15 @@ proxy_digest() {
 }
 
 proxy_target_count() {
-  docker exec "$proxy_container" sh -c \
-    "grep -R -F 'proxy_pass http://mfms-v0-preview-web:3000' /etc/nginx/conf.d 2>/dev/null | wc -l" \
+  docker exec "$proxy_container" sh -c '
+    upstream_count=$(grep -R -E "^[[:space:]]*server[[:space:]]+mfms-v0-preview-web:3000;" /etc/nginx/conf.d 2>/dev/null | wc -l | tr -d "[:space:]")
+    route_count=$(grep -R -E "^[[:space:]]*proxy_pass[[:space:]]+http://mfms_production_frontend;" /etc/nginx/conf.d 2>/dev/null | wc -l | tr -d "[:space:]")
+    if [ "$upstream_count" -eq 1 ] && [ "$route_count" -ge 1 ]; then
+      printf "%s\n" "$route_count"
+    else
+      printf "0\n"
+    fi
+  ' \
     | tr -d '[:space:]'
 }
 
