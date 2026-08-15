@@ -133,7 +133,7 @@ jobs:
           grep -Fqx 'rollback_environment=Production' "$report"
           grep -Fqx 'rollback_component=backend' "$report"
           grep -Fqx 'rollback_url=https://muthufarms.com' "$report"
-          grep -Fqx 'database_migrations=none' "$report"
+          grep -Fqx 'database_migrations=forward-only-retained' "$report"
           grep -Fqx 'frontend_unchanged=true' "$report"
           grep -Fqx 'odk_unchanged=true' "$report"
           grep -Fqx 'schedules_unchanged=true' "$report"

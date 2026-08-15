@@ -32,6 +32,10 @@ readonly backend_live_container="harvest-api"
 readonly frontend_container="mfms-v0-preview-web"
 readonly proxy_container="central-nginx-1"
 readonly production_network="harvest-net"
+readonly approved_production_ipv4="172.19.0.2"
+readonly approved_production_subnet="172.19.0.0/16"
+readonly approved_production_gateway="172.19.0.1"
+readonly approved_production_dynamic_pool="172.19.128.0/17"
 readonly production_url="https://muthufarms.com"
 readonly database_name="mfms_server_prod"
 readonly live_port="8001"
@@ -41,6 +45,7 @@ readonly state_file="$state_dir/last-successful-backend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
 readonly database_backup_dir="$state_dir/database-backups"
+readonly database_url_override_file="/home/muthu/mfms_secrets/database-roles/prod-app.database_url"
 readonly approved_restart_policy="unless-stopped"
 readonly approved_production_well_odk_cutoff="2026-07-21T06:06:53+05:30"
 readonly approved_temp_mount_source="/tmp"
@@ -64,6 +69,7 @@ expected_current_revision=""
 run_id=""
 readonly deploy_command_pattern='^deploy-production-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-production-backend ([0-9a-f]{40}) ([0-9]+)$'
+readonly credential_cutover_command_pattern='^cutover-production-database-role ([0-9a-f]{40}) ([0-9]+)$'
 
 original_command=${SSH_ORIGINAL_COMMAND:-}
 if [[ "$original_command" =~ $deploy_command_pattern ]]; then
@@ -74,8 +80,12 @@ elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
   operation="rollback"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $credential_cutover_command_pattern ]]; then
+  operation="credential-cutover"
+  expected_current_revision=${BASH_REMATCH[1]}
+  run_id=${BASH_REMATCH[2]}
 else
-  blocked "the SSH key accepts only an exact Production backend deploy or rollback command"
+  blocked "the SSH key accepts only an exact Production backend deploy, rollback, or database-role cutover command"
 fi
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -177,6 +187,22 @@ ensure_production_network_attachment() {
     sleep 1
   done
   return 1
+}
+
+assert_production_ipam_contract() {
+  local network_subnet network_gateway network_dynamic_pool
+  network_subnet=$(docker network inspect \
+    --format '{{(index .IPAM.Config 0).Subnet}}' "$production_network")
+  network_gateway=$(docker network inspect \
+    --format '{{(index .IPAM.Config 0).Gateway}}' "$production_network")
+  network_dynamic_pool=$(docker network inspect \
+    --format '{{(index .IPAM.Config 0).IPRange}}' "$production_network")
+  [[ "$network_subnet" == "$approved_production_subnet" ]] \
+    || blocked "Production network subnet differs from $approved_production_subnet"
+  [[ "$network_gateway" == "$approved_production_gateway" ]] \
+    || blocked "Production network gateway differs from $approved_production_gateway"
+  [[ "$network_dynamic_pool" == "$approved_production_dynamic_pool" ]] \
+    || blocked "Production network dynamic pool differs from $approved_production_dynamic_pool"
 }
 
 image_revision_for_container() {
@@ -315,13 +341,48 @@ if len(lines) != 1 or not re.fullmatch(r"MFMS_ACTOR_ASSERTION_SECRET=[0-9a-f]{64
 PY
 }
 
+ensure_database_url_override() {
+  python3 - "$database_url_override_file" <<'PY'
+import os
+import pathlib
+import stat
+import sys
+from urllib.parse import urlsplit
+
+path = pathlib.Path(sys.argv[1])
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("Production database URL override must be a regular mode-0600 file")
+if metadata.st_uid != os.getuid():
+    raise SystemExit("Production database URL override has the wrong owner")
+lines = path.read_text(encoding="ascii").splitlines()
+if len(lines) != 1 or not lines[0].startswith("DATABASE_URL="):
+    raise SystemExit("Production database URL override has invalid structure")
+value = lines[0].split("=", 1)[1]
+parsed = urlsplit(value.replace("postgresql+psycopg://", "postgresql://", 1))
+if (
+    parsed.scheme != "postgresql"
+    or parsed.username != "mfms_prod_app"
+    or not parsed.password
+    or parsed.hostname != "harvest-db"
+    or parsed.port != 5432
+    or parsed.path != "/mfms_server_prod"
+    or parsed.query
+    or parsed.fragment
+):
+    raise SystemExit("Production database URL override does not match the approved isolated target")
+PY
+}
+
 write_environment_file() {
   local source_container=$1 target_revision=${2:-} worker_secret
   ensure_worker_signing_secret
+  ensure_database_url_override
   worker_secret=$(awk -F= '$1 == "MFMS_ACTOR_ASSERTION_SECRET" {print $2}' "$worker_secret_file")
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
-    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_PRODUCTION_WELL_ODK_CUTOFF|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
+    | awk 'length($0) && $0 !~ /^(DATABASE_URL|MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_PRODUCTION_WELL_ODK_CUTOFF|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
     > "$environment_file"
+  cat "$database_url_override_file" >> "$environment_file"
   [[ -n "$(grep -E '^DATABASE_URL=' "$environment_file" || true)" ]] \
     || blocked "Production backend has no DATABASE_URL environment entry"
   if [[ -n "$target_revision" ]]; then
@@ -354,6 +415,7 @@ live_revision() {
 }
 
 validate_common_live_state() {
+  assert_production_ipam_contract
   container_exists "$backend_live_container" || blocked "Production backend container is missing"
   container_running "$backend_live_container" || blocked "Production backend container is not running"
   container_exists "$frontend_container" || blocked "Production frontend container is missing"
@@ -373,7 +435,8 @@ validate_common_live_state() {
   original_image_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
   original_image_tag=$(docker inspect --format '{{.Config.Image}}' "$backend_live_container")
   original_network_ip=$(network_ip_for_container "$backend_live_container")
-  [[ -n "$original_network_ip" ]] || blocked "Production backend has no Production network address"
+  [[ "$original_network_ip" == "$approved_production_ipv4" ]] \
+    || blocked "Production backend must own fixed address $approved_production_ipv4"
   original_revision=$(live_revision)
   frontend_id_before=$(docker inspect --format '{{.Id}}' "$frontend_container")
   frontend_image_before=$(docker inspect --format '{{.Image}}' "$frontend_container")
@@ -435,7 +498,7 @@ source = pathlib.Path(source_text).resolve()
 data = json.loads(pathlib.Path(descriptor_path).read_text(encoding="utf-8"))
 
 expected_invariants = {
-    "database_migrations": "none",
+    "database": "production-migrations-only",
     "frontend": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
@@ -453,7 +516,7 @@ if data.get("repository") != "ayemuthu1963-beep/muthu-harvest-dashboard":
     raise SystemExit("backend release descriptor repository is invalid")
 if data.get("release_branch") != "production-release":
     raise SystemExit("backend release descriptor branch is invalid")
-if data.get("deployment_kind") != "backend-source-only-no-database-migrations":
+if data.get("deployment_kind") != "backend-with-forward-only-migrations":
     raise SystemExit("backend release descriptor deployment kind is invalid")
 if data.get("protected_invariants") != expected_invariants:
     raise SystemExit("backend release descriptor protected invariants are incomplete")
@@ -461,8 +524,8 @@ if data.get("protected_invariants") != expected_invariants:
 migrations = data.get("migrations")
 if not isinstance(migrations, list):
     raise SystemExit("backend release descriptor migrations must be a list")
-if migrations:
-    raise SystemExit("source-only Production release must not contain database migrations")
+if not migrations:
+    raise SystemExit("Production migration release must contain a declared migration")
 safe_migration = re.compile(r"^db/migrations/[0-9][A-Za-z0-9_.-]*\.sql$")
 seen = set()
 plan = []
@@ -618,16 +681,45 @@ PY
 }
 
 apply_migrations() {
-  [[ ! -s "$migration_plan" ]] \
-    || blocked "source-only Production release unexpectedly contains database migrations"
+  local path checksum
+  [[ -s "$migration_plan" ]] \
+    || blocked "Production migration release has an empty migration plan"
+  while IFS='|' read -r path checksum; do
+    [[ -n "$path" && -n "$checksum" ]] \
+      || blocked "Production migration plan entry is incomplete"
+    docker run --rm \
+      --network "$production_network" \
+      --env-file "$environment_file" \
+      "$new_image" \
+      python /app/scripts/apply_production_migrations.py \
+        --confirm-production \
+        --migration "$path" \
+        --expected-sha256 "$checksum"
+  done < "$migration_plan"
 }
 
 verify_migrations() {
-  [[ ! -s "$migration_plan" ]] \
-    || blocked "source-only Production release unexpectedly contains database migrations"
+  local path checksum
+  [[ -s "$migration_plan" ]] \
+    || blocked "Production migration release has an empty migration plan"
+  while IFS='|' read -r path checksum; do
+    [[ -n "$path" && -n "$checksum" ]] \
+      || blocked "Production migration verification entry is incomplete"
+    docker run --rm \
+      --network "$production_network" \
+      --env-file "$environment_file" \
+      "$new_image" \
+      python /app/scripts/apply_production_migrations.py \
+        --confirm-production \
+        --migration "$path" \
+        --expected-sha256 "$checksum" \
+        --verify
+  done < "$migration_plan"
 }
 
 start_candidate() {
+  local require_version_endpoint=${1:-true}
+  local require_openapi_plan=${2:-true}
   candidate_container="$backend_live_container-candidate-$run_id-$timestamp"
   docker run -d \
     --name "$candidate_container" \
@@ -640,9 +732,12 @@ start_candidate() {
     "$new_image" >/dev/null
   wait_for_health "http://127.0.0.1:$candidate_port" \
     || blocked "backend candidate health endpoint failed"
-  wait_for_backend_version "http://127.0.0.1:$candidate_port" "$candidate_revision" \
-    || blocked "backend candidate version endpoint failed"
-  python3 - "$openapi_plan" "http://127.0.0.1:$candidate_port/openapi.json" <<'PY'
+  if [[ "$require_version_endpoint" == "true" ]]; then
+    wait_for_backend_version "http://127.0.0.1:$candidate_port" "$candidate_revision" \
+      || blocked "backend candidate version endpoint failed"
+  fi
+  if [[ "$require_openapi_plan" == "true" ]]; then
+    python3 - "$openapi_plan" "http://127.0.0.1:$candidate_port/openapi.json" <<'PY'
 import json
 import sys
 from urllib.request import urlopen
@@ -654,7 +749,8 @@ missing = [path for path in expected if path not in paths]
 if missing:
     raise SystemExit(f"candidate OpenAPI is missing required paths: {', '.join(missing)}")
 PY
-  verify_migrations
+    verify_migrations
+  fi
 }
 
 remove_candidate() {
@@ -679,6 +775,8 @@ assert_live_contract() {
     || blocked "Production backend restart policy changed"
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$backend_live_container")" == "$production_network" ]] \
     || blocked "Production backend network changed"
+  [[ "$(network_ip_for_container "$backend_live_container")" == "$approved_production_ipv4" ]] \
+    || blocked "Production backend does not own fixed address $approved_production_ipv4"
   if [[ "$require_same_network_ip" == "true" ]]; then
     [[ "$(network_ip_for_container "$backend_live_container")" == "$original_network_ip" ]] \
       || blocked "Production backend network address changed"
@@ -723,7 +821,7 @@ rollback_image_id=$rollback_image_id
 rollback_image_tag=$rollback_image_tag
 run_id=$run_id
 updated_at=$timestamp
-database_migrations=none
+database_migrations=forward-only
 EOF
   chmod 600 "$temporary_state"
   mv "$temporary_state" "$state_file"
@@ -753,7 +851,7 @@ restore_original_backend() {
     docker rename "$transaction_backup" "$backend_live_container" >/dev/null 2>&1 || return 1
   fi
   if container_exists "$backend_live_container"; then
-    ensure_production_network_attachment "$backend_live_container" \
+    ensure_production_network_ip "$backend_live_container" "$approved_production_ipv4" \
       >/dev/null 2>&1 || return 1
     docker start "$backend_live_container" >/dev/null 2>&1 || return 1
     if wait_for_health "http://127.0.0.1:$live_port"; then
@@ -805,9 +903,8 @@ deploy_backend() {
   write_environment_file "$backend_live_container" "$candidate_revision"
   create_production_database_backup
 
-  # This release is source-only. The verified custom-format backup is retained
-  # as rollback evidence, while the empty migration plan is enforced before
-  # the isolated candidate is started.
+  # The verified custom-format backup is retained before the checksum-pinned,
+  # forward-only migration is applied and independently verified.
   apply_migrations
   start_candidate
   remove_candidate
@@ -820,7 +917,7 @@ deploy_backend() {
   docker run -d \
     --name "$backend_live_container" \
     --network "$production_network" \
-    --ip "$original_network_ip" \
+    --ip "$approved_production_ipv4" \
     --restart "$approved_restart_policy" \
     -p "127.0.0.1:$live_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
@@ -851,7 +948,7 @@ deploy_backend() {
   echo "database_backup_sha256=$database_backup_sha256"
   echo "database_backup_bytes=$database_backup_bytes"
   echo "database_backup_verified=true"
-  echo "database_migrations=none"
+  echo "database_migrations=forward-only"
   echo "worker_actor_assertion=server-local"
   echo "frontend_unchanged=true"
   echo "odk_unchanged=true"
@@ -860,6 +957,60 @@ deploy_backend() {
   echo "test_touched=0"
   echo "preview_touched=0"
   echo "PRODUCTION_BACKEND_DEPLOYMENT=PASS"
+}
+
+credential_cutover_backend() {
+  validate_common_live_state
+  [[ "$original_revision" == "$expected_current_revision" ]] \
+    || blocked "current Production backend revision does not match the database-role cutover input"
+  [[ "$original_network_ip" == "$approved_production_ipv4" ]] \
+    || blocked "current Production backend does not own the approved fixed address"
+  assert_candidate_port_available
+  candidate_revision="$original_revision"
+  new_image="$original_image_id"
+  new_image_id="$original_image_id"
+  write_environment_file "$backend_live_container" "$original_revision"
+  start_candidate true false
+  remove_candidate
+
+  transaction_backup="$backend_live_container-pre-database-role-$run_id-$timestamp"
+  transaction_active=1
+  docker stop --time 30 "$backend_live_container" >/dev/null
+  disconnect_production_network "$backend_live_container"
+  docker rename "$backend_live_container" "$transaction_backup"
+  docker run -d \
+    --name "$backend_live_container" \
+    --network "$production_network" \
+    --ip "$approved_production_ipv4" \
+    --restart "$approved_restart_policy" \
+    -p "127.0.0.1:$live_port:8000" \
+    --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
+    --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
+    --env-file "$environment_file" \
+    "$original_image_id" >/dev/null
+
+  assert_live_contract "$original_revision" "$original_image_id"
+  trap '' HUP INT TERM
+  write_state \
+    "$original_revision" "$original_image_id" "$original_image_tag" \
+    "$transaction_backup" "$original_revision" "$original_image_id" "$original_image_tag"
+  transaction_active=0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  echo "credential_environment=Production"
+  echo "credential_component=backend"
+  echo "application_revision_unchanged=$original_revision"
+  echo "application_image_unchanged=$original_image_id"
+  echo "rollback_container=$transaction_backup"
+  echo "database=$database_name"
+  echo "database_role=mfms_prod_app"
+  echo "production_ipv4=$approved_production_ipv4"
+  echo "database_migrations=none"
+  echo "preview_touched=0"
+  echo "test_touched=0"
+  echo "PRODUCTION_DATABASE_ROLE_CUTOVER=PASS"
 }
 
 rollback_backend() {
@@ -902,8 +1053,8 @@ rollback_backend() {
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
   docker rename "$rollback_container" "$backend_live_container"
-  ensure_production_network_attachment "$backend_live_container" \
-    || blocked "backend rollback could not attach to the Production network"
+  ensure_production_network_ip "$backend_live_container" "$approved_production_ipv4" \
+    || blocked "backend rollback could not restore fixed Production address $approved_production_ipv4"
   docker start "$backend_live_container" >/dev/null
   replacement_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
 
@@ -923,7 +1074,7 @@ rollback_backend() {
   echo "previous_backend_revision=$deployed_revision"
   echo "restored_backend_revision=$rollback_revision"
   echo "rollback_container_retained=$transaction_backup"
-  echo "database_migrations=none"
+  echo "database_migrations=forward-only-retained"
   echo "frontend_unchanged=true"
   echo "odk_unchanged=true"
   echo "schedules_unchanged=true"
@@ -939,5 +1090,8 @@ case "$operation" in
     ;;
   rollback)
     rollback_backend
+    ;;
+  credential-cutover)
+    credential_cutover_backend
     ;;
 esac

@@ -41,6 +41,7 @@ readonly state_file="$state_dir/last-successful-backend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
 readonly database_backup_dir="$state_dir/database-backups"
+readonly database_url_override_file="/home/muthu/mfms_secrets/database-roles/uat-app.database_url"
 readonly approved_restart_policy="no"
 readonly approved_preview_well_odk_cutoff="2026-07-21T06:06:53+05:30"
 readonly approved_temp_mount_source="/tmp"
@@ -64,6 +65,7 @@ expected_current_revision=""
 run_id=""
 readonly deploy_command_pattern='^deploy-preview-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-preview-backend ([0-9a-f]{40}) ([0-9]+)$'
+readonly credential_cutover_command_pattern='^cutover-preview-database-role ([0-9a-f]{40}) ([0-9]+)$'
 
 original_command=${SSH_ORIGINAL_COMMAND:-}
 if [[ "$original_command" =~ $deploy_command_pattern ]]; then
@@ -74,8 +76,12 @@ elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
   operation="rollback"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $credential_cutover_command_pattern ]]; then
+  operation="credential-cutover"
+  expected_current_revision=${BASH_REMATCH[1]}
+  run_id=${BASH_REMATCH[2]}
 else
-  blocked "the SSH key accepts only an exact Preview backend deploy or rollback command"
+  blocked "the SSH key accepts only an exact Preview backend deploy, rollback, or database-role cutover command"
 fi
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -315,13 +321,48 @@ if len(lines) != 1 or not re.fullmatch(r"MFMS_ACTOR_ASSERTION_SECRET=[0-9a-f]{64
 PY
 }
 
+ensure_database_url_override() {
+  python3 - "$database_url_override_file" <<'PY'
+import os
+import pathlib
+import stat
+import sys
+from urllib.parse import urlsplit
+
+path = pathlib.Path(sys.argv[1])
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("Preview database URL override must be a regular mode-0600 file")
+if metadata.st_uid != os.getuid():
+    raise SystemExit("Preview database URL override has the wrong owner")
+lines = path.read_text(encoding="ascii").splitlines()
+if len(lines) != 1 or not lines[0].startswith("DATABASE_URL="):
+    raise SystemExit("Preview database URL override has invalid structure")
+value = lines[0].split("=", 1)[1]
+parsed = urlsplit(value.replace("postgresql+psycopg://", "postgresql://", 1))
+if (
+    parsed.scheme != "postgresql"
+    or parsed.username != "mfms_uat_app"
+    or not parsed.password
+    or parsed.hostname != "harvest-db"
+    or parsed.port != 5432
+    or parsed.path != "/mfms_server_uat"
+    or parsed.query
+    or parsed.fragment
+):
+    raise SystemExit("Preview database URL override does not match the approved isolated target")
+PY
+}
+
 write_environment_file() {
   local source_container=$1 target_revision=${2:-} worker_secret
   ensure_worker_signing_secret
+  ensure_database_url_override
   worker_secret=$(awk -F= '$1 == "MFMS_ACTOR_ASSERTION_SECRET" {print $2}' "$worker_secret_file")
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$source_container" \
-    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_PREVIEW_WELL_ODK_CUTOFF|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
+    | awk 'length($0) && $0 !~ /^(DATABASE_URL|NEXT_PUBLIC_API_BASE_URL|MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_PREVIEW_WELL_ODK_CUTOFF|MFMS_WORKER_MANAGEMENT_ENABLED|MFMS_ACTOR_ASSERTION_SECRET|MFMS_ACTOR_ASSERTION_MAX_AGE_SECONDS|MFMS_LOCAL_ACTOR_ENABLED|MFMS_LOCAL_ACTOR_USERNAME|MFMS_LOCAL_ACTOR_ROLE)=/' \
     > "$environment_file"
+  cat "$database_url_override_file" >> "$environment_file"
   [[ -n "$(grep -E '^DATABASE_URL=' "$environment_file" || true)" ]] \
     || blocked "Preview backend has no DATABASE_URL environment entry"
   if [[ -n "$target_revision" ]]; then
@@ -496,19 +537,19 @@ changed = subprocess.check_output(
     ["git", "-C", str(source), "diff", "--name-only", f"{current}..{candidate}"], text=True
 ).splitlines()
 allowed = re.compile(
-    r"^(?:\.github/(?:CODEOWNERS|pull_request_template\.md|workflows/ci\.yml)|"
+    r"^(?:\.env\.example|docker-compose\.yml|"
+    r"\.github/(?:CODEOWNERS|pull_request_template\.md|workflows/ci\.yml)|"
     r"README\.md|"
     r"api/(?:Dockerfile|requirements\.txt|app/(?:[^/]+\.py|routers/[^/]+\.py|"
-    r"models/(?:__init__|worker_management)\.py|"
-    r"repositories/(?:__init__|worker_management)\.py|"
-    r"services/(?:motor_excel_parser|motor_runtime_management|well_water_dashboard|"
-    r"worker_management(?:_api|_auth)?)\.py))|"
+    r"models/[^/]+\.py|repositories/[^/]+\.py|services/[^/]+\.py))|"
     r"db/migrations/[0-9][A-Za-z0-9_.-]*\.sql|"
-    r"db/rollbacks/(?:20260806_motor_runtime_management|20260810_worker_management)\.sql|"
+    r"db/rollbacks/[0-9][A-Za-z0-9_.-]*\.sql|"
     r"deploy/(?:preview-backend-release|release-governance)\.json|"
     r"docs/MFMS_DATABASE_RELEASE_POLICY\.md|"
-    r"scripts/(?:apply_preview_asset_register|apply_preview_migrations|"
-    r"sync_well_water_odk|validate_release_governance)\.py|"
+    r"scripts/(?:apply_preview_asset_register|apply_preview_migrations|import_access_csv|"
+    r"import_historical_clean_csv|import_manual_harvest_csv|odk_sync_placeholder|"
+    r"sync_preview_harvest_odk|sync_well_water_odk|validate_release_governance)\.py|"
+    r"scripts/run_preview_(?:beetle|harvest|well_water)_sync\.sh|"
     r"tests/[^/]+)$"
 )
 if not changed:
@@ -516,6 +557,21 @@ if not changed:
 for path in changed:
     if not allowed.fullmatch(path):
         raise SystemExit(f"backend candidate contains an unapproved path: {path}")
+
+# Preview environment-source edits are normally blocked. This one-time,
+# content-addressed exception permits only the reviewed stale-variable removal
+# and isolated UAT role template. Any future edit to either file fails closed.
+approved_environment_sources = {
+    ".env.example": "19cf290372dccba1c3756deac3816b85f86734f079fc154910a99c927d98b3b4",
+    "docker-compose.yml": "b3d39d0294bb9576bc4d308105c96edae202f3b3aa1e1bc55a5dcf6deb8cbbca",
+}
+for path in set(changed).intersection(approved_environment_sources):
+    payload = (source / path).read_bytes().replace(b"\r\n", b"\n")
+    actual = hashlib.sha256(payload).hexdigest()
+    if actual != approved_environment_sources[path]:
+        raise SystemExit(f"backend candidate changed protected Preview environment source: {path}")
+    if b"NEXT_PUBLIC_API_BASE_URL" in payload:
+        raise SystemExit(f"backend candidate retained the stale Preview API base variable: {path}")
 
 pathlib.Path(migrations_output).write_text(
     "".join(f"{path}|{checksum}\n" for path, checksum in plan), encoding="utf-8"
@@ -539,6 +595,8 @@ build_image() {
     || blocked "built backend image revision label is invalid"
   [[ "$(docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.environment"}}' "$new_image")" == "Preview" ]] \
     || blocked "built backend image is not labelled Preview"
+  [[ "$(docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.source-contract"}}' "$new_image")" == "git-complete" ]] \
+    || blocked "built backend image does not declare the complete Git source contract"
 }
 
 create_preview_database_backup() {
@@ -879,6 +937,57 @@ deploy_backend() {
   echo "PREVIEW_BACKEND_DEPLOYMENT=PASS"
 }
 
+credential_cutover_backend() {
+  validate_common_live_state
+  [[ "$original_revision" == "$expected_current_revision" ]] \
+    || blocked "current Preview backend revision does not match the database-role cutover input"
+  assert_candidate_port_available
+  candidate_revision="$original_revision"
+  new_image="$original_image_id"
+  new_image_id="$original_image_id"
+  write_environment_file "$backend_live_container" "$original_revision"
+  start_candidate true false
+  remove_candidate
+
+  transaction_backup="$backend_live_container-pre-database-role-$run_id-$timestamp"
+  transaction_active=1
+  docker stop --time 30 "$backend_live_container" >/dev/null
+  disconnect_preview_network "$backend_live_container"
+  docker rename "$backend_live_container" "$transaction_backup"
+  docker run -d \
+    --name "$backend_live_container" \
+    --network "$preview_network" \
+    --ip "$original_network_ip" \
+    --restart "$approved_restart_policy" \
+    -p "127.0.0.1:$live_port:8000" \
+    --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
+    --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
+    --env-file "$environment_file" \
+    "$original_image_id" >/dev/null
+
+  assert_live_contract "$original_revision" "$original_image_id"
+  trap '' HUP INT TERM
+  write_state \
+    "$original_revision" "$original_image_id" "$original_image_tag" \
+    "$transaction_backup" "$original_revision" "$original_image_id" "$original_image_tag"
+  transaction_active=0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  echo "credential_environment=Preview"
+  echo "credential_component=backend"
+  echo "application_revision_unchanged=$original_revision"
+  echo "application_image_unchanged=$original_image_id"
+  echo "rollback_container=$transaction_backup"
+  echo "database=$database_name"
+  echo "database_role=mfms_uat_app"
+  echo "database_migrations=none"
+  echo "production_touched=0"
+  echo "test_touched=0"
+  echo "PREVIEW_DATABASE_ROLE_CUTOVER=PASS"
+}
+
 rollback_backend() {
   local deployed_revision deployed_image_id deployed_image_tag
   local rollback_container rollback_revision rollback_image_id rollback_image_tag replacement_id
@@ -955,5 +1064,8 @@ case "$operation" in
     ;;
   rollback)
     rollback_backend
+    ;;
+  credential-cutover)
+    credential_cutover_backend
     ;;
 esac
