@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "environment": "Production",
+  "target_url": "https://muthufarms.com",
+  "deployment_kind": "frontend-only",
+  "base_commit": "e3edbfcd845f5e267e60ea2f028772473f30510a",
+  "preview_approved": {
+    "revision": "ec763d202f215097d7ef354a09e02b1c1178e311",
+    "image_id": "sha256:0c1af4b373021dfe8593e2b522bb60d3ee39f69f820c2758a63bcdee75f3331d",
+    "feature_revision": "780772d19e47ecb2ecb51530764ec697b466d6e8",
+    "verified_files": [
+      "app/page.tsx",
+      "components/home/farm-calendar-card.tsx",
+      "lib/farm-calendar.ts",
+      "tests/farm-calendar-homepage.mjs"
+    ]
+  },
+  "protected_invariants": {
+    "preview": "unchanged",
+    "test": "unchanged",
+    "backend": "unchanged",
+    "database": "unchanged",
+    "odk": "unchanged",
+    "schedules": "unchanged",
+    "proxy_configuration": "unchanged"
+  },
+  "allowed_paths": [
+    "app/page.tsx",
+    "components/home/farm-calendar-card.tsx",
+    "deploy/production-release-manifest.json",
+    "lib/farm-calendar.ts",
+    "package.json",
+    "tests/farm-calendar-homepage.mjs",
+    "tests/farm-calendar-production-promotion.mjs",
+    "tests/motor-screenshot-analysis-real-workflow.mjs"
+  ]
+}
