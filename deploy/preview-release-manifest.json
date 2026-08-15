@@ -3,13 +3,14 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Roll back Farm Calendar after failed authenticated embed validation",
-  "base_commit": "517cb7e7cb055ca71abb2913ee4a211457879481",
+  "release_note": "Add simple external Farm Calendar homepage tile",
+  "base_commit": "cd81691966672bdd4d9207efc93db3c6b0af40ad",
   "allowed_paths": [
     "app/page.tsx",
     "components/home/farm-calendar-card.tsx",
     "deploy/preview-release-manifest.json",
     "lib/farm-calendar.ts",
+    "package.json",
     "tests/farm-calendar-homepage.mjs",
     "tests/motor-screenshot-analysis-real-workflow.mjs",
     "tests/preview-deployment-workflow.mjs"
