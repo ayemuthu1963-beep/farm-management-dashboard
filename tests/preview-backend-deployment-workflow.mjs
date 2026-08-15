@@ -57,6 +57,8 @@ const allowedPattern = [...deployScript.slice(allowedStart, allowedEnd).matchAll
   .join("")
 
 for (const path of [
+  ".env.example",
+  "docker-compose.yml",
   "api/Dockerfile",
   "api/requirements.txt",
   "api/app/main.py",
@@ -87,6 +89,16 @@ for (const path of [
 }
 assert.equal(pythonFullmatch(allowedPattern, ".github/workflows/preview-backend-deploy.yml"), false)
 assert.equal(pythonFullmatch(allowedPattern, "db/rollbacks/drop_everything.sql"), false)
+
+assert.match(deployScript, /NEXT_PUBLIC_API_BASE_URL/)
+assert.match(
+  deployScript,
+  /\.env\.example": "19cf290372dccba1c3756deac3816b85f86734f079fc154910a99c927d98b3b4"/,
+)
+assert.match(
+  deployScript,
+  /docker-compose\.yml": "b3d39d0294bb9576bc4d308105c96edae202f3b3aa1e1bc55a5dcf6deb8cbbca"/,
+)
 
 function assertPythonPlanLines(label, source, expectedLines) {
   const result = spawnSync("python3", ["-c", source], { encoding: "utf8" })
@@ -220,6 +232,9 @@ assert.match(deployScript, /: > "\$migration_plan"/)
 assert.match(deployScript, /: > "\$openapi_plan"/)
 assert.match(deployScript, /apply_preview_migrations\.py/)
 assert.match(deployScript, /ensure_worker_signing_secret/)
+assert.match(deployScript, /database-roles\/uat-app\.database_url/)
+assert.match(deployScript, /parsed\.username != "mfms_uat_app"/)
+assert.match(deployScript, /NEXT_PUBLIC_API_BASE_URL/)
 assert.match(deployScript, /MFMS_WORKER_MANAGEMENT_ENABLED=true/)
 assert.match(deployScript, /MFMS_ACTOR_ASSERTION_SECRET=\[0-9a-f\]\{64\}/)
 assert.match(deployScript, /create_preview_database_backup/)

@@ -1,0 +1,124 @@
+name: Roll back Production frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_revision:
+        description: Exact 40-character Production frontend revision to roll back
+        required: true
+        type: string
+      confirmation:
+        description: Type ROLL BACK PRODUCTION FRONTEND to authorize the guarded rollback
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfms-production-server
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    environment:
+      name: Production
+      url: https://muthufarms.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Require the exact rollback request
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          CURRENT_REVISION: ${{ inputs.current_revision }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_REF" == "refs/heads/main" ]]
+          [[ "$CONFIRMATION" == "ROLL BACK PRODUCTION FRONTEND" ]]
+          [[ "$CURRENT_REVISION" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Install the dedicated Production frontend deploy identity
+        id: ssh
+        shell: bash
+        env:
+          PRODUCTION_FRONTEND_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_SSH_PRIVATE_KEY }}
+          PRODUCTION_SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+          PRODUCTION_SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+        run: |
+          set -euo pipefail
+          for required_name in \
+            PRODUCTION_FRONTEND_DEPLOY_SSH_PRIVATE_KEY \
+            PRODUCTION_SSH_HOST \
+            PRODUCTION_SSH_KNOWN_HOSTS \
+            PRODUCTION_SSH_USER
+          do
+            [[ -n "${!required_name:-}" ]]
+          done
+          [[ "$PRODUCTION_SSH_HOST" == "168.144.179.221" ]]
+          [[ "$PRODUCTION_SSH_USER" == "muthu" ]]
+          ssh_dir="$RUNNER_TEMP/mfms-production-frontend-deploy-ssh"
+          install -d -m 700 "$ssh_dir"
+          install -m 600 /dev/null "$ssh_dir/id_ed25519"
+          install -m 600 /dev/null "$ssh_dir/known_hosts"
+          printf '%s\n' "$PRODUCTION_FRONTEND_DEPLOY_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null
+          ssh-keygen -F "$PRODUCTION_SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null
+          echo "identity_file=$ssh_dir/id_ed25519" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$ssh_dir/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Roll back the Production frontend
+        shell: bash
+        env:
+          CURRENT_REVISION: ${{ inputs.current_revision }}
+          IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
+          PRODUCTION_SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+          PRODUCTION_SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/production-frontend-rollback.txt"
+          : > "$report"
+          ssh -T \
+            -i "$IDENTITY_FILE" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o KbdInteractiveAuthentication=no \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -o ConnectTimeout=10 \
+            "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
+            "rollback-production-frontend $CURRENT_REVISION $GITHUB_RUN_ID" \
+            | tee "$report"
+          grep -Fqx 'rollback_environment=Production' "$report"
+          grep -Fqx 'rollback_url=https://muthufarms.com' "$report"
+          grep -Fqx "previous_revision=$CURRENT_REVISION" "$report"
+          grep -Eq '^restored_revision=[0-9a-f]{40}$' "$report"
+          grep -Fqx 'backend_unchanged=true' "$report"
+          grep -Fqx 'database_unchanged=true' "$report"
+          grep -Fqx 'odk_unchanged=true' "$report"
+          grep -Fqx 'schedules_unchanged=true' "$report"
+          grep -Fqx 'proxy_configuration_unchanged=true' "$report"
+          grep -Fqx 'preview_touched=0' "$report"
+          grep -Fqx 'test_touched=0' "$report"
+          grep -Fqx 'production_frontend_touched=1' "$report"
+          grep -Fqx 'PRODUCTION_ROLLBACK=PASS' "$report"
+
+      - name: Upload sanitized Production frontend rollback report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: production-frontend-rollback-${{ github.run_id }}
+          path: ${{ runner.temp }}/production-frontend-rollback.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mfms-production-frontend-deploy-ssh"

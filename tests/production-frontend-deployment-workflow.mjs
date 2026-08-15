@@ -1,0 +1,60 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+
+
+const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
+const deploy = readText(".github/workflows/production-frontend-deploy.yml")
+const rollback = readText(".github/workflows/production-frontend-rollback.yml")
+const helper = readText("scripts/production-server-deploy.sh")
+
+for (const workflow of [deploy, rollback]) {
+  assert.match(workflow, /^\s*workflow_dispatch:/m)
+  assert.doesNotMatch(workflow, /^\s*(push|pull_request|schedule|workflow_run):/m)
+  assert.match(workflow, /^permissions:\n\s+contents: read$/m)
+  assert.match(workflow, /^\s+group: mfms-production-server$/m)
+  assert.match(workflow, /^\s+name: Production$/m)
+  assert.match(workflow, /PRODUCTION_FRONTEND_DEPLOY_SSH_PRIVATE_KEY/)
+  assert.match(workflow, /StrictHostKeyChecking=yes/)
+  assert.match(workflow, /BatchMode=yes/)
+  assert.match(workflow, /PasswordAuthentication=no/)
+  assert.match(workflow, /KbdInteractiveAuthentication=no/)
+  assert.match(workflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/)
+  for (const action of workflow.matchAll(/^\s*uses:\s*([^\s#]+)/gm)) {
+    assert.match(action[1].split("@")[1], /^[0-9a-f]{40}$/)
+  }
+}
+
+assert.match(deploy, /DEPLOY PRODUCTION FRONTEND ONLY/)
+assert.match(deploy, /deploy-production-frontend \$CANDIDATE_REVISION \$EXPECTED_CURRENT_REVISION \$GITHUB_RUN_ID/)
+assert.match(deploy, /production_frontend_touched=1/)
+assert.match(rollback, /ROLL BACK PRODUCTION FRONTEND/)
+assert.match(rollback, /rollback-production-frontend \$CURRENT_REVISION \$GITHUB_RUN_ID/)
+
+assert.match(helper, /readonly release_ref="refs\/heads\/production-release"/)
+assert.match(helper, /readonly live_container="mfms-v0-preview-web"/)
+assert.match(helper, /readonly backend_container="harvest-api"/)
+assert.match(helper, /readonly live_port="3014"/)
+assert.match(helper, /readonly candidate_port="3013"/)
+assert.match(helper, /readonly expected_running_containers="21"/)
+assert.match(helper, /172\.19\.0\.2/)
+assert.match(helper, /172\.19\.128\.0\/17/)
+assert.match(helper, /mfms_prod_app\|mfms_server_prod/)
+assert.match(helper, /mfms_uat_app\|mfms_server_uat/)
+assert.match(helper, /mfms_test_app\|mfms_server_test/)
+assert.match(helper, /systemctl --failed/)
+assert.match(helper, /candidate is not the exact production-release head/)
+assert.match(helper, /candidate does not contain the live Production baseline/)
+assert.match(helper, /deploy\/production-release-manifest\.json/)
+assert.match(helper, /path is outside the approved Production frontend source scope/)
+assert.match(helper, /docker build/)
+assert.match(helper, /--pull=false/)
+assert.match(helper, /AUTOMATIC_RESTORE=/)
+assert.match(helper, /PRODUCTION_DEPLOYMENT=PASS/)
+assert.match(helper, /PRODUCTION_ROLLBACK=PASS/)
+assert.doesNotMatch(helper, /docker\s+compose\b/)
+assert.doesNotMatch(helper, /\bsudo\b/)
+assert.doesNotMatch(helper, /nginx\s+-s\s+reload/)
+assert.doesNotMatch(helper, /certbot/)
+assert.doesNotMatch(helper, /production_touched=0/)
+
+console.log("Production frontend deployment and rollback workflow tests passed.")
