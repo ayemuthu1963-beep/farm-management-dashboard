@@ -18,6 +18,9 @@ for (const workflow of [deploy, rollback]) {
   assert.match(workflow, /BatchMode=yes/)
   assert.match(workflow, /PasswordAuthentication=no/)
   assert.match(workflow, /KbdInteractiveAuthentication=no/)
+  assert.match(workflow, /ServerAliveInterval=20/)
+  assert.match(workflow, /ServerAliveCountMax=30/)
+  assert.match(workflow, /TCPKeepAlive=yes/)
   assert.match(workflow, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/)
   for (const action of workflow.matchAll(/^\s*uses:\s*([^\s#]+)/gm)) {
     assert.match(action[1].split("@")[1], /^[0-9a-f]{40}$/)
