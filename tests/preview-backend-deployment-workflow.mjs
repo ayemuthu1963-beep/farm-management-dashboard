@@ -93,11 +93,11 @@ assert.equal(pythonFullmatch(allowedPattern, "db/rollbacks/drop_everything.sql")
 assert.match(deployScript, /NEXT_PUBLIC_API_BASE_URL/)
 assert.match(
   deployScript,
-  /\.env\.example": "19cf290372dccba1c3756deac3816b85f86734f079fc154910a99c927d98b3b4"/,
+  /\.env\.example": "a3b28d1c61868a87d19a3650a4a062b7547ccbb884c84279b0534e13aed426e9"/,
 )
 assert.match(
   deployScript,
-  /docker-compose\.yml": "b3d39d0294bb9576bc4d308105c96edae202f3b3aa1e1bc55a5dcf6deb8cbbca"/,
+  /docker-compose\.yml": "fc3987f71241d245a5f01acab20b4fc04f0fe9d8fc33e1ea17d8256825055117"/,
 )
 
 function assertPythonPlanLines(label, source, expectedLines) {
