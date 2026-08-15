@@ -3,15 +3,12 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Add private Farm Calendar tile to the homepage",
-  "base_commit": "b8926bc328fb4763fcce03a4921ce91a0b84f44d",
+  "release_note": "Open Farm Calendar with the dedicated admin account",
+  "base_commit": "8d83823938a4c2f906c48da2eed0a8c8d217092a",
   "allowed_paths": [
-    "app/page.tsx",
-    "components/home/farm-calendar-card.tsx",
     "deploy/preview-release-manifest.json",
     "lib/farm-calendar.ts",
     "tests/farm-calendar-homepage.mjs",
-    "tests/motor-screenshot-analysis-real-workflow.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {

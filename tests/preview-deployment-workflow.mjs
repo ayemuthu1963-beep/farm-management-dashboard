@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add private Farm Calendar tile to the homepage",
+  "Open Farm Calendar with the dedicated admin account",
 )
-assert.equal(manifest.base_commit, "b8926bc328fb4763fcce03a4921ce91a0b84f44d")
+assert.equal(manifest.base_commit, "8d83823938a4c2f906c48da2eed0a8c8d217092a")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,12 +280,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/page.tsx",
-  "components/home/farm-calendar-card.tsx",
   "deploy/preview-release-manifest.json",
   "lib/farm-calendar.ts",
   "tests/farm-calendar-homepage.mjs",
-  "tests/motor-screenshot-analysis-real-workflow.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
