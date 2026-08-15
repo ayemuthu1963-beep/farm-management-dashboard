@@ -111,6 +111,9 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
             -o ConnectTimeout=10 \
+            -o ServerAliveInterval=20 \
+            -o ServerAliveCountMax=30 \
+            -o TCPKeepAlive=yes \
             "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
             "deploy-production-frontend $CANDIDATE_REVISION $EXPECTED_CURRENT_REVISION $GITHUB_RUN_ID" \
             | tee "$report"
