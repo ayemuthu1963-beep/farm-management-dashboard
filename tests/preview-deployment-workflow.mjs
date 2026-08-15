@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add private Farm Calendar tile to the homepage",
+  "Persist Motor Runtime settings and Irrigation Targets",
 )
-assert.equal(manifest.base_commit, "b8926bc328fb4763fcce03a4921ce91a0b84f44d")
+assert.equal(manifest.base_commit, "b52d5a4dce8135d33908e550365dbb9f044c7f56")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,13 +280,17 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/page.tsx",
-  "components/home/farm-calendar-card.tsx",
+  "app/api/operator-settings/[[...path]]/route.ts",
+  "components/irrigation/zone-status-cards.tsx",
+  "components/motor/motor-status-cards.tsx",
+  "components/worker-management/weekly-settlement.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/farm-calendar.ts",
-  "tests/farm-calendar-homepage.mjs",
-  "tests/motor-screenshot-analysis-real-workflow.mjs",
+  "lib/operator-settings.ts",
+  "package.json",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/operator-settings-persistence.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

@@ -1,6 +1,5 @@
 import { HomeHeader } from "@/components/home/home-header"
 import { WeatherCard } from "@/components/home/weather-card"
-import { FarmCalendarCard } from "@/components/home/farm-calendar-card"
 import { ModuleCard } from "@/components/home/module-card"
 import { HomeFooter } from "@/components/home/home-footer"
 import { moduleCards, weatherData } from "@/lib/home-data"
@@ -18,10 +17,7 @@ export default function HomePage() {
           {/* 1. Today's Weather */}
           <WeatherCard data={weatherData} />
 
-          {/* 2. Private Farm Calendar */}
-          <FarmCalendarCard />
-
-          {/* Existing module-card order remains frozen per the approved reference. */}
+          {/* 2-12. Module cards: 3 rows x 4 columns on desktop (order frozen per approved reference) */}
           {moduleCards.map((card) => (
             <ModuleCard key={card.id} data={card} />
           ))}
