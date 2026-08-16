@@ -25,6 +25,22 @@ source.tar
 *.tgz
 *.zip
 *.apk
+*.aab
+*.ipa
+
+# Native mobile build outputs and local signing material
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+ios/App/DerivedData/
+ios/App/build/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+android/keystore.properties
 
 # Local RC database snapshots and disposable data
 *.sql

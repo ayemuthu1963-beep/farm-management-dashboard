@@ -7,12 +7,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --experimental-strip-types tests/worker-management.mjs && node --experimental-strip-types tests/worker-management-offline.mjs && node --experimental-strip-types tests/environment-identity.mjs && node tests/weather-underground-api.mjs && node tests/odk-preview-links.mjs && node tests/admin-entry-workflows.mjs && node tests/well-water-authoritative-daily-values.mjs && node tests/well-water-page-corrections.mjs && node tests/irrigation-management-corrections.mjs && node tests/motor-runtime-water-pumped.mjs && node tests/tree-view-totals.mjs && node tests/preview-targeted-repair.mjs && node tests/navigation-consistency.mjs && node --experimental-strip-types tests/farm-calendar-homepage.mjs && node tests/farm-map-coconut-trees.mjs && node --experimental-strip-types tests/farm-map-tree-click.mjs && node tests/farm-map-jackfruit-affine-review.mjs && node tests/farm-map-jackfruit-prefix.mjs && node tests/tree-number-autocomplete.mjs && node tests/version-visibility.mjs && node tests/harvest-sync-exact-duplicates.mjs && node tests/beetle-trap-uat-amendment.mjs && node tests/preview-deployment-workflow.mjs && node tests/beetle-trap-cumulative-period-export.mjs && node tests/asset-register-release.mjs && node tests/tree-lifecycle-sapling.mjs && node tests/tree-wise-table-query.mjs && node tests/motor-screenshot-analysis-real-workflow.mjs && node tests/harvest-live-counter.mjs && node tests/preview-state-corrections.mjs && node tests/beetle-trap-water-change.mjs && node tests/fertiliser-master-management.mjs && node tests/page-title-and-corrections.mjs && node tests/motor-runtime-import-ui-state.mjs && node tests/operator-settings-persistence.mjs",
+    "test": "node --experimental-strip-types tests/worker-management.mjs && node --experimental-strip-types tests/worker-management-offline.mjs && node --experimental-strip-types tests/environment-identity.mjs && node tests/weather-underground-api.mjs && node tests/odk-preview-links.mjs && node tests/admin-entry-workflows.mjs && node tests/well-water-authoritative-daily-values.mjs && node tests/well-water-page-corrections.mjs && node tests/irrigation-management-corrections.mjs && node tests/motor-runtime-water-pumped.mjs && node tests/tree-view-totals.mjs && node tests/preview-targeted-repair.mjs && node tests/navigation-consistency.mjs && node --experimental-strip-types tests/farm-calendar-homepage.mjs && node tests/farm-map-coconut-trees.mjs && node --experimental-strip-types tests/farm-map-tree-click.mjs && node tests/farm-map-jackfruit-affine-review.mjs && node tests/farm-map-jackfruit-prefix.mjs && node tests/tree-number-autocomplete.mjs && node tests/version-visibility.mjs && node tests/harvest-sync-exact-duplicates.mjs && node tests/beetle-trap-uat-amendment.mjs && node tests/preview-deployment-workflow.mjs && node tests/beetle-trap-cumulative-period-export.mjs && node tests/asset-register-release.mjs && node tests/tree-lifecycle-sapling.mjs && node tests/tree-wise-table-query.mjs && node tests/motor-screenshot-analysis-real-workflow.mjs && node tests/harvest-live-counter.mjs && node tests/preview-state-corrections.mjs && node tests/beetle-trap-water-change.mjs && node tests/fertiliser-master-management.mjs && node tests/page-title-and-corrections.mjs && node tests/motor-runtime-import-ui-state.mjs && node tests/operator-settings-persistence.mjs && node tests/mobile-app-config.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "mobile:verify": "node tests/mobile-app-config.mjs",
+    "mobile:sync": "cap sync && node scripts/fix-capacitor-ios-spm.mjs",
+    "mobile:icons": "capacitor-assets generate --android --ios",
+    "mobile:android:debug": "cap sync android && node scripts/run-mobile-gradle.mjs assembleDebug",
+    "mobile:android:release": "cap sync android && node scripts/run-mobile-gradle.mjs assembleRelease bundleRelease",
+    "mobile:ios:sync": "cap sync ios && node scripts/fix-capacitor-ios-spm.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@capacitor/android": "8.5.0",
+    "@capacitor/core": "8.5.0",
+    "@capacitor/ios": "8.5.0",
+    "@capacitor/splash-screen": "8.0.2",
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource/merriweather": "5.3.0",
     "@vercel/analytics": "1.6.1",
@@ -29,6 +39,8 @@
     "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.5.0",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/leaflet": "1.9.21",
     "@types/node": "^24",

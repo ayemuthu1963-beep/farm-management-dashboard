@@ -26,6 +26,8 @@ export default defineConfig([
     "node_modules/**",
     "out/**",
     "coverage/**",
+    "android/**",
+    "ios/**",
     "next-env.d.ts",
   ]),
 ])

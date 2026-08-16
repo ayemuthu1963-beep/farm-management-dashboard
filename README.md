@@ -2,6 +2,21 @@
 
 This is a **Next.js (App Router) + React + TypeScript + Tailwind CSS** project.
 
+## Official mobile applications
+
+The Android and iOS Capacitor projects use application identifier
+`com.muthufarms.app` and are currently hard-gated to
+`https://preview.muthufarms.com`. Start with:
+
+- [Mobile architecture and audit](docs/MOBILE_APP_AUDIT.md)
+- [Setup and build guide](docs/MOBILE_APP_BUILD.md)
+- [Security and permissions](docs/MOBILE_APP_SECURITY_AND_PERMISSIONS.md)
+- [Test results](docs/MOBILE_APP_TEST_RESULTS.md)
+- [Release checklist](docs/MOBILE_APP_RELEASE_CHECKLIST.md)
+
+Production targeting, signing, TestFlight upload, store publication, merge, and
+deployment remain approval gates.
+
 The UI was designed in **v0** and is **visually approved**. **The design is frozen.**
 Data is currently **mock JSON only** — there is no backend, API, or database wired up yet.
 

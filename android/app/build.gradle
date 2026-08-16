@@ -1,0 +1,97 @@
+apply plugin: 'com.android.application'
+
+def releaseSigningEnvironment = [
+    storeFile: System.getenv('MFMS_ANDROID_KEYSTORE_PATH'),
+    storePassword: System.getenv('MFMS_ANDROID_KEYSTORE_PASSWORD'),
+    keyAlias: System.getenv('MFMS_ANDROID_KEY_ALIAS'),
+    keyPassword: System.getenv('MFMS_ANDROID_KEY_PASSWORD'),
+]
+def hasReleaseSigning = releaseSigningEnvironment.values().every { it != null && !it.trim().isEmpty() }
+def mobileReleaseEnvironment = (System.getenv('MFMS_MOBILE_RELEASE_ENVIRONMENT') ?: 'preview').trim().toLowerCase()
+def androidVersionCode = (System.getenv('MFMS_ANDROID_VERSION_CODE') ?: '1').trim().toInteger()
+def androidVersionName = (System.getenv('MFMS_ANDROID_VERSION_NAME') ?: '1.0.0').trim()
+
+if (!(mobileReleaseEnvironment in ['preview', 'production'])) {
+    throw new GradleException('MFMS_MOBILE_RELEASE_ENVIRONMENT must be preview or production.')
+}
+if (androidVersionCode < 1) {
+    throw new GradleException('MFMS_ANDROID_VERSION_CODE must be a positive integer.')
+}
+if (androidVersionName.isEmpty()) {
+    throw new GradleException('MFMS_ANDROID_VERSION_NAME must not be empty.')
+}
+
+def mobilePrimaryHost = mobileReleaseEnvironment == 'production' ? 'muthufarms.com' : 'preview.muthufarms.com'
+def mobileSecondaryHost = mobileReleaseEnvironment == 'production' ? 'www.muthufarms.com' : ''
+def asBuildConfigString = { value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+
+android {
+    namespace = "com.muthufarms.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.muthufarms.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode androidVersionCode
+        versionName androidVersionName
+        buildConfigField 'boolean', 'MFMS_PRODUCTION', mobileReleaseEnvironment == 'production' ? 'true' : 'false'
+        buildConfigField 'String', 'MFMS_PRIMARY_HOST', asBuildConfigString(mobilePrimaryHost)
+        buildConfigField 'String', 'MFMS_SECONDARY_HOST', asBuildConfigString(mobileSecondaryHost)
+        buildConfigField 'String', 'MFMS_AUTH_HOST', asBuildConfigString('auth.muthufarms.com')
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseSigningEnvironment.storeFile)
+                storePassword releaseSigningEnvironment.storePassword
+                keyAlias releaseSigningEnvironment.keyAlias
+                keyPassword releaseSigningEnvironment.keyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (hasReleaseSigning) signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
