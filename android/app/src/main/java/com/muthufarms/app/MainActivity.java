@@ -14,10 +14,14 @@ import android.util.Base64;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.WebViewListener;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -38,8 +42,33 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         WebView webView = getBridge().getWebView();
+        configureHttpErrorHandling();
         configureBackNavigation(webView);
         configureDownloads(webView);
+    }
+
+    private void configureHttpErrorHandling() {
+        getBridge().setWebViewClient(new MuthuFarmsWebViewClient(getBridge()));
+    }
+
+    private static final class MuthuFarmsWebViewClient extends BridgeWebViewClient {
+
+        MuthuFarmsWebViewClient(Bridge bridge) {
+            super(bridge);
+        }
+
+        @Override
+        public void onReceivedHttpError(
+            WebView view,
+            WebResourceRequest request,
+            WebResourceResponse errorResponse
+        ) {
+            // Preserve the website's authentication and authorization error pages.
+            // Capacitor's default client redirects every main-frame HTTP error to
+            // server.errorPath, which incorrectly turns a valid 401/403 response
+            // into the offline screen. Genuine network failures still flow through
+            // the inherited onReceivedError implementation and use offline.html.
+        }
     }
 
     private void configureBackNavigation(WebView webView) {

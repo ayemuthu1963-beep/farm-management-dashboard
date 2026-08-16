@@ -21,7 +21,7 @@ Branch: `agent/muthu-farms-mobile-preview`
 | Final Next.js production build | Pass | `pnpm build`, 49 static pages plus dynamic routes |
 | Android debug compilation | Pass | Gradle `assembleDebug` |
 | Android lint and unit tests | Pass | Gradle `lintDebug testDebugUnitTest`; 0 errors, 17 generated-asset warnings |
-| Android unsigned release APK/AAB compilation | Pass, unsigned only | Gradle `assembleRelease bundleRelease`; signing credentials were not supplied |
+| Android signed release APK | Pass | Permanent local key; Gradle `assembleRelease lintRelease testReleaseUnitTest` |
 | iOS simulator compile | Pass | Draft PR CI on GitHub `macos-26`; Xcode compile completed in 2m13s without signing |
 | iOS project sync | Pass | `pnpm mobile:ios:sync` with Swift Package Manager |
 | Authentication source tests | Pass | 11/11 crypto, cookie, session, CSRF, role, and server tests |
@@ -29,7 +29,7 @@ Branch: `agent/muthu-farms-mobile-preview`
 | Android GitHub Actions build | Pass | Draft PR `preview-debug` completed in 2m38s |
 | Existing Preview baseline CI | Pass | Draft PR validation completed in 59s |
 | Vercel pull-request preview | Pass | Preview deployment completed; no Production deployment |
-| TestFlight archive/upload | Correctly skipped | Manual signing input was false and no credentials were supplied |
+| iOS Ad Hoc archive/export | Blocked on Apple signing inputs | Workflow prepared with no TestFlight or store-upload step |
 
 A passing compile is not treated as proof of an authenticated device workflow.
 
@@ -45,8 +45,23 @@ Final Preview debug APK:
   Camera, Coarse Location, and Fine Location plus Android's generated
   non-exported-receiver permission.
 
-The release APK and AAB compiled but were deliberately confirmed unsigned.
-They are not delivered or described as release-ready artifacts.
+Final signed Preview release APK:
+
+- Package/version: `com.muthufarms.app` 1.0.0 (`versionCode=1`)
+- SHA-256: `E3291D2440DD5FAED5E52C8DE7841AF352554711CBC43FFDA19BB049BE975655`
+- APK Signature Scheme v2 verification: pass
+- Certificate SHA-256: `5bd94927e052e01b215d01d7063c3e364b7fab4441ef4a13178c1070b91ca1b1`
+- Signing key: 4096-bit RSA, private material stored outside Git
+- Physical install/launch: pass on Samsung SM-S928B, Android 16/API 36
+- Invalid credentials: pass after the Android WebView HTTP-error correction;
+  the existing `Incorrect username or password.` response remains visible
+- Camera and precise-location permissions remain denied until requested
+
+The first invalid-login attempt revealed that Capacitor's default Android
+`server.errorPath` handling replaced the auth service's valid HTTP 403 page with
+the offline screen. The custom WebView client now preserves HTTP 401/403 pages
+while retaining the offline path for transport failures. This was reproduced,
+fixed, rebuilt with the same signing key, and retested on the physical Samsung.
 
 ## Live endpoint checks completed
 
@@ -117,7 +132,8 @@ this branch at Production.
 - Android API 24 minimum compatibility build, API 36 target emulator, and at
   least one current physical Android device with camera/GPS.
 - iPhone simulator on Xcode 26 plus at least one physical iPhone for camera,
-  photo library, precise location, WKWebView cookie, and TestFlight behavior.
+  photo library, precise location, WKWebView cookie, Ad Hoc installation, and
+  registered-device behavior.
 - Portrait and landscape; compact phone and tablet-sized viewport.
 - Wi-Fi, mobile data, offline launch, mid-submit disconnect, and recovery.
 

@@ -26,39 +26,33 @@ No box in an approval section may be inferred from a successful build.
 - [ ] No credentials, tokens, cookies, API keys, keystores, certificates,
       profiles, or signing passwords in source, logs, artifacts, or PR diff.
 
-## Android signing and Play preparation
+## Android local signing
 
-- [ ] Google Play developer account owner confirms application ID
-      `com.muthufarms.app` is permanently reserved.
-- [ ] Play App Signing policy and a recoverably backed-up upload key are approved.
-- [ ] Signing values are provided through a protected environment only.
-- [ ] Signed release APK and AAB are built from the reviewed commit.
-- [ ] `apksigner verify --verbose --print-certs` passes and the expected
-      certificate fingerprint is recorded outside the repository.
-- [ ] Release AAB is tested through Play internal testing.
-- [ ] Store listing, privacy policy, data-safety answers, screenshots, support
-      contact, and content rating are approved.
+- [x] Permanent local Muthu Farms release key generated outside Git.
+- [x] Signing password protected with Windows current-user DPAPI and restrictive ACLs.
+- [ ] Owner stores a recoverable encrypted offline backup of the key and DPAPI blob.
+- [x] Signed release APK built from the reviewed Preview source.
+- [x] `apksigner verify --verbose --print-certs` passes and certificate SHA-256 is recorded.
+- [x] Signed APK installs and launches on a physical Android 16 Samsung device.
+- [ ] All authenticated Preview acceptance scenarios pass on the signed APK.
 
-## iOS signing and TestFlight preparation
+## iOS Ad Hoc signing
 
-- [ ] Apple Developer/App Store Connect team owns `com.muthufarms.app`.
-- [ ] Distribution certificate, App Store profile, and least-privilege App Store
-      Connect API key are installed as protected environment secrets.
-- [ ] GitHub `mobile-ios-signing` environment has a required owner reviewer.
+- [ ] Apple Developer Team ID is supplied and owns `com.muthufarms.app`.
+- [ ] Each Muthu Farms iPhone/iPad name and UDID is registered with the Apple team.
+- [ ] Apple Distribution certificate and device-containing Ad Hoc provisioning
+      profile are installed as protected environment secrets.
+- [ ] GitHub `mobile-ios-ad-hoc` environment has a required owner reviewer.
 - [ ] iOS simulator compile passes on Xcode 26.
-- [ ] Signed archive validates and the expected team/bundle/entitlements are recorded.
-- [ ] TestFlight upload is manually approved and processed successfully.
-- [ ] TestFlight build completes the physical-iPhone matrix.
-- [ ] App privacy answers, privacy policy, support URL, screenshots, age rating,
-      export compliance, and review account/instructions are approved.
+- [ ] Ad Hoc archive/export validates the Team ID, bundle ID, certificate,
+      entitlements, embedded registered-device profile, and IPA signature.
+- [ ] IPA installs and launches on every registered physical Apple test device.
+- [ ] Physical-iPhone/iPad Preview acceptance matrix passes.
 
-## Architecture and store-review gate
+## Architecture and local-release gate
 
 - [ ] Owner reviews Capacitor's warning that `server.url`/`allowNavigation` are
       not intended for production.
-- [ ] Apple minimum-functionality review risk for a remote website wrapper is
-      resolved with documented native value or an approved local-shell/API design.
-- [ ] Google Play webview/content and minimum-functionality policy review is complete.
 - [ ] Cookie, CSRF, SameSite, Origin, CORS, session refresh, logout, and expiry
       are reverified in the signed release candidates.
 - [ ] Security review confirms backend role enforcement for every protected route.
@@ -68,9 +62,7 @@ No box in an approval section may be inferred from a successful build.
 - [ ] Approval to point any release candidate at Production.
 - [ ] Approval to make any Production deployment or backend/auth change.
 - [ ] Approval to merge the pull request.
-- [ ] Approval to upload to TestFlight or Play internal testing.
-- [ ] Approval to submit to App Store review or Google Play review.
-- [ ] Approval to publish either store release.
+- [x] Store and TestFlight publication prohibited for this local-only release.
 
 Until every applicable gate is complete, distribute only the clearly labelled
-Preview debug/test build.
+Preview local test build to approved devices.

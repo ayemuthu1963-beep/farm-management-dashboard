@@ -64,8 +64,11 @@ pnpm mobile:android:release
 Outputs are under `android/app/build/outputs/apk/release/` and
 `android/app/build/outputs/bundle/release/`. Without all four variables, Gradle
 may compile unsigned release artifacts only; those are not publishable builds.
-Use a permanent, backed-up Play App Signing upload key when the account owner
-provides it.
+For local-only distribution, use the permanent Muthu Farms release key. The
+current key is stored outside the repository with a random password protected by
+Windows current-user DPAPI and a restrictive filesystem ACL. Back up the
+keystore and its DPAPI blob together to owner-controlled encrypted storage; an
+APK signed with another key cannot update an installed copy.
 
 ## iOS project on a Mac
 
@@ -84,30 +87,30 @@ repository-relative path. Always use this script instead of invoking
 `cap sync ios` directly, especially when the project was prepared on Windows.
 
 In Xcode, select the App target, choose the owner's Apple team, confirm bundle
-ID `com.muthufarms.app`, connect a device or select a simulator, and build. For
-TestFlight, create an Archive, validate it, and distribute to App Store Connect.
-The local Windows computer cannot compile, sign, or validate an iOS archive.
+ID `com.muthufarms.app`, and build. For local-only device distribution, register
+each iPhone/iPad UDID, create an Ad Hoc provisioning profile for the bundle ID,
+archive with the Apple Distribution certificate, and export an Ad Hoc IPA. Do
+not select App Store Connect or TestFlight. The local Windows computer cannot
+compile, sign, or validate an iOS archive.
 
 ## Secure GitHub Actions iOS build
 
 `.github/workflows/mobile-ios.yml` always compiles the Preview project without
-signing on pull requests. A manually dispatched run can archive and upload to
-TestFlight only through the protected `mobile-ios-signing` environment and these
-repository/environment secrets:
+signing on pull requests. A manually dispatched run can create a registered-
+device Ad Hoc IPA only through the protected `mobile-ios-ad-hoc` environment and
+these repository/environment secrets:
 
 - `IOS_DISTRIBUTION_CERTIFICATE_BASE64`
 - `IOS_CERTIFICATE_PASSWORD`
-- `IOS_PROVISIONING_PROFILE_BASE64`
-- `IOS_KEYCHAIN_PASSWORD`
-- `IOS_PROVISIONING_PROFILE_NAME`
+- `IOS_AD_HOC_PROVISIONING_PROFILE_BASE64`
 - `APPLE_TEAM_ID`
-- `APP_STORE_CONNECT_API_KEY_ID`
-- `APP_STORE_CONNECT_ISSUER_ID`
-- `APP_STORE_CONNECT_API_KEY_BASE64`
 
 Use a required reviewer on the protected environment. The workflow creates a
-temporary keychain and removes it and the API key after the job. Certificates,
-profiles, keys, and passwords must never be committed or printed.
+randomly protected temporary keychain, validates the profile's Team ID, bundle
+ID, and non-empty registered-device list, verifies the exported IPA, retains the
+private artifact for one day, and removes signing material after the job. It has
+no App Store Connect or upload step. Certificates, profiles, keys, and passwords
+must never be committed or printed.
 
 ## Icons and splash assets
 
@@ -132,4 +135,4 @@ $env:ALLOW_PRODUCTION_MOBILE_TARGET = 'true'
 ```
 
 This is an intentional hard stop. Do not set it for Preview testing, pull
-requests, or TestFlight preparation without the owner's direct approval.
+requests, or Ad Hoc signing preparation without the owner's direct approval.

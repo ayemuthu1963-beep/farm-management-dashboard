@@ -66,4 +66,7 @@ Android signing reads only process environment variables. iOS CI reads only
 protected GitHub secrets and imports them into a temporary macOS keychain. All
 common keystore, certificate, provisioning profile, API key, APK, AAB, and IPA
 files are ignored by Git. A final release audit must still inspect the Git diff
-and generated package before upload.
+and generated package before distribution. The iOS workflow exports only an Ad
+Hoc IPA whose embedded provisioning profile contains registered devices; it has
+no TestFlight, App Store Connect, or store-upload operation. The Android release
+key password is stored only as a Windows current-user DPAPI blob outside Git.
