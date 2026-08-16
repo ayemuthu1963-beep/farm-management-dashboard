@@ -22,10 +22,14 @@ Branch: `agent/muthu-farms-mobile-preview`
 | Android debug compilation | Pass | Gradle `assembleDebug` |
 | Android lint and unit tests | Pass | Gradle `lintDebug testDebugUnitTest`; 0 errors, 17 generated-asset warnings |
 | Android unsigned release APK/AAB compilation | Pass, unsigned only | Gradle `assembleRelease bundleRelease`; signing credentials were not supplied |
-| iOS simulator compile | Not available on Windows | GitHub macOS workflow added; first PR run is a release gate |
+| iOS simulator compile | Pass | Draft PR CI on GitHub `macos-26`; Xcode compile completed in 2m13s without signing |
 | iOS project sync | Pass | `pnpm mobile:ios:sync` with Swift Package Manager |
 | Authentication source tests | Pass | 11/11 crypto, cookie, session, CSRF, role, and server tests |
 | Backend source syntax audit | Pass | 32 Python source files parsed; this recovery repository has no test suite |
+| Android GitHub Actions build | Pass | Draft PR `preview-debug` completed in 2m38s |
+| Existing Preview baseline CI | Pass | Draft PR validation completed in 59s |
+| Vercel pull-request preview | Pass | Preview deployment completed; no Production deployment |
+| TestFlight archive/upload | Correctly skipped | Manual signing input was false and no credentials were supplied |
 
 A passing compile is not treated as proof of an authenticated device workflow.
 
