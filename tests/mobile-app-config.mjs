@@ -1,0 +1,53 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+
+function read(path) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+}
+
+const capacitor = read("capacitor.config.ts")
+const androidManifest = read("android/app/src/main/AndroidManifest.xml")
+const androidGradle = read("android/app/build.gradle")
+const androidActivity = read("android/app/src/main/java/com/muthufarms/app/MainActivity.java")
+const iosInfo = read("ios/App/App/Info.plist")
+const iosProject = read("ios/App/App.xcodeproj/project.pbxproj")
+const iosScene = read("ios/App/App/SceneDelegate.swift")
+const iosPackage = read("ios/App/CapApp-SPM/Package.swift")
+const bridge = read("mobile-web/mfms-mobile-download-bridge.js")
+
+assert.match(capacitor, /appId:\s*"com\.muthufarms\.app"/)
+assert.match(capacitor, /appName:\s*"Muthu Farms"/)
+assert.match(capacitor, /const PREVIEW_URL = "https:\/\/preview\.muthufarms\.com"/)
+assert.match(capacitor, /ALLOW_PRODUCTION_MOBILE_TARGET !== "true"/)
+assert.match(capacitor, /cleartext:\s*false/)
+assert.match(capacitor, /"auth\.muthufarms\.com"/)
+
+assert.match(androidManifest, /android:allowBackup="false"/)
+assert.match(androidManifest, /android:usesCleartextTraffic="false"/)
+assert.match(androidManifest, /android\.permission\.CAMERA/)
+assert.match(androidManifest, /android\.permission\.ACCESS_FINE_LOCATION/)
+assert.doesNotMatch(androidManifest, /READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE/)
+assert.match(androidGradle, /applicationId "com\.muthufarms\.app"/)
+assert.match(androidGradle, /MFMS_ANDROID_KEYSTORE_PATH/)
+assert.doesNotMatch(androidGradle, /storePassword\s+["'][^"']+["']/)
+assert.match(androidActivity, /OnBackPressedCallback/)
+assert.match(androidActivity, /CookieManager\.getInstance\(\)\.getCookie/)
+assert.match(androidActivity, /MAX_DOWNLOAD_BYTES = 25 \* 1024 \* 1024/)
+assert.match(androidActivity, /"preview\.muthufarms\.com"\.equalsIgnoreCase/)
+
+assert.match(iosProject, /PRODUCT_BUNDLE_IDENTIFIER = com\.muthufarms\.app/)
+assert.match(iosInfo, /NSCameraUsageDescription/)
+assert.match(iosInfo, /NSLocationWhenInUseUsageDescription/)
+assert.match(iosInfo, /NSPhotoLibraryUsageDescription/)
+assert.match(iosScene, /allowsBackForwardNavigationGestures = true/)
+assert.match(iosScene, /maxDownloadBytes = 25 \* 1024 \* 1024/)
+assert.match(iosScene, /"preview\.muthufarms\.com"/)
+assert.match(iosPackage, /path: "\.\.\/\.\.\/\.\.\/node_modules\/@capacitor\/splash-screen"/)
+assert.doesNotMatch(iosPackage, /path: "[^"\n]*\\/)
+
+assert.match(bridge, /credentials:\s*"include"/)
+assert.match(bridge, /MAX_DOWNLOAD_BYTES = 25 \* 1024 \* 1024/)
+assert.match(bridge, /url\.origin === window\.location\.origin/)
+assert.doesNotMatch(bridge, /localStorage|sessionStorage|password/)
+
+console.log("Mobile application configuration assertions passed.")

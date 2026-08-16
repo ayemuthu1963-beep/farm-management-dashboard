@@ -1,0 +1,162 @@
+name: Mobile iOS Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      sign_and_upload:
+        description: Archive and upload the Preview build to TestFlight using protected secrets
+        required: true
+        default: false
+        type: boolean
+  pull_request:
+    paths:
+      - "ios/**"
+      - "assets/**"
+      - "mobile-web/**"
+      - "scripts/fix-capacitor-ios-spm.mjs"
+      - "tests/mobile-app-config.mjs"
+      - "capacitor.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-ios.yml"
+
+permissions:
+  contents: read
+
+env:
+  MOBILE_WEB_URL: https://preview.muthufarms.com
+
+jobs:
+  simulator-build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm mobile:verify
+      - run: pnpm mobile:ios:sync
+      - name: Compile for iOS Simulator without signing
+        run: >-
+          xcodebuild
+          -project ios/App/App.xcodeproj
+          -scheme App
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/MuthuFarmsDerivedData"
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+  testflight:
+    if: github.event_name == 'workflow_dispatch' && inputs.sign_and_upload
+    needs: simulator-build
+    runs-on: macos-26
+    timeout-minutes: 45
+    environment: mobile-ios-signing
+    env:
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm mobile:verify
+      - run: pnpm mobile:ios:sync
+      - name: Install ephemeral signing material
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            IOS_DISTRIBUTION_CERTIFICATE_BASE64 IOS_CERTIFICATE_PASSWORD
+            IOS_PROVISIONING_PROFILE_BASE64 IOS_KEYCHAIN_PASSWORD
+            IOS_PROVISIONING_PROFILE_NAME APPLE_TEAM_ID
+            APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_ISSUER_ID
+            APP_STORE_CONNECT_API_KEY_BASE64
+          )
+          for variable in "${required[@]}"; do
+            test -n "${!variable:-}" || { echo "Required protected secret is missing: $variable" >&2; exit 2; }
+          done
+          certificate="$RUNNER_TEMP/muthu-farms-distribution.p12"
+          profile="$RUNNER_TEMP/muthu-farms.mobileprovision"
+          keychain="$RUNNER_TEMP/muthu-farms-signing.keychain-db"
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode > "$certificate"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile"
+          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security list-keychain -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$IOS_KEYCHAIN_PASSWORD" "$keychain"
+          profile_uuid="$(security cms -D -i "$profile" | plutil -extract UUID raw -)"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
+      - name: Archive Preview application
+        run: >-
+          xcodebuild
+          -project ios/App/App.xcodeproj
+          -scheme App
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -archivePath "$RUNNER_TEMP/MuthuFarms.xcarchive"
+          DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+          CODE_SIGN_STYLE=Manual
+          PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISIONING_PROFILE_NAME"
+          archive
+      - name: Export IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          options="$RUNNER_TEMP/ExportOptions.plist"
+          plutil -create xml1 "$options"
+          plutil -insert method -string app-store-connect "$options"
+          plutil -insert destination -string export "$options"
+          plutil -insert signingStyle -string manual "$options"
+          plutil -insert teamID -string "$APPLE_TEAM_ID" "$options"
+          plutil -insert provisioningProfiles -json "{\"com.muthufarms.app\":\"$IOS_PROVISIONING_PROFILE_NAME\"}" "$options"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/MuthuFarms.xcarchive" \
+            -exportPath "$RUNNER_TEMP/MuthuFarmsExport" \
+            -exportOptionsPlist "$options"
+      - name: Upload Preview build to TestFlight
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_directory="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$key_directory"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$key_directory/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8"
+          ipa="$(find "$RUNNER_TEMP/MuthuFarmsExport" -maxdepth 1 -name '*.ipa' -print -quit)"
+          test -n "$ipa"
+          xcrun altool --upload-app -f "$ipa" \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muthu-farms-ios-preview
+          path: ${{ runner.temp }}/MuthuFarmsExport/*.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove ephemeral signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/muthu-farms-signing.keychain-db" 2>/dev/null || true
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8"

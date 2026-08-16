@@ -1,0 +1,52 @@
+name: Mobile Android Preview
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "android/**"
+      - "assets/**"
+      - "mobile-web/**"
+      - "scripts/run-mobile-gradle.mjs"
+      - "tests/mobile-app-config.mjs"
+      - "capacitor.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-android.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  preview-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MOBILE_WEB_URL: https://preview.muthufarms.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned Android SDK components
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm mobile:verify
+      - run: pnpm exec cap sync android
+      - run: chmod +x android/gradlew
+      - run: node scripts/run-mobile-gradle.mjs assembleDebug lintDebug testDebugUnitTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muthu-farms-android-preview-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
