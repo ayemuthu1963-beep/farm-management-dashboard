@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
@@ -31,11 +32,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MainActivity extends BridgeActivity {
 
     private static final int MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
     private static final int MAX_BASE64_CHARACTERS = 36 * 1024 * 1024;
+    private static final String ENDPOINT_AUDIT_TAG = "MFMS_ENDPOINT_AUDIT";
+    private static final Set<String> AUDITED_ORIGINS = ConcurrentHashMap.newKeySet();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,16 +63,45 @@ public class MainActivity extends BridgeActivity {
         }
 
         @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            auditEndpoint(request.getUrl());
+            return super.shouldInterceptRequest(view, request);
+        }
+
+        @Override
         public void onReceivedHttpError(
             WebView view,
             WebResourceRequest request,
             WebResourceResponse errorResponse
         ) {
+            Uri uri = request.getUrl();
+            Log.w(
+                ENDPOINT_AUDIT_TAG,
+                "http_status=" + errorResponse.getStatusCode()
+                    + " scheme=" + safeAuditValue(uri.getScheme())
+                    + " host=" + safeAuditValue(uri.getHost())
+                    + " main_frame=" + request.isForMainFrame()
+            );
             // Preserve the website's authentication and authorization error pages.
             // Capacitor's default client redirects every main-frame HTTP error to
             // server.errorPath, which incorrectly turns a valid 401/403 response
             // into the offline screen. Genuine network failures still flow through
             // the inherited onReceivedError implementation and use offline.html.
+        }
+
+        private static void auditEndpoint(Uri uri) {
+            if (uri == null) return;
+            String scheme = safeAuditValue(uri.getScheme()).toLowerCase(Locale.ROOT);
+            String host = safeAuditValue(uri.getHost()).toLowerCase(Locale.ROOT);
+            if (host.isEmpty()) return;
+            String origin = scheme + "://" + host;
+            if (AUDITED_ORIGINS.add(origin)) {
+                Log.i(ENDPOINT_AUDIT_TAG, "scheme=" + scheme + " host=" + host);
+            }
+        }
+
+        private static String safeAuditValue(String value) {
+            return value == null ? "" : value.replaceAll("[^A-Za-z0-9.:-]", "");
         }
     }
 
@@ -157,9 +191,9 @@ public class MainActivity extends BridgeActivity {
         if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
         String host = uri.getHost();
         return (
-            "preview.muthufarms.com".equalsIgnoreCase(host) ||
-            "muthufarms.com".equalsIgnoreCase(host) ||
-            "www.muthufarms.com".equalsIgnoreCase(host)
+            BuildConfig.MFMS_PRIMARY_HOST.equalsIgnoreCase(host) ||
+            (!BuildConfig.MFMS_SECONDARY_HOST.isEmpty()
+                && BuildConfig.MFMS_SECONDARY_HOST.equalsIgnoreCase(host))
         );
     }
 

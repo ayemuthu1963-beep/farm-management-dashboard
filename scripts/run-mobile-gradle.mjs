@@ -4,11 +4,14 @@ import { spawnSync } from "node:child_process"
 import process from "node:process"
 
 const supportedTasks = new Set([
+  "clean",
   "assembleDebug",
   "assembleRelease",
   "bundleRelease",
   "lintDebug",
+  "lintRelease",
   "testDebugUnitTest",
+  "testReleaseUnitTest",
 ])
 const tasks = process.argv.slice(2)
 
