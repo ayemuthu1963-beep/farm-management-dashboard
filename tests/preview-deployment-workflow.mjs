@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the admin-only irrigation pipeline editor to the existing Farm Map",
+  "Allow expired fertiliser stock in Outgoing Stock and Stock Adjustment",
 )
-assert.equal(manifest.base_commit, "fd8108bbd5195ed8039fd2dea47d3d9ea6b834b1")
+assert.equal(manifest.base_commit, "9842f21a4bb04ff4f1750790392dbfee0dc941d3")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,18 +280,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/irrigation-pipeline/[[...path]]/route.ts",
-  "app/farm-map/page.tsx",
-  "components/maps/farm-map-client.tsx",
-  "components/maps/irrigation-pipeline-editor.tsx",
-  "deploy/approved-change-scope.txt",
+  "app/fertiliser-management/page.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/irrigation-pipeline-api.ts",
-  "lib/irrigation-pipeline-geometry.ts",
-  "lib/irrigation-pipeline-signing.ts",
-  "lib/irrigation-pipeline-types.ts",
-  "package.json",
-  "tests/irrigation-pipeline-editor.mjs",
+  "tests/fertiliser-master-management.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
