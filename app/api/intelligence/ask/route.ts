@@ -9,18 +9,38 @@ const MAX_QUESTION_CHARACTERS = 500
 const MAX_REQUEST_BYTES = 4096
 const PROXY_TIMEOUT_MS = 20_000
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
+const TOP10_ROW_FIELDS = ["average_nuts_per_harvested_record", "harvest_records", "plot", "quality_flags", "rank", "total_bunches", "total_nuts", "tree_no"]
 
 function safeError(status: number, message: string) {
   return NextResponse.json({
     answer: "", status: "failed_closed", data_as_of: null, period: null, cycles: [],
-    denominator: null, quality_flags: [], blocked_reason: message,
+    denominator: null, quality_flags: [], table_rows: [], blocked_reason: message,
     metabase_call_made: false, provider_call_made: false,
   }, { status, headers: NO_STORE_HEADERS })
 }
 
+function isSafeTableRow(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const row = value as Record<string, unknown>
+  if (JSON.stringify(Object.keys(row).toSorted()) !== JSON.stringify(TOP10_ROW_FIELDS)) return false
+  return typeof row.rank === "number"
+    && Number.isInteger(row.rank)
+    && typeof row.tree_no === "string"
+    && typeof row.plot === "string"
+    && typeof row.total_nuts === "number"
+    && Number.isInteger(row.total_nuts)
+    && typeof row.total_bunches === "number"
+    && Number.isInteger(row.total_bunches)
+    && typeof row.harvest_records === "number"
+    && Number.isInteger(row.harvest_records)
+    && typeof row.average_nuts_per_harvested_record === "string"
+    && Array.isArray(row.quality_flags)
+    && row.quality_flags.every((flag) => typeof flag === "string")
+}
+
 function isSafeResponse(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
-  const expected = ["answer", "blocked_reason", "cycles", "data_as_of", "denominator", "metabase_call_made", "period", "provider_call_made", "quality_flags", "status"]
+  const expected = ["answer", "blocked_reason", "cycles", "data_as_of", "denominator", "metabase_call_made", "period", "provider_call_made", "quality_flags", "status", "table_rows"]
   if (JSON.stringify(Object.keys(value).toSorted()) !== JSON.stringify(expected)) return false
   const response = value as Record<string, unknown>
   return typeof response.answer === "string"
@@ -32,6 +52,9 @@ function isSafeResponse(value: unknown): value is Record<string, unknown> {
     && (typeof response.denominator === "string" || response.denominator === null)
     && Array.isArray(response.quality_flags)
     && response.quality_flags.every((flag) => typeof flag === "string")
+    && Array.isArray(response.table_rows)
+    && response.table_rows.length <= 10
+    && response.table_rows.every(isSafeTableRow)
     && (typeof response.blocked_reason === "string" || response.blocked_reason === null)
     && typeof response.metabase_call_made === "boolean"
     && typeof response.provider_call_made === "boolean"

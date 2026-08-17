@@ -3,15 +3,22 @@
 import { FormEvent, useState } from "react"
 import { AlertTriangle, CheckCircle2, LoaderCircle, Send } from "lucide-react"
 
+type TopTreeRow = {
+  rank: number; tree_no: string; plot: string; total_nuts: number; total_bunches: number;
+  harvest_records: number; average_nuts_per_harvested_record: string; quality_flags: string[];
+}
+
 type IntelligenceResponse = {
   answer: string; status: string; data_as_of: string | null; period: string | null;
   cycles: Array<string | number>; denominator: string | null; quality_flags: string[];
+  table_rows: TopTreeRow[];
   blocked_reason: string | null; metabase_call_made: boolean; provider_call_made: boolean;
 }
 
 const examples = [
   "Average coconuts per harvested tree in the latest 10 completed harvest cycles",
   "Compare Plot 1 and Plot 2 for the latest 10 completed harvest cycles",
+  "Top 10 coconut producing trees",
   "Show Tree 1112 harvest history",
 ]
 
@@ -31,7 +38,7 @@ export function IntelligenceClient() {
       })
       setResult((await response.json()) as IntelligenceResponse)
     } catch {
-      setResult({ answer: "", status: "failed_closed", data_as_of: null, period: null, cycles: [], denominator: null, quality_flags: [], blocked_reason: "MFMS Intelligence is temporarily unavailable.", metabase_call_made: false, provider_call_made: false })
+      setResult({ answer: "", status: "failed_closed", data_as_of: null, period: null, cycles: [], denominator: null, quality_flags: [], table_rows: [], blocked_reason: "MFMS Intelligence is temporarily unavailable.", metabase_call_made: false, provider_call_made: false })
     } finally { setLoading(false) }
   }
 
@@ -55,6 +62,33 @@ export function IntelligenceClient() {
     {result && <section aria-live="polite" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <div className="flex items-center gap-2">{answered ? <CheckCircle2 className="size-5 text-emerald-600" /> : <AlertTriangle className="size-5 text-amber-600" />}<h2 className="font-bold">{answered ? "Verified answer" : "Blocked or unavailable"}</h2></div>
       <p className="mt-4 whitespace-pre-wrap text-sm leading-6">{result.answer || result.blocked_reason}</p>
+      {result.table_rows.length > 0 && <div className="mt-5 overflow-x-auto rounded-xl border border-border">
+        <table className="min-w-[780px] w-full border-collapse text-left text-sm">
+          <caption className="sr-only">Top 10 coconut-producing trees in the latest 10 completed harvest cycles</caption>
+          <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-3 py-3 font-semibold">Rank</th>
+              <th className="px-3 py-3 font-semibold">Tree No</th>
+              <th className="px-3 py-3 font-semibold">Plot</th>
+              <th className="px-3 py-3 text-right font-semibold">Total Nuts</th>
+              <th className="px-3 py-3 text-right font-semibold">Total Bunches</th>
+              <th className="px-3 py-3 text-right font-semibold">Harvest Records</th>
+              <th className="px-3 py-3 text-right font-semibold">Avg Nuts / Harvested Record</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {result.table_rows.map((row) => <tr key={`${row.rank}-${row.tree_no}`} className="bg-background align-top">
+              <td className="px-3 py-3 font-semibold tabular-nums">{row.rank}</td>
+              <td className="px-3 py-3 font-mono font-semibold">{row.tree_no}{row.quality_flags.length > 0 && <div className="mt-1 max-w-64 text-[11px] font-sans font-normal text-amber-700">{row.quality_flags.join(", ")}</div>}</td>
+              <td className="px-3 py-3 whitespace-nowrap">{row.plot}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{row.total_nuts.toLocaleString()}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{row.total_bunches.toLocaleString()}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{row.harvest_records.toLocaleString()}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{row.average_nuts_per_harvested_record}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>}
       <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
         {result.data_as_of && <div><dt className="font-semibold">Data as of</dt><dd>{result.data_as_of}</dd></div>}
         {result.period && <div><dt className="font-semibold">Period</dt><dd>{result.period}</dd></div>}
