@@ -7,7 +7,7 @@ import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContai
 type TableCell = string | number | null | string[]
 type TableColumn = { key: string; label: string; format: "integer" | "text" | "date" | "decimal6" | "flags" }
 type ResultTable = { title: string; columns: TableColumn[]; rows: Array<Record<string, TableCell>> }
-type ResultChart = { type: "line" | "bar"; x_field: string; y_fields: string[]; series_field: "plot" | null; rows: Array<Record<string, string | number | null>> }
+type ResultChart = { type: "line" | "bar"; x_field: string; y_fields: string[]; series_field: "plot" | "well" | null; rows: Array<Record<string, string | number | null>> }
 
 type IntelligenceResponse = {
   answer: string; status: string; data_as_of: string; period: string | null;
@@ -24,6 +24,9 @@ const examples = [
   "Show production trend for the last 10 harvests",
   "How is Tree 351 performing?",
   "Compare Tree 351 and Tree 281",
+  "Show irrigation by zone for the latest 7 irrigation dates",
+  "How much water was pumped from South Well on 16 August?",
+  "Compare North and South Well readings",
 ]
 
 const EMPTY_FAILURE: IntelligenceResponse = {
@@ -62,7 +65,7 @@ function GovernedChart({ chart }: { chart: ResultChart }) {
   const colors = ["#15803d", "#2563eb", "#b45309"]
   return <div className="mt-5 rounded-xl border border-border p-3">
     <h3 className="mb-3 text-sm font-semibold">Verified chart</h3>
-    <div className="h-72 w-full" aria-label="Deterministic harvest result chart">
+    <div className="h-72 w-full" aria-label="Deterministic verified analytics result chart">
       <ResponsiveContainer width="100%" height="100%">
         {chart.type === "line" ? <LineChart data={rows} margin={{ top: 8, right: 18, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey={chart.x_field} /><YAxis /><Tooltip /><Legend />
@@ -97,8 +100,8 @@ export function IntelligenceClient() {
   const answered = result?.status === "ANSWERED"
   return <div className="space-y-5">
     <form onSubmit={ask} className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
-      <label htmlFor="intelligence-question" className="mb-2 block text-sm font-semibold">Ask a verified harvest analytics question</label>
-      <textarea id="intelligence-question" value={question} onChange={(event) => setQuestion(event.target.value.slice(0, 500))} maxLength={500} rows={4} className="w-full resize-y rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none ring-primary/30 focus:ring-4" placeholder="Ask about completed harvest cycles, plots, observed trees, rankings, or trends" />
+      <label htmlFor="intelligence-question" className="mb-2 block text-sm font-semibold">Ask a verified farm analytics question</label>
+      <textarea id="intelligence-question" value={question} onChange={(event) => setQuestion(event.target.value.slice(0, 500))} maxLength={500} rows={4} className="w-full resize-y rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none ring-primary/30 focus:ring-4" placeholder="Ask about harvest, irrigation runtime and delivered water, or North/South Well readings" />
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">{question.length}/500 characters</span>
         <button type="submit" disabled={loading || !question.trim()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
@@ -110,7 +113,7 @@ export function IntelligenceClient() {
     <section aria-label="Example questions" className="rounded-2xl border border-border bg-card p-4 sm:p-6">
       <h2 className="text-sm font-semibold">Try a verified question</h2>
       <div className="mt-3 flex flex-wrap gap-2">{examples.map((example) => <button key={example} type="button" onClick={() => setQuestion(example)} className="rounded-full border border-border bg-muted px-3 py-2 text-left text-xs hover:bg-primary/10">{example}</button>)}</div>
-      <p className="mt-3 text-xs text-muted-foreground">Eligible-tree, missed-harvest, revenue, classification, previous-10, forecasting, causal irrigation, and beetle recommendation metrics remain blocked.</p>
+      <p className="mt-3 text-xs text-muted-foreground">Eligible-tree, per-tree irrigation, missed-harvest, revenue, recharge, sufficiency, forecasting, causal, and recommendation metrics remain blocked.</p>
     </section>
 
     {result && <section aria-live="polite" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">

@@ -10,8 +10,11 @@ const MAX_REQUEST_BYTES = 4096
 const PROXY_TIMEOUT_MS = 20_000
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
 const RESPONSE_FIELDS = ["analysis_plan", "answer", "blocked_reason", "chart", "cycles", "data_as_of", "data_source_status", "denominator", "metabase_call_made", "period", "period_end", "period_start", "provider_call_made", "quality_flags", "status", "table"]
-const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags"])
+const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness"])
 const METRICS = new Set(["total_nuts", "total_bunches", "harvested_tree_cycle_records", "distinct_observed_harvested_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch"])
+const IRRIGATION_METRICS = new Set(["runtime_minutes", "estimated_delivered_litres"])
+const WELL_WATER_METRICS = new Set(["calibrated_litres"])
+const PERIOD_KINDS = new Set(["latest_irrigation_dates", "last_calendar_days", "relative_day", "current_month", "previous_month", "date_range"])
 
 function safeError(status: number, message: string) {
   return NextResponse.json({
@@ -32,7 +35,31 @@ function hasExactFields(value: Record<string, unknown>, fields: string[]) {
 
 function isSafePlan(value: unknown) {
   if (value === null) return true
-  if (!isRecord(value) || !hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "series", "chart_type"])) return false
+  if (!isRecord(value)) return false
+  if (value.domain === "irrigation" || value.domain === "well_water") {
+    if (!hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "chart_type"])) return false
+    const filters = value.filters; const period = value.period; const sort = value.sort
+    if (!isRecord(filters) || !isRecord(period) || !hasExactFields(period, ["kind", "count", "start", "end"]) || !isRecord(sort) || !hasExactFields(sort, ["direction"])) return false
+    if (typeof period.kind !== "string" || !PERIOD_KINDS.has(period.kind)) return false
+    if (period.count !== null && !(typeof period.count === "number" && Number.isInteger(period.count) && period.count >= -1 && period.count <= 31)) return false
+    if (![period.start, period.end].every((item) => item === null || (typeof item === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item)))) return false
+    if (sort.direction !== "asc" && sort.direction !== "desc") return false
+    if (value.limit !== null && !(typeof value.limit === "number" && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 50)) return false
+    if (value.chart_type !== null && value.chart_type !== "line" && value.chart_type !== "bar") return false
+    if (value.domain === "irrigation") return typeof value.metric === "string" && IRRIGATION_METRICS.has(value.metric)
+      && typeof value.group_by === "string" && ["none", "zone", "motor", "well", "date"].includes(value.group_by)
+      && hasExactFields(filters, ["zones", "motors", "wells"])
+      && Array.isArray(filters.zones) && filters.zones.length <= 6 && filters.zones.every((item) => typeof item === "string" && ["P1W", "P1E", "P2W", "P2E", "JF", "NM"].includes(item))
+      && Array.isArray(filters.motors) && filters.motors.length <= 3 && filters.motors.every((item) => typeof item === "string" && ["M1", "M2", "M3"].includes(item))
+      && Array.isArray(filters.wells) && filters.wells.length <= 2 && filters.wells.every((item) => typeof item === "string" && ["North Well", "South Well"].includes(item))
+    return typeof value.metric === "string" && WELL_WATER_METRICS.has(value.metric)
+      && typeof value.group_by === "string" && ["well", "date_well"].includes(value.group_by)
+      && hasExactFields(filters, ["wells", "reading_period", "quality_filter"])
+      && Array.isArray(filters.wells) && filters.wells.length <= 2 && filters.wells.every((item) => typeof item === "string" && ["North Well", "South Well"].includes(item))
+      && [null, "Morning", "Evening"].includes(filters.reading_period as null | string)
+      && [null, "MISSING_MORNING_READING", "MISSING_EVENING_READING", "DUPLICATE_PERIOD", "CAPACITY_CONFLICT"].includes(filters.quality_filter as null | string)
+  }
+  if (!hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "series", "chart_type"])) return false
   const filters = value.filters; const period = value.period; const sort = value.sort
   if (!isRecord(filters) || !hasExactFields(filters, ["plots", "tree_numbers"]) || !isRecord(period) || !hasExactFields(period, ["kind", "count", "cycles"]) || !isRecord(sort) || !hasExactFields(sort, ["metric", "direction"])) return false
   return value.domain === "harvest"
@@ -50,7 +77,7 @@ function isSafePlan(value: unknown) {
 }
 
 function isSafeCell(value: unknown, format: string) {
-  if (value === null) return format === "decimal6"
+  if (value === null) return format === "decimal6" || format === "integer"
   if (format === "integer") return typeof value === "number" && Number.isInteger(value) && value >= 0
   if (format === "text") return typeof value === "string" && value.length <= 128
   if (format === "date") return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -75,7 +102,7 @@ function isSafeChart(value: unknown, table: unknown) {
   if (!isRecord(value) || !hasExactFields(value, ["type", "x_field", "y_fields", "series_field", "rows"]) || !isRecord(table)) return false
   const tableRows = table.rows
   if (!Array.isArray(tableRows)) return false
-  if (!["line", "bar"].includes(String(value.type)) || typeof value.x_field !== "string" || !TABLE_FIELDS.has(value.x_field) || !Array.isArray(value.y_fields) || value.y_fields.length < 1 || value.y_fields.length > 3 || !value.y_fields.every((field) => typeof field === "string" && TABLE_FIELDS.has(field)) || (value.series_field !== null && value.series_field !== "plot") || !Array.isArray(value.rows) || value.rows.length > 50 || value.rows.length !== tableRows.length) return false
+  if (!["line", "bar"].includes(String(value.type)) || typeof value.x_field !== "string" || !TABLE_FIELDS.has(value.x_field) || !Array.isArray(value.y_fields) || value.y_fields.length < 1 || value.y_fields.length > 3 || !value.y_fields.every((field) => typeof field === "string" && TABLE_FIELDS.has(field)) || (value.series_field !== null && value.series_field !== "plot" && value.series_field !== "well") || !Array.isArray(value.rows) || value.rows.length > 50 || value.rows.length !== tableRows.length) return false
   const keys = [value.x_field, ...value.y_fields] as string[]
   if (value.series_field && !keys.includes(value.series_field)) keys.push(value.series_field)
   return value.rows.every((rawRow, index) => isRecord(rawRow) && isRecord(tableRows[index]) && JSON.stringify(Object.keys(rawRow)) === JSON.stringify(keys) && keys.every((key) => rawRow[key] === (tableRows[index] as Record<string, unknown>)[key]))
