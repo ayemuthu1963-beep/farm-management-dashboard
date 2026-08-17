@@ -9,24 +9,34 @@ const sha256 = (path) => createHash("sha256")
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 
-assert.equal(manifest.base_commit, "e3edbfcd845f5e267e60ea2f028772473f30510a")
+assert.equal(manifest.base_commit, "e9833917c0a7fd190d933acb8cb234f60f5c8c65")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "ec763d202f215097d7ef354a09e02b1c1178e311",
-  image_id: "sha256:0c1af4b373021dfe8593e2b522bb60d3ee39f69f820c2758a63bcdee75f3331d",
-  feature_revision: "780772d19e47ecb2ecb51530764ec697b466d6e8",
+  revision: "fc791dfb090874e8ba16408ee38f910f161c9a52",
+  image_id: "sha256:4159d9e484855be68eacf32a41b895e311ff2957b56f3be05f39dfae133cf266",
+  feature_revision: "6ab5216a7dba47204321a66b145de6bc6ff56086",
   verified_files: [
-    "app/page.tsx",
-    "components/home/farm-calendar-card.tsx",
-    "lib/farm-calendar.ts",
-    "tests/farm-calendar-homepage.mjs",
+    "app/api/operator-settings/[[...path]]/route.ts",
+    "app/irrigation-management/page.tsx",
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
+    "components/irrigation/irrigation-plan-tables.tsx",
+    "lib/irrigation-plan.ts",
+    "tests/irrigation-management-corrections.mjs",
+    "tests/irrigation-plan.mjs",
+    "tests/operator-settings-persistence.mjs",
   ],
 })
 
 const previewApprovedDigests = {
-  "app/page.tsx": "6cd92f7d2928dfc4504a30e2efcfc32756456e06232cc031b10b26009d23d926",
-  "components/home/farm-calendar-card.tsx": "8cecebdf873f0c000fd6d8fd6f9ea02ccb51e13e2972225c5e15c1708529be7f",
-  "lib/farm-calendar.ts": "29079701af297a91cefd6a8a595be845c11c58dd7849aa394d53e03332b021c7",
-  "tests/farm-calendar-homepage.mjs": "760442b66e845a3ca85b1e818aa16326436e9c9c9ce74e8462b4a80757c0b125",
+  "app/api/operator-settings/[[...path]]/route.ts": "19f9bd02a39e3548b1ff19499571e1b1a7f786462c4c8228b29a93b556fc2727",
+  "app/irrigation-management/page.tsx": "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+  "components/irrigation/irrigation-charts-hybrid.tsx": "392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
+  "components/irrigation/irrigation-map-with-details.tsx": "b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
+  "components/irrigation/irrigation-plan-tables.tsx": "9c39d156279a201d6fa7633ac67f9bc44ae134f9411400c4abbb22337a9f412d",
+  "lib/irrigation-plan.ts": "397c632cf9a9ab7e1802ccba449870c1c53b64f3d61158daaa8fed66629f2146",
+  "tests/irrigation-management-corrections.mjs": "a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
+  "tests/irrigation-plan.mjs": "f9a41dd35b45249aea4a876d4a2d65ce9d0eac0ee221160eb50b24731e632e30",
+  "tests/operator-settings-persistence.mjs": "b75e10872e5d3052390556e81ed4a4e2ca736f32305eb31d5a441eb229dce819",
 }
 
 for (const [path, expectedDigest] of Object.entries(previewApprovedDigests)) {
@@ -38,4 +48,7 @@ assert.ok(
   "The Production promotion parity test must be inside the guarded manifest scope",
 )
 
-console.log("Farm Calendar Preview-to-Production source parity checks: PASS")
+assert.notEqual(manifest.preview_approved.revision, "26cb0e1ec52bec3dcdd2533c7f01fcfdff34737c")
+assert.notEqual(manifest.preview_approved.image_id, "sha256:ee78c4b6c9601b209f0cf225a735b3699955f71463caf8c4ae0a0938a3ae8888")
+
+console.log("Irrigation Management Preview-to-Production source parity checks: PASS")
