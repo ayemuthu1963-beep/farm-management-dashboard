@@ -4,7 +4,7 @@
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
   "release_note": "Reconcile the approved Farm Map icon and add the persistent responsive Irrigation Plan",
-  "base_commit": "7dee6fefd640f4623808c57cb0d34ec3a6ad9437",
+  "base_commit": "d8ca60eb57e6de9c4e289352ad98c998e2450976",
   "allowed_paths": [
     "app/api/operator-settings/[[...path]]/route.ts",
     "app/irrigation-management/page.tsx",
