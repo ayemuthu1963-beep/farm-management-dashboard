@@ -50,6 +50,21 @@ frontend:components/coconut/tree-view-client.tsx
 frontend:tests/tree-view-totals.mjs
 frontend:tests/tree-wise-table-query.mjs
 
+# Irrigation Plan Drip Output and Motor Run Schedule, Preview only.
+frontend:app/api/operator-settings/[[...path]]/route.ts
+frontend:app/irrigation-management/page.tsx
+frontend:components/irrigation/irrigation-map-with-details.tsx
+frontend:components/irrigation/irrigation-plan-tables.tsx
+frontend:lib/irrigation-plan.ts
+frontend:tests/irrigation-plan.mjs
+frontend:tests/operator-settings-persistence.mjs
+backend:api/app/routers/operator_settings.py
+backend:db/migrations/20260817_irrigation_plan_settings.sql
+backend:db/rollbacks/20260817_irrigation_plan_settings.sql
+backend:deploy/preview-backend-release.json
+backend:tests/test_operator_settings.py
+backend:tests/test_preview_migrations.py
+
 # Independent Preview/UAT asset-register release.
 frontend:app/admin/page.tsx
 frontend:app/api/asset-register/[...path]/route.ts

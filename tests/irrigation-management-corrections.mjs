@@ -275,7 +275,7 @@ assert.deepEqual(history.P1E[0], {
 assert.equal(history.P1E[1].status, "No Record")
 assert.equal(history.P1E[1].perTreeLitres, null)
 
-// Zone Status and Farm Irrigation Map change only the visible tile order.
+// Zone Status and Farm Irrigation Map preserve the requested visible zone order.
 for (const source of [zoneStatusCards, map]) {
   assert.match(source, /const DISPLAY_ZONE_ORDER: ZoneId\[\] = \["P1W", "P1E", "P2W", "P2E", "JF", "NM"\]/)
   assert.match(source, /displayZones\.map\(\(zone\) =>/)
@@ -299,6 +299,9 @@ for (const tone of ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "prim
 }
 assert.match(map, /ZONE_TILE_APPEARANCE\[zone\.id\]\.card/)
 assert.doesNotMatch(map, /rounded-2xl border bg-card/)
+assert.doesNotMatch(map, /Selected Zone Details/)
+assert.match(map, /zone\.physicalPlot/)
+assert.match(map, /zone\.recordsCount/)
 
 // The requested chart pair is half-width: Daily Irrigation Trend first, then
 // Water Supplied per Tree by date with one line for every operational zone.
