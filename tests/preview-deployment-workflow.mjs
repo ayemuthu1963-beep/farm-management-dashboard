@@ -270,7 +270,7 @@ assert.equal(
   manifest.release_note,
   "Complete authenticated Irrigation Plan persistence on the current live Preview baseline",
 )
-assert.equal(manifest.base_commit, "537b010e0abe847358c7423b71301db17e303ff4")
+assert.equal(manifest.base_commit, "278a727939eecc1e3d7f55755399f34f5ad0d945")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
