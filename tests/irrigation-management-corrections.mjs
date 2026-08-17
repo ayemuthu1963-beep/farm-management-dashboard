@@ -309,6 +309,10 @@ assert.doesNotMatch(charts, /\bBarChart\b|<Bar\b/)
 assert.doesNotMatch(charts, /Runtime and Water Pumped by Zone/)
 assert.equal((charts.match(/<Panel title="Daily Irrigation Trend"/g) ?? []).length, 1)
 assert.doesNotMatch(charts, /Daily Irrigation Trend" className="lg:col-span-2/)
+assert.match(charts, /<ChartState title="Daily Irrigation Trend" label=\{label\} \/>/)
+assert.match(charts, /<ChartState title="Water Supplied per Tree" label=\{label\} \/>/)
+assert.match(charts, /if \(!hasAnyData\) return <ChartStates label="No live irrigation records for the selected period\." \/>/)
+assert.doesNotMatch(charts, /Panel title="Irrigation Charts"/)
 const dailyTrendChart = charts.slice(
   charts.indexOf('<Panel title="Daily Irrigation Trend">'),
   charts.indexOf('<Panel title="Water Supplied per Tree">'),

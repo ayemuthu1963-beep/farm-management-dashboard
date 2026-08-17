@@ -282,6 +282,7 @@ assert.deepEqual(manifest.protected_invariants, {
 const expectedReleasePaths = [
   "app/api/operator-settings/[[...path]]/route.ts",
   "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
   "components/irrigation/irrigation-map-with-details.tsx",
   "components/irrigation/irrigation-plan-tables.tsx",
   "deploy/approved-change-scope.txt",
