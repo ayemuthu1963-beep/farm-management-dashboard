@@ -4,7 +4,7 @@
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
   "release_note": "Add the admin-only irrigation pipeline editor to the existing Farm Map",
-  "base_commit": "fc791dfb090874e8ba16408ee38f910f161c9a52",
+  "base_commit": "fd8108bbd5195ed8039fd2dea47d3d9ea6b834b1",
   "allowed_paths": [
     "app/api/irrigation-pipeline/[[...path]]/route.ts",
     "app/farm-map/page.tsx",

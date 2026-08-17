@@ -234,7 +234,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     href: "/intelligence",
     icon: Sparkles,
     dashboardIcon: "/mfms/icons/farm-reports.png",
-    description: "Ask governed questions about verified harvest analytics",
+    description: "Ask governed questions about verified harvest, irrigation, and well-water analytics",
     status: "active",
     showOnDashboard: false,
     showInSidebar: true,

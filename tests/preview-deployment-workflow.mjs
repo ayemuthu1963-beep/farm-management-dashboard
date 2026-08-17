@@ -270,7 +270,7 @@ assert.equal(
   manifest.release_note,
   "Add the admin-only irrigation pipeline editor to the existing Farm Map",
 )
-assert.equal(manifest.base_commit, "fc791dfb090874e8ba16408ee38f910f161c9a52")
+assert.equal(manifest.base_commit, "fd8108bbd5195ed8039fd2dea47d3d9ea6b834b1")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
