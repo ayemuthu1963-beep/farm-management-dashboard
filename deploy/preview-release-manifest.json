@@ -8,7 +8,8 @@
   "allowed_paths": [
     "app/fertiliser-management/page.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/fertiliser-master-management.mjs"
+    "tests/fertiliser-master-management.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
