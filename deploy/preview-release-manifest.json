@@ -3,10 +3,10 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Compact the Farm Irrigation Map into one six-tile desktop row",
-  "base_commit": "0764aa17b1799b276c9e960e138fdf6cb2b47063",
+  "release_note": "Remove the Irrigation Management KPI strip",
+  "base_commit": "269ed2d110df92a5ff8dc5b79e26f08a3b059bed",
   "allowed_paths": [
-    "components/irrigation/irrigation-map-with-details.tsx",
+    "app/irrigation-management/page.tsx",
     "deploy/preview-release-manifest.json",
     "tests/irrigation-management-corrections.mjs",
     "tests/preview-deployment-workflow.mjs"

@@ -6,7 +6,6 @@ import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { IrrigationPeriodSelector } from "@/components/irrigation/irrigation-period-selector"
-import { IrrigationSummaryCards } from "@/components/irrigation/irrigation-summary-cards"
 import { ZoneStatusCards } from "@/components/irrigation/zone-status-cards"
 import { IrrigationMapWithDetails } from "@/components/irrigation/irrigation-map-with-details"
 import { IrrigationChartsHybrid } from "@/components/irrigation/irrigation-charts-hybrid"
@@ -95,8 +94,6 @@ export default function IrrigationManagementPage() {
         </div>
 
         {errorMessage ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}. Live data unavailable; no fallback data is being shown.</div> : null}
-
-        <IrrigationSummaryCards summary={data.summary} zoneCount={data.zones.length} isLoading={isLoading} />
 
         <IrrigationMapWithDetails zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} isLoading={isLoading} />
 
