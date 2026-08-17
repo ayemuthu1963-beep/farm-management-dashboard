@@ -290,6 +290,7 @@ const expectedReleasePaths = [
   "lib/mfms-navigation.ts",
   "package.json",
   "public/mfms/icons/farm-map.svg",
+  "scripts/preview-server-deploy.sh",
   "tests/irrigation-management-corrections.mjs",
   "tests/irrigation-plan.mjs",
   "tests/operator-settings-persistence.mjs",
