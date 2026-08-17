@@ -378,6 +378,7 @@ start_candidate() {
   local image=$1 revision=$2
   candidate_container="$live_container-candidate-$run_id-$timestamp"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$candidate_container" \
     --network "$preview_network" \
     --restart no \
@@ -722,6 +723,7 @@ deploy_preview() {
   disconnect_preview_network "$live_container"
   docker rename "$live_container" "$transaction_backup"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$live_container" \
     --network "$preview_network" \
     --ip "$original_network_ip" \
