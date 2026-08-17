@@ -270,7 +270,7 @@ assert.equal(
   manifest.release_note,
   "Reconcile the approved Farm Map icon and add the persistent responsive Irrigation Plan",
 )
-assert.equal(manifest.base_commit, "7dee6fefd640f4623808c57cb0d34ec3a6ad9437")
+assert.equal(manifest.base_commit, "d8ca60eb57e6de9c4e289352ad98c998e2450976")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
