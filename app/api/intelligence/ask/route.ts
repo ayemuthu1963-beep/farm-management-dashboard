@@ -10,7 +10,8 @@ const MAX_REQUEST_BYTES = 4096
 const PROXY_TIMEOUT_MS = 20_000
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
 const RESPONSE_FIELDS = ["analysis_plan", "answer", "blocked_reason", "chart", "cycles", "data_as_of", "data_source_status", "denominator", "metabase_call_made", "period", "period_end", "period_start", "provider_call_made", "quality_flags", "status", "table"]
-const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows"])
+const COMPOSITE_RESPONSE_FIELDS = [...RESPONSE_FIELDS, "charts", "freshness", "sections"]
+const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows", "irrigation_runtime", "water_delivered", "north_morning", "north_evening", "south_morning", "south_evening", "beetle_traps_inspected", "beetle_captures"])
 const METRICS = new Set(["total_nuts", "total_bunches", "harvested_tree_cycle_records", "distinct_observed_harvested_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch"])
 const IRRIGATION_METRICS = new Set(["runtime_minutes", "estimated_delivered_litres"])
 const WELL_WATER_METRICS = new Set(["calibrated_litres"])
@@ -35,9 +36,20 @@ function hasExactFields(value: Record<string, unknown>, fields: string[]) {
   return JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify(fields.toSorted())
 }
 
-function isSafePlan(value: unknown) {
+function isSafePlan(value: unknown, allowComposite = true): boolean {
   if (value === null) return true
   if (!isRecord(value)) return false
+  if (value.kind === "composite") {
+    if (!allowComposite || !hasExactFields(value, ["kind", "domains", "period", "presentation", "execution", "subplans"])) return false
+    const domains = value.domains; const period = value.period; const subplans = value.subplans
+    const allowedDomains = ["harvest", "irrigation", "well_water", "beetle_monitoring"]
+    if (!Array.isArray(domains) || domains.length < 2 || domains.length > 4 || !domains.every((domain) => typeof domain === "string" && allowedDomains.includes(domain)) || new Set(domains).size !== domains.length) return false
+    if (!isRecord(period) || !hasExactFields(period, ["kind", "start", "end", "count"]) || !["domain_default", "date_range"].includes(String(period.kind))) return false
+    if (![period.start, period.end].every((item) => item === null || (typeof item === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item)))) return false
+    if (period.count !== null && !(typeof period.count === "number" && Number.isInteger(period.count) && period.count >= 1 && period.count <= 31)) return false
+    if (!["domain_cards", "date_aligned", "side_by_side"].includes(String(value.presentation)) || value.execution !== "independent_validated_domain_subplans") return false
+    return Array.isArray(subplans) && subplans.length === domains.length && subplans.every((subplan, index) => isRecord(subplan) && subplan.domain === domains[index] && isSafePlan(subplan, false))
+  }
   if (value.domain === "beetle_monitoring") {
     if (!hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "chart_type"])) return false
     const filters = value.filters; const period = value.period; const sort = value.sort
@@ -126,14 +138,44 @@ function isSafeChart(value: unknown, table: unknown) {
   return value.rows.every((rawRow, index) => isRecord(rawRow) && isRecord(tableRows[index]) && JSON.stringify(Object.keys(rawRow)) === JSON.stringify(keys) && keys.every((key) => rawRow[key] === (tableRows[index] as Record<string, unknown>)[key]))
 }
 
+function isSafeSection(value: unknown) {
+  if (!isRecord(value) || !hasExactFields(value, ["domain", "title", "headline", "period", "data_as_of", "denominator", "quality_flags", "data_source_status", "table", "chart"])) return false
+  if (!["harvest", "irrigation", "well_water", "beetle_monitoring"].includes(String(value.domain))) return false
+  if (![value.title, value.headline, value.data_as_of, value.data_source_status].every((item) => typeof item === "string")) return false
+  if (value.period !== null && typeof value.period !== "string") return false
+  if (value.denominator !== null && typeof value.denominator !== "string") return false
+  if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 16 || !value.quality_flags.every((flag) => typeof flag === "string" && flag.length <= 160)) return false
+  return isSafeTable(value.table) && isSafeChart(value.chart, value.table)
+}
+
+function isSafeFreshness(value: unknown, domains: string[]) {
+  if (!isRecord(value) || !hasExactFields(value, ["domains", "oldest_source_refresh", "oldest_source_domain", "quality_flags"]) || !isRecord(value.domains)) return false
+  if (JSON.stringify(Object.keys(value.domains)) !== JSON.stringify(domains) || !Object.values(value.domains).every((item) => typeof item === "string" && item.length > 0)) return false
+  if (typeof value.oldest_source_domain !== "string" || !domains.includes(value.oldest_source_domain) || typeof value.oldest_source_refresh !== "string" || value.oldest_source_refresh !== value.domains[value.oldest_source_domain]) return false
+  return Array.isArray(value.quality_flags) && value.quality_flags.length <= 1 && value.quality_flags.every((flag) => flag === "DATA_FRESHNESS_DIFFERS_BY_DOMAIN")
+}
+
+function isSafePanelChart(value: unknown, sections: Array<Record<string, unknown>>) {
+  if (!isRecord(value) || !hasExactFields(value, ["domain", "title", "type", "x_field", "y_fields", "series_field", "rows"]) || typeof value.domain !== "string" || typeof value.title !== "string") return false
+  const section = sections.find((item) => item.domain === value.domain)
+  if (!section) return false
+  return isSafeChart({ type: value.type, x_field: value.x_field, y_fields: value.y_fields, series_field: value.series_field, rows: value.rows }, section.table)
+}
+
 function isSafeResponse(value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value) || !hasExactFields(value, RESPONSE_FIELDS)) return false
+  if (!isRecord(value) || (!hasExactFields(value, RESPONSE_FIELDS) && !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS))) return false
   if (typeof value.answer !== "string" || typeof value.status !== "string" || !["ANSWERED", "BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT", "CLARIFICATION_REQUIRED"].includes(value.status) || typeof value.data_as_of !== "string" || typeof value.data_source_status !== "string") return false
   if (![value.period, value.period_start, value.period_end, value.denominator, value.blocked_reason].every((item) => item === null || typeof item === "string")) return false
   if (!Array.isArray(value.cycles) || value.cycles.length > 19 || !value.cycles.every((cycle) => typeof cycle === "string" && /^\d+$/.test(cycle))) return false
-  if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 8 || !value.quality_flags.every((flag) => typeof flag === "string")) return false
-  return typeof value.metabase_call_made === "boolean" && typeof value.provider_call_made === "boolean"
+  if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 32 || !value.quality_flags.every((flag) => typeof flag === "string")) return false
+  const baseValid = typeof value.metabase_call_made === "boolean" && typeof value.provider_call_made === "boolean"
     && isSafePlan(value.analysis_plan) && isSafeTable(value.table) && isSafeChart(value.chart, value.table)
+  if (!baseValid || !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS)) return baseValid
+  if (!Array.isArray(value.sections) || value.sections.length < 2 || value.sections.length > 4 || !value.sections.every(isSafeSection)) return false
+  const sections = value.sections as Array<Record<string, unknown>>
+  const domains = sections.map((section) => String(section.domain))
+  if (new Set(domains).size !== domains.length || !isSafeFreshness(value.freshness, domains)) return false
+  return Array.isArray(value.charts) && value.charts.length <= 4 && value.charts.every((chart) => isSafePanelChart(chart, sections))
 }
 
 export async function POST(request: NextRequest) {
