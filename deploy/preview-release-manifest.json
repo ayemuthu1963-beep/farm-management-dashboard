@@ -11,7 +11,8 @@
     "deploy/preview-release-manifest.json",
     "lib/irrigation-plan.ts",
     "tests/irrigation-plan.mjs",
-    "tests/operator-settings-persistence.mjs"
+    "tests/operator-settings-persistence.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
