@@ -6,6 +6,7 @@ import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { IrrigationPeriodSelector } from "@/components/irrigation/irrigation-period-selector"
+import { IrrigationSummaryCards } from "@/components/irrigation/irrigation-summary-cards"
 import { ZoneStatusCards } from "@/components/irrigation/zone-status-cards"
 import { IrrigationMapWithDetails } from "@/components/irrigation/irrigation-map-with-details"
 import { IrrigationChartsHybrid } from "@/components/irrigation/irrigation-charts-hybrid"
@@ -108,6 +109,8 @@ export default function IrrigationManagementPage() {
           isLoading={isLoading}
           canExport={data.source === "live"}
         />
+
+        <IrrigationSummaryCards summary={data.summary} zoneCount={data.zones.length} isLoading={isLoading} />
 
         <section className="space-y-3">
           <div>
