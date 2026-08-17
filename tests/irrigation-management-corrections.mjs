@@ -69,8 +69,36 @@ const page = read("app/irrigation-management/page.tsx")
 const selector = read("components/irrigation/irrigation-period-selector.tsx")
 const route = read("app/api/irrigation-management/route.ts")
 const map = read("components/irrigation/irrigation-map-with-details.tsx")
+const summaryCards = read("components/irrigation/irrigation-summary-cards.tsx")
 const zoneStatusCards = read("components/irrigation/zone-status-cards.tsx")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
+
+// The existing live-data summary cards appear exactly once after the period
+// controls and before Zone Status, without disturbing the approved page order.
+assert.equal((page.match(/<IrrigationSummaryCards\b/g) ?? []).length, 1)
+assert.match(page, /<IrrigationSummaryCards summary=\{data\.summary\} zoneCount=\{data\.zones\.length\} isLoading=\{isLoading\} \/>/)
+const expectedPageSectionTokens = [
+  "<IrrigationMapWithDetails",
+  "<IrrigationPlanTables",
+  "<IrrigationChartsHybrid",
+  "<IrrigationPeriodSelector",
+  "<IrrigationSummaryCards",
+  ">Zone Status</h2>",
+  '<Panel title="Operational Alerts"',
+  "<IrrigationZoneTableHybrid",
+]
+const pageSectionOffsets = expectedPageSectionTokens.map((token) => page.indexOf(token))
+assert.equal(pageSectionOffsets.every((offset) => offset >= 0), true)
+assert.deepEqual(pageSectionOffsets, [...pageSectionOffsets].sort((left, right) => left - right))
+assert.match(summaryCards, /grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5/)
+for (const label of ["Total Water Pumped", "Total Runtime", "Zones Irrigated", "Zones Not Irrigated", "Avg Water per Tree"]) {
+  assert.match(summaryCards, new RegExp(`label="${label}"`))
+}
+assert.match(summaryCards, /formatWaterLitres\(summary\.totalWaterSupplied\)/)
+assert.match(summaryCards, /summary\.totalMotorRuntime/)
+assert.match(summaryCards, /summary\.zonesIrrigated/)
+assert.match(summaryCards, /summary\.zonesNotIrrigated/)
+assert.match(summaryCards, /formatNumberIN\(summary\.averageWaterPerTree\)/)
 
 // The period control exposes exactly the four approved choices.
 assert.deepEqual(
@@ -275,7 +303,7 @@ assert.deepEqual(history.P1E[0], {
 assert.equal(history.P1E[1].status, "No Record")
 assert.equal(history.P1E[1].perTreeLitres, null)
 
-// Zone Status and Farm Irrigation Map change only the visible tile order.
+// Zone Status and Farm Irrigation Map preserve the requested visible zone order.
 for (const source of [zoneStatusCards, map]) {
   assert.match(source, /const DISPLAY_ZONE_ORDER: ZoneId\[\] = \["P1W", "P1E", "P2W", "P2E", "JF", "NM"\]/)
   assert.match(source, /displayZones\.map\(\(zone\) =>/)
@@ -289,6 +317,7 @@ assert.match(zoneStatusCards, />Irrigation Target</)
 assert.match(zoneStatusCards, /type="text"/)
 assert.match(zoneStatusCards, /placeholder="\*{16}"/)
 assert.match(zoneStatusCards, /aria-label=\{`\$\{zone\.name\} irrigation target`\}/)
+assert.match(zoneStatusCards, /setIrrigationTargets/)
 for (const icon of ["LandPlot", "TreePine", "Leaf"]) {
   assert.match(zoneStatusCards, new RegExp(`\\b${icon}\\b`))
 }
@@ -298,6 +327,18 @@ for (const tone of ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "prim
 }
 assert.match(map, /ZONE_TILE_APPEARANCE\[zone\.id\]\.card/)
 assert.doesNotMatch(map, /rounded-2xl border bg-card/)
+assert.doesNotMatch(map, /Selected Zone Details/)
+assert.match(map, /zone\.physicalPlot/)
+assert.match(map, /zone\.recordsCount/)
+
+// The full-width map keeps six equal compact tiles on one desktop row. Below
+// desktop width, only the map region scrolls horizontally; the page does not.
+assert.match(map, /max-w-full overflow-x-auto overscroll-x-contain/)
+assert.match(map, /grid min-w-\[64rem\] grid-cols-6 items-stretch gap-2 xl:min-w-0/)
+assert.match(map, /aria-label="Farm Irrigation Map zones; scroll horizontally on smaller screens"/)
+assert.match(map, /flex h-full min-h-\[330px\] min-w-0 flex-col/)
+assert.doesNotMatch(map, /min-h-\[470px\]/)
+assert.doesNotMatch(map, /sm:grid-cols-2 xl:grid-cols-3/)
 
 // The requested chart pair is half-width: Daily Irrigation Trend first, then
 // Water Supplied per Tree by date with one line for every operational zone.
@@ -305,6 +346,10 @@ assert.doesNotMatch(charts, /\bBarChart\b|<Bar\b/)
 assert.doesNotMatch(charts, /Runtime and Water Pumped by Zone/)
 assert.equal((charts.match(/<Panel title="Daily Irrigation Trend"/g) ?? []).length, 1)
 assert.doesNotMatch(charts, /Daily Irrigation Trend" className="lg:col-span-2/)
+assert.match(charts, /<ChartState title="Daily Irrigation Trend" label=\{label\} \/>/)
+assert.match(charts, /<ChartState title="Water Supplied per Tree" label=\{label\} \/>/)
+assert.match(charts, /if \(!hasAnyData\) return <ChartStates label="No live irrigation records for the selected period\." \/>/)
+assert.doesNotMatch(charts, /Panel title="Irrigation Charts"/)
 const dailyTrendChart = charts.slice(
   charts.indexOf('<Panel title="Daily Irrigation Trend">'),
   charts.indexOf('<Panel title="Water Supplied per Tree">'),

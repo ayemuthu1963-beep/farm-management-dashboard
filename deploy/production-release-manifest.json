@@ -3,16 +3,21 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "base_commit": "e3edbfcd845f5e267e60ea2f028772473f30510a",
+  "base_commit": "e9833917c0a7fd190d933acb8cb234f60f5c8c65",
   "preview_approved": {
-    "revision": "ec763d202f215097d7ef354a09e02b1c1178e311",
-    "image_id": "sha256:0c1af4b373021dfe8593e2b522bb60d3ee39f69f820c2758a63bcdee75f3331d",
-    "feature_revision": "780772d19e47ecb2ecb51530764ec697b466d6e8",
+    "revision": "fc791dfb090874e8ba16408ee38f910f161c9a52",
+    "image_id": "sha256:4159d9e484855be68eacf32a41b895e311ff2957b56f3be05f39dfae133cf266",
+    "feature_revision": "6ab5216a7dba47204321a66b145de6bc6ff56086",
     "verified_files": [
-      "app/page.tsx",
-      "components/home/farm-calendar-card.tsx",
-      "lib/farm-calendar.ts",
-      "tests/farm-calendar-homepage.mjs"
+      "app/api/operator-settings/[[...path]]/route.ts",
+      "app/irrigation-management/page.tsx",
+      "components/irrigation/irrigation-charts-hybrid.tsx",
+      "components/irrigation/irrigation-map-with-details.tsx",
+      "components/irrigation/irrigation-plan-tables.tsx",
+      "lib/irrigation-plan.ts",
+      "tests/irrigation-management-corrections.mjs",
+      "tests/irrigation-plan.mjs",
+      "tests/operator-settings-persistence.mjs"
     ]
   },
   "protected_invariants": {
@@ -25,13 +30,17 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/page.tsx",
-    "components/home/farm-calendar-card.tsx",
+    "app/api/operator-settings/[[...path]]/route.ts",
+    "app/irrigation-management/page.tsx",
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
+    "components/irrigation/irrigation-plan-tables.tsx",
     "deploy/production-release-manifest.json",
-    "lib/farm-calendar.ts",
+    "lib/irrigation-plan.ts",
     "package.json",
-    "tests/farm-calendar-homepage.mjs",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/motor-screenshot-analysis-real-workflow.mjs"
+    "tests/irrigation-management-corrections.mjs",
+    "tests/irrigation-plan.mjs",
+    "tests/operator-settings-persistence.mjs"
   ]
 }
