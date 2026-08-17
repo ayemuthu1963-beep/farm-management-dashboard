@@ -11,6 +11,7 @@ import { ZoneStatusCards } from "@/components/irrigation/zone-status-cards"
 import { IrrigationMapWithDetails } from "@/components/irrigation/irrigation-map-with-details"
 import { IrrigationChartsHybrid } from "@/components/irrigation/irrigation-charts-hybrid"
 import { IrrigationZoneTableHybrid } from "@/components/irrigation/irrigation-zone-table-hybrid"
+import { IrrigationPlanTables } from "@/components/irrigation/irrigation-plan-tables"
 import { emptyIrrigationData, statusColors, type IrrigationData, type ZoneId } from "@/lib/irrigation-data"
 import { buildIrrigationZoneCsv } from "@/lib/irrigation-export"
 import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
@@ -18,11 +19,7 @@ import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
 const environmentBanner = process.env.NEXT_PUBLIC_MFMS_ENV_BANNER?.trim()
 const environmentDatabaseLabel = process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL?.trim()
 const environmentDataScope =
-  environmentDatabaseLabel === "mfms_server_prod" || environmentBanner?.toLowerCase() === "production"
-    ? "PRODUCTION"
-    : environmentDatabaseLabel === "mfms_server_prod_candidate" || environmentBanner?.toLowerCase().includes("candidate")
-      ? "PRODUCTION CANDIDATE"
-      : environmentDatabaseLabel === "mfms_server_uat" || environmentBanner?.toLowerCase().includes("pilot")
+  environmentDatabaseLabel === "mfms_server_uat" || environmentBanner?.toLowerCase().includes("pilot")
     ? "PREVIEW"
     : environmentDatabaseLabel === "mfms_local_uat_v1_2" || environmentBanner?.toLowerCase().includes("uat")
       ? "LOCAL UAT"
@@ -99,6 +96,12 @@ export default function IrrigationManagementPage() {
 
         {errorMessage ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}. Live data unavailable; no fallback data is being shown.</div> : null}
 
+        <IrrigationMapWithDetails zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} isLoading={isLoading} />
+
+        <IrrigationPlanTables />
+
+        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={errorMessage} />
+
         <IrrigationPeriodSelector
           onPeriodChange={setPeriodQuery}
           onRefresh={refreshData}
@@ -106,6 +109,7 @@ export default function IrrigationManagementPage() {
           isLoading={isLoading}
           canExport={data.source === "live"}
         />
+
         <IrrigationSummaryCards summary={data.summary} zoneCount={data.zones.length} isLoading={isLoading} />
 
         <section className="space-y-3">
@@ -115,8 +119,6 @@ export default function IrrigationManagementPage() {
           </div>
           <ZoneStatusCards zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} />
         </section>
-
-        <IrrigationMapWithDetails zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} isLoading={isLoading} />
 
         <Panel title="Operational Alerts" icon={AlertTriangle}>
           {isLoading ? (
@@ -134,8 +136,6 @@ export default function IrrigationManagementPage() {
             </div>
           )}
         </Panel>
-
-        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={errorMessage} />
         <IrrigationZoneTableHybrid records={data.records} isLoading={isLoading} errorMessage={errorMessage} />
       </main>
     </DashboardShell>
