@@ -10,11 +10,13 @@ const MAX_REQUEST_BYTES = 4096
 const PROXY_TIMEOUT_MS = 20_000
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
 const RESPONSE_FIELDS = ["analysis_plan", "answer", "blocked_reason", "chart", "cycles", "data_as_of", "data_source_status", "denominator", "metabase_call_made", "period", "period_end", "period_start", "provider_call_made", "quality_flags", "status", "table"]
-const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness"])
+const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows"])
 const METRICS = new Set(["total_nuts", "total_bunches", "harvested_tree_cycle_records", "distinct_observed_harvested_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch"])
 const IRRIGATION_METRICS = new Set(["runtime_minutes", "estimated_delivered_litres"])
 const WELL_WATER_METRICS = new Set(["calibrated_litres"])
+const BEETLE_METRICS = new Set(["total_captures", "inspected_traps", "positive_catch_traps", "zero_catch_traps", "average_captures_per_inspected_trap_date", "coverage", "current_active_traps", "last_inspection", "days_since_last_inspection", "global_next_inspection", "never_inspected_traps", "inspection_date_count", "repeated_groups", "source_quality"])
 const PERIOD_KINDS = new Set(["latest_irrigation_dates", "last_calendar_days", "relative_day", "current_month", "previous_month", "date_range"])
+const BEETLE_PERIOD_KINDS = new Set(["latest_inspection_dates", "last_calendar_days", "relative_day", "current_month", "previous_month", "date_range", "all_available"])
 
 function safeError(status: number, message: string) {
   return NextResponse.json({
@@ -36,6 +38,22 @@ function hasExactFields(value: Record<string, unknown>, fields: string[]) {
 function isSafePlan(value: unknown) {
   if (value === null) return true
   if (!isRecord(value)) return false
+  if (value.domain === "beetle_monitoring") {
+    if (!hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "chart_type"])) return false
+    const filters = value.filters; const period = value.period; const sort = value.sort
+    if (!isRecord(filters) || !hasExactFields(filters, ["trap_types", "plots", "trap_numbers"]) || !isRecord(period) || !hasExactFields(period, ["kind", "count", "start", "end"]) || !isRecord(sort) || !hasExactFields(sort, ["direction"])) return false
+    return typeof value.metric === "string" && BEETLE_METRICS.has(value.metric)
+      && typeof value.group_by === "string" && ["none", "trap", "trap_history", "date", "trap_type", "plot"].includes(value.group_by)
+      && Array.isArray(filters.trap_types) && filters.trap_types.length <= 2 && filters.trap_types.every((item) => item === "Rhinoceros Beetle" || item === "Red Palm Weevil")
+      && Array.isArray(filters.plots) && filters.plots.length <= 2 && filters.plots.every((item) => item === "Plot 1" || item === "Plot 2")
+      && Array.isArray(filters.trap_numbers) && filters.trap_numbers.length <= 50 && filters.trap_numbers.every((item) => typeof item === "string" && /^\d+$/.test(item))
+      && typeof period.kind === "string" && BEETLE_PERIOD_KINDS.has(period.kind)
+      && (period.count === null || (typeof period.count === "number" && Number.isInteger(period.count) && period.count >= -1 && period.count <= 31))
+      && [period.start, period.end].every((item) => item === null || (typeof item === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item)))
+      && (sort.direction === "asc" || sort.direction === "desc")
+      && (value.limit === null || (typeof value.limit === "number" && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 50))
+      && (value.chart_type === null || value.chart_type === "line" || value.chart_type === "bar")
+  }
   if (value.domain === "irrigation" || value.domain === "well_water") {
     if (!hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "chart_type"])) return false
     const filters = value.filters; const period = value.period; const sort = value.sort
@@ -76,8 +94,8 @@ function isSafePlan(value: unknown) {
     && (value.chart_type === null || value.chart_type === "line" || value.chart_type === "bar")
 }
 
-function isSafeCell(value: unknown, format: string) {
-  if (value === null) return format === "decimal6" || format === "integer"
+function isSafeCell(value: unknown, format: string, key: string) {
+  if (value === null) return format === "decimal6" || format === "integer" || (format === "text" && key === "linked_tree")
   if (format === "integer") return typeof value === "number" && Number.isInteger(value) && value >= 0
   if (format === "text") return typeof value === "string" && value.length <= 128
   if (format === "date") return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -94,7 +112,7 @@ function isSafeTable(value: unknown) {
     if (!isRecord(rawColumn) || !hasExactFields(rawColumn, ["key", "label", "format"]) || typeof rawColumn.key !== "string" || !TABLE_FIELDS.has(rawColumn.key) || formats.has(rawColumn.key) || typeof rawColumn.label !== "string" || typeof rawColumn.format !== "string" || !["integer", "text", "date", "decimal6", "flags"].includes(rawColumn.format)) return false
     keys.push(rawColumn.key); formats.set(rawColumn.key, rawColumn.format)
   }
-  return value.rows.every((rawRow) => isRecord(rawRow) && JSON.stringify(Object.keys(rawRow)) === JSON.stringify(keys) && keys.every((key) => isSafeCell(rawRow[key], formats.get(key) ?? "")))
+  return value.rows.every((rawRow) => isRecord(rawRow) && JSON.stringify(Object.keys(rawRow)) === JSON.stringify(keys) && keys.every((key) => isSafeCell(rawRow[key], formats.get(key) ?? "", key)))
 }
 
 function isSafeChart(value: unknown, table: unknown) {

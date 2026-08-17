@@ -27,6 +27,9 @@ const examples = [
   "Show irrigation by zone for the latest 7 irrigation dates",
   "How much water was pumped from South Well on 16 August?",
   "Compare North and South Well readings",
+  "How many beetles were caught on 17 August?",
+  "Show Trap 12 history",
+  "Show beetle-catch trend this month",
 ]
 
 const EMPTY_FAILURE: IntelligenceResponse = {
@@ -101,7 +104,7 @@ export function IntelligenceClient() {
   return <div className="space-y-5">
     <form onSubmit={ask} className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <label htmlFor="intelligence-question" className="mb-2 block text-sm font-semibold">Ask a verified farm analytics question</label>
-      <textarea id="intelligence-question" value={question} onChange={(event) => setQuestion(event.target.value.slice(0, 500))} maxLength={500} rows={4} className="w-full resize-y rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none ring-primary/30 focus:ring-4" placeholder="Ask about harvest, irrigation runtime and delivered water, or North/South Well readings" />
+      <textarea id="intelligence-question" value={question} onChange={(event) => setQuestion(event.target.value.slice(0, 500))} maxLength={500} rows={4} className="w-full resize-y rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none ring-primary/30 focus:ring-4" placeholder="Ask about harvest, irrigation, wells, or descriptive beetle monitoring" />
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">{question.length}/500 characters</span>
         <button type="submit" disabled={loading || !question.trim()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
@@ -113,7 +116,7 @@ export function IntelligenceClient() {
     <section aria-label="Example questions" className="rounded-2xl border border-border bg-card p-4 sm:p-6">
       <h2 className="text-sm font-semibold">Try a verified question</h2>
       <div className="mt-3 flex flex-wrap gap-2">{examples.map((example) => <button key={example} type="button" onClick={() => setQuestion(example)} className="rounded-full border border-border bg-muted px-3 py-2 text-left text-xs hover:bg-primary/10">{example}</button>)}</div>
-      <p className="mt-3 text-xs text-muted-foreground">Eligible-tree, per-tree irrigation, missed-harvest, revenue, recharge, sufficiency, forecasting, causal, and recommendation metrics remain blocked.</p>
+      <p className="mt-3 text-xs text-muted-foreground">Eligible-tree, per-tree irrigation, missed-harvest, revenue, recharge, sufficiency, forecasting, causal, trap-effectiveness, placement, and treatment recommendations remain blocked.</p>
     </section>
 
     {result && <section aria-live="polite" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
