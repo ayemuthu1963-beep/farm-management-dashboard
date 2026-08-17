@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Replace the Farm Map faucet icon with a dedicated map and location-pin icon",
+  "Add the persistent Irrigation Plan tables and requested responsive irrigation tile layout",
 )
-assert.equal(manifest.base_commit, "ec763d202f215097d7ef354a09e02b1c1178e311")
+assert.equal(manifest.base_commit, "ccfd04a15b713dbef1ba47248324b412042fe215")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,10 +280,17 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/api/operator-settings/[[...path]]/route.ts",
+  "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/irrigation/irrigation-plan-tables.tsx",
   "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "lib/mfms-navigation.ts",
-  "public/mfms/icons/farm-map.svg",
+  "lib/irrigation-plan.ts",
+  "package.json",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/irrigation-plan.mjs",
+  "tests/operator-settings-persistence.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

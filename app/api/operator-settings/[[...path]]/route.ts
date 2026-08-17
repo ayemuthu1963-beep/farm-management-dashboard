@@ -15,7 +15,9 @@ async function proxy(request: Request, context: RouteContext, method: "GET" | "P
   const suffix = path.join("/")
   const allowed = method === "GET"
     ? suffix === ""
-    : /^motors\/M[1-3]$/.test(suffix) || /^irrigation-targets\/(P1W|P1E|P2W|P2E|JF|NM)$/.test(suffix)
+    : /^motors\/M[1-3]$/.test(suffix)
+      || /^irrigation-targets\/(P1W|P1E|P2W|P2E|JF|NM)$/.test(suffix)
+      || /^irrigation-plan\/(drip-output|motor-run-schedule)$/.test(suffix)
 
   if (!allowed) return errorResponse("Operator settings path was not found.", 404)
 
