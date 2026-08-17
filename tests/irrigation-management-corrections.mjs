@@ -72,6 +72,10 @@ const map = read("components/irrigation/irrigation-map-with-details.tsx")
 const zoneStatusCards = read("components/irrigation/zone-status-cards.tsx")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
 
+// The redundant five-card KPI strip is intentionally absent; all other
+// Irrigation Management sections continue in their existing order.
+assert.doesNotMatch(page, /IrrigationSummaryCards/)
+
 // The period control exposes exactly the four approved choices.
 assert.deepEqual(
   IRRIGATION_PERIOD_OPTIONS.map(({ id, label }) => ({ id, label })),
