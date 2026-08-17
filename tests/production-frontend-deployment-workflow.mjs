@@ -41,7 +41,22 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.match(helper, /readonly expected_running_containers="21"/)
+assert.match(helper, /readonly -a production_service_manifest=/)
+for (const service of [
+  "frontend|mfms-v0-preview-web",
+  "api|harvest-api",
+  "database|harvest-db",
+  "authentication|mfms-auth",
+  "harvest-counter|mfms-harvest-counter-api",
+  "reverse-proxy|central-nginx-1",
+]) {
+  assert.match(helper, new RegExp(service.replace(/[|]/g, "\\|")))
+}
+assert.match(helper, /Production service is missing: role=/)
+assert.match(helper, /Production service is not running: role=/)
+assert.match(helper, /Production service manifest contains a duplicate role/)
+assert.doesNotMatch(helper, /expected_running_containers/)
+assert.doesNotMatch(helper, /running container count is not the approved baseline/)
 assert.match(helper, /172\.19\.0\.2/)
 assert.match(helper, /172\.19\.128\.0\/17/)
 assert.match(helper, /mfms_prod_app\|mfms_server_prod/)
