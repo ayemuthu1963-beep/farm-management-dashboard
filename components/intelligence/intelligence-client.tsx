@@ -8,6 +8,17 @@ type TableCell = string | number | null | string[]
 type TableColumn = { key: string; label: string; format: "integer" | "text" | "date" | "decimal6" | "flags" }
 type ResultTable = { title: string; columns: TableColumn[]; rows: Array<Record<string, TableCell>> }
 type ResultChart = { type: "line" | "bar"; x_field: string; y_fields: string[]; series_field: "plot" | "well" | null; rows: Array<Record<string, string | number | null>> }
+type DomainName = "harvest" | "irrigation" | "well_water" | "beetle_monitoring"
+type DomainSection = {
+  domain: DomainName; title: string; headline: string; period: string | null; data_as_of: string;
+  denominator: string | null; quality_flags: string[]; data_source_status: string;
+  table: ResultTable | null; chart: ResultChart | null;
+}
+type ResultFreshness = {
+  domains: Record<DomainName, string>; oldest_source_refresh: string;
+  oldest_source_domain: DomainName; quality_flags: string[];
+}
+type PanelChart = ResultChart & { domain: DomainName; title: string }
 
 type IntelligenceResponse = {
   answer: string; status: string; data_as_of: string; period: string | null;
@@ -15,6 +26,7 @@ type IntelligenceResponse = {
   denominator: string | null; quality_flags: string[]; data_source_status: string;
   analysis_plan: Record<string, unknown> | null; table: ResultTable | null; chart: ResultChart | null;
   blocked_reason: string | null; metabase_call_made: boolean; provider_call_made: boolean;
+  sections?: DomainSection[]; freshness?: ResultFreshness; charts?: PanelChart[];
 }
 
 const examples = [
@@ -30,6 +42,10 @@ const examples = [
   "How many beetles were caught on 17 August?",
   "Show Trap 12 history",
   "Show beetle-catch trend this month",
+  "Give me a farm overview",
+  "Show irrigation and well water for 16 August",
+  "Show irrigation and beetle activity from 10 to 16 August",
+  "Show irrigation, wells and beetle activity for the last 7 calendar days",
 ]
 
 const EMPTY_FAILURE: IntelligenceResponse = {
@@ -50,7 +66,7 @@ function renderCell(value: TableCell, format: TableColumn["format"]) {
   return String(value)
 }
 
-function GovernedChart({ chart }: { chart: ResultChart }) {
+function GovernedChart({ chart, title = "Verified chart" }: { chart: ResultChart; title?: string }) {
   const normalizedRows = useMemo(() => chart.rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, typeof value === "string" && /^\d+\.\d+$/.test(value) ? Number(value) : value]))), [chart])
   const { rows, valueFields } = useMemo(() => {
     const seriesField = chart.series_field
@@ -67,7 +83,7 @@ function GovernedChart({ chart }: { chart: ResultChart }) {
   }, [chart, normalizedRows])
   const colors = ["#15803d", "#2563eb", "#b45309"]
   return <div className="mt-5 rounded-xl border border-border p-3">
-    <h3 className="mb-3 text-sm font-semibold">Verified chart</h3>
+    <h3 className="mb-3 text-sm font-semibold">{title}</h3>
     <div className="h-72 w-full" aria-label="Deterministic verified analytics result chart">
       <ResponsiveContainer width="100%" height="100%">
         {chart.type === "line" ? <LineChart data={rows} margin={{ top: 8, right: 18, left: 8, bottom: 8 }}>
@@ -80,6 +96,37 @@ function GovernedChart({ chart }: { chart: ResultChart }) {
       </ResponsiveContainer>
     </div>
   </div>
+}
+
+function GovernedTable({ table }: { table: ResultTable }) {
+  return <div className="mt-5 overflow-x-auto rounded-xl border border-border">
+    <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+      <caption className="px-3 py-3 text-left text-sm font-semibold">{table.title}</caption>
+      <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>{table.columns.map((column) => <th key={column.key} className={`px-3 py-3 font-semibold ${["integer", "decimal6"].includes(column.format) ? "text-right" : "text-left"}`}>{column.label}</th>)}</tr></thead>
+      <tbody className="divide-y divide-border">{table.rows.map((row, rowIndex) => <tr key={`${rowIndex}-${String(row.date ?? row.tree_no ?? row.cycle ?? row.plot ?? "result")}`} className="bg-background align-top">
+        {table.columns.map((column) => <td key={column.key} className={`px-3 py-3 ${["integer", "decimal6"].includes(column.format) ? "text-right tabular-nums" : "text-left"} ${column.key === "tree_no" ? "font-mono font-semibold" : ""}`}>{renderCell(row[column.key], column.format)}</td>)}
+      </tr>)}</tbody>
+    </table>
+  </div>
+}
+
+function DomainCard({ section }: { section: DomainSection }) {
+  return <article className="rounded-xl border border-border bg-background p-4">
+    <h3 className="font-bold">{section.title}</h3>
+    <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{section.headline}</p>
+    <dl className="mt-4 grid gap-2 text-xs text-muted-foreground">
+      <div><dt className="font-semibold text-foreground">Period</dt><dd>{section.period ?? "Domain default"}</dd></div>
+      <div><dt className="font-semibold text-foreground">Latest data</dt><dd>{section.data_as_of}</dd></div>
+      {section.denominator && <div><dt className="font-semibold text-foreground">Denominator</dt><dd>{section.denominator}</dd></div>}
+      <div><dt className="font-semibold text-foreground">Source status</dt><dd className="break-words">{section.data_source_status}</dd></div>
+    </dl>
+    {section.quality_flags.length > 0 && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-[11px] text-amber-950"><span className="font-semibold">Quality: </span>{section.quality_flags.join(", ")}</div>}
+    {(section.table || section.chart) && <details className="mt-4">
+      <summary className="cursor-pointer text-sm font-semibold text-primary">Open verified details</summary>
+      {section.table && <GovernedTable table={section.table} />}
+      {section.chart && <GovernedChart chart={section.chart} title={`${section.title} — verified chart`} />}
+    </details>}
+  </article>
 }
 
 export function IntelligenceClient() {
@@ -123,21 +170,22 @@ export function IntelligenceClient() {
       <div className="flex items-center gap-2">{answered ? <CheckCircle2 className="size-5 text-emerald-600" /> : <AlertTriangle className="size-5 text-amber-600" />}<h2 className="font-bold">{answered ? "Verified answer" : "Blocked or clarification required"}</h2></div>
       <p className="mt-4 whitespace-pre-wrap text-sm leading-6">{result.answer || result.blocked_reason}</p>
 
-      {result.table && <div className="mt-5 overflow-x-auto rounded-xl border border-border">
-        <table className="min-w-[760px] w-full border-collapse text-left text-sm">
-          <caption className="px-3 py-3 text-left text-sm font-semibold">{result.table.title}</caption>
-          <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>{result.table.columns.map((column) => <th key={column.key} className={`px-3 py-3 font-semibold ${["integer", "decimal6"].includes(column.format) ? "text-right" : "text-left"}`}>{column.label}</th>)}</tr></thead>
-          <tbody className="divide-y divide-border">{result.table.rows.map((row, rowIndex) => <tr key={`${rowIndex}-${String(row.tree_no ?? row.cycle ?? row.plot ?? "result")}`} className="bg-background align-top">
-            {result.table!.columns.map((column) => <td key={column.key} className={`px-3 py-3 ${["integer", "decimal6"].includes(column.format) ? "text-right tabular-nums" : "text-left"} ${column.key === "tree_no" ? "font-mono font-semibold" : ""}`}>{renderCell(row[column.key], column.format)}</td>)}
-          </tr>)}</tbody>
-        </table>
-      </div>}
+      {result.sections && result.sections.length > 0 && <div className="mt-5 grid gap-4 lg:grid-cols-2">{result.sections.map((section) => <DomainCard key={section.domain} section={section} />)}</div>}
+      {result.table && <GovernedTable table={result.table} />}
       {result.chart && <GovernedChart chart={result.chart} />}
+      {result.charts && result.charts.length > 0 && <div className="mt-5 space-y-4" aria-label="Independent cross-domain chart panels">{result.charts.map(({ domain, title, ...chart }) => <GovernedChart key={`${domain}-${title}`} chart={chart} title={title} />)}</div>}
+
+      {result.freshness && <div className="mt-5 rounded-xl border border-border bg-muted/30 p-4">
+        <h3 className="text-sm font-semibold">Freshness by domain</h3>
+        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">{Object.entries(result.freshness.domains).map(([domain, timestamp]) => <div key={domain}><dt className="font-semibold">{domain.replaceAll("_", " ")}</dt><dd>{timestamp}</dd></div>)}</dl>
+        <p className="mt-3 text-xs text-muted-foreground">Oldest source refresh: {result.freshness.oldest_source_refresh} ({result.freshness.oldest_source_domain.replaceAll("_", " ")})</p>
+        {result.freshness.quality_flags.includes("DATA_FRESHNESS_DIFFERS_BY_DOMAIN") && <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950">Data freshness differs by domain.</p>}
+      </div>}
 
       <div className="mt-5 rounded-xl bg-muted/50 p-4">
         <h3 className="text-sm font-semibold">Verification</h3>
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-          {result.data_as_of && <div><dt className="font-semibold">Data as of</dt><dd>{result.data_as_of}</dd></div>}
+          {result.data_as_of && !result.freshness && <div><dt className="font-semibold">Data as of</dt><dd>{result.data_as_of}</dd></div>}
           {result.period && <div><dt className="font-semibold">Period</dt><dd>{result.period}</dd></div>}
           {(result.period_start || result.period_end) && <div><dt className="font-semibold">Dates</dt><dd>{result.period_start ?? "—"} to {result.period_end ?? "—"}</dd></div>}
           {result.cycles.length > 0 && <div><dt className="font-semibold">Cycles</dt><dd>{result.cycles.join(", ")}</dd></div>}
