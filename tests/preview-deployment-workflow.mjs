@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Reconcile the approved Farm Map icon and add the persistent responsive Irrigation Plan",
+  "Compact the Farm Irrigation Map into one six-tile desktop row",
 )
-assert.equal(manifest.base_commit, "d8ca60eb57e6de9c4e289352ad98c998e2450976")
+assert.equal(manifest.base_commit, "0764aa17b1799b276c9e960e138fdf6cb2b47063")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,7 +280,7 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
   "deploy/preview-release-manifest.json",
   "tests/irrigation-management-corrections.mjs",
   "tests/preview-deployment-workflow.mjs",

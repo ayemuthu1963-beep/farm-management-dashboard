@@ -3,10 +3,10 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Reconcile the approved Farm Map icon and add the persistent responsive Irrigation Plan",
-  "base_commit": "d8ca60eb57e6de9c4e289352ad98c998e2450976",
+  "release_note": "Compact the Farm Irrigation Map into one six-tile desktop row",
+  "base_commit": "0764aa17b1799b276c9e960e138fdf6cb2b47063",
   "allowed_paths": [
-    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
     "deploy/preview-release-manifest.json",
     "tests/irrigation-management-corrections.mjs",
     "tests/preview-deployment-workflow.mjs"
