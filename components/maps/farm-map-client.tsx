@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { LeafletMouseEvent } from "leaflet"
 import { AlertTriangle, RefreshCw, Trees } from "lucide-react"
+import dynamic from "next/dynamic"
 
 import { Panel } from "@/components/farm/panel"
 import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
@@ -37,6 +38,15 @@ import type {
   PlotName,
 } from "@/lib/farm-map/types"
 import { treeNumberOptionKey, type TreeNumberOption } from "@/lib/tree-number-options"
+import type { PipelineTreeOption } from "@/lib/irrigation-pipeline-types"
+
+const IrrigationPipelineEditor = dynamic(
+  () =>
+    import("@/components/maps/irrigation-pipeline-editor").then(
+      (module) => module.IrrigationPipelineEditor,
+    ),
+  { ssr: false },
+)
 
 type PlotFilter = "Plot 1 & Plot 2" | PlotName
 type DataState = "loading" | "ready" | "stale" | "partial" | "error"
@@ -372,6 +382,8 @@ export function FarmMapClient() {
   const [operationalWithoutSpatial, setOperationalWithoutSpatial] = useState(0)
   const [geometryOptions, setGeometryOptions] = useState<TreeNumberOption[]>([])
   const [jackfruitOptions, setJackfruitOptions] = useState<TreeNumberOption[]>([])
+  const [pipelineMap, setPipelineMap] = useState<{ map: LeafletMap; leaflet: LeafletApi } | null>(null)
+  const [pipelineTrees, setPipelineTrees] = useState<PipelineTreeOption[]>([])
 
   const availableOptions = useMemo(
     () =>
@@ -742,6 +754,7 @@ export function FarmMapClient() {
       let cancelled = false
       mapRef.current = map
       leafletRef.current = leaflet
+      setPipelineMap({ map, leaflet })
       pointLayers.current = { "Plot 1": leaflet.layerGroup(), "Plot 2": leaflet.layerGroup() }
       hitLayers.current = { "Plot 1": leaflet.layerGroup(), "Plot 2": leaflet.layerGroup() }
       labelLayer.current = leaflet.layerGroup()
@@ -811,6 +824,14 @@ export function FarmMapClient() {
             })
           }
           setGeometryOptions(nextOptions)
+          setPipelineTrees(
+            collection.features.map((feature) => ({
+              treeNo: feature.properties.treeNo,
+              plot: feature.properties.plot,
+              latitude: feature.geometry.coordinates[1],
+              longitude: feature.geometry.coordinates[0],
+            })),
+          )
           setGeometryState("ready")
           setStatus(`${EXPECTED_TREE_COUNT.toLocaleString("en-IN")} approved coconut-tree coordinates loaded.`)
           const join = recalculateJoinState()
@@ -916,6 +937,8 @@ export function FarmMapClient() {
         operationalByNumber.current.clear()
         setGeometryOptions([])
         setJackfruitOptions([])
+        setPipelineTrees([])
+        setPipelineMap(null)
         mapRef.current = null
         leafletRef.current = null
       }
@@ -1201,6 +1224,11 @@ export function FarmMapClient() {
           </p>
         </div>
       </Panel>
+      <IrrigationPipelineEditor
+        map={pipelineMap?.map ?? null}
+        leaflet={pipelineMap?.leaflet ?? null}
+        trees={pipelineTrees}
+      />
       </>
     </FarmOrthomosaicMap>
   )

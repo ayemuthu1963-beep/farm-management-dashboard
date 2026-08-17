@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Restore Irrigation summary cards below period controls",
+  "Add the admin-only irrigation pipeline editor to the existing Farm Map",
 )
-assert.equal(manifest.base_commit, "26cb0e1ec52bec3dcdd2533c7f01fcfdff34737c")
+assert.equal(manifest.base_commit, "fc791dfb090874e8ba16408ee38f910f161c9a52")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,9 +280,18 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/irrigation-management/page.tsx",
+  "app/api/irrigation-pipeline/[[...path]]/route.ts",
+  "app/farm-map/page.tsx",
+  "components/maps/farm-map-client.tsx",
+  "components/maps/irrigation-pipeline-editor.tsx",
+  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "tests/irrigation-management-corrections.mjs",
+  "lib/irrigation-pipeline-api.ts",
+  "lib/irrigation-pipeline-geometry.ts",
+  "lib/irrigation-pipeline-signing.ts",
+  "lib/irrigation-pipeline-types.ts",
+  "package.json",
+  "tests/irrigation-pipeline-editor.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

@@ -20,7 +20,7 @@ export default function FarmMapPage() {
                 Farm Map – Drone Orthomosaic
               </h1>
               <p className="text-sm text-muted-foreground">
-                Combined drone orthomosaic with selectable coconut tree information
+                Protected orthomosaic, tree layers and admin-only irrigation pipeline editor
               </p>
             </div>
           </div>

@@ -159,3 +159,29 @@ backend:tests/test_worker_management_calculations.py
 backend:tests/test_worker_management_migration.py
 backend:tests/test_worker_management_permissions.py
 backend:tests/test_worker_management_sync_contract.py
+
+# Admin-only Irrigation Pipeline editor inside the existing Farm Map. The
+# backend is released separately; this frontend deployment itself leaves the
+# backend and database unchanged.
+frontend:app/api/irrigation-pipeline/[[...path]]/route.ts
+frontend:app/farm-map/page.tsx
+frontend:components/maps/farm-map-client.tsx
+frontend:components/maps/irrigation-pipeline-editor.tsx
+frontend:lib/irrigation-pipeline-api.ts
+frontend:lib/irrigation-pipeline-geometry.ts
+frontend:lib/irrigation-pipeline-signing.ts
+frontend:lib/irrigation-pipeline-types.ts
+frontend:tests/irrigation-pipeline-editor.mjs
+backend:api/Dockerfile
+backend:api/app/main.py
+backend:api/app/models/irrigation_pipeline.py
+backend:api/app/routers/irrigation_pipeline.py
+backend:api/app/services/irrigation_pipeline.py
+backend:api/app/services/irrigation_pipeline_import.py
+backend:db/migrations/20260817_irrigation_pipeline_editor.sql
+backend:db/rollbacks/20260817_irrigation_pipeline_editor.sql
+backend:deploy/preview-backend-release.json
+backend:tests/build_irrigation_pipeline_fixture.py
+backend:tests/irrigation_pipeline_fixture.json
+backend:tests/test_irrigation_pipeline.py
+backend:tests/test_preview_migrations.py
