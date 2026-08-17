@@ -280,21 +280,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "app/irrigation-management/page.tsx",
   "components/irrigation/irrigation-charts-hybrid.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/irrigation/irrigation-plan-tables.tsx",
-  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "lib/irrigation-plan.ts",
-  "lib/mfms-navigation.ts",
-  "package.json",
-  "public/mfms/icons/farm-map.svg",
-  "scripts/preview-server-deploy.sh",
   "tests/irrigation-management-corrections.mjs",
-  "tests/irrigation-plan.mjs",
-  "tests/operator-settings-persistence.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
