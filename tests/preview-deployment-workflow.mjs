@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the persistent Irrigation Plan tables and requested responsive irrigation tile layout",
+  "Reconcile the approved Farm Map icon and add the persistent responsive Irrigation Plan",
 )
-assert.equal(manifest.base_commit, "ccfd04a15b713dbef1ba47248324b412042fe215")
+assert.equal(manifest.base_commit, "7dee6fefd640f4623808c57cb0d34ec3a6ad9437")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -287,7 +287,9 @@ const expectedReleasePaths = [
   "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
   "lib/irrigation-plan.ts",
+  "lib/mfms-navigation.ts",
   "package.json",
+  "public/mfms/icons/farm-map.svg",
   "tests/irrigation-management-corrections.mjs",
   "tests/irrigation-plan.mjs",
   "tests/operator-settings-persistence.mjs",
