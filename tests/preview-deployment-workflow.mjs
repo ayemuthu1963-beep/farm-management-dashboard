@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add simple external Farm Calendar homepage tile",
+  "Replace the Farm Map faucet icon with a dedicated map and location-pin icon",
 )
-assert.equal(manifest.base_commit, "cd81691966672bdd4d9207efc93db3c6b0af40ad")
+assert.equal(manifest.base_commit, "ec763d202f215097d7ef354a09e02b1c1178e311")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,13 +280,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/page.tsx",
-  "components/home/farm-calendar-card.tsx",
+  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "lib/farm-calendar.ts",
-  "package.json",
-  "tests/farm-calendar-homepage.mjs",
-  "tests/motor-screenshot-analysis-real-workflow.mjs",
+  "lib/mfms-navigation.ts",
+  "public/mfms/icons/farm-map.svg",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
