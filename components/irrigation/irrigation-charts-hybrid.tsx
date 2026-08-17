@@ -46,27 +46,31 @@ function PerTreeLegend() {
   )
 }
 
-function ChartState({ label, wide = false }: { label: string; wide?: boolean }) {
+function ChartState({ title, label }: { title: string; label: string }) {
   return (
-    <Panel title="Irrigation Charts" className={wide ? "lg:col-span-2" : undefined}>
+    <Panel title={title}>
       <div className="flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">{label}</div>
     </Panel>
   )
 }
 
+function ChartStates({ label }: { label: string }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <ChartState title="Daily Irrigation Trend" label={label} />
+      <ChartState title="Water Supplied per Tree" label={label} />
+    </div>
+  )
+}
+
 export function IrrigationChartsHybrid({ zones, trend, isLoading = false, errorMessage = null }: Props) {
   if (isLoading) {
-    return (
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartState label="Loading live chart data..." />
-        <ChartState label="Loading live chart data..." />
-      </div>
-    )
+    return <ChartStates label="Loading live chart data..." />
   }
-  if (errorMessage) return <ChartState label={errorMessage} wide />
+  if (errorMessage) return <ChartStates label={errorMessage} />
 
   const hasAnyData = zones.some((zone) => zone.totalRuntimeMinutes > 0) || trend.length > 0
-  if (!hasAnyData) return <ChartState label="No live irrigation records for the selected period." wide />
+  if (!hasAnyData) return <ChartStates label="No live irrigation records for the selected period." />
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
