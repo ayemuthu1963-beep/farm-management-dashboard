@@ -41,6 +41,7 @@ frontend:app/api/farm-map/tree-classifications/route.ts
 frontend:components/maps/farm-map-client.tsx
 frontend:components/maps/farm-orthomosaic-map.tsx
 frontend:lib/coconut-harvest-api.ts
+frontend:public/mfms/icons/farm-map.svg
 frontend:tests/farm-map-coconut-trees.mjs
 
 # Minor Harvest UI cosmetics and Farm Map classification legend.
