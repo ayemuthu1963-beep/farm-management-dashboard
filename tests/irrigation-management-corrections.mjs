@@ -69,12 +69,36 @@ const page = read("app/irrigation-management/page.tsx")
 const selector = read("components/irrigation/irrigation-period-selector.tsx")
 const route = read("app/api/irrigation-management/route.ts")
 const map = read("components/irrigation/irrigation-map-with-details.tsx")
+const summaryCards = read("components/irrigation/irrigation-summary-cards.tsx")
 const zoneStatusCards = read("components/irrigation/zone-status-cards.tsx")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
 
-// The redundant five-card KPI strip is intentionally absent; all other
-// Irrigation Management sections continue in their existing order.
-assert.doesNotMatch(page, /IrrigationSummaryCards/)
+// The existing live-data summary cards appear exactly once after the period
+// controls and before Zone Status, without disturbing the approved page order.
+assert.equal((page.match(/<IrrigationSummaryCards\b/g) ?? []).length, 1)
+assert.match(page, /<IrrigationSummaryCards summary=\{data\.summary\} zoneCount=\{data\.zones\.length\} isLoading=\{isLoading\} \/>/)
+const expectedPageSectionTokens = [
+  "<IrrigationMapWithDetails",
+  "<IrrigationPlanTables",
+  "<IrrigationChartsHybrid",
+  "<IrrigationPeriodSelector",
+  "<IrrigationSummaryCards",
+  ">Zone Status</h2>",
+  '<Panel title="Operational Alerts"',
+  "<IrrigationZoneTableHybrid",
+]
+const pageSectionOffsets = expectedPageSectionTokens.map((token) => page.indexOf(token))
+assert.equal(pageSectionOffsets.every((offset) => offset >= 0), true)
+assert.deepEqual(pageSectionOffsets, [...pageSectionOffsets].sort((left, right) => left - right))
+assert.match(summaryCards, /grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5/)
+for (const label of ["Total Water Pumped", "Total Runtime", "Zones Irrigated", "Zones Not Irrigated", "Avg Water per Tree"]) {
+  assert.match(summaryCards, new RegExp(`label="${label}"`))
+}
+assert.match(summaryCards, /formatWaterLitres\(summary\.totalWaterSupplied\)/)
+assert.match(summaryCards, /summary\.totalMotorRuntime/)
+assert.match(summaryCards, /summary\.zonesIrrigated/)
+assert.match(summaryCards, /summary\.zonesNotIrrigated/)
+assert.match(summaryCards, /formatNumberIN\(summary\.averageWaterPerTree\)/)
 
 // The period control exposes exactly the four approved choices.
 assert.deepEqual(

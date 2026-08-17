@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Remove the Irrigation Management KPI strip",
+  "Restore Irrigation summary cards below period controls",
 )
-assert.equal(manifest.base_commit, "269ed2d110df92a5ff8dc5b79e26f08a3b059bed")
+assert.equal(manifest.base_commit, "26cb0e1ec52bec3dcdd2533c7f01fcfdff34737c")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
