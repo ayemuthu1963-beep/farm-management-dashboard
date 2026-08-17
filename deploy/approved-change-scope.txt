@@ -172,3 +172,17 @@ frontend:lib/irrigation-pipeline-geometry.ts
 frontend:lib/irrigation-pipeline-signing.ts
 frontend:lib/irrigation-pipeline-types.ts
 frontend:tests/irrigation-pipeline-editor.mjs
+backend:.gitignore
+backend:api/Dockerfile
+backend:api/app/main.py
+backend:api/app/models/irrigation_pipeline.py
+backend:api/app/routers/irrigation_pipeline.py
+backend:api/app/services/irrigation_pipeline.py
+backend:data/irrigation-pipeline/kobo-irrigation-pipeline-survey-2026-06.json
+backend:db/migrations/20260817_irrigation_pipeline_editor.sql
+backend:db/rollbacks/20260817_irrigation_pipeline_editor.sql
+backend:deploy/preview-backend-release.json
+backend:scripts/build_irrigation_pipeline_fixture.py
+backend:scripts/import_irrigation_pipeline.py
+backend:tests/test_irrigation_pipeline.py
+backend:tests/test_preview_migrations.py
