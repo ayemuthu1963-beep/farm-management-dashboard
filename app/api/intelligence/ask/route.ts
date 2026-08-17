@@ -9,55 +9,86 @@ const MAX_QUESTION_CHARACTERS = 500
 const MAX_REQUEST_BYTES = 4096
 const PROXY_TIMEOUT_MS = 20_000
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
-const TOP10_ROW_FIELDS = ["average_nuts_per_harvested_record", "harvest_records", "plot", "quality_flags", "rank", "total_bunches", "total_nuts", "tree_no"]
+const RESPONSE_FIELDS = ["analysis_plan", "answer", "blocked_reason", "chart", "cycles", "data_as_of", "data_source_status", "denominator", "metabase_call_made", "period", "period_end", "period_start", "provider_call_made", "quality_flags", "status", "table"]
+const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags"])
+const METRICS = new Set(["total_nuts", "total_bunches", "harvested_tree_cycle_records", "distinct_observed_harvested_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch"])
 
 function safeError(status: number, message: string) {
   return NextResponse.json({
-    answer: "", status: "failed_closed", data_as_of: null, period: null, cycles: [],
-    denominator: null, quality_flags: [], table_rows: [], blocked_reason: message,
-    metabase_call_made: false, provider_call_made: false,
+    answer: "", status: "BLOCKED_NOT_YET_SUPPORTED", data_as_of: "", period: null,
+    period_start: null, period_end: null, cycles: [], denominator: null, quality_flags: [],
+    data_source_status: "NOT_QUERIED_FAIL_CLOSED", analysis_plan: null, table: null, chart: null,
+    blocked_reason: message, metabase_call_made: false, provider_call_made: false,
   }, { status, headers: NO_STORE_HEADERS })
 }
 
-function isSafeTableRow(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false
-  const row = value as Record<string, unknown>
-  if (JSON.stringify(Object.keys(row).toSorted()) !== JSON.stringify(TOP10_ROW_FIELDS)) return false
-  return typeof row.rank === "number"
-    && Number.isInteger(row.rank)
-    && typeof row.tree_no === "string"
-    && typeof row.plot === "string"
-    && typeof row.total_nuts === "number"
-    && Number.isInteger(row.total_nuts)
-    && typeof row.total_bunches === "number"
-    && Number.isInteger(row.total_bunches)
-    && typeof row.harvest_records === "number"
-    && Number.isInteger(row.harvest_records)
-    && typeof row.average_nuts_per_harvested_record === "string"
-    && Array.isArray(row.quality_flags)
-    && row.quality_flags.every((flag) => typeof flag === "string")
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function hasExactFields(value: Record<string, unknown>, fields: string[]) {
+  return JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify(fields.toSorted())
+}
+
+function isSafePlan(value: unknown) {
+  if (value === null) return true
+  if (!isRecord(value) || !hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "series", "chart_type"])) return false
+  const filters = value.filters; const period = value.period; const sort = value.sort
+  if (!isRecord(filters) || !hasExactFields(filters, ["plots", "tree_numbers"]) || !isRecord(period) || !hasExactFields(period, ["kind", "count", "cycles"]) || !isRecord(sort) || !hasExactFields(sort, ["metric", "direction"])) return false
+  return value.domain === "harvest"
+    && typeof value.metric === "string" && METRICS.has(value.metric)
+    && typeof value.group_by === "string" && ["none", "tree", "plot", "cycle"].includes(value.group_by)
+    && Array.isArray(filters.plots) && filters.plots.length <= 2 && filters.plots.every((item) => item === "Plot 1" || item === "Plot 2")
+    && Array.isArray(filters.tree_numbers) && filters.tree_numbers.length <= 50 && filters.tree_numbers.every((item) => typeof item === "string" && /^[0-9]+(?:\.[0-9]+)?$/.test(item))
+    && typeof period.kind === "string" && ["latest_n", "latest_completed", "all_completed", "cycles"].includes(period.kind)
+    && (period.count === null || (typeof period.count === "number" && Number.isInteger(period.count) && period.count >= 1 && period.count <= 19))
+    && Array.isArray(period.cycles) && period.cycles.length <= 19 && period.cycles.every((item) => typeof item === "string" && /^\d+$/.test(item))
+    && typeof sort.metric === "string" && METRICS.has(sort.metric) && (sort.direction === "asc" || sort.direction === "desc")
+    && (value.limit === null || (typeof value.limit === "number" && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 50))
+    && (value.series === "none" || value.series === "plot")
+    && (value.chart_type === null || value.chart_type === "line" || value.chart_type === "bar")
+}
+
+function isSafeCell(value: unknown, format: string) {
+  if (value === null) return format === "decimal6"
+  if (format === "integer") return typeof value === "number" && Number.isInteger(value) && value >= 0
+  if (format === "text") return typeof value === "string" && value.length <= 128
+  if (format === "date") return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  if (format === "decimal6") return typeof value === "string" && /^\d+\.\d{6}$/.test(value)
+  if (format === "flags") return Array.isArray(value) && value.length <= 8 && value.every((item) => typeof item === "string" && item.length <= 128)
+  return false
+}
+
+function isSafeTable(value: unknown) {
+  if (value === null) return true
+  if (!isRecord(value) || !hasExactFields(value, ["title", "columns", "rows"]) || typeof value.title !== "string" || !Array.isArray(value.columns) || !Array.isArray(value.rows) || value.columns.length < 1 || value.columns.length > TABLE_FIELDS.size || value.rows.length > 50) return false
+  const keys: string[] = []; const formats = new Map<string, string>()
+  for (const rawColumn of value.columns) {
+    if (!isRecord(rawColumn) || !hasExactFields(rawColumn, ["key", "label", "format"]) || typeof rawColumn.key !== "string" || !TABLE_FIELDS.has(rawColumn.key) || formats.has(rawColumn.key) || typeof rawColumn.label !== "string" || typeof rawColumn.format !== "string" || !["integer", "text", "date", "decimal6", "flags"].includes(rawColumn.format)) return false
+    keys.push(rawColumn.key); formats.set(rawColumn.key, rawColumn.format)
+  }
+  return value.rows.every((rawRow) => isRecord(rawRow) && JSON.stringify(Object.keys(rawRow)) === JSON.stringify(keys) && keys.every((key) => isSafeCell(rawRow[key], formats.get(key) ?? "")))
+}
+
+function isSafeChart(value: unknown, table: unknown) {
+  if (value === null) return true
+  if (!isRecord(value) || !hasExactFields(value, ["type", "x_field", "y_fields", "series_field", "rows"]) || !isRecord(table)) return false
+  const tableRows = table.rows
+  if (!Array.isArray(tableRows)) return false
+  if (!["line", "bar"].includes(String(value.type)) || typeof value.x_field !== "string" || !TABLE_FIELDS.has(value.x_field) || !Array.isArray(value.y_fields) || value.y_fields.length < 1 || value.y_fields.length > 3 || !value.y_fields.every((field) => typeof field === "string" && TABLE_FIELDS.has(field)) || (value.series_field !== null && value.series_field !== "plot") || !Array.isArray(value.rows) || value.rows.length > 50 || value.rows.length !== tableRows.length) return false
+  const keys = [value.x_field, ...value.y_fields] as string[]
+  if (value.series_field && !keys.includes(value.series_field)) keys.push(value.series_field)
+  return value.rows.every((rawRow, index) => isRecord(rawRow) && isRecord(tableRows[index]) && JSON.stringify(Object.keys(rawRow)) === JSON.stringify(keys) && keys.every((key) => rawRow[key] === (tableRows[index] as Record<string, unknown>)[key]))
 }
 
 function isSafeResponse(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false
-  const expected = ["answer", "blocked_reason", "cycles", "data_as_of", "denominator", "metabase_call_made", "period", "provider_call_made", "quality_flags", "status", "table_rows"]
-  if (JSON.stringify(Object.keys(value).toSorted()) !== JSON.stringify(expected)) return false
-  const response = value as Record<string, unknown>
-  return typeof response.answer === "string"
-    && typeof response.status === "string"
-    && (typeof response.data_as_of === "string" || response.data_as_of === null)
-    && (typeof response.period === "string" || response.period === null)
-    && Array.isArray(response.cycles)
-    && response.cycles.every((cycle) => typeof cycle === "string" || typeof cycle === "number")
-    && (typeof response.denominator === "string" || response.denominator === null)
-    && Array.isArray(response.quality_flags)
-    && response.quality_flags.every((flag) => typeof flag === "string")
-    && Array.isArray(response.table_rows)
-    && response.table_rows.length <= 10
-    && response.table_rows.every(isSafeTableRow)
-    && (typeof response.blocked_reason === "string" || response.blocked_reason === null)
-    && typeof response.metabase_call_made === "boolean"
-    && typeof response.provider_call_made === "boolean"
+  if (!isRecord(value) || !hasExactFields(value, RESPONSE_FIELDS)) return false
+  if (typeof value.answer !== "string" || typeof value.status !== "string" || !["ANSWERED", "BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT", "CLARIFICATION_REQUIRED"].includes(value.status) || typeof value.data_as_of !== "string" || typeof value.data_source_status !== "string") return false
+  if (![value.period, value.period_start, value.period_end, value.denominator, value.blocked_reason].every((item) => item === null || typeof item === "string")) return false
+  if (!Array.isArray(value.cycles) || value.cycles.length > 19 || !value.cycles.every((cycle) => typeof cycle === "string" && /^\d+$/.test(cycle))) return false
+  if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 8 || !value.quality_flags.every((flag) => typeof flag === "string")) return false
+  return typeof value.metabase_call_made === "boolean" && typeof value.provider_call_made === "boolean"
+    && isSafePlan(value.analysis_plan) && isSafeTable(value.table) && isSafeChart(value.chart, value.table)
 }
 
 export async function POST(request: NextRequest) {
@@ -66,9 +97,8 @@ export async function POST(request: NextRequest) {
   const contentLength = Number(request.headers.get("content-length") ?? "0")
   if (!Number.isFinite(contentLength) || contentLength > MAX_REQUEST_BYTES) return safeError(413, "The request is too large.")
   const rawPayload: unknown = await request.json().catch(() => null)
-  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) return safeError(400, "A valid JSON question is required.")
-  const fields = Object.keys(rawPayload)
-  const question = (rawPayload as { question?: unknown }).question
+  if (!isRecord(rawPayload)) return safeError(400, "A valid JSON question is required.")
+  const fields = Object.keys(rawPayload); const question = rawPayload.question
   if (fields.length !== 1 || fields[0] !== "question" || typeof question !== "string") return safeError(400, "Only the question field is accepted.")
   const normalizedQuestion = question.trim()
   if (!normalizedQuestion || normalizedQuestion.length > MAX_QUESTION_CHARACTERS) return safeError(422, `Question must contain 1 to ${MAX_QUESTION_CHARACTERS} characters.`)
@@ -85,10 +115,8 @@ export async function POST(request: NextRequest) {
   }
   try {
     const response = await fetch(target, {
-      method: "POST",
-      headers: { Authorization: authHeader, Accept: "application/json", "Content-Type": "application/json", ...actorHeaders },
-      body: JSON.stringify({ question: normalizedQuestion }), cache: "no-store",
-      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+      method: "POST", headers: { Authorization: authHeader, Accept: "application/json", "Content-Type": "application/json", ...actorHeaders },
+      body: JSON.stringify({ question: normalizedQuestion }), cache: "no-store", signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     })
     const payload: unknown = await response.json().catch(() => null)
     if (!isSafeResponse(payload)) return safeError(502, "MFMS Intelligence returned an invalid response.")
