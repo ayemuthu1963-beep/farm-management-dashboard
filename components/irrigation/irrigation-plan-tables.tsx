@@ -299,12 +299,19 @@ export function IrrigationPlanTables() {
     let isActive = true
     async function loadPlan() {
       try {
-        const response = await fetch("/api/operator-settings", { cache: "no-store" })
-        const payload = (await response.json().catch(() => ({}))) as IrrigationPlanResponse
-        if (!response.ok) throw new Error(irrigationPlanError(payload, "Irrigation Plan could not be loaded."))
+        const [dripResponse, scheduleResponse] = await Promise.all([
+          fetch("/api/operator-settings/irrigation-plan/drip-output", { cache: "no-store" }),
+          fetch("/api/operator-settings/irrigation-plan/motor-run-schedule", { cache: "no-store" }),
+        ])
+        const [dripPayload, schedulePayload] = await Promise.all([
+          dripResponse.json().catch(() => ({})) as Promise<IrrigationPlanResponse>,
+          scheduleResponse.json().catch(() => ({})) as Promise<IrrigationPlanResponse>,
+        ])
+        if (!dripResponse.ok) throw new Error(irrigationPlanError(dripPayload, "Drip Output could not be loaded."))
+        if (!scheduleResponse.ok) throw new Error(irrigationPlanError(schedulePayload, "Motor Run Schedule could not be loaded."))
         if (!isActive) return
-        const loadedDrip = parseDripOutputRows(payload.irrigationPlan?.dripOutput?.rows)
-        const loadedSchedule = parseMotorRunScheduleRows(payload.irrigationPlan?.motorRunSchedule?.rows)
+        const loadedDrip = parseDripOutputRows(dripPayload.rows)
+        const loadedSchedule = parseMotorRunScheduleRows(schedulePayload.rows)
         setDripRows(loadedDrip)
         setScheduleRows(loadedSchedule)
         setSavedDrip(dripSnapshot(loadedDrip))
