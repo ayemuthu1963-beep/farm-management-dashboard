@@ -9,7 +9,8 @@
     "deploy/approved-change-scope.txt",
     "deploy/preview-release-manifest.json",
     "lib/mfms-navigation.ts",
-    "public/mfms/icons/farm-map.svg"
+    "public/mfms/icons/farm-map.svg",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
