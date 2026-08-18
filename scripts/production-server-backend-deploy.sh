@@ -45,6 +45,11 @@ readonly state_file="$state_dir/last-successful-backend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
 readonly database_backup_dir="$state_dir/database-backups"
+readonly database_backup_credential_file="/etc/mfms-production/backup/mfms_backup.env"
+readonly database_backup_role="mfms_backup"
+readonly database_backup_postgres_major="16"
+readonly database_backup_baseline_migration="db/migrations/20260814_operator_settings_v2.sql"
+readonly database_backup_baseline_migration_sha256="bdd4d1e4dcf067a73b84880b19a4dc6d3241aa9b557c0a303f40dfd725ab6846"
 readonly database_url_override_file="/home/muthu/mfms_secrets/database-roles/prod-app.database_url"
 readonly approved_restart_policy="unless-stopped"
 readonly approved_production_well_odk_cutoff="2026-07-21T06:06:53+05:30"
@@ -115,6 +120,11 @@ cron_digest_before=""
 database_backup_file=""
 database_backup_sha256=""
 database_backup_bytes=""
+database_backup_temporary=""
+database_backup_restore_container=""
+database_backup_restore_postgres_major=""
+database_backup_verified="false"
+database_backup_restore_verified="false"
 transaction_active=0
 automatic_restore_result="not-required"
 
@@ -649,8 +659,306 @@ build_image() {
     || blocked "built backend image does not declare the complete Git source contract"
 }
 
+validate_database_backup_credential_state() {
+  python3 - "$database_backup_credential_file" 0 "$(id -g)" 0 <<'PY_DATABASE_BACKUP_CREDENTIAL_VALIDATION'
+import pathlib
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected_owner_uid = int(sys.argv[2])
+expected_runner_gid = int(sys.argv[3])
+expected_root_gid = int(sys.argv[4])
+
+
+def require_directory(target: pathlib.Path, owner_uid: int, group_gid: int, mode: int) -> None:
+    metadata = target.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+        raise SystemExit(f"Backup credential parent is not a real directory: {target}")
+    if metadata.st_uid != owner_uid or metadata.st_gid != group_gid:
+        raise SystemExit(f"Backup credential parent ownership is invalid: {target}")
+    actual_mode = stat.S_IMODE(metadata.st_mode)
+    if actual_mode != mode or actual_mode & 0o022:
+        raise SystemExit(f"Backup credential parent permissions are invalid: {target}")
+
+
+require_directory(path.parent.parent, expected_owner_uid, expected_root_gid, 0o755)
+require_directory(path.parent, expected_owner_uid, expected_runner_gid, 0o750)
+
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+    raise SystemExit("Production backup credential must be a regular non-symlink file")
+if metadata.st_uid != expected_owner_uid:
+    raise SystemExit("Production backup credential owner UID is invalid")
+if metadata.st_gid != expected_runner_gid:
+    raise SystemExit("Production backup credential group is not the deployment runner private group")
+actual_mode = stat.S_IMODE(metadata.st_mode)
+if actual_mode != 0o640 or actual_mode & 0o022:
+    raise SystemExit("Production backup credential permissions must be exactly 0640 and non-writable by group/others")
+
+lines = path.read_bytes().splitlines()
+prefix = b"MFMS_BACKUP_PASSWORD="
+if len(lines) != 1 or not lines[0].startswith(prefix):
+    raise SystemExit("Production backup credential must contain exactly MFMS_BACKUP_PASSWORD")
+value = lines[0][len(prefix):]
+if not value or b"\x00" in value or b"\n" in value or b"\r" in value:
+    raise SystemExit("Production backup credential value is invalid")
+PY_DATABASE_BACKUP_CREDENTIAL_VALIDATION
+}
+
+read_database_backup_password() {
+  validate_database_backup_credential_state
+  python3 - "$database_backup_credential_file" <<'PY_DATABASE_BACKUP_PASSWORD_READ'
+import pathlib
+import sys
+
+line = pathlib.Path(sys.argv[1]).read_bytes().splitlines()[0]
+sys.stdout.buffer.write(line.split(b"=", 1)[1])
+PY_DATABASE_BACKUP_PASSWORD_READ
+}
+
+run_database_backup_psql() {
+  local database_container=$1 sql=$2 backup_password status
+  backup_password=$(read_database_backup_password)
+  if printf '%s\n' "$backup_password" | docker exec -i "$database_container" sh -c '
+    IFS= read -r PGPASSWORD
+    [ -n "$PGPASSWORD" ] || exit 81
+    export PGPASSWORD
+    exec psql \
+      --host=127.0.0.1 \
+      --port=5432 \
+      --username="$1" \
+      --dbname="$2" \
+      --no-password \
+      --no-psqlrc \
+      --tuples-only \
+      --no-align \
+      --set=ON_ERROR_STOP=1 \
+      --command="$3"
+  ' sh "$database_backup_role" "$database_name" "$sql"; then
+    status=0
+  else
+    status=$?
+  fi
+  unset backup_password
+  return "$status"
+}
+
+validate_database_backup_access_report() {
+  local report_file=$1
+  python3 - "$report_file" "$database_name" "$database_backup_role" "$database_backup_postgres_major" <<'PY_DATABASE_BACKUP_ACCESS_VALIDATION'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected_database = sys.argv[2]
+expected_role = sys.argv[3]
+expected_major = int(sys.argv[4])
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+expected_keys = {
+    "database",
+    "role",
+    "role_exists",
+    "role_can_login",
+    "role_superuser",
+    "role_createdb",
+    "role_createrole",
+    "role_replication",
+    "role_bypassrls",
+    "server_major",
+    "connect_allowed",
+    "missing_schema_usage",
+    "missing_table_select",
+    "missing_sequence_select",
+    "large_objects",
+    "rls_tables",
+}
+if set(payload) != expected_keys:
+    raise SystemExit("Production backup access report has an unexpected structure")
+if payload["database"] != expected_database:
+    raise SystemExit("Production backup connection resolved to the wrong database")
+if payload["role"] != expected_role or payload["role_exists"] is not True:
+    raise SystemExit("Production backup connection resolved to the wrong role")
+if payload["role_can_login"] is not True:
+    raise SystemExit("Production backup role is not login-capable")
+for attribute in ("role_superuser", "role_createdb", "role_createrole", "role_replication", "role_bypassrls"):
+    if payload[attribute] is not False:
+        raise SystemExit(f"Production backup role has an unapproved attribute: {attribute}")
+if payload["server_major"] != expected_major:
+    raise SystemExit("Production PostgreSQL major version is not approved")
+if payload["connect_allowed"] is not True:
+    raise SystemExit("Production backup role lacks CONNECT")
+for counter in (
+    "missing_schema_usage",
+    "missing_table_select",
+    "missing_sequence_select",
+    "large_objects",
+    "rls_tables",
+):
+    if payload[counter] != 0:
+        raise SystemExit(f"Production backup role cannot produce a complete logical backup: {counter}")
+PY_DATABASE_BACKUP_ACCESS_VALIDATION
+}
+
+verify_database_backup_access() {
+  local database_container=$1 access_report="$work_dir/database-backup-access.json" sql
+  sql=$(cat <<'SQL_DATABASE_BACKUP_ACCESS'
+WITH backup_role AS (
+    SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+    FROM pg_roles
+    WHERE rolname = current_user
+)
+SELECT json_build_object(
+    'database', current_database(),
+    'role', current_user,
+    'role_exists', (SELECT count(*) = 1 FROM backup_role),
+    'role_can_login', coalesce((SELECT rolcanlogin FROM backup_role), false),
+    'role_superuser', coalesce((SELECT rolsuper FROM backup_role), false),
+    'role_createdb', coalesce((SELECT rolcreatedb FROM backup_role), false),
+    'role_createrole', coalesce((SELECT rolcreaterole FROM backup_role), false),
+    'role_replication', coalesce((SELECT rolreplication FROM backup_role), false),
+    'role_bypassrls', coalesce((SELECT rolbypassrls FROM backup_role), false),
+    'server_major', current_setting('server_version_num')::integer / 10000,
+    'connect_allowed', has_database_privilege(current_user, current_database(), 'CONNECT'),
+    'missing_schema_usage', (
+        SELECT count(*) FROM pg_namespace n
+        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+          AND NOT has_schema_privilege(current_user, n.oid, 'USAGE')
+    ),
+    'missing_table_select', (
+        SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND NOT has_table_privilege(current_user, c.oid, 'SELECT')
+    ),
+    'missing_sequence_select', (
+        SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+          AND c.relkind = 'S'
+          AND NOT has_sequence_privilege(current_user, c.oid, 'SELECT')
+    ),
+    'large_objects', (SELECT count(*) FROM pg_largeobject_metadata),
+    'rls_tables', (
+        SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+          AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+    )
+)::text;
+SQL_DATABASE_BACKUP_ACCESS
+  )
+  if ! run_database_backup_psql "$database_container" "$sql" > "$access_report"; then
+    rm -f "$access_report"
+    blocked "Production backup role authentication or privilege query failed"
+    return 1
+  fi
+  [[ -s "$access_report" ]] || blocked "Production backup access report is empty"
+  validate_database_backup_access_report "$access_report"
+}
+
+verify_database_backup_restore() {
+  local database_container=$1 dump_file=$2 database_image restore_report attempt version_num
+  database_image=$(docker inspect --format '{{.Image}}' "$database_container")
+  [[ "$database_image" =~ ^sha256:[0-9a-f]{64}$ ]] \
+    || blocked "Production database image identity is invalid"
+
+  database_backup_restore_container="mfms-production-backup-restore-${run_id}-${timestamp}"
+  [[ -z "$(docker ps -aq --filter "name=^/${database_backup_restore_container}$")" ]] \
+    || blocked "Production backup restore container name already exists"
+  docker run -d \
+    --name "$database_backup_restore_container" \
+    --network none \
+    --restart no \
+    --shm-size 256m \
+    --tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,size=2g \
+    --env POSTGRES_HOST_AUTH_METHOD=trust \
+    "$database_image" >/dev/null
+
+  for attempt in $(seq 1 60); do
+    if docker exec "$database_backup_restore_container" \
+      pg_isready --username=postgres --dbname=postgres >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  docker exec "$database_backup_restore_container" \
+    pg_isready --username=postgres --dbname=postgres >/dev/null 2>&1 \
+    || blocked "Disposable PostgreSQL restore environment did not become ready"
+
+  version_num=$(docker exec "$database_backup_restore_container" \
+    psql --username=postgres --dbname=postgres --no-psqlrc --tuples-only --no-align \
+      --set=ON_ERROR_STOP=1 --command="show server_version_num")
+  database_backup_restore_postgres_major=$((version_num / 10000))
+  [[ "$database_backup_restore_postgres_major" == "$database_backup_postgres_major" ]] \
+    || blocked "Disposable PostgreSQL restore environment has the wrong major version"
+
+  docker exec "$database_backup_restore_container" \
+    createdb --username=postgres --template=template0 "$database_name"
+  docker exec -i "$database_backup_restore_container" \
+    pg_restore --exit-on-error --no-owner --no-privileges \
+      --username=postgres --dbname="$database_name" < "$dump_file"
+
+  restore_report="$work_dir/database-backup-restore.json"
+  docker exec "$database_backup_restore_container" \
+    psql --username=postgres --dbname="$database_name" --no-psqlrc --tuples-only --no-align \
+      --set=ON_ERROR_STOP=1 --command="
+        SELECT json_build_object(
+          'database', current_database(),
+          'harvest_records', to_regclass('public.harvest_records') IS NOT NULL,
+          'motor_runtime_entries', to_regclass('public.motor_runtime_entries') IS NOT NULL,
+          'mfms_motor_operator_settings', to_regclass('public.mfms_motor_operator_settings') IS NOT NULL,
+          'mfms_irrigation_targets', to_regclass('public.mfms_irrigation_targets') IS NOT NULL,
+          'well_water_readings', to_regclass('public.well_water_readings') IS NOT NULL,
+          'migration_ledger', to_regclass('public.mfms_production_schema_migrations') IS NOT NULL,
+          'ledger_count', (SELECT count(*) FROM mfms_production_schema_migrations),
+          'baseline_migration_count', (
+            SELECT count(*) FROM mfms_production_schema_migrations
+            WHERE migration_name = '$database_backup_baseline_migration'
+              AND sha256 = '$database_backup_baseline_migration_sha256'
+          )
+        )::text;
+      " > "$restore_report"
+  python3 - "$restore_report" "$database_name" <<'PY_DATABASE_BACKUP_RESTORE_VALIDATION'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if payload["database"] != sys.argv[2]:
+    raise SystemExit("Restored backup has the wrong database identity")
+for relation in (
+    "harvest_records",
+    "motor_runtime_entries",
+    "mfms_motor_operator_settings",
+    "mfms_irrigation_targets",
+    "well_water_readings",
+    "migration_ledger",
+):
+    if payload.get(relation) is not True:
+        raise SystemExit(f"Restored backup is missing baseline relation: {relation}")
+if payload.get("ledger_count") != 1 or payload.get("baseline_migration_count") != 1:
+    raise SystemExit("Restored backup migration ledger does not match the approved Production baseline")
+PY_DATABASE_BACKUP_RESTORE_VALIDATION
+
+  docker rm -f "$database_backup_restore_container" >/dev/null
+  database_backup_restore_container=""
+  database_backup_restore_verified="true"
+}
+
+assert_validated_database_backup() {
+  [[ "$database_backup_verified" == "true" ]] \
+    || blocked "A validated Production database backup is required before migration"
+  [[ "$database_backup_restore_verified" == "true" ]] \
+    || blocked "A verified isolated Production database restore is required before migration"
+  [[ -f "$database_backup_file" && -s "$database_backup_file" ]] \
+    || blocked "Validated Production database backup evidence is missing"
+  [[ "$(sha256sum "$database_backup_file" | awk '{print $1}')" == "$database_backup_sha256" ]] \
+    || blocked "Validated Production database backup checksum changed"
+}
+
 create_production_database_backup() {
-  local database_host database_container network_snapshot temporary_backup backup_list
+  local database_host database_container network_snapshot backup_list backup_password status
   database_host=$(docker exec "$backend_live_container" python -c \
     'from urllib.parse import urlparse; from app.config import get_settings; print(urlparse(get_settings().database_url).hostname or "")')
   [[ "$database_host" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] \
@@ -685,44 +993,88 @@ PY
   )
   [[ -n "$database_container" ]] || blocked "Production database container is unavailable"
   docker exec "$database_container" sh -c \
-    'command -v pg_dump >/dev/null && command -v pg_restore >/dev/null && test -n "${POSTGRES_USER:-}"' \
-    || blocked "Production database container lacks the required backup tools or user"
+    'command -v pg_dump >/dev/null && command -v pg_restore >/dev/null && command -v psql >/dev/null && command -v pg_isready >/dev/null' \
+    || blocked "Production database container lacks the required PostgreSQL backup tools"
+
+  validate_database_backup_credential_state
+  verify_database_backup_access "$database_container"
 
   install -d -m 700 "$database_backup_dir"
-  temporary_backup=$(mktemp "$database_backup_dir/.${database_name}.XXXXXX")
+  database_backup_temporary=$(mktemp "$database_backup_dir/.${database_name}.XXXXXX")
   backup_list="$work_dir/database-backup.list"
-  if ! docker exec "$database_container" sh -c \
-    'exec pg_dump --format=custom --compress=9 --no-owner --no-privileges --username="$POSTGRES_USER" --dbname="$1"' \
-    sh "$database_name" > "$temporary_backup"; then
-    rm -f "$temporary_backup"
+  backup_password=$(read_database_backup_password)
+  if printf '%s\n' "$backup_password" | docker exec -i "$database_container" sh -c '
+    IFS= read -r PGPASSWORD
+    [ -n "$PGPASSWORD" ] || exit 82
+    export PGPASSWORD
+    exec pg_dump \
+      --host=127.0.0.1 \
+      --port=5432 \
+      --username="$1" \
+      --dbname="$2" \
+      --no-password \
+      --format=custom \
+      --compress=9 \
+      --no-owner \
+      --no-privileges
+  ' sh "$database_backup_role" "$database_name" > "$database_backup_temporary"; then
+    status=0
+  else
+    status=$?
+  fi
+  unset backup_password
+  if [[ "$status" -ne 0 ]]; then
+    rm -f "$database_backup_temporary"
+    database_backup_temporary=""
     blocked "Production database backup failed"
     return 1
   fi
-  chmod 600 "$temporary_backup"
-  if [[ ! -s "$temporary_backup" ]] \
-    || ! docker exec -i "$database_container" sh -c 'exec pg_restore --list' \
-      < "$temporary_backup" > "$backup_list" \
+  chmod 600 "$database_backup_temporary"
+  if [[ ! -s "$database_backup_temporary" ]] \
+    || ! python3 - "$database_backup_temporary" <<'PY_DATABASE_BACKUP_FORMAT'
+import pathlib
+import sys
+
+raise SystemExit(0 if pathlib.Path(sys.argv[1]).read_bytes()[:5] == b"PGDMP" else 1)
+PY_DATABASE_BACKUP_FORMAT
+  then
+    rm -f "$database_backup_temporary"
+    database_backup_temporary=""
+    blocked "Production database backup is empty or not custom format"
+    return 1
+  fi
+  if ! docker exec -i "$database_container" sh -c 'exec pg_restore --list' \
+      < "$database_backup_temporary" > "$backup_list" \
     || [[ ! -s "$backup_list" ]]; then
-    rm -f "$temporary_backup"
-    blocked "Production database backup verification failed"
+    rm -f "$database_backup_temporary"
+    database_backup_temporary=""
+    blocked "Production database backup listing verification failed"
     return 1
   fi
 
+  verify_database_backup_restore "$database_container" "$database_backup_temporary"
+  [[ "$database_backup_restore_verified" == "true" ]] \
+    || blocked "Production database backup restore verification did not complete"
+
   database_backup_file="$database_backup_dir/${database_name}-pre-${candidate_revision}-${timestamp}.dump"
-  [[ ! -e "$database_backup_file" ]] || {
-    rm -f "$temporary_backup"
+  [[ ! -e "$database_backup_file" && ! -L "$database_backup_file" ]] || {
+    rm -f "$database_backup_temporary"
+    database_backup_temporary=""
     blocked "Production database backup target already exists"
     return 1
   }
-  mv "$temporary_backup" "$database_backup_file"
+  mv "$database_backup_temporary" "$database_backup_file"
+  database_backup_temporary=""
   database_backup_sha256=$(sha256sum "$database_backup_file" | awk '{print $1}')
   database_backup_bytes=$(wc -c < "$database_backup_file" | tr -d '[:space:]')
   [[ "$database_backup_sha256" =~ ^[0-9a-f]{64}$ && "$database_backup_bytes" =~ ^[1-9][0-9]*$ ]] \
     || blocked "Production database backup evidence is invalid"
+  database_backup_verified="true"
 }
 
 apply_migrations() {
   local path checksum
+  assert_validated_database_backup
   [[ -s "$migration_plan" ]] \
     || blocked "Production migration release has an empty migration plan"
   while IFS='|' read -r path checksum; do
@@ -903,6 +1255,17 @@ restore_original_backend() {
 
 cleanup() {
   set +e
+  if [[ -n "$database_backup_restore_container" \
+      && "$database_backup_restore_container" == mfms-production-backup-restore-* \
+      && -n "$(docker ps -aq --filter "name=^/${database_backup_restore_container}$")" ]]; then
+    docker rm -f "$database_backup_restore_container" >/dev/null 2>&1 || true
+  fi
+  database_backup_restore_container=""
+  if [[ -n "$database_backup_temporary" \
+      && "$database_backup_temporary" == "$database_backup_dir"/."$database_name".* ]]; then
+    rm -f "$database_backup_temporary"
+  fi
+  database_backup_temporary=""
   remove_candidate
   if [[ "$work_dir" == "$state_dir"/backend-work.* ]]; then
     rm -rf "$work_dir"
@@ -989,6 +1352,9 @@ deploy_backend() {
   echo "database_backup_sha256=$database_backup_sha256"
   echo "database_backup_bytes=$database_backup_bytes"
   echo "database_backup_verified=true"
+  echo "database_backup_role=$database_backup_role"
+  echo "database_backup_restore_postgres_major=$database_backup_restore_postgres_major"
+  echo "database_backup_restore_verified=$database_backup_restore_verified"
   echo "database_migrations=forward-only"
   echo "worker_actor_assertion=server-local"
   echo "frontend_unchanged=true"
