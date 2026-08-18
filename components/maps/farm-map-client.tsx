@@ -1051,6 +1051,9 @@ export function FarmMapClient() {
 
   return (
     <FarmOrthomosaicMap
+      controlsPlacement="responsive-grid"
+      enableFullscreen
+      mapHeightClassName="h-[clamp(440px,60vh,620px)] md:h-[clamp(500px,62vh,680px)] lg:h-[clamp(520px,65vh,800px)]"
       mapTitle={
         <>
           <span>MFMS Farm Map — Preview/UAT</span>

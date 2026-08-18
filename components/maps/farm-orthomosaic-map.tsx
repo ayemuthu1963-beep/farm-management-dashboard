@@ -1,9 +1,9 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type Leaflet from "leaflet"
-import { Layers, MapPinned, Maximize2 } from "lucide-react"
+import { Layers, MapPinned, Maximize2, Minimize2 } from "lucide-react"
 import { PMTiles, TileType, leafletRasterLayer } from "pmtiles"
 
 import { Panel } from "@/components/farm/panel"
@@ -24,7 +24,8 @@ interface FarmOrthomosaicMapProps {
   showLayerControls?: boolean
   showFitControls?: boolean
   showDetails?: boolean
-  controlsPlacement?: "side" | "below"
+  enableFullscreen?: boolean
+  controlsPlacement?: "side" | "below" | "responsive-grid"
   onMapReady?: (map: LeafletMap, leaflet: LeafletApi) => void | (() => void)
   children?: ReactNode
   contentBelowMap?: ReactNode
@@ -44,17 +45,38 @@ export function FarmOrthomosaicMap({
   showLayerControls = true,
   showFitControls = true,
   showDetails = true,
+  enableFullscreen = false,
   controlsPlacement = "side",
   onMapReady,
   children,
   contentBelowMap,
 }: FarmOrthomosaicMapProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null)
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
   const tileRef = useRef<Leaflet.GridLayer | null>(null)
+  const resizeTimerRef = useRef<number | null>(null)
+  const wasExpandedRef = useRef(false)
   const [layerEnabled, setLayerEnabled] = useState(true)
   const [opacity, setOpacity] = useState(100)
   const [status, setStatus] = useState("Loading PMTiles orthomosaic…")
+  const [fullscreenMode, setFullscreenMode] = useState<"none" | "native" | "fallback">("none")
+  const isMapExpanded = fullscreenMode !== "none"
+
+  const resizeMap = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    window.requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false, pan: false })
+    })
+    if (resizeTimerRef.current !== null) window.clearTimeout(resizeTimerRef.current)
+    resizeTimerRef.current = window.setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: false, pan: false })
+      resizeTimerRef.current = null
+    }, 180)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -131,21 +153,139 @@ export function FarmOrthomosaicMap({
     tileRef.current?.setOpacity(opacity / 100)
   }, [opacity])
 
+  useEffect(() => {
+    if (!enableFullscreen) return
+    const handleFullscreenChange = () => {
+      if (document.fullscreenElement === mapContainerRef.current) {
+        setFullscreenMode("native")
+        return
+      }
+      setFullscreenMode((current) => (current === "native" ? "none" : current))
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && fullscreenMode === "fallback") {
+        setFullscreenMode("none")
+      }
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [enableFullscreen, fullscreenMode])
+
+  useEffect(() => {
+    if (!isMapExpanded) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isMapExpanded])
+
+  useEffect(() => {
+    resizeMap()
+    if (wasExpandedRef.current && !isMapExpanded) expandButtonRef.current?.focus()
+    wasExpandedRef.current = isMapExpanded
+  }, [isMapExpanded, resizeMap])
+
+  useEffect(() => {
+    if (!enableFullscreen) return
+    const fullscreenContainer = mapContainerRef.current
+    const handleViewportChange = () => resizeMap()
+    window.addEventListener("resize", handleViewportChange)
+    window.addEventListener("orientationchange", handleViewportChange)
+
+    const observer =
+      typeof ResizeObserver === "undefined" || !mapElementRef.current
+        ? null
+        : new ResizeObserver(handleViewportChange)
+    if (observer && mapElementRef.current) observer.observe(mapElementRef.current)
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange)
+      window.removeEventListener("orientationchange", handleViewportChange)
+      observer?.disconnect()
+      if (resizeTimerRef.current !== null) window.clearTimeout(resizeTimerRef.current)
+      if (document.fullscreenElement === fullscreenContainer) void document.exitFullscreen()
+    }
+  }, [enableFullscreen, resizeMap])
+
+  async function toggleMapExpansion() {
+    const container = mapContainerRef.current
+    if (!container) return
+
+    if (isMapExpanded) {
+      if (document.fullscreenElement === container && document.exitFullscreen) {
+        await document.exitFullscreen()
+      } else {
+        setFullscreenMode("none")
+      }
+      return
+    }
+
+    if (container.requestFullscreen) {
+      try {
+        await container.requestFullscreen()
+        setFullscreenMode("native")
+        return
+      } catch {
+        // Browsers may reject Fullscreen API requests; the fixed viewport fallback remains available.
+      }
+    }
+    setFullscreenMode("fallback")
+  }
+
   function fitTo(bounds: Coordinate[]) {
     mapRef.current?.fitBounds(bounds, { padding: FARM_FIT_PADDING })
   }
 
   const mapPanel = (
-    <Panel
-      title={mapTitle}
-      icon={MapPinned}
-      bodyClassName="p-0"
-      headerRight={<span className="text-xs font-medium text-muted-foreground">{status}</span>}
+    <div
+      ref={mapContainerRef}
+      id="farm-map-container"
+      className={
+        isMapExpanded
+          ? "fixed inset-0 z-[1100] h-[100dvh] w-screen bg-background"
+          : "min-w-0"
+      }
     >
-      <div className={`${mapHeightClassName} overflow-hidden rounded-b-xl bg-muted`}>
-        <div ref={mapElementRef} className="h-full w-full" aria-label="Farm drone orthomosaic map" />
-      </div>
-    </Panel>
+      <Panel
+        title={mapTitle}
+        icon={MapPinned}
+        className={isMapExpanded ? "flex h-full min-h-0 flex-col rounded-none border-0" : undefined}
+        bodyClassName={isMapExpanded ? "flex min-h-0 flex-1 p-0" : "p-0"}
+        headerRight={enableFullscreen ? (
+          <div className="flex items-center justify-end gap-2">
+            <span className="hidden max-w-64 text-xs font-medium leading-tight text-muted-foreground sm:block" aria-live="polite">
+              {status}
+            </span>
+            <Button
+              ref={expandButtonRef}
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-controls="farm-map-container"
+              aria-expanded={isMapExpanded}
+              aria-label={isMapExpanded ? "Exit full screen" : "Expand map"}
+              title={isMapExpanded ? "Exit full screen" : "Expand map"}
+              onClick={() => void toggleMapExpansion()}
+            >
+              {isMapExpanded ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+              <span className="hidden sm:inline">{isMapExpanded ? "Exit full screen" : "Expand map"}</span>
+            </Button>
+          </div>
+        ) : <span className="text-xs font-medium text-muted-foreground">{status}</span>}
+      >
+        <div
+          className={`${isMapExpanded ? "h-full min-h-0 flex-1 rounded-none" : mapHeightClassName} overflow-hidden rounded-b-xl bg-muted`}
+        >
+          <div ref={mapElementRef} className="h-full w-full" aria-label="Farm drone orthomosaic map" />
+        </div>
+      </Panel>
+    </div>
   )
 
   const layerControls = showLayerControls ? (
@@ -220,6 +360,25 @@ export function FarmOrthomosaicMap({
         {children}
         {detailsPanel}
         {notePanel}
+      </div>
+    )
+  }
+
+  if (controlsPlacement === "responsive-grid") {
+    return (
+      <div className={`flex min-w-0 flex-col gap-4 ${className}`}>
+        {mapPanel}
+        <div
+          data-testid="farm-map-tile-grid"
+          className="grid min-w-0 grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+        >
+          {layerControls}
+          {children}
+          {fitControls}
+          {contentBelowMap}
+          {detailsPanel}
+          {notePanel}
+        </div>
       </div>
     )
   }
