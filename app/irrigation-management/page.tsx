@@ -14,19 +14,13 @@ import { IrrigationZoneTableHybrid } from "@/components/irrigation/irrigation-zo
 import { IrrigationPlanTables } from "@/components/irrigation/irrigation-plan-tables"
 import { emptyIrrigationData, statusColors, type IrrigationData, type ZoneId } from "@/lib/irrigation-data"
 import { buildIrrigationZoneCsv } from "@/lib/irrigation-export"
+import { irrigationEnvironmentCopy } from "@/lib/public-environment"
 import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
 
-const environmentBanner = process.env.NEXT_PUBLIC_MFMS_ENV_BANNER?.trim()
-const environmentDatabaseLabel = process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL?.trim()
-const environmentDataScope =
-  environmentDatabaseLabel === "mfms_server_uat" || environmentBanner?.toLowerCase().includes("pilot")
-    ? "PREVIEW"
-    : environmentDatabaseLabel === "mfms_local_uat_v1_2" || environmentBanner?.toLowerCase().includes("uat")
-      ? "LOCAL UAT"
-      : !environmentDatabaseLabel || environmentDatabaseLabel === "mfms_local_dev_v1_2"
-        ? "LOCAL"
-        : "UNKNOWN"
-const liveDataLabel = `LIVE ${environmentDataScope} DATABASE DATA`
+const irrigationEnvironment = irrigationEnvironmentCopy(
+  process.env.NEXT_PUBLIC_MFMS_ENV,
+  process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL,
+)
 
 export default function IrrigationManagementPage() {
   const [periodQuery, setPeriodQuery] = useState(() => buildIrrigationPeriodQuery("lastN"))
@@ -90,7 +84,7 @@ export default function IrrigationManagementPage() {
             <p className="mt-1 text-muted-foreground">Six-zone water distribution with an independent Nutmeg box</p>
           </div>
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-emerald-700">
-            <Database className="size-3.5" aria-hidden="true" /> {liveDataLabel}
+            <Database className="size-3.5" aria-hidden="true" /> {irrigationEnvironment.liveDataBadge}
           </div>
         </div>
 
