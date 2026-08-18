@@ -576,11 +576,22 @@ allowed = re.compile(
     r"scripts/run_production_(?:beetle|harvest|well_water)_sync\.sh|"
     r"tests/[^/]+)$"
 )
+release_specific_tree = "f889f6ad2c97662bd935c3fdfa1add1614836fc3"
 release_specific = {
     ".env.example": {
         "candidate": "94b28f17702e409e13d25e288fc5cd4b9bbef545",
         "blob": "d4485596e32dd37aff86b4bcede1a1ec0034ade4",
         "sha256": "896a4746e01e263518d8966f8586e2bc187e473aad5a087e0e9511625b509615",
+    },
+    "docker-compose.yml": {
+        "candidate": "94b28f17702e409e13d25e288fc5cd4b9bbef545",
+        "blob": "839a5adc66376d41ef80993abedda33d10c14f25",
+        "sha256": "c0165614281b7b81f33cb252907f313a25bc613a8e6bf0c3346e632d98396247",
+    },
+    "scripts/verify_production_deployment_contract.py": {
+        "candidate": "94b28f17702e409e13d25e288fc5cd4b9bbef545",
+        "blob": "cd107bbe56de0a75cd147ffcbd7952d25c0ecf03",
+        "sha256": "63e9ffdcda9d3486cc5084ec1c8c9066490e2fdf905afcdb01a90e78697b1e1d",
     },
 }
 
@@ -588,6 +599,11 @@ release_specific = {
 def release_specific_path_approved(path):
     approval = release_specific.get(path)
     if approval is None or candidate != approval["candidate"]:
+        return False
+    tree = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", f"{candidate}^{{tree}}"], text=True
+    ).strip()
+    if tree != release_specific_tree:
         return False
     blob = subprocess.check_output(
         ["git", "-C", str(source), "rev-parse", f"{candidate}:{path}"], text=True
