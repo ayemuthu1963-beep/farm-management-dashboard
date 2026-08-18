@@ -2,43 +2,35 @@
   "schema_version": 1,
   "environment": "Production",
   "target_url": "https://muthufarms.com",
-  "deployment_kind": "frontend-only",
-  "release_note": "Farm Irrigation Table scheduled-versus-actual comparison",
-  "base_commit": "a3e63db408ffbd063d2f58724eed617d130eff22",
+  "deployment_kind": "coordinated-frontend-after-backend",
+  "release_note": "Allow expired fertiliser stock in Outgoing Stock and Adjustment Out",
+  "base_commit": "11d2a1493a7546328b5d7c2ee1bb002d7df0249b",
   "preview_approved": {
-    "revision": "8c1ce1b2b2945e8968104fb5699d6cbfb16b795f",
-    "image_id": "sha256:131f76a8dd6532e171dbd68c1da678b1313887ec67fe8af1ee3971cf061c009d",
-    "feature_revision": "0857b91f661e05b8321bc1646347af248bb8f42b",
+    "revision": "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e",
+    "image_id": "sha256:b0e5301a08386cf1defb78be947f8b07b95b85c43dee0b3895d0228affbc0220",
+    "feature_revision": "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4",
     "verified_files": [
-      "app/irrigation-management/page.tsx",
-      "components/irrigation/irrigation-map-with-details.tsx",
-      "components/irrigation/irrigation-plan-tables.tsx",
-      "lib/irrigation-schedule-comparison.ts",
-      "tests/irrigation-management-corrections.mjs"
+      "tests/fertiliser-master-management.mjs"
     ],
     "production_adaptations": [
+      "app/fertiliser-management/page.tsx",
       "deploy/production-release-manifest.json",
-      "tests/farm-calendar-production-promotion.mjs",
-      "tests/irrigation-plan.mjs"
+      "tests/farm-calendar-production-promotion.mjs"
     ]
   },
   "protected_invariants": {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "unchanged",
+    "backend": "deployed-first-from-isolated-fertiliser-candidate",
     "database": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/irrigation-management/page.tsx",
-    "components/irrigation/irrigation-map-with-details.tsx",
-    "components/irrigation/irrigation-plan-tables.tsx",
+    "app/fertiliser-management/page.tsx",
     "deploy/production-release-manifest.json",
-    "lib/irrigation-schedule-comparison.ts",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/irrigation-management-corrections.mjs",
-    "tests/irrigation-plan.mjs"
+    "tests/fertiliser-master-management.mjs"
   ]
 }
