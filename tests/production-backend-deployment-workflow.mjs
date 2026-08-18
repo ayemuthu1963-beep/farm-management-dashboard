@@ -78,34 +78,127 @@ assert.match(gate, /PRODUCTION_BACKEND_ROLLBACK=PASS/)
 assert.doesNotMatch(gate, /mfms_server_uat|harvest-api-pilot|production\.muthufarms\.com/)
 assert.doesNotMatch(gate, /docker\s+compose\b|\bsudo\b|nginx\s+-s\s+reload|crontab\s+-[er]/)
 
-const exactPathApproval = {
-  path: ".env.example",
+const exactReleaseApproval = {
   candidate: "94b28f17702e409e13d25e288fc5cd4b9bbef545",
-  blob: "d4485596e32dd37aff86b4bcede1a1ec0034ade4",
-  sha256: "896a4746e01e263518d8966f8586e2bc187e473aad5a087e0e9511625b509615",
+  tree: "f889f6ad2c97662bd935c3fdfa1add1614836fc3",
+  paths: {
+    ".env.example": {
+      blob: "d4485596e32dd37aff86b4bcede1a1ec0034ade4",
+      sha256: "896a4746e01e263518d8966f8586e2bc187e473aad5a087e0e9511625b509615",
+    },
+    "docker-compose.yml": {
+      blob: "839a5adc66376d41ef80993abedda33d10c14f25",
+      sha256: "c0165614281b7b81f33cb252907f313a25bc613a8e6bf0c3346e632d98396247",
+    },
+    "scripts/verify_production_deployment_contract.py": {
+      blob: "cd107bbe56de0a75cd147ffcbd7952d25c0ecf03",
+      sha256: "63e9ffdcda9d3486cc5084ec1c8c9066490e2fdf905afcdb01a90e78697b1e1d",
+    },
+  },
+  migrationHashes: {
+    settings: "87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1",
+    persistenceV2: "5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9",
+  },
 }
-const releaseSpecificDecision = ({ path, candidate, blob, sha256 }) =>
-  path === exactPathApproval.path
-  && candidate === exactPathApproval.candidate
-  && blob === exactPathApproval.blob
-  && sha256 === exactPathApproval.sha256
+const releaseSpecificDecision = ({ path, candidate, tree, blob, sha256 }) => {
+  const approval = exactReleaseApproval.paths[path]
+  return approval != null
+    && candidate === exactReleaseApproval.candidate
+    && tree === exactReleaseApproval.tree
+    && blob === approval.blob
+    && sha256 === approval.sha256
+}
+const exactPathApprovals = Object.entries(exactReleaseApproval.paths).map(([path, hashes]) => ({
+  path,
+  candidate: exactReleaseApproval.candidate,
+  tree: exactReleaseApproval.tree,
+  ...hashes,
+}))
 
-assert.equal(releaseSpecificDecision(exactPathApproval), true)
-assert.equal(releaseSpecificDecision({ ...exactPathApproval, blob: "0".repeat(40) }), false)
-assert.equal(releaseSpecificDecision({ ...exactPathApproval, sha256: "0".repeat(64) }), false)
-assert.equal(releaseSpecificDecision({ ...exactPathApproval, path: "unexpected.txt" }), false)
-assert.equal(releaseSpecificDecision({ ...exactPathApproval, candidate: "0".repeat(40) }), false)
+for (const approval of exactPathApprovals) {
+  assert.equal(releaseSpecificDecision(approval), true)
+  assert.equal(releaseSpecificDecision({ ...approval, blob: "0".repeat(40) }), false)
+  assert.equal(releaseSpecificDecision({ ...approval, sha256: "0".repeat(64) }), false)
+}
+assert.equal(releaseSpecificDecision({ ...exactPathApprovals[0], tree: "0".repeat(40) }), false)
+assert.equal(releaseSpecificDecision({ ...exactPathApprovals[0], path: "unexpected.txt" }), false)
+assert.equal(releaseSpecificDecision({ ...exactPathApprovals[0], candidate: "0".repeat(40) }), false)
 
-for (const value of Object.values(exactPathApproval)) {
+for (const value of [
+  exactReleaseApproval.candidate,
+  exactReleaseApproval.tree,
+  ...Object.values(exactReleaseApproval.paths).flatMap(({ blob, sha256 }) => [blob, sha256]),
+]) {
   assert.match(gate, new RegExp(value.replaceAll(".", "\\.")))
 }
 assert.match(gate, /approval is None or candidate != approval\["candidate"\]/)
+assert.match(gate, /if tree != release_specific_tree:/)
 assert.match(gate, /if blob != approval\["blob"\]/)
 assert.match(gate, /hashlib\.sha256\(content\)\.hexdigest\(\) == approval\["sha256"\]/)
 assert.match(gate, /if allowed\.fullmatch\(path\) or release_specific_path_approved\(path\):/)
 
 const generalAllowlist = gate.match(/allowed = re\.compile\([\s\S]*?\n\)/)?.[0] ?? ""
 assert.doesNotMatch(generalAllowlist, /\\?\.env|dotfile/)
+assert.doesNotMatch(generalAllowlist, /docker-compose|verify_production_deployment_contract/)
+
+const completeCandidatePaths = [
+  ".env.example",
+  ".github/workflows/ci.yml",
+  "api/app/routers/operator_settings.py",
+  "db/migrations/20260817_irrigation_plan_persistence_v2.sql",
+  "db/migrations/20260817_irrigation_plan_settings.sql",
+  "db/migrations/20260818_production_irrigation_plan_persistence_v2.sql",
+  "db/migrations/20260818_production_irrigation_plan_settings.sql",
+  "db/rollbacks/20260817_irrigation_plan_persistence_v2.sql",
+  "db/rollbacks/20260817_irrigation_plan_settings.sql",
+  "db/rollbacks/20260818_production_irrigation_plan_persistence_v2.sql",
+  "db/rollbacks/20260818_production_irrigation_plan_settings.sql",
+  "deploy/production-backend-release.json",
+  "docker-compose.yml",
+  "scripts/apply_production_migrations.py",
+  "scripts/validate_production_release.py",
+  "scripts/verify_production_deployment_contract.py",
+  "tests/run_production_irrigation_migration_integration.py",
+  "tests/test_irrigation_plan_persistence_production.py",
+  "tests/test_production_deployment_contract.py",
+  "tests/test_production_migration_runner.py",
+  "tests/test_production_source_release_contract.py",
+]
+const generalCandidatePath = /^(?:\.github\/(?:CODEOWNERS|pull_request_template\.md|workflows\/ci\.yml)|README\.md|api\/(?:Dockerfile|requirements\.txt|app\/(?:[^/]+\.py|routers\/[^/]+\.py|models\/[^/]+\.py|repositories\/[^/]+\.py|services\/[^/]+\.py))|db\/migrations\/[0-9][A-Za-z0-9_.-]*\.sql|db\/rollbacks\/[0-9][A-Za-z0-9_.-]*\.sql|deploy\/(?:production-backend-release|release-governance)\.json|docs\/MFMS_DATABASE_RELEASE_POLICY\.md|scripts\/(?:apply_production_asset_register|apply_production_migrations|import_access_csv|import_historical_clean_csv|import_manual_harvest_csv|odk_sync_placeholder|sync_production_harvest_odk|sync_well_water_odk|validate_production_release|validate_release_governance)\.py|scripts\/run_production_(?:beetle|harvest|well_water)_sync\.sh|tests\/[^/]+)$/
+const remainingUnapproved = completeCandidatePaths.filter(
+  (path) => !generalCandidatePath.test(path) && exactReleaseApproval.paths[path] == null,
+)
+assert.equal(completeCandidatePaths.length, 21)
+assert.deepEqual(remainingUnapproved, [])
+assert.deepEqual(
+  completeCandidatePaths.filter((path) => !generalCandidatePath.test(path)),
+  Object.keys(exactReleaseApproval.paths),
+)
+
+assert.deepEqual(exactReleaseApproval.migrationHashes, {
+  settings: "87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1",
+  persistenceV2: "5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9",
+})
+
+for (const contract of [
+  /readonly live_port="8001"/,
+  /readonly candidate_port="8002"/,
+  /readonly approved_restart_policy="unless-stopped"/,
+  /readonly approved_temp_mount_source="\/tmp"/,
+  /readonly approved_temp_mount_target="\/host-tmp"/,
+  /readonly approved_storage_mount_source="\/home\/muthu\/mfms_data\/production\/motor-screenshot-analysis"/,
+  /readonly approved_storage_mount_target="\/var\/lib\/mfms\/motor-screenshot-analysis"/,
+  /docker inspect --format '\{\{range \.Config\.Env\}\}\{\{println \.\}\}\{\{end\}\}' "\$source_container"/,
+  /cat "\$database_url_override_file" >> "\$environment_file"/,
+  /--ip "\$approved_production_ipv4"/,
+  /-p "127\.0\.0\.1:\$live_port:8000"/,
+  /--restart "\$approved_restart_policy"/,
+  /wait_for_health "http:\/\/127\.0\.0\.1:\$live_port"/,
+  /assert_approved_mount_contract "\$backend_live_container"/,
+  /assert_database_target "\$backend_live_container"/,
+]) {
+  assert.match(gate, contract)
+}
 
 const mode = spawnSync("git", ["ls-files", "-s", "--", "scripts/production-server-backend-deploy.sh"], {
   encoding: "utf8",
