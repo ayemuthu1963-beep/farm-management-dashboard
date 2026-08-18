@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Keep Farm Irrigation Table values readable in contained mobile scrolling",
+  "Allow expired fertiliser stock in Outgoing Stock and Adjustment Out",
 )
-assert.equal(manifest.base_commit, "97c8d0f28ecbf314a5af1c4f36505ee75a43fd30")
+assert.equal(manifest.base_commit, "8c1ce1b2b2945e8968104fb5699d6cbfb16b795f")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,8 +280,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "tests/irrigation-management-corrections.mjs",
+  "app/fertiliser-management/page.tsx",
+  "tests/fertiliser-master-management.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
 ]

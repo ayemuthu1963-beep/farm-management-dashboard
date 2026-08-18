@@ -3,11 +3,11 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Keep Farm Irrigation Table values readable in contained mobile scrolling",
-  "base_commit": "97c8d0f28ecbf314a5af1c4f36505ee75a43fd30",
+  "release_note": "Allow expired fertiliser stock in Outgoing Stock and Adjustment Out",
+  "base_commit": "8c1ce1b2b2945e8968104fb5699d6cbfb16b795f",
   "allowed_paths": [
-    "components/irrigation/irrigation-map-with-details.tsx",
-    "tests/irrigation-management-corrections.mjs",
+    "app/fertiliser-management/page.tsx",
+    "tests/fertiliser-master-management.mjs",
     "deploy/preview-release-manifest.json",
     "tests/preview-deployment-workflow.mjs"
   ],
