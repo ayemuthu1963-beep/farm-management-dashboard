@@ -66,6 +66,8 @@ assert.match(gate, /deploy\/production-backend-release\.json/)
 assert.match(gate, /backend-with-forward-only-migrations/)
 assert.match(gate, /Production migration release must contain a declared migration/)
 assert.match(gate, /Production migration release has an empty migration plan/)
+assert.match(gate, /actual = hashlib\.sha256\(content\)\.hexdigest\(\)/)
+assert.match(gate, /if actual != checksum:/)
 assert.match(gate, /pg_dump --format=custom/)
 assert.match(gate, /pg_restore --list/)
 assert.match(gate, /com\.muthufarms\.mfms\.source-contract/)
@@ -75,6 +77,35 @@ assert.match(gate, /PRODUCTION_BACKEND_DEPLOYMENT=PASS/)
 assert.match(gate, /PRODUCTION_BACKEND_ROLLBACK=PASS/)
 assert.doesNotMatch(gate, /mfms_server_uat|harvest-api-pilot|production\.muthufarms\.com/)
 assert.doesNotMatch(gate, /docker\s+compose\b|\bsudo\b|nginx\s+-s\s+reload|crontab\s+-[er]/)
+
+const exactPathApproval = {
+  path: ".env.example",
+  candidate: "94b28f17702e409e13d25e288fc5cd4b9bbef545",
+  blob: "d4485596e32dd37aff86b4bcede1a1ec0034ade4",
+  sha256: "896a4746e01e263518d8966f8586e2bc187e473aad5a087e0e9511625b509615",
+}
+const releaseSpecificDecision = ({ path, candidate, blob, sha256 }) =>
+  path === exactPathApproval.path
+  && candidate === exactPathApproval.candidate
+  && blob === exactPathApproval.blob
+  && sha256 === exactPathApproval.sha256
+
+assert.equal(releaseSpecificDecision(exactPathApproval), true)
+assert.equal(releaseSpecificDecision({ ...exactPathApproval, blob: "0".repeat(40) }), false)
+assert.equal(releaseSpecificDecision({ ...exactPathApproval, sha256: "0".repeat(64) }), false)
+assert.equal(releaseSpecificDecision({ ...exactPathApproval, path: "unexpected.txt" }), false)
+assert.equal(releaseSpecificDecision({ ...exactPathApproval, candidate: "0".repeat(40) }), false)
+
+for (const value of Object.values(exactPathApproval)) {
+  assert.match(gate, new RegExp(value.replaceAll(".", "\\.")))
+}
+assert.match(gate, /approval is None or candidate != approval\["candidate"\]/)
+assert.match(gate, /if blob != approval\["blob"\]/)
+assert.match(gate, /hashlib\.sha256\(content\)\.hexdigest\(\) == approval\["sha256"\]/)
+assert.match(gate, /if allowed\.fullmatch\(path\) or release_specific_path_approved\(path\):/)
+
+const generalAllowlist = gate.match(/allowed = re\.compile\([\s\S]*?\n\)/)?.[0] ?? ""
+assert.doesNotMatch(generalAllowlist, /\\?\.env|dotfile/)
 
 const mode = spawnSync("git", ["ls-files", "-s", "--", "scripts/production-server-backend-deploy.sh"], {
   encoding: "utf8",

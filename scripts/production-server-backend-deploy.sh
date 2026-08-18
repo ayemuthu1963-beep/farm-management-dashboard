@@ -576,11 +576,36 @@ allowed = re.compile(
     r"scripts/run_production_(?:beetle|harvest|well_water)_sync\.sh|"
     r"tests/[^/]+)$"
 )
+release_specific = {
+    ".env.example": {
+        "candidate": "94b28f17702e409e13d25e288fc5cd4b9bbef545",
+        "blob": "d4485596e32dd37aff86b4bcede1a1ec0034ade4",
+        "sha256": "896a4746e01e263518d8966f8586e2bc187e473aad5a087e0e9511625b509615",
+    },
+}
+
+
+def release_specific_path_approved(path):
+    approval = release_specific.get(path)
+    if approval is None or candidate != approval["candidate"]:
+        return False
+    blob = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", f"{candidate}:{path}"], text=True
+    ).strip()
+    if blob != approval["blob"]:
+        return False
+    content = subprocess.check_output(
+        ["git", "-C", str(source), "cat-file", "blob", blob]
+    )
+    return hashlib.sha256(content).hexdigest() == approval["sha256"]
+
+
 if not changed:
     raise SystemExit("backend candidate contains no changes from the live revision")
 for path in changed:
-    if not allowed.fullmatch(path):
-        raise SystemExit(f"backend candidate contains an unapproved path: {path}")
+    if allowed.fullmatch(path) or release_specific_path_approved(path):
+        continue
+    raise SystemExit(f"backend candidate contains an unapproved path: {path}")
 
 pathlib.Path(migrations_output).write_text(
     "".join(f"{path}|{checksum}\n" for path, checksum in plan), encoding="utf-8"
