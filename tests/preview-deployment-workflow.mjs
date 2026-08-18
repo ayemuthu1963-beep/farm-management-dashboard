@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Refine the Preview Farm Map card packing and classification labels after live responsive review",
+  "Prevent long Farm Map classification labels from clipping in the responsive Preview card grid",
 )
-assert.equal(manifest.base_commit, "b4370dd82383dde8a573cb4e93ca7da3944243d3")
+assert.equal(manifest.base_commit, "f79ca14f91192ffae19117f00caaeea407f6ad18")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -281,7 +281,6 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 const expectedReleasePaths = [
   "components/maps/farm-map-client.tsx",
-  "components/maps/irrigation-pipeline-editor.tsx",
   "tests/farm-map-fullscreen-layout.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
