@@ -37,6 +37,25 @@ readonly state_dir="/home/muthu/.local/state/mfms-production-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
+readonly coordinated_candidate_revision="9a577add2308b85637fcf05ee49b6274e19cc2dc"
+readonly coordinated_candidate_tree="e102fe82bdb6b009012933684c6db3d927f53a7a"
+readonly coordinated_backend_revision="94b28f17702e409e13d25e288fc5cd4b9bbef545"
+readonly coordinated_backend_container_id="969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47"
+readonly coordinated_backend_image_id="sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512"
+readonly coordinated_backend_environment_sha256="90213d0772f3fa45c40987748bc4b1815cdb55fb24e701ecd4a2bcc941e81e12"
+readonly coordinated_backup_path="/home/muthu/.local/state/mfms-production-github/database-backups/mfms_server_prod-pre-94b28f17702e409e13d25e288fc5cd4b9bbef545-20260818T050946Z.dump"
+readonly coordinated_backup_bytes="1762112"
+readonly coordinated_backup_sha256="9ea00949fd57a579bbee1b6765f8faf7bc88268166bc05c5cc087088dcd47e13"
+readonly coordinated_settings_migration="db/migrations/20260818_production_irrigation_plan_settings.sql"
+readonly coordinated_settings_sha256="87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1"
+readonly coordinated_audit_migration="db/migrations/20260818_production_irrigation_plan_persistence_v2.sql"
+readonly coordinated_audit_sha256="5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9"
+readonly coordinated_frontend_baseline_revision="e9833917c0a7fd190d933acb8cb234f60f5c8c65"
+readonly coordinated_frontend_baseline_container_id="2e8781b403c115b08a15faf0f88e75fca1faa8a6f055128365329e159a119436"
+readonly coordinated_frontend_baseline_image_id="sha256:6f3e81bef1f52c643e12c37a72b195d146a28e3f2eb6ca681cc6d9192b3081a8"
+readonly coordinated_frontend_baseline_environment_sha256="530e3be8c0957715d98b4253b2b7d50c39f5115b85d8e70543ac7f3cb09883d7"
+readonly coordinated_frontend_baseline_ipv4="172.19.128.7"
+readonly coordinated_verification_actor="production-release-verification"
 
 [[ "$production_url" == "https://muthufarms.com" ]] \
   || blocked "the public target is not Production"
@@ -51,6 +70,7 @@ expected_current_revision=""
 run_id=""
 readonly deploy_command_pattern='^deploy-production-frontend ([0-9a-f]{40}) ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-production-frontend ([0-9a-f]{40}) ([0-9]+)$'
+readonly preflight_command_pattern='^preflight-production-frontend ([0-9a-f]{40}) ([0-9a-f]{40}) ([0-9]+)$'
 
 original_command=${SSH_ORIGINAL_COMMAND:-}
 if [[ "$original_command" =~ $deploy_command_pattern ]]; then
@@ -62,8 +82,13 @@ elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
   operation="rollback"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $preflight_command_pattern ]]; then
+  operation="preflight"
+  candidate_revision=${BASH_REMATCH[1]}
+  expected_current_revision=${BASH_REMATCH[2]}
+  run_id=${BASH_REMATCH[3]}
 else
-  blocked "the SSH key accepts only an exact Production deploy or rollback command"
+  blocked "the SSH key accepts only an exact Production deploy, preflight, or rollback command"
 fi
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -95,6 +120,10 @@ preview_approved_revision=""
 preview_approved_image_id=""
 preview_feature_revision=""
 preview_verified_file_count=""
+candidate_tree=""
+coordinated_database_before="$work_dir/coordinated-database.before.json"
+coordinated_database_after_read="$work_dir/coordinated-database.after-read.json"
+coordinated_database_after_deploy="$work_dir/coordinated-database.after-deploy.json"
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -211,6 +240,12 @@ image_environment_for_container() {
   local container=$1 image_id
   image_id=$(docker inspect --format '{{.Image}}' "$container")
   docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.environment"}}' "$image_id"
+}
+
+environment_sha256_for_container() {
+  local container=$1
+  docker inspect --format '{{json .Config.Env}}' "$container" \
+    | python3 -c 'import hashlib,json,sys; values=sorted(json.load(sys.stdin) or []); print(hashlib.sha256(("\n".join(values)+"\n").encode()).hexdigest())'
 }
 
 snapshot_unrelated_containers() {
@@ -530,13 +565,18 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 validate_common_live_state() {
-  local failed_units
+  local failed_units running_id
   failed_units=$(systemctl --failed --no-legend --plain | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')
   [[ "$failed_units" == "0" ]] || blocked "the server has failed systemd units"
   [[ "$(docker ps -q | wc -l | tr -d '[:space:]')" == "$expected_running_containers" ]] \
     || blocked "the running container count is not the approved baseline"
   [[ "$(docker ps --filter health=unhealthy -q | wc -l | tr -d '[:space:]')" == "0" ]] \
     || blocked "an unhealthy container exists"
+  while IFS= read -r running_id; do
+    [[ -n "$running_id" ]] || continue
+    [[ "$(docker inspect --format '{{.RestartCount}}' "$running_id")" == "0" ]] \
+      || blocked "a running container has a nonzero restart count"
+  done < <(docker ps -q)
   for maintenance_lock in \
     /home/muthu/.local/state/mfms-preview-github/deployment.lock \
     /home/muthu/.local/state/mfms-test-github/deployment.lock
@@ -663,6 +703,287 @@ PY
     || blocked "public Production authentication guard is unavailable"
 }
 
+validate_coordinated_backup() {
+  python3 - "$coordinated_backup_path" "$coordinated_backup_bytes" <<'PY_COORDINATED_BACKUP'
+import pathlib
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected_bytes = int(sys.argv[2])
+metadata = path.lstat()
+if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+    raise SystemExit("coordinated Production backup is not a regular file")
+if stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("coordinated Production backup permissions changed")
+if metadata.st_size != expected_bytes:
+    raise SystemExit("coordinated Production backup size changed")
+PY_COORDINATED_BACKUP
+  [[ "$(sha256sum "$coordinated_backup_path" | awk '{print $1}')" == "$coordinated_backup_sha256" ]] \
+    || blocked "coordinated Production backup checksum changed"
+}
+
+snapshot_coordinated_database_state() {
+  local output=$1
+  docker exec -i "$backend_container" python - > "$output" \
+    "$coordinated_settings_migration" "$coordinated_settings_sha256" \
+    "$coordinated_audit_migration" "$coordinated_audit_sha256" \
+    "$coordinated_verification_actor" <<'PY_COORDINATED_DATABASE'
+import hashlib
+import json
+import os
+import sys
+
+import psycopg
+from psycopg.rows import dict_row
+
+settings_name, settings_hash, audit_name, audit_hash, verification_actor = sys.argv[1:]
+
+
+def digest(rows):
+    payload = json.dumps(rows, default=str, separators=(",", ":"), sort_keys=True).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+connection = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+try:
+    with connection.cursor() as cursor:
+        cursor.execute("SET TRANSACTION READ ONLY")
+        cursor.execute("SELECT current_database()")
+        database = cursor.fetchone()["current_database"]
+        cursor.execute("SELECT * FROM mfms_production_schema_migrations ORDER BY migration_name")
+        ledger = cursor.fetchall()
+        cursor.execute("SELECT * FROM mfms_irrigation_plan_settings ORDER BY setting_key")
+        settings = cursor.fetchall()
+        cursor.execute("SELECT * FROM mfms_irrigation_plan_audit ORDER BY audit_id")
+        audit = cursor.fetchall()
+        cursor.execute("""
+            SELECT tgname, tgenabled
+            FROM pg_trigger
+            WHERE tgrelid = 'mfms_irrigation_plan_audit'::regclass
+              AND NOT tgisinternal
+            ORDER BY tgname
+        """)
+        triggers = cursor.fetchall()
+finally:
+    connection.rollback()
+    connection.close()
+
+irrigation_ledger = [
+    {"migration_name": row["migration_name"], "sha256": row["sha256"]}
+    for row in ledger
+    if row["migration_name"] in {settings_name, audit_name}
+]
+put_audit_evidence = {
+    key: sum(
+        1 for row in audit
+        if row["setting_key"] == key
+        and row["actor"] == verification_actor
+        and row["action"] == "save"
+        and row["previous_payload"] == row["new_payload"]
+    )
+    for key in ("drip-output", "motor-run-schedule")
+}
+print(json.dumps({
+    "database": database,
+    "ledger_count": len(ledger),
+    "ledger_sha256": digest(ledger),
+    "irrigation_ledger": irrigation_ledger,
+    "settings_count": len(settings),
+    "settings_sha256": digest(settings),
+    "audit_count": len(audit),
+    "audit_sha256": digest(audit),
+    "put_audit_evidence": put_audit_evidence,
+    "triggers": triggers,
+    "trigger_sha256": digest(triggers),
+}, default=str, separators=(",", ":"), sort_keys=True))
+PY_COORDINATED_DATABASE
+  [[ -s "$output" ]] || blocked "coordinated database evidence is empty"
+  python3 - "$output" \
+    "$coordinated_settings_migration" "$coordinated_settings_sha256" \
+    "$coordinated_audit_migration" "$coordinated_audit_sha256" <<'PY_VALIDATE_COORDINATED_DATABASE'
+import json
+import pathlib
+import re
+import sys
+
+path, settings_name, settings_hash, audit_name, audit_hash = sys.argv[1:]
+evidence = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+if evidence.get("database") != "mfms_server_prod":
+    raise SystemExit("coordinated database evidence resolved to the wrong database")
+expected_ledger = [
+    {"migration_name": audit_name, "sha256": audit_hash},
+    {"migration_name": settings_name, "sha256": settings_hash},
+]
+if evidence.get("irrigation_ledger") != expected_ledger or evidence.get("ledger_count") != 3:
+    raise SystemExit("coordinated irrigation migration ledger is missing or changed")
+if evidence.get("settings_count") != 2:
+    raise SystemExit("coordinated irrigation settings table is missing or changed")
+if evidence.get("put_audit_evidence") != {"drip-output": 1, "motor-run-schedule": 1}:
+    raise SystemExit("coordinated authenticated PUT audit evidence is missing or changed")
+if evidence.get("triggers") != [{"tgenabled": "O", "tgname": "mfms_irrigation_plan_audit_no_change"}]:
+    raise SystemExit("coordinated append-only audit protection trigger is missing or changed")
+for key in ("ledger_sha256", "settings_sha256", "audit_sha256", "trigger_sha256"):
+    if re.fullmatch(r"[0-9a-f]{64}", str(evidence.get(key, ""))) is None:
+        raise SystemExit(f"coordinated database evidence has an invalid {key}")
+PY_VALIDATE_COORDINATED_DATABASE
+}
+
+probe_authenticated_irrigation_get() {
+  local path=$1
+  docker exec -i "$backend_container" python - "$path" <<'PY_AUTHENTICATED_IRRIGATION_GET'
+import base64
+import hashlib
+import hmac
+import json
+import sys
+import time
+from urllib.request import Request, urlopen
+
+from app.config import get_settings
+
+path = sys.argv[1]
+actor = "production-frontend-coordinated-guard"
+settings = get_settings()
+timestamp = str(int(time.time()))
+canonical = "\n".join((timestamp, "GET", path, actor))
+signature = hmac.new(
+    settings.api_admin_password.encode("utf-8"),
+    canonical.encode("utf-8"),
+    hashlib.sha256,
+).hexdigest()
+basic = base64.b64encode(
+    f"{settings.api_admin_username}:{settings.api_admin_password}".encode("utf-8")
+).decode("ascii")
+request = Request(
+    "http://127.0.0.1:8000" + path,
+    headers={
+        "Authorization": "Basic " + basic,
+        "X-MFMS-Authenticated-User": actor,
+        "X-MFMS-Authenticated-User-Timestamp": timestamp,
+        "X-MFMS-Authenticated-User-Signature": signature,
+    },
+)
+with urlopen(request, timeout=10) as response:
+    payload = json.load(response)
+    if response.status != 200 or not isinstance(payload.get("rows"), list) or len(payload["rows"]) != 6:
+        raise SystemExit("authenticated irrigation GET contract failed")
+print(f"authenticated_endpoint=GET {path} 200")
+PY_AUTHENTICATED_IRRIGATION_GET
+}
+
+verify_authenticated_irrigation_endpoint_evidence() {
+  local backend_logs="$work_dir/coordinated-backend.log" path
+  curl -fsS --max-time 10 http://127.0.0.1:8001/openapi.json \
+    | python3 -c '
+import json
+import sys
+
+paths = json.load(sys.stdin).get("paths", {})
+required = (
+    "/api/operator-settings/irrigation-plan/drip-output",
+    "/api/operator-settings/irrigation-plan/motor-run-schedule",
+)
+raise SystemExit(0 if all({"get", "put"}.issubset(paths.get(path, {})) for path in required) else 1)
+' || blocked "coordinated backend OpenAPI is missing an irrigation GET or PUT operation"
+  for path in \
+    /api/operator-settings/irrigation-plan/drip-output \
+    /api/operator-settings/irrigation-plan/motor-run-schedule
+  do
+    probe_authenticated_irrigation_get "$path" \
+      || blocked "coordinated authenticated irrigation GET failed: $path"
+  done
+  docker logs "$backend_container" > "$backend_logs" 2>&1
+  for path in \
+    /api/operator-settings/irrigation-plan/drip-output \
+    /api/operator-settings/irrigation-plan/motor-run-schedule
+  do
+    grep -Fq "\"GET $path HTTP/1.1\" 200 OK" "$backend_logs" \
+      || blocked "coordinated authenticated irrigation GET 200 evidence is missing: $path"
+    grep -Fq "\"PUT $path HTTP/1.1\" 200 OK" "$backend_logs" \
+      || blocked "coordinated authenticated irrigation PUT 200 evidence is missing: $path"
+  done
+}
+
+validate_exact_coordinated_release_state() {
+  [[ "$candidate_revision" == "$coordinated_candidate_revision" ]] \
+    || blocked "coordinated frontend candidate revision is not approved"
+  [[ "$candidate_tree" == "$coordinated_candidate_tree" ]] \
+    || blocked "coordinated frontend candidate tree is not approved"
+  [[ "$original_revision" == "$coordinated_frontend_baseline_revision" ]] \
+    || blocked "coordinated frontend baseline revision changed"
+  [[ "$original_container_id" == "$coordinated_frontend_baseline_container_id" ]] \
+    || blocked "coordinated frontend baseline container changed"
+  [[ "$original_image_id" == "$coordinated_frontend_baseline_image_id" ]] \
+    || blocked "coordinated frontend baseline image changed"
+  [[ "$original_network_ip" == "$coordinated_frontend_baseline_ipv4" ]] \
+    || blocked "coordinated frontend baseline fixed address changed"
+  [[ "$(environment_sha256_for_container "$live_container")" == "$coordinated_frontend_baseline_environment_sha256" ]] \
+    || blocked "coordinated frontend baseline environment changed"
+  [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]] \
+    || blocked "coordinated frontend baseline has restarted"
+  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$live_container")" == "unless-stopped" ]] \
+    || blocked "coordinated frontend baseline restart policy changed"
+  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "0" ]] \
+    || blocked "coordinated frontend baseline mount contract changed"
+
+  [[ "$backend_id_before" == "$coordinated_backend_container_id" ]] \
+    || blocked "coordinated backend container changed"
+  [[ "$backend_image_before" == "$coordinated_backend_image_id" ]] \
+    || blocked "coordinated backend image changed"
+  [[ "$(image_revision_for_container "$backend_container")" == "$coordinated_backend_revision" ]] \
+    || blocked "coordinated backend revision changed"
+  [[ "$(environment_sha256_for_container "$backend_container")" == "$coordinated_backend_environment_sha256" ]] \
+    || blocked "coordinated backend environment changed"
+  [[ "$(docker inspect --format '{{.RestartCount}}' "$backend_container")" == "0" ]] \
+    || blocked "coordinated backend has restarted"
+  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$backend_container")" == "unless-stopped" ]] \
+    || blocked "coordinated backend restart policy changed"
+  [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$backend_container")" == "$production_network" ]] \
+    || blocked "coordinated backend network changed"
+  [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$backend_container")" == \
+      '{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8001"}]}' ]] \
+    || blocked "coordinated backend port contract changed"
+  docker inspect --format '{{json .Mounts}}' "$backend_container" | python3 -c '
+import json
+import sys
+
+mounts = {
+    (item.get("Type"), item.get("Source"), item.get("Destination"), item.get("RW"))
+    for item in json.load(sys.stdin)
+}
+expected = {
+    ("bind", "/tmp", "/host-tmp", True),
+    ("bind", "/home/muthu/mfms_data/production/motor-screenshot-analysis", "/var/lib/mfms/motor-screenshot-analysis", True),
+}
+raise SystemExit(0 if mounts == expected else 1)
+' || blocked "coordinated backend mount contract changed"
+
+  validate_coordinated_backup
+  snapshot_coordinated_database_state "$coordinated_database_before"
+  verify_authenticated_irrigation_endpoint_evidence
+  snapshot_coordinated_database_state "$coordinated_database_after_read"
+  cmp -s "$coordinated_database_before" "$coordinated_database_after_read" \
+    || blocked "coordinated read-only endpoint preflight changed the Production database"
+}
+
+assert_coordinated_release_state_unchanged() {
+  [[ "$(docker inspect --format '{{.Id}}' "$backend_container")" == "$coordinated_backend_container_id" ]] \
+    || blocked "coordinated frontend deployment replaced the backend"
+  [[ "$(docker inspect --format '{{.Image}}' "$backend_container")" == "$coordinated_backend_image_id" ]] \
+    || blocked "coordinated frontend deployment changed the backend image"
+  [[ "$(environment_sha256_for_container "$backend_container")" == "$coordinated_backend_environment_sha256" ]] \
+    || blocked "coordinated frontend deployment changed backend credentials or environment"
+  [[ "$(network_ip_for_container "$backend_container")" == "172.19.0.2" ]] \
+    || blocked "coordinated frontend deployment changed the backend fixed address"
+  [[ "$(docker inspect --format '{{.RestartCount}}' "$backend_container")" == "0" ]] \
+    || blocked "coordinated frontend deployment restarted the backend"
+  validate_coordinated_backup
+  snapshot_coordinated_database_state "$coordinated_database_after_deploy"
+  cmp -s "$coordinated_database_before" "$coordinated_database_after_deploy" \
+    || blocked "coordinated frontend deployment changed the Production database"
+}
+
 validate_release_manifest() {
   local manifest="$source_dir/deploy/production-release-manifest.json"
   local actual_paths="$work_dir/actual-paths.txt"
@@ -673,16 +994,17 @@ validate_release_manifest() {
   git -C "$source_dir" diff --name-only "$original_revision..$candidate_revision" \
     | LC_ALL=C sort -u > "$actual_paths"
   [[ -s "$actual_paths" ]] || blocked "candidate contains no changes from live Production"
-  python3 - "$manifest" "$actual_paths" "$original_revision" > "$preview_contract" <<'PY'
+  python3 - "$manifest" "$actual_paths" "$original_revision" "$candidate_revision" "$candidate_tree" \
+    > "$preview_contract" <<'PY_RELEASE_MANIFEST'
 import json
 import pathlib
 import re
 import sys
 
-manifest_path, actual_path, current = sys.argv[1:]
+manifest_path, actual_path, current, candidate, candidate_tree = sys.argv[1:]
 data = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
 
-expected_invariants = {
+frontend_only_invariants = {
     "preview": "unchanged",
     "test": "unchanged",
     "backend": "unchanged",
@@ -691,6 +1013,17 @@ expected_invariants = {
     "schedules": "unchanged",
     "proxy_configuration": "unchanged",
 }
+coordinated_invariants = {
+    "preview": "unchanged",
+    "test": "unchanged",
+    "backend": "deployed-first-from-isolated-irrigation-candidate",
+    "database": "additive-production-irrigation-migrations-only",
+    "odk": "unchanged",
+    "schedules": "unchanged",
+    "proxy_configuration": "unchanged",
+}
+approved_coordinated_candidate = "9a577add2308b85637fcf05ee49b6274e19cc2dc"
+approved_coordinated_tree = "e102fe82bdb6b009012933684c6db3d927f53a7a"
 
 if data.get("schema_version") != 1:
     raise SystemExit("invalid manifest schema")
@@ -698,12 +1031,19 @@ if data.get("environment") != "Production":
     raise SystemExit("manifest environment is not Production")
 if data.get("target_url") != "https://muthufarms.com":
     raise SystemExit("manifest target URL is not Production")
-if data.get("deployment_kind") != "frontend-only":
-    raise SystemExit("manifest is not frontend-only")
 if data.get("base_commit") != current:
     raise SystemExit("manifest base does not match live Production")
-if data.get("protected_invariants") != expected_invariants:
-    raise SystemExit("manifest protected invariants are incomplete")
+deployment_kind = data.get("deployment_kind")
+if deployment_kind == "frontend-only":
+    if data.get("protected_invariants") != frontend_only_invariants:
+        raise SystemExit("frontend-only manifest protected invariants are incomplete")
+elif deployment_kind == "coordinated-frontend-after-backend":
+    if candidate != approved_coordinated_candidate or candidate_tree != approved_coordinated_tree:
+        raise SystemExit("coordinated frontend mode is not approved for this candidate and tree")
+    if data.get("protected_invariants") != coordinated_invariants:
+        raise SystemExit("coordinated frontend manifest protected invariants are incomplete")
+else:
+    raise SystemExit("manifest deployment kind is invalid")
 
 preview = data.get("preview_approved")
 if not isinstance(preview, dict):
@@ -766,7 +1106,7 @@ print(preview_image_id)
 print(feature_revision)
 for path in verified_files:
     print(path)
-PY
+PY_RELEASE_MANIFEST
 
   mapfile -t preview_contract_lines < "$preview_contract"
   [[ "${#preview_contract_lines[@]}" -ge 4 ]] \
@@ -824,8 +1164,8 @@ read_state_value() {
   printf '%s\n' "$value"
 }
 
-deploy_production() {
-  local remote_release new_image new_image_id
+prepare_production_candidate() {
+  local remote_release
   remote_release=$(git ls-remote "$repo_url" "$release_ref" | awk 'NR == 1 {print $1}')
   [[ "$remote_release" == "$candidate_revision" ]] \
     || blocked "candidate is not the exact production-release head"
@@ -840,7 +1180,42 @@ deploy_production() {
   git -C "$source_dir" merge-base --is-ancestor "$original_revision" "$candidate_revision" \
     || blocked "candidate does not contain the live Production baseline"
   [[ -z "$(git -C "$source_dir" status --short)" ]] || blocked "candidate checkout is not clean"
+  candidate_tree=$(git -C "$source_dir" rev-parse "$candidate_revision^{tree}")
   validate_release_manifest
+  if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
+    validate_exact_coordinated_release_state
+  fi
+}
+
+preflight_production() {
+  [[ "$candidate_revision" == "$coordinated_candidate_revision" ]] \
+    || blocked "the coordinated frontend preflight is approved only for the exact irrigation candidate"
+  prepare_production_candidate
+  echo "preflight_environment=Production"
+  echo "preflight_component=frontend"
+  echo "preflight_deployment_kind=coordinated-frontend-after-backend"
+  echo "preflight_candidate_revision=$candidate_revision"
+  echo "preflight_candidate_tree=$candidate_tree"
+  echo "preflight_current_frontend_revision=$original_revision"
+  echo "preflight_current_frontend_container=$original_container_id"
+  echo "preflight_current_frontend_image=$original_image_id"
+  echo "preflight_backend_revision=$coordinated_backend_revision"
+  echo "preflight_backend_container=$backend_id_before"
+  echo "preflight_backend_image=$backend_image_before"
+  echo "preflight_backup_path=$coordinated_backup_path"
+  echo "preflight_backup_bytes=$coordinated_backup_bytes"
+  echo "preflight_backup_sha256=$coordinated_backup_sha256"
+  echo "preflight_authenticated_irrigation_operations=4"
+  echo "preflight_database_evidence_sha256=$(sha256sum "$coordinated_database_before" | awk '{print $1}')"
+  echo "database_writes=none"
+  echo "backend_replacement=none"
+  echo "traffic_switch=not-performed"
+  echo "PRODUCTION_FRONTEND_PREFLIGHT=PASS"
+}
+
+deploy_production() {
+  local new_image new_image_id
+  prepare_production_candidate
 
   new_image="mfms-dashboard:production-github-${candidate_revision:0:7}-$timestamp"
   docker build \
@@ -883,6 +1258,9 @@ deploy_production() {
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
   wait_for_public_production_guard || blocked "public Production authentication guard failed"
   assert_live_contract "$candidate_revision" "$new_image_id" "$before_unrelated"
+  if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
+    assert_coordinated_release_state_unchanged
+  fi
 
   trap '' HUP INT TERM
   write_state \
@@ -905,6 +1283,13 @@ deploy_production() {
   echo "preview_feature_revision=$preview_feature_revision"
   echo "preview_verified_file_count=$preview_verified_file_count"
   echo "production_source_matches_preview=true"
+  if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
+    echo "deployment_kind=coordinated-frontend-after-backend"
+    echo "coordinated_backend_verified=true"
+    echo "coordinated_backup_verified=true"
+    echo "coordinated_migrations_verified=true"
+    echo "coordinated_endpoints_verified=true"
+  fi
   echo "rollback_container=$transaction_backup"
   if [[ "$worker_secret_loaded" -eq 1 ]]; then
     echo "worker_actor_assertion=server-local"
@@ -1017,6 +1402,9 @@ rollback_production() {
 case "$operation" in
   deploy)
     deploy_production
+    ;;
+  preflight)
+    preflight_production
     ;;
   rollback)
     rollback_production
