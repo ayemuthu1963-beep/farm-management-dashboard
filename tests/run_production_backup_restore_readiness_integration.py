@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import pathlib
 import re
 import secrets
@@ -56,9 +57,8 @@ def main():
     source_container = f"mfms-readiness-source-{suffix}"
     target_container = f"mfms-readiness-target-{suffix}"
     source_volume = f"mfms-readiness-source-{suffix}-data"
-    target_volume = f"mfms-readiness-target-{suffix}-data"
     resources = [source_container, target_container]
-    volumes = [source_volume, target_volume]
+    volumes = [source_volume]
     temp_dir = pathlib.Path(tempfile.mkdtemp(prefix="mfms-readiness-integration-"))
     dump_path = temp_dir / "sample.dump"
     init_script = temp_dir / "observe-transient.sh"
@@ -69,16 +69,12 @@ def main():
         if not match:
             raise RuntimeError("embedded restore-readiness program is missing")
         readiness_script.write_text(match.group(1) + "\n", encoding="utf-8")
-        init_script.write_text("#!/bin/sh\necho MFMS_READINESS_TEST_TRANSIENT_SERVER\nsleep 5\n", encoding="utf-8")
+        init_script.write_bytes(
+            b"#!/bin/sh\necho MFMS_READINESS_TEST_TRANSIENT_SERVER\nsleep 5\n"
+        )
         init_script.chmod(0o755)
 
-        for volume in volumes:
-            docker("volume", "create", volume)
-        docker(
-            "run", "--rm", "--network", "none", "--entrypoint", "sh",
-            "--mount", f"type=volume,source={target_volume},target=/var/lib/postgresql/data,volume-nocopy",
-            args.image, "-ec", 'test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"',
-        )
+        docker("volume", "create", source_volume)
 
         docker(
             "run", "-d", "--name", source_container, "--network", "none", "--restart", "no",
@@ -103,10 +99,24 @@ def main():
 
         docker(
             "run", "-d", "--name", target_container, "--network", "none", "--restart", "no",
-            "--mount", f"type=volume,source={target_volume},target=/var/lib/postgresql/data,volume-nocopy",
+            "--mount", "type=tmpfs,target=/var/lib/postgresql/data,tmpfs-size=2147483648,tmpfs-mode=0700",
             "--mount", f"type=bind,source={init_script},target=/docker-entrypoint-initdb.d/observe-transient.sh,readonly",
             "--env", "POSTGRES_HOST_AUTH_METHOD=trust", args.image,
         )
+        mounts = json.loads(
+            docker(
+                "inspect", "--format", "{{json .HostConfig.Mounts}}", target_container
+            ).stdout
+        )
+        target_mounts = [
+            mount
+            for mount in mounts
+            if mount.get("Type") == "tmpfs"
+            and mount.get("Target") == "/var/lib/postgresql/data"
+        ]
+        options = target_mounts[0].get("TmpfsOptions") if len(target_mounts) == 1 else {}
+        if options.get("SizeBytes") != 2147483648 or options.get("Mode") != 0o700:
+            raise RuntimeError("target restore tmpfs does not enforce the 2 GiB capacity bound")
         target_id = docker("inspect", "--format", "{{.Id}}", target_container).stdout.strip()
         gate = subprocess.Popen(
             [sys.executable, str(readiness_script), target_container, target_id, "mfms_server_prod", "16", "120", "3", "1"],
@@ -123,7 +133,11 @@ def main():
             time.sleep(0.1)
         gate_output = gate.stdout.read() if gate.stdout is not None else ""
         if gate.returncode != 0:
-            raise RuntimeError(f"stable final-server gate failed:\n{gate_output}")
+            target_logs = docker("logs", target_container, check=False).stderr
+            raise RuntimeError(
+                f"stable final-server gate failed:\n{gate_output}\n"
+                f"target PostgreSQL logs:\n{target_logs}"
+            )
         if not observed_transient:
             raise RuntimeError("integration did not observe transient initialization-server readiness")
         if "RESTORE_READINESS_STABLE=" not in gate_output:
