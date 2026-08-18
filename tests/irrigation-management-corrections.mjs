@@ -454,7 +454,7 @@ assert.match(map, /zone\.recordsCount/)
 // The full-width map keeps six equal compact tiles on one desktop row. Below
 // desktop width, only the map region scrolls horizontally; the page does not.
 assert.match(map, /max-w-full overflow-x-auto overscroll-x-contain/)
-assert.match(map, /grid min-w-\[64rem\] grid-cols-6 items-stretch gap-2 xl:min-w-0/)
+assert.match(map, /grid min-w-\[96rem\] grid-cols-6 items-stretch gap-2 xl:min-w-0/)
 assert.match(map, /aria-label="Farm Irrigation Map zones; scroll horizontally on smaller screens"/)
 assert.match(map, /flex h-full min-h-\[330px\] min-w-0 flex-col/)
 assert.doesNotMatch(map, /min-h-\[470px\]/)

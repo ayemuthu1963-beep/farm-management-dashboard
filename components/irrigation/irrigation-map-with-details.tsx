@@ -168,7 +168,7 @@ export function IrrigationMapWithDetails({
           aria-label="Farm Irrigation Map zones; scroll horizontally on smaller screens"
           tabIndex={0}
         >
-          <div className="grid min-w-[64rem] grid-cols-6 items-stretch gap-2 xl:min-w-0">
+          <div className="grid min-w-[96rem] grid-cols-6 items-stretch gap-2 xl:min-w-0">
             {displayZones.map((zone) => (
               <AreaBox
                 key={zone.id}

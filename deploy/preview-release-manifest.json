@@ -3,10 +3,10 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Accept persisted null cells for blank Motor Run Schedule entries",
-  "base_commit": "08a72613fec0cafeb699f0ac4455fa7ba655cc58",
+  "release_note": "Keep Farm Irrigation Table values readable in contained mobile scrolling",
+  "base_commit": "97c8d0f28ecbf314a5af1c4f36505ee75a43fd30",
   "allowed_paths": [
-    "lib/irrigation-schedule-comparison.ts",
+    "components/irrigation/irrigation-map-with-details.tsx",
     "tests/irrigation-management-corrections.mjs",
     "deploy/preview-release-manifest.json",
     "tests/preview-deployment-workflow.mjs"
