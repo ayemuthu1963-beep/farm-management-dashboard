@@ -105,7 +105,15 @@ assert.deepEqual(ZONE_SCHEDULE_IDS, {
   NM: "schedule-m1-nm",
 })
 const scheduleRows = initialMotorRunScheduleRows()
-const persistedSchedule = parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(scheduleRows).rows)
+const persistedApiRows = motorRunSchedulePayload(scheduleRows).rows.map((row) => ({
+  ...row,
+  days: Object.fromEntries(Object.entries(row.days).map(([weekday, day]) => [weekday, {
+    min: day.min === "" ? null : day.min,
+    ltrs: day.ltrs === "" ? null : day.ltrs,
+  }])),
+}))
+const persistedSchedule = parsePersistedMotorRunScheduleRows(persistedApiRows)
+assert.deepEqual(persistedSchedule.find((row) => row.scheduleId === "schedule-m1-p1e").days.sun, { min: "", ltrs: "" })
 for (const [zoneId, scheduleId] of Object.entries(ZONE_SCHEDULE_IDS)) {
   const expected = persistedSchedule.find((row) => row.scheduleId === scheduleId)
   assert.ok(expected)
@@ -181,6 +189,7 @@ const failedSaveProjection = persistedSchedule
 assert.equal(scheduledWaterForZoneDate(failedSaveProjection, "ready", "P1E", "2026-08-17").litres, 96)
 
 assert.throws(() => parsePersistedMotorRunScheduleRows([]), /six persisted rows/)
+assert.throws(() => parsePersistedMotorRunScheduleRows(persistedApiRows.map((row, index) => index === 0 ? { ...row, motor: null } : row)), /invalid persisted cell value/)
 assert.throws(() => parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(persistedSchedule).rows.map((row, index) => index === 0 ? { ...row, scheduleId: "invalid" } : row)), /invalid stable schedule identifier/)
 assert.throws(() => parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(persistedSchedule).rows.map((row, index) => index === 0 ? { ...row, days: { ...row.days, mon: { ...row.days.mon, ltrs: "invalid" } } } : row)), /invalid mon litres/)
 

@@ -47,7 +47,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-function persistedCellValue(value: unknown): string {
+function persistedCellValue(value: unknown, allowNull = false): string {
+  if (allowNull && value === null) return ""
   if (typeof value === "number" && Number.isFinite(value)) return String(value)
   if (typeof value === "string") return value
   throw new Error("Motor Run Schedule contains an invalid persisted cell value.")
@@ -78,8 +79,8 @@ export function parsePersistedMotorRunScheduleRows(value: unknown): MotorRunSche
     const days = Object.fromEntries(IRRIGATION_PLAN_DAYS.map(({ key }) => {
       const day = persistedDays[key]
       if (!isRecord(day)) throw new Error(`Motor Run Schedule row ${scheduleId} is missing ${key}.`)
-      const min = persistedCellValue(day.min)
-      const ltrs = persistedCellValue(day.ltrs)
+      const min = persistedCellValue(day.min, true)
+      const ltrs = persistedCellValue(day.ltrs, true)
       if (!validPersistedLitres(ltrs)) throw new Error(`Motor Run Schedule row ${scheduleId} has invalid ${key} litres.`)
       return [key, { min, ltrs } satisfies MotorRunScheduleDay]
     })) as Record<IrrigationPlanDayKey, MotorRunScheduleDay>

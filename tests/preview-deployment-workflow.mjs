@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Show persisted scheduled versus actual litres per tree in the seven-day Farm Irrigation Table",
+  "Accept persisted null cells for blank Motor Run Schedule entries",
 )
-assert.equal(manifest.base_commit, "5cb72ce50c0c16c6c019d3ca6f79873eab7f8895")
+assert.equal(manifest.base_commit, "08a72613fec0cafeb699f0ac4455fa7ba655cc58")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,12 +280,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/irrigation-management/page.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/irrigation/irrigation-plan-tables.tsx",
   "lib/irrigation-schedule-comparison.ts",
   "tests/irrigation-management-corrections.mjs",
-  "tests/irrigation-plan.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
 ]
