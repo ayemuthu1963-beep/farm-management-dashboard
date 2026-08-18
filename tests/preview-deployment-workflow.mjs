@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Accept persisted null cells for blank Motor Run Schedule entries",
+  "Keep Farm Irrigation Table values readable in contained mobile scrolling",
 )
-assert.equal(manifest.base_commit, "08a72613fec0cafeb699f0ac4455fa7ba655cc58")
+assert.equal(manifest.base_commit, "97c8d0f28ecbf314a5af1c4f36505ee75a43fd30")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,7 +280,7 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "lib/irrigation-schedule-comparison.ts",
+  "components/irrigation/irrigation-map-with-details.tsx",
   "tests/irrigation-management-corrections.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
