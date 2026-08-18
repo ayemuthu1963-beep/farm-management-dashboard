@@ -63,6 +63,20 @@ readonly approved_storage_mount_target="/var/lib/mfms/motor-screenshot-analysis"
 readonly expected_mount_contract="bind|$approved_storage_mount_source|$approved_storage_mount_target|true
 bind|$approved_temp_mount_source|$approved_temp_mount_target|true"
 readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8001"}]}'
+readonly approved_rollback_current_revision="94b28f17702e409e13d25e288fc5cd4b9bbef545"
+readonly approved_rollback_current_container_id="969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47"
+readonly approved_rollback_current_image_id="sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512"
+readonly approved_rollback_current_environment_sha256="90213d0772f3fa45c40987748bc4b1815cdb55fb24e701ecd4a2bcc941e81e12"
+readonly approved_rollback_target_revision="515638139232c76992a7c7ceaadd8e191e444176"
+readonly approved_rollback_target_container="harvest-api-pre-github-2026081802-20260818T050946Z"
+readonly approved_rollback_target_container_id="38aaed2a9555f4f51df06efab59972886c58225ed0d88035e4b075243b289e1c"
+readonly approved_rollback_target_image_id="sha256:fbe824766b16ebdc2e85f6ed814c4b10bc7f9b4bc0a285945c07e544861b1fe8"
+readonly approved_rollback_target_environment_sha256="15da2029147713e2795ddc3d746cc57eed46cd9d090af189f864390d3a56dff9"
+readonly approved_rollback_state_sha256="112fc3e7b302ec5636cd237b0dcd0f70b9f85d97f162dcaa2f1795fc52d6b6c2"
+readonly approved_irrigation_settings_migration="db/migrations/20260818_production_irrigation_plan_settings.sql"
+readonly approved_irrigation_settings_sha256="87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1"
+readonly approved_irrigation_audit_migration="db/migrations/20260818_production_irrigation_plan_persistence_v2.sql"
+readonly approved_irrigation_audit_sha256="5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9"
 
 [[ "$production_url" == "https://muthufarms.com" ]] \
   || blocked "the public target is not Production"
@@ -77,6 +91,7 @@ expected_current_revision=""
 run_id=""
 readonly deploy_command_pattern='^deploy-production-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-production-backend ([0-9a-f]{40}) ([0-9]+)$'
+readonly rollback_dry_run_command_pattern='^dry-run-production-backend-rollback ([0-9a-f]{40}) ([0-9]+)$'
 readonly credential_cutover_command_pattern='^cutover-production-database-role ([0-9a-f]{40}) ([0-9]+)$'
 
 original_command=${SSH_ORIGINAL_COMMAND:-}
@@ -88,12 +103,16 @@ elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
   operation="rollback"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $rollback_dry_run_command_pattern ]]; then
+  operation="rollback-dry-run"
+  expected_current_revision=${BASH_REMATCH[1]}
+  run_id=${BASH_REMATCH[2]}
 elif [[ "$original_command" =~ $credential_cutover_command_pattern ]]; then
   operation="credential-cutover"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
 else
-  blocked "the SSH key accepts only an exact Production backend deploy, rollback, or database-role cutover command"
+  blocked "the SSH key accepts only an exact Production backend deploy, rollback, rollback dry run, or database-role cutover command"
 fi
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -131,6 +150,8 @@ database_backup_verified="false"
 database_backup_restore_verified="false"
 transaction_active=0
 automatic_restore_result="not-required"
+rollback_database_before="$work_dir/rollback-database.before.json"
+rollback_database_after="$work_dir/rollback-database.after.json"
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -152,6 +173,12 @@ mount_contract_for_container() {
     --format '{{json .Mounts}}' \
     "$container" \
     | python3 -c 'import json,sys; mounts=json.load(sys.stdin); print("\n".join(sorted("{}|{}|{}|{}".format(item["Type"], item["Source"], item["Destination"], str(item["RW"]).lower()) for item in mounts)))'
+}
+
+environment_sha256_for_container() {
+  local container=$1
+  docker inspect --format '{{json .Config.Env}}' "$container" \
+    | python3 -c 'import hashlib,json,sys; values=sorted(json.load(sys.stdin) or []); print(hashlib.sha256(("\n".join(values)+"\n").encode()).hexdigest())'
 }
 
 assert_approved_mount_contract() {
@@ -461,6 +488,151 @@ validate_common_live_state() {
     || blocked "Production proxy has no approved frontend target"
   assert_database_target "$backend_live_container"
   snapshot_unrelated_containers > "$before_unrelated"
+}
+
+assert_exact_historical_application_rollback() {
+  local rollback_container rollback_revision rollback_image_id state_migrations
+  [[ "$expected_current_revision" == "$approved_rollback_current_revision" ]] \
+    || blocked "rollback is not for the exact approved current Production revision"
+  [[ "$original_revision" == "$approved_rollback_current_revision" ]] \
+    || blocked "live Production revision is not the approved rollback source"
+  [[ "$original_container_id" == "$approved_rollback_current_container_id" ]] \
+    || blocked "live Production container is not the approved rollback source"
+  [[ "$original_image_id" == "$approved_rollback_current_image_id" ]] \
+    || blocked "live Production image is not the approved rollback source"
+  [[ "$(environment_sha256_for_container "$backend_live_container")" == "$approved_rollback_current_environment_sha256" ]] \
+    || blocked "live Production backend environment differs from the approved rollback source"
+  [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$approved_rollback_state_sha256" ]] \
+    || blocked "Production backend rollback state differs from the approved release record"
+
+  rollback_container=$(read_state_value rollback_container)
+  rollback_revision=$(read_state_value rollback_revision)
+  rollback_image_id=$(read_state_value rollback_image_id)
+  state_migrations=$(read_state_value database_migrations)
+  [[ "$rollback_container" == "$approved_rollback_target_container" ]] \
+    || blocked "recorded rollback container is not the approved historical target"
+  [[ "$rollback_revision" == "$approved_rollback_target_revision" ]] \
+    || blocked "recorded rollback revision is not the approved historical target"
+  [[ "$rollback_image_id" == "$approved_rollback_target_image_id" ]] \
+    || blocked "recorded rollback image is not the approved historical target"
+  [[ "$state_migrations" == "forward-only" ]] \
+    || blocked "forward-only migration state is not retained"
+  container_exists "$rollback_container" || blocked "approved historical rollback container is missing"
+  ! container_running "$rollback_container" || blocked "approved historical rollback container is unexpectedly running"
+  [[ "$(docker inspect --format '{{.Id}}' "$rollback_container")" == "$approved_rollback_target_container_id" ]] \
+    || blocked "approved historical rollback container identity changed"
+  [[ "$(docker inspect --format '{{.Image}}' "$rollback_container")" == "$approved_rollback_target_image_id" ]] \
+    || blocked "approved historical rollback image changed"
+  [[ "$(image_revision_for_container "$rollback_container")" == "$approved_rollback_target_revision" ]] \
+    || blocked "approved historical rollback revision changed"
+  [[ "$(image_environment_for_container "$rollback_container")" == "Production" ]] \
+    || blocked "approved historical rollback image is not labelled Production"
+  [[ "$(environment_sha256_for_container "$rollback_container")" == "$approved_rollback_target_environment_sha256" ]] \
+    || blocked "approved historical rollback environment changed"
+  [[ "$(docker inspect --format '{{.RestartCount}}' "$rollback_container")" == "0" ]] \
+    || blocked "approved historical rollback container has restarted"
+  [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$rollback_container")" == "$production_network" ]] \
+    || blocked "approved historical rollback network mode changed"
+  [[ -z "$(network_ip_for_container "$rollback_container")" ]] \
+    || blocked "approved historical rollback container is unexpectedly attached to Production"
+  [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$rollback_container")" == "$expected_port_bindings" ]] \
+    || blocked "approved historical rollback port contract changed"
+  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$rollback_container")" == "$approved_restart_policy" ]] \
+    || blocked "approved historical rollback restart policy changed"
+  assert_approved_mount_contract "$rollback_container"
+  wait_for_health "http://127.0.0.1:$live_port" \
+    || blocked "current Production backend is not healthy enough for the approved rollback"
+}
+
+snapshot_rollback_database_evidence() {
+  local container=$1 output=$2
+  docker exec -i "$container" python - > "$output" <<'PY_ROLLBACK_DATABASE_EVIDENCE'
+import hashlib
+import json
+import os
+
+import psycopg
+from psycopg.rows import dict_row
+
+
+def digest(rows):
+    payload = json.dumps(rows, default=str, separators=(",", ":"), sort_keys=True).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+connection = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+try:
+    with connection.cursor() as cursor:
+        cursor.execute("SET TRANSACTION READ ONLY")
+        cursor.execute("SELECT current_database()")
+        database = cursor.fetchone()["current_database"]
+        cursor.execute("SELECT * FROM mfms_production_schema_migrations ORDER BY migration_name")
+        ledger = cursor.fetchall()
+        cursor.execute("SELECT * FROM mfms_irrigation_plan_settings ORDER BY setting_key")
+        settings = cursor.fetchall()
+        cursor.execute("SELECT * FROM mfms_irrigation_plan_audit ORDER BY audit_id")
+        audit = cursor.fetchall()
+        cursor.execute("""
+        SELECT tgname, tgenabled
+        FROM pg_trigger
+        WHERE tgrelid = 'mfms_irrigation_plan_audit'::regclass
+          AND NOT tgisinternal
+        ORDER BY tgname
+        """)
+        trigger = cursor.fetchall()
+finally:
+    connection.rollback()
+    connection.close()
+
+print(json.dumps({
+    "database": database,
+    "ledger_count": len(ledger),
+    "ledger_sha256": digest(ledger),
+    "irrigation_ledger": [
+        {"migration_name": row.get("migration_name"), "sha256": row.get("sha256")}
+        for row in ledger
+        if row.get("migration_name") in {
+            "db/migrations/20260818_production_irrigation_plan_settings.sql",
+            "db/migrations/20260818_production_irrigation_plan_persistence_v2.sql",
+        }
+    ],
+    "settings_count": len(settings),
+    "settings_sha256": digest(settings),
+    "audit_count": len(audit),
+    "audit_sha256": digest(audit),
+    "trigger_count": len(trigger),
+    "trigger_sha256": digest(trigger),
+}, separators=(",", ":"), sort_keys=True))
+PY_ROLLBACK_DATABASE_EVIDENCE
+  [[ -s "$output" ]] || blocked "rollback database evidence is empty"
+  python3 - "$output" \
+    "$approved_irrigation_settings_migration" "$approved_irrigation_settings_sha256" \
+    "$approved_irrigation_audit_migration" "$approved_irrigation_audit_sha256" <<'PY_VALIDATE_ROLLBACK_DATABASE_EVIDENCE'
+import json
+import pathlib
+import re
+import sys
+
+path, settings_name, settings_hash, audit_name, audit_hash = sys.argv[1:]
+evidence = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+if evidence.get("database") != "mfms_server_prod":
+    raise SystemExit("rollback database evidence resolved to the wrong database")
+for key in ("ledger_count", "settings_count", "audit_count", "trigger_count"):
+    value = evidence.get(key)
+    if not isinstance(value, int) or value < 0:
+        raise SystemExit(f"rollback database evidence has an invalid {key}")
+for key in ("ledger_sha256", "settings_sha256", "audit_sha256", "trigger_sha256"):
+    if not re.fullmatch(r"[0-9a-f]{64}", str(evidence.get(key, ""))):
+        raise SystemExit(f"rollback database evidence has an invalid {key}")
+if evidence["settings_count"] != 2 or evidence["trigger_count"] != 1:
+    raise SystemExit("rollback database evidence is missing the irrigation settings or protection trigger")
+expected_irrigation_ledger = [
+    {"migration_name": audit_name, "sha256": audit_hash},
+    {"migration_name": settings_name, "sha256": settings_hash},
+]
+if evidence.get("irrigation_ledger") != expected_irrigation_ledger:
+    raise SystemExit("rollback database evidence has an unexpected irrigation migration ledger")
+PY_VALIDATE_ROLLBACK_DATABASE_EVIDENCE
 }
 
 prepare_backend_source() {
@@ -1665,6 +1837,30 @@ credential_cutover_backend() {
   echo "PRODUCTION_DATABASE_ROLE_CUTOVER=PASS"
 }
 
+dry_run_backend_rollback() {
+  [[ -f "$state_file" ]] || blocked "no successful Production backend deployment is recorded"
+  validate_common_live_state
+  assert_exact_historical_application_rollback
+  assert_candidate_port_available
+  snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
+
+  echo "rollback_dry_run_environment=Production"
+  echo "rollback_dry_run_component=backend"
+  echo "rollback_dry_run_current_revision=$original_revision"
+  echo "rollback_dry_run_current_container=$original_container_id"
+  echo "rollback_dry_run_current_image=$original_image_id"
+  echo "rollback_dry_run_target_revision=$approved_rollback_target_revision"
+  echo "rollback_dry_run_target_container=$approved_rollback_target_container_id"
+  echo "rollback_dry_run_target_image=$approved_rollback_target_image_id"
+  echo "rollback_dry_run_database_evidence_sha256=$(sha256sum "$rollback_database_before" | awk '{print $1}')"
+  echo "rollback_dry_run_migration_plan=empty-approved-historical-application-only"
+  echo "database_backup_operations=none"
+  echo "database_migration_operations=none"
+  echo "traffic_switch=not-performed"
+  echo "current_backend_preserved=true"
+  echo "PRODUCTION_BACKEND_ROLLBACK_DRY_RUN=PASS"
+}
+
 rollback_backend() {
   local deployed_revision deployed_image_id deployed_image_tag
   local rollback_container rollback_revision rollback_image_id rollback_image_tag replacement_id
@@ -1672,6 +1868,8 @@ rollback_backend() {
   validate_common_live_state
   [[ "$expected_current_revision" == "$original_revision" ]] \
     || blocked "current Production backend does not match the requested rollback revision"
+  assert_exact_historical_application_rollback
+  snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
 
   deployed_revision=$(read_state_value deployed_revision)
   deployed_image_id=$(read_state_value deployed_image_id)
@@ -1695,7 +1893,10 @@ rollback_backend() {
   assert_candidate_port_available
   new_image="$rollback_image_id"
   candidate_revision="$rollback_revision"
-  start_candidate
+  # The exact historical application rollback intentionally has no forward
+  # migration plan. Health and revision are tested without invoking migration
+  # verification; every forward deployment still uses the required plan.
+  start_candidate true false
   remove_candidate
 
   transaction_backup="$backend_live_container-pre-rollback-$run_id-$timestamp"
@@ -1711,6 +1912,9 @@ rollback_backend() {
   replacement_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
 
   assert_live_contract "$rollback_revision" "$replacement_id" false false
+  snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_after"
+  cmp -s "$rollback_database_before" "$rollback_database_after" \
+    || blocked "application-only rollback changed the migration ledger, settings, audit history, or protection trigger"
   trap '' HUP INT TERM
   write_state \
     "$rollback_revision" "$replacement_id" "$rollback_image_tag" \
@@ -1727,6 +1931,10 @@ rollback_backend() {
   echo "restored_backend_revision=$rollback_revision"
   echo "rollback_container_retained=$transaction_backup"
   echo "database_migrations=forward-only-retained"
+  echo "database_backup_operations=none"
+  echo "database_migration_operations=none"
+  echo "application_only_rollback=true"
+  echo "rollback_database_evidence_sha256=$(sha256sum "$rollback_database_after" | awk '{print $1}')"
   echo "frontend_unchanged=true"
   echo "odk_unchanged=true"
   echo "schedules_unchanged=true"
@@ -1742,6 +1950,9 @@ case "$operation" in
     ;;
   rollback)
     rollback_backend
+    ;;
+  rollback-dry-run)
+    dry_run_backend_rollback
     ;;
   credential-cutover)
     credential_cutover_backend
