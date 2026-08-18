@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Prevent long Farm Map classification labels from clipping in the responsive Preview card grid",
+  "Show persisted scheduled versus actual litres per tree in the seven-day Farm Irrigation Table",
 )
-assert.equal(manifest.base_commit, "f79ca14f91192ffae19117f00caaeea407f6ad18")
+assert.equal(manifest.base_commit, "5cb72ce50c0c16c6c019d3ca6f79873eab7f8895")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,8 +280,12 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/maps/farm-map-client.tsx",
-  "tests/farm-map-fullscreen-layout.mjs",
+  "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/irrigation/irrigation-plan-tables.tsx",
+  "lib/irrigation-schedule-comparison.ts",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/irrigation-plan.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
 ]
