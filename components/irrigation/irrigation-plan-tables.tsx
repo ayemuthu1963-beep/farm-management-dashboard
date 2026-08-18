@@ -18,13 +18,13 @@ import {
   motorRunSchedulePayload,
   motorScheduleValidationMessages,
   parseDripOutputRows,
-  parseMotorRunScheduleRows,
   type DripOutputEditableField,
   type DripOutputRow,
   type IrrigationPlanDayKey,
   type IrrigationPlanResponse,
   type MotorRunScheduleRow,
 } from "@/lib/irrigation-plan"
+import { parsePersistedMotorRunScheduleRows, type ScheduleLoadStatus } from "@/lib/irrigation-schedule-comparison"
 import { cn } from "@/lib/utils"
 
 const irrigationEnvironment = irrigationEnvironmentCopy(
@@ -280,15 +280,30 @@ function MotorRunScheduleTable({
   )
 }
 
-export function IrrigationPlanTables() {
+interface IrrigationPlanTablesProps {
+  persistedScheduleRows: MotorRunScheduleRow[]
+  scheduleLoadStatus: ScheduleLoadStatus
+  scheduleLoadError: string | null
+  onPersistedScheduleChange: (rows: MotorRunScheduleRow[]) => void
+  onPersistedScheduleUnavailable: (message: string) => void
+}
+
+export function IrrigationPlanTables({
+  persistedScheduleRows,
+  scheduleLoadStatus,
+  scheduleLoadError,
+  onPersistedScheduleChange,
+  onPersistedScheduleUnavailable,
+}: IrrigationPlanTablesProps) {
   const initialDrip = useMemo(() => initialDripOutputRows(), [])
-  const initialSchedule = useMemo(() => initialMotorRunScheduleRows(), [])
   const [dripRows, setDripRows] = useState(initialDrip)
-  const [scheduleRows, setScheduleRows] = useState(initialSchedule)
+  const [scheduleRows, setScheduleRows] = useState(() => (
+    scheduleLoadStatus === "ready" ? persistedScheduleRows : initialMotorRunScheduleRows()
+  ))
   const [savedDrip, setSavedDrip] = useState(() => dripSnapshot(initialDrip))
-  const [savedSchedule, setSavedSchedule] = useState(() => scheduleSnapshot(initialSchedule))
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [savedSchedule, setSavedSchedule] = useState(() => scheduleSnapshot(scheduleRows))
+  const [dripIsLoading, setDripIsLoading] = useState(true)
+  const [dripLoadError, setDripLoadError] = useState<string | null>(null)
   const [dripSaveState, setDripSaveState] = useState<SaveState>("idle")
   const [scheduleSaveState, setScheduleSaveState] = useState<SaveState>("idle")
   const [dripSaveError, setDripSaveError] = useState<string | null>(null)
@@ -303,33 +318,23 @@ export function IrrigationPlanTables() {
 
   useEffect(() => {
     let isActive = true
-    async function loadPlan() {
+    async function loadDripOutput() {
       try {
-        const [dripResponse, scheduleResponse] = await Promise.all([
-          fetch("/api/operator-settings/irrigation-plan/drip-output", { cache: "no-store" }),
-          fetch("/api/operator-settings/irrigation-plan/motor-run-schedule", { cache: "no-store" }),
-        ])
-        const [dripPayload, schedulePayload] = await Promise.all([
-          dripResponse.json().catch(() => ({})) as Promise<IrrigationPlanResponse>,
-          scheduleResponse.json().catch(() => ({})) as Promise<IrrigationPlanResponse>,
-        ])
+        const dripResponse = await fetch("/api/operator-settings/irrigation-plan/drip-output", { cache: "no-store" })
+        const dripPayload = (await dripResponse.json().catch(() => ({}))) as IrrigationPlanResponse
         if (!dripResponse.ok) throw new Error(irrigationPlanError(dripPayload, "Drip Output could not be loaded."))
-        if (!scheduleResponse.ok) throw new Error(irrigationPlanError(schedulePayload, "Motor Run Schedule could not be loaded."))
         if (!isActive) return
         const loadedDrip = parseDripOutputRows(dripPayload.rows)
-        const loadedSchedule = parseMotorRunScheduleRows(schedulePayload.rows)
         setDripRows(loadedDrip)
-        setScheduleRows(loadedSchedule)
         setSavedDrip(dripSnapshot(loadedDrip))
-        setSavedSchedule(scheduleSnapshot(loadedSchedule))
-        setLoadError(null)
+        setDripLoadError(null)
       } catch (error) {
-        if (isActive) setLoadError(error instanceof Error ? error.message : "Irrigation Plan could not be loaded.")
+        if (isActive) setDripLoadError(error instanceof Error ? error.message : "Drip Output could not be loaded.")
       } finally {
-        if (isActive) setIsLoading(false)
+        if (isActive) setDripIsLoading(false)
       }
     }
-    void loadPlan()
+    void loadDripOutput()
     return () => { isActive = false }
   }, [])
 
@@ -395,6 +400,7 @@ export function IrrigationPlanTables() {
     scheduleSaving.current = true
     setScheduleSaveState("saving")
     setScheduleSaveError(null)
+    let saveAccepted = false
     try {
       const response = await fetch("/api/operator-settings/irrigation-plan/motor-run-schedule", {
         method: "PUT",
@@ -403,14 +409,21 @@ export function IrrigationPlanTables() {
       })
       const payload = (await response.json().catch(() => ({}))) as IrrigationPlanResponse
       if (!response.ok || payload.ok !== true) throw new Error(irrigationPlanError(payload, "Motor Run Schedule could not be saved."))
-      if (!Array.isArray(payload.rows)) throw new Error("Motor Run Schedule save response was incomplete.")
-      const savedRows = parseMotorRunScheduleRows(payload.rows)
+      saveAccepted = true
+
+      const persistedResponse = await fetch("/api/operator-settings/irrigation-plan/motor-run-schedule", { cache: "no-store" })
+      const persistedPayload = (await persistedResponse.json().catch(() => ({}))) as IrrigationPlanResponse
+      if (!persistedResponse.ok) throw new Error(irrigationPlanError(persistedPayload, "Saved Motor Run Schedule could not be refreshed."))
+      const savedRows = parsePersistedMotorRunScheduleRows(persistedPayload.rows)
       setScheduleRows(savedRows)
       setSavedSchedule(scheduleSnapshot(savedRows))
       setScheduleSaveState("saved")
+      onPersistedScheduleChange(savedRows)
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Motor Run Schedule could not be saved."
       setScheduleSaveState("error")
-      setScheduleSaveError(error instanceof Error ? error.message : "Motor Run Schedule could not be saved.")
+      setScheduleSaveError(message)
+      if (saveAccepted) onPersistedScheduleUnavailable(message)
     } finally {
       scheduleSaving.current = false
     }
@@ -423,8 +436,8 @@ export function IrrigationPlanTables() {
         <p className="text-xs text-muted-foreground">Editable drip measurements and weekly motor schedule stored in the {irrigationEnvironment.databaseName}.</p>
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.8fr)]">
-        <DripOutputTable rows={dripRows} onChange={updateDripRow} dirty={dripDirty} isLoading={isLoading} loadError={loadError} saveState={dripSaveState} saveError={dripSaveError} onSave={() => { void saveDripOutput() }} />
-        <MotorRunScheduleTable rows={scheduleRows} onIdentityChange={updateScheduleIdentity} onDayChange={updateScheduleDay} dirty={scheduleDirty} isLoading={isLoading} loadError={loadError} saveState={scheduleSaveState} saveError={scheduleSaveError} onSave={() => { void saveMotorRunSchedule() }} />
+        <DripOutputTable rows={dripRows} onChange={updateDripRow} dirty={dripDirty} isLoading={dripIsLoading} loadError={dripLoadError} saveState={dripSaveState} saveError={dripSaveError} onSave={() => { void saveDripOutput() }} />
+        <MotorRunScheduleTable rows={scheduleRows} onIdentityChange={updateScheduleIdentity} onDayChange={updateScheduleDay} dirty={scheduleDirty} isLoading={scheduleLoadStatus === "loading"} loadError={scheduleLoadError} saveState={scheduleSaveState} saveError={scheduleSaveError} onSave={() => { void saveMotorRunSchedule() }} />
       </div>
     </section>
   )

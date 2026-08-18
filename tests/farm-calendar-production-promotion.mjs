@@ -9,41 +9,51 @@ const sha256 = (path) => createHash("sha256")
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 
+assert.equal(manifest.schema_version, 1)
+assert.equal(manifest.environment, "Production")
+assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
-assert.equal(manifest.base_commit, "9a577add2308b85637fcf05ee49b6274e19cc2dc")
+assert.equal(
+  manifest.release_note,
+  "Farm Irrigation Table scheduled-versus-actual comparison",
+)
+assert.equal(manifest.base_commit, "a3e63db408ffbd063d2f58724eed617d130eff22")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "f5c4c465fed1ccd68cab1286e705ed8215b53f17",
-  image_id: "sha256:e69ee588ebbee6b87264342c5c11ec72ca7f52e8530ffc5c3eadff9678236053",
-  feature_revision: "6f1773b25195c6daf4c3b58f6989ba9a330a3ea9",
+  revision: "8c1ce1b2b2945e8968104fb5699d6cbfb16b795f",
+  image_id: "sha256:131f76a8dd6532e171dbd68c1da678b1313887ec67fe8af1ee3971cf061c009d",
+  feature_revision: "0857b91f661e05b8321bc1646347af248bb8f42b",
   verified_files: [
     "app/irrigation-management/page.tsx",
     "components/irrigation/irrigation-map-with-details.tsx",
     "components/irrigation/irrigation-plan-tables.tsx",
-    "lib/public-environment.ts",
-    "tests/irrigation-environment-copy.mjs",
+    "lib/irrigation-schedule-comparison.ts",
+    "tests/irrigation-management-corrections.mjs",
   ],
   production_adaptations: [
-    "package.json",
+    "deploy/production-release-manifest.json",
+    "tests/farm-calendar-production-promotion.mjs",
     "tests/irrigation-plan.mjs",
   ],
 })
+assert.deepEqual(manifest.protected_invariants, {
+  preview: "unchanged",
+  test: "unchanged",
+  backend: "unchanged",
+  database: "unchanged",
+  odk: "unchanged",
+  schedules: "unchanged",
+  proxy_configuration: "unchanged",
+})
 
 const previewApprovedDigests = {
-  "app/irrigation-management/page.tsx": "724ce549afa9fcb4a219a24e5c905635acd19dd7eced6b8f082f5f32c57191c8",
-  "components/irrigation/irrigation-map-with-details.tsx": "7f4ec6f3944c4d74310e64f28af1a680230d67436fc64ea0f863e675d7b90997",
-  "components/irrigation/irrigation-plan-tables.tsx": "0852afe6e4773e509fe45d699fbd5f943f0c18414e671752a9f6255fb9d78b85",
-  "lib/public-environment.ts": "c5a0671fdc9060e1a5916196299548ea2ab4c8bded835e87299665ee2e50f7e1",
-  "tests/irrigation-environment-copy.mjs": "a617783bb8e57c46d441ea1ff09dfb22afbeb79cb74a63b081a7f2a2df3d54f6",
+  "app/irrigation-management/page.tsx": "68842b3d1797923e6c7d0e0cbfe530a63be4d4a84deb9b0fdc1f428e833bc8b5",
+  "components/irrigation/irrigation-map-with-details.tsx": "20029ea95772ee82d3dcd0d23d673e20d0a3676163b1da5592756d83e480370f",
+  "components/irrigation/irrigation-plan-tables.tsx": "3303a86d059a9acb7e587eac27a6861facfc11381458e5879b71fed30fbe783a",
+  "lib/irrigation-schedule-comparison.ts": "4fa217a24e009c6f3f58ae597c53c45b7256d22671b10abf2858dccd8da594e9",
+  "tests/irrigation-management-corrections.mjs": "de58b8e7aa95868075cb91743ef9a174626c3c952d42f92ecb0727b9cad24d7d",
 }
-
-const productionProxy = read("app/api/operator-settings/[[...path]]/route.ts")
-assert.match(productionProxy, /getAuthenticatedUserAssertionHeaders/)
-assert.match(productionProxy, /irrigation-plan/)
-assert.match(productionProxy, /drip-output\|motor-run-schedule/)
-assert.doesNotMatch(productionProxy, /irrigation-pipeline-signing|worker-management-signing/)
-
-for (const [path, expectedDigest] of Object.entries(previewApprovedDigests)) {
-  assert.equal(sha256(path), expectedDigest, `${path} differs from the Preview-approved file`)
+for (const [file, expectedDigest] of Object.entries(previewApprovedDigests)) {
+  assert.equal(sha256(file), expectedDigest, `${file} differs from the Preview-approved blob`)
 }
 
 assert.deepEqual(manifest.allowed_paths, [
@@ -51,14 +61,27 @@ assert.deepEqual(manifest.allowed_paths, [
   "components/irrigation/irrigation-map-with-details.tsx",
   "components/irrigation/irrigation-plan-tables.tsx",
   "deploy/production-release-manifest.json",
-  "lib/public-environment.ts",
-  "package.json",
+  "lib/irrigation-schedule-comparison.ts",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/irrigation-environment-copy.mjs",
+  "tests/irrigation-management-corrections.mjs",
   "tests/irrigation-plan.mjs",
 ])
 
-assert.notEqual(manifest.preview_approved.revision, "26cb0e1ec52bec3dcdd2533c7f01fcfdff34737c")
-assert.notEqual(manifest.preview_approved.image_id, "sha256:ee78c4b6c9601b209f0cf225a735b3699955f71463caf8c4ae0a0938a3ae8888")
+const page = read("app/irrigation-management/page.tsx")
+const table = read("components/irrigation/irrigation-map-with-details.tsx")
+const plan = read("components/irrigation/irrigation-plan-tables.tsx")
+assert.match(page, /parsePersistedMotorRunScheduleRows/)
+assert.match(page, /motor-run-schedule/)
+assert.match(table, /Farm Irrigation Table/)
+assert.match(table, /data-water-status=/)
+assert.match(table, /min-w-\[96rem\]/)
+assert.match(plan, /onPersistedScheduleChange/)
+assert.match(plan, /parsePersistedMotorRunScheduleRows/)
 
-console.log("Irrigation Management text correction Preview-to-Production parity checks: PASS")
+const productionProxy = read("app/api/operator-settings/[[...path]]/route.ts")
+assert.match(productionProxy, /getAuthenticatedUserAssertionHeaders/)
+assert.match(productionProxy, /irrigation-plan/)
+assert.match(productionProxy, /drip-output\|motor-run-schedule/)
+assert.doesNotMatch(productionProxy, /irrigation-pipeline-signing|worker-management-signing/)
+
+console.log("Farm Irrigation Table scheduled-versus-actual Preview-to-Production parity checks: PASS")
