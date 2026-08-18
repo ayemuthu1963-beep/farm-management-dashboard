@@ -966,6 +966,20 @@ export default function FertiliserManagementPage() {
     setAdjustmentResult(null)
   }
 
+  const handleAdjustmentTypeChange = (value: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT") => {
+    setAdjustmentType(value)
+    setAdjustmentResult(null)
+
+    if (value !== "ADJUSTMENT_OUT" || !adjustmentProductId) return
+    const productId = Number(adjustmentProductId)
+    const product = liveData?.stock.find((item) => item.product_id === productId)
+    const available = product ? numberFromApi(product.eligible_available_quantity) ?? 0 : 0
+    if (!product || product.quantity === null || available <= 0) {
+      setAdjustmentProductId("")
+      setAdjustmentUnit("")
+    }
+  }
+
   const handleRequirementProductChange = (value: string) => {
     setRequirementProductId(value)
     const productId = Number(value)
@@ -1711,7 +1725,7 @@ export default function FertiliserManagementPage() {
               <InputField label="Date" name="transactionDate" type="date" error={stockAdjustmentErrors.transaction_date} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Adjustment Type</span>
-                <select name="adjustmentType" value={adjustmentType} onChange={(event) => { setAdjustmentType(event.target.value as "ADJUSTMENT_IN" | "ADJUSTMENT_OUT"); setAdjustmentResult(null) }} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
+                <select name="adjustmentType" value={adjustmentType} onChange={(event) => handleAdjustmentTypeChange(event.target.value as "ADJUSTMENT_IN" | "ADJUSTMENT_OUT")} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
                   <option value="ADJUSTMENT_IN">ADJUSTMENT_IN</option>
                   <option value="ADJUSTMENT_OUT">ADJUSTMENT_OUT</option>
                 </select>

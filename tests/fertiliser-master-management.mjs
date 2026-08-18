@@ -8,6 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 
 const page = read("app/fertiliser-management/page.tsx")
 const api = read("lib/fertiliser-api.ts")
+const adjustmentTypeHandler = page.split("const handleAdjustmentTypeChange", 2)[1].split("const handleRequirementProductChange", 1)[0]
 
 assert.doesNotMatch(page, /Read-only in FERT-04|validateDisabledMasterForm|Validate Disabled Form/)
 assert.match(page, /createFertiliserProduct/)
@@ -24,6 +25,10 @@ assert.match(page, /earliest expiry first, including expired batches; null-expir
 assert.match(page, /Expired batches are included and allocated first by FEFO/)
 assert.match(page, /Adjustment Out includes expired stock and allocates the oldest expiry first/)
 assert.match(page, /adjustmentType !== "ADJUSTMENT_OUT".*eligible_available_quantity/)
+assert.match(adjustmentTypeHandler, /value !== "ADJUSTMENT_OUT"/)
+assert.match(adjustmentTypeHandler, /eligible_available_quantity/)
+assert.match(adjustmentTypeHandler, /setAdjustmentProductId\(""\)/)
+assert.match(adjustmentTypeHandler, /setAdjustmentUnit\(""\)/)
 assert.doesNotMatch(page, /No valid non-expired stock is available/)
 assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
