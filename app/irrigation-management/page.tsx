@@ -16,6 +16,8 @@ import { emptyIrrigationData, statusColors, type IrrigationData, type ZoneId } f
 import { buildIrrigationZoneCsv } from "@/lib/irrigation-export"
 import { irrigationEnvironmentCopy } from "@/lib/public-environment"
 import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
+import { irrigationPlanError, type IrrigationPlanResponse, type MotorRunScheduleRow } from "@/lib/irrigation-plan"
+import { parsePersistedMotorRunScheduleRows, type ScheduleLoadStatus } from "@/lib/irrigation-schedule-comparison"
 
 const irrigationEnvironment = irrigationEnvironmentCopy(
   process.env.NEXT_PUBLIC_MFMS_ENV,
@@ -29,6 +31,33 @@ export default function IrrigationManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [refreshVersion, setRefreshVersion] = useState(0)
+  const [persistedScheduleRows, setPersistedScheduleRows] = useState<MotorRunScheduleRow[]>([])
+  const [scheduleLoadStatus, setScheduleLoadStatus] = useState<ScheduleLoadStatus>("loading")
+  const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    async function loadPersistedSchedule() {
+      setScheduleLoadStatus("loading")
+      setScheduleLoadError(null)
+      try {
+        const response = await fetch("/api/operator-settings/irrigation-plan/motor-run-schedule", { cache: "no-store" })
+        const payload = (await response.json().catch(() => ({}))) as IrrigationPlanResponse
+        if (!response.ok) throw new Error(irrigationPlanError(payload, "Motor Run Schedule could not be loaded."))
+        const rows = parsePersistedMotorRunScheduleRows(payload.rows)
+        if (!active) return
+        setPersistedScheduleRows(rows)
+        setScheduleLoadStatus("ready")
+      } catch (error) {
+        if (!active) return
+        setPersistedScheduleRows([])
+        setScheduleLoadStatus("unavailable")
+        setScheduleLoadError(error instanceof Error ? error.message : "Motor Run Schedule could not be loaded.")
+      }
+    }
+    void loadPersistedSchedule()
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -90,9 +119,37 @@ export default function IrrigationManagementPage() {
 
         {errorMessage ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}. Live data unavailable; no fallback data is being shown.</div> : null}
 
-        <IrrigationMapWithDetails zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} isLoading={isLoading} />
+        <IrrigationMapWithDetails
+          zones={data.zones}
+          selectedZoneId={selectedZoneId}
+          onSelectZone={setSelectedZoneId}
+          isLoading={isLoading}
+          persistedScheduleRows={persistedScheduleRows}
+          scheduleLoadStatus={scheduleLoadStatus}
+          scheduleLoadError={scheduleLoadError}
+        />
 
-        <IrrigationPlanTables />
+        {scheduleLoadStatus === "loading" ? (
+          <section className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">
+            Loading persisted Irrigation Plan…
+          </section>
+        ) : (
+          <IrrigationPlanTables
+            persistedScheduleRows={persistedScheduleRows}
+            scheduleLoadStatus={scheduleLoadStatus}
+            scheduleLoadError={scheduleLoadError}
+            onPersistedScheduleChange={(rows) => {
+              setPersistedScheduleRows(rows)
+              setScheduleLoadStatus("ready")
+              setScheduleLoadError(null)
+            }}
+            onPersistedScheduleUnavailable={(message) => {
+              setPersistedScheduleRows([])
+              setScheduleLoadStatus("unavailable")
+              setScheduleLoadError(message)
+            }}
+          />
+        )}
 
         <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={errorMessage} />
 

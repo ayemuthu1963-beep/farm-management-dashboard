@@ -17,6 +17,12 @@ import {
   resolveIrrigationDateBounds,
 } from "../lib/irrigation-period.ts"
 import { fetchAllMotorRuntimeEntries } from "../lib/irrigation-upstream.ts"
+import {
+  IRRIGATION_PLAN_DAYS,
+  SCHEDULE_IDS,
+  initialMotorRunScheduleRows,
+  motorRunSchedulePayload,
+} from "../lib/irrigation-plan.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
@@ -72,6 +78,120 @@ const map = read("components/irrigation/irrigation-map-with-details.tsx")
 const summaryCards = read("components/irrigation/irrigation-summary-cards.tsx")
 const zoneStatusCards = read("components/irrigation/zone-status-cards.tsx")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
+const comparisonModule = loadTsxModule("lib/irrigation-schedule-comparison.ts", {
+  "./irrigation-plan": { IRRIGATION_PLAN_DAYS, SCHEDULE_IDS },
+  "./irrigation-data": {},
+})
+const {
+  FARM_TIME_ZONE,
+  ZONE_SCHEDULE_IDS,
+  compareActualWater,
+  farmWeekdayForDate,
+  formatActualWater,
+  formatLitresPerTree,
+  parsePersistedMotorRunScheduleRows,
+  scheduledWaterForZoneDate,
+} = comparisonModule
+
+// The Farm Irrigation Table compares every zone against the persisted litres
+// for its exact stable schedule identifier, independent of row order.
+assert.equal(FARM_TIME_ZONE, "Asia/Kolkata")
+assert.deepEqual(ZONE_SCHEDULE_IDS, {
+  P1W: "schedule-m1-p1w",
+  P1E: "schedule-m1-p1e",
+  P2W: "schedule-m2-p2w",
+  P2E: "schedule-m3-p2e",
+  JF: "schedule-m3-jf",
+  NM: "schedule-m1-nm",
+})
+const scheduleRows = initialMotorRunScheduleRows()
+const persistedApiRows = motorRunSchedulePayload(scheduleRows).rows.map((row) => ({
+  ...row,
+  days: Object.fromEntries(Object.entries(row.days).map(([weekday, day]) => [weekday, {
+    min: day.min === "" ? null : day.min,
+    ltrs: day.ltrs === "" ? null : day.ltrs,
+  }])),
+}))
+const persistedSchedule = parsePersistedMotorRunScheduleRows(persistedApiRows)
+assert.deepEqual(persistedSchedule.find((row) => row.scheduleId === "schedule-m1-p1e").days.sun, { min: "", ltrs: "" })
+for (const [zoneId, scheduleId] of Object.entries(ZONE_SCHEDULE_IDS)) {
+  const expected = persistedSchedule.find((row) => row.scheduleId === scheduleId)
+  assert.ok(expected)
+  const scheduled = scheduledWaterForZoneDate([...persistedSchedule].reverse(), "ready", zoneId, "2026-08-17")
+  const expectedLitres = Number(expected.days.mon.ltrs)
+  assert.equal(scheduled.litres, expectedLitres > 0 ? expectedLitres : null)
+}
+
+const weekdayCases = [
+  ["2026-08-17", "mon"],
+  ["2026-08-18", "tue"],
+  ["2026-08-19", "wed"],
+  ["2026-08-20", "thu"],
+  ["2026-08-21", "fri"],
+  ["2026-08-22", "sat"],
+  ["2026-08-23", "sun"],
+]
+assert.deepEqual(weekdayCases.map(([date]) => farmWeekdayForDate(date)), weekdayCases.map(([, weekday]) => weekday))
+assert.equal(farmWeekdayForDate("2026-08-16"), "sun")
+assert.equal(farmWeekdayForDate("invalid"), null)
+
+const sevenDates = getRecentIrrigationHistoryDates("2026-08-17", new Date("2026-08-18T00:00:00Z"))
+assert.deepEqual(sevenDates, ["2026-08-17", "2026-08-16", "2026-08-15", "2026-08-14", "2026-08-13", "2026-08-12", "2026-08-11"])
+assert.equal(new Set(sevenDates).size, 7)
+
+const p1eWithDistinctMinutes = persistedSchedule.map((row) => row.scheduleId === "schedule-m1-p1e" ? {
+  ...row,
+  days: { ...row.days, mon: { min: "999", ltrs: "96" } },
+} : row)
+assert.deepEqual(scheduledWaterForZoneDate(p1eWithDistinctMinutes, "ready", "P1E", "2026-08-17"), {
+  kind: "scheduled",
+  litres: 96,
+  display: "96 L/Tree",
+})
+
+const scheduled96 = { kind: "scheduled", litres: 96, display: "96 L/Tree" }
+assert.deepEqual([null, 0, 95, 96, 123, 144, 145].map((actual) => compareActualWater(scheduled96, actual).tone), [
+  "red", "red", "yellow", "light-green", "light-green", "light-green", "dark-green",
+])
+assert.equal(compareActualWater(scheduled96, null).status, "scheduled-missing")
+assert.equal(compareActualWater(scheduled96, 0).status, "scheduled-missing")
+assert.equal(compareActualWater(scheduled96, 123).status, "within-schedule")
+assert.equal(compareActualWater(scheduled96, 144).status, "within-schedule")
+assert.equal(compareActualWater(scheduled96, 145).status, "above-schedule")
+
+const notScheduled = scheduledWaterForZoneDate(persistedSchedule, "ready", "P1E", "2026-08-23")
+assert.deepEqual(notScheduled, { kind: "not-scheduled", litres: null, display: "Not scheduled" })
+assert.equal(compareActualWater(notScheduled, null).tone, "neutral")
+assert.equal(compareActualWater(notScheduled, 0).tone, "neutral")
+assert.equal(compareActualWater(notScheduled, 10).tone, "dark-green")
+assert.equal(compareActualWater(notScheduled, 10).explanation, "Water supplied on an unscheduled day")
+
+const unavailable = scheduledWaterForZoneDate([], "unavailable", "P1E", "2026-08-17")
+assert.deepEqual(unavailable, { kind: "unavailable", litres: null, display: "Unavailable" })
+assert.equal(compareActualWater(unavailable, 123).tone, "neutral")
+assert.equal(compareActualWater(unavailable, 123).status, "schedule-unavailable")
+assert.equal(formatLitresPerTree(96.5), "96.5 L/Tree")
+assert.equal(formatLitresPerTree(96.25), "96.25 L/Tree")
+assert.equal(formatActualWater({ perTreeLitres: null }), "No records")
+assert.equal(formatActualWater({ perTreeLitres: 0 }), "0 L/Tree")
+
+// Unsaved editor values cannot affect tiles until a successful refetch becomes
+// the new persisted source. A failed save leaves the prior projection intact.
+const unsavedEditorRows = persistedSchedule.map((row) => row.scheduleId === "schedule-m1-p1e" ? {
+  ...row,
+  days: { ...row.days, mon: { ...row.days.mon, ltrs: "777" } },
+} : row)
+assert.equal(scheduledWaterForZoneDate(persistedSchedule, "ready", "P1E", "2026-08-17").litres, 96)
+assert.equal(scheduledWaterForZoneDate(unsavedEditorRows, "ready", "P1E", "2026-08-17").litres, 777)
+const refetchedRows = parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(unsavedEditorRows).rows)
+assert.equal(scheduledWaterForZoneDate(refetchedRows, "ready", "P1E", "2026-08-17").litres, 777)
+const failedSaveProjection = persistedSchedule
+assert.equal(scheduledWaterForZoneDate(failedSaveProjection, "ready", "P1E", "2026-08-17").litres, 96)
+
+assert.throws(() => parsePersistedMotorRunScheduleRows([]), /six persisted rows/)
+assert.throws(() => parsePersistedMotorRunScheduleRows(persistedApiRows.map((row, index) => index === 0 ? { ...row, motor: null } : row)), /invalid persisted cell value/)
+assert.throws(() => parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(persistedSchedule).rows.map((row, index) => index === 0 ? { ...row, scheduleId: "invalid" } : row)), /invalid stable schedule identifier/)
+assert.throws(() => parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(persistedSchedule).rows.map((row, index) => index === 0 ? { ...row, days: { ...row.days, mon: { ...row.days.mon, ltrs: "invalid" } } } : row)), /invalid mon litres/)
 
 // The existing live-data summary cards appear exactly once after the period
 // controls and before Zone Status, without disturbing the approved page order.
@@ -275,7 +395,7 @@ assert.deepEqual(historyDates, [
 ])
 assert.equal(new Set(historyDates).size, 7)
 assert.match(route, /const historyDates = getRecentIrrigationHistoryDates\(endDate\)/)
-assert.match(map, /Seven-day water per tree/)
+assert.match(map, /Seven-day scheduled vs actual/)
 assert.doesNotMatch(map, /Five-day water per tree/)
 
 const history = buildRecentIrrigationHistory({
@@ -334,7 +454,7 @@ assert.match(map, /zone\.recordsCount/)
 // The full-width map keeps six equal compact tiles on one desktop row. Below
 // desktop width, only the map region scrolls horizontally; the page does not.
 assert.match(map, /max-w-full overflow-x-auto overscroll-x-contain/)
-assert.match(map, /grid min-w-\[64rem\] grid-cols-6 items-stretch gap-2 xl:min-w-0/)
+assert.match(map, /grid min-w-\[96rem\] grid-cols-6 items-stretch gap-2 xl:min-w-0/)
 assert.match(map, /aria-label="Farm Irrigation Map zones; scroll horizontally on smaller screens"/)
 assert.match(map, /flex h-full min-h-\[330px\] min-w-0 flex-col/)
 assert.doesNotMatch(map, /min-h-\[470px\]/)
