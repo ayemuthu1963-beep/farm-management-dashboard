@@ -4,12 +4,23 @@ import { Map } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
 import { cn } from "@/lib/utils"
 import { formatWaterLitres, statusColors, type Zone, type ZoneFiveDayHistory, type ZoneId } from "@/lib/irrigation-data"
+import type { MotorRunScheduleRow } from "@/lib/irrigation-plan"
+import {
+  compareActualWater,
+  formatActualWater,
+  scheduledWaterForZoneDate,
+  type ActualWaterComparison,
+  type ScheduleLoadStatus,
+} from "@/lib/irrigation-schedule-comparison"
 
 interface Props {
   zones: Zone[]
   selectedZoneId: ZoneId
   onSelectZone: (zoneId: ZoneId) => void
   isLoading?: boolean
+  persistedScheduleRows: MotorRunScheduleRow[]
+  scheduleLoadStatus: ScheduleLoadStatus
+  scheduleLoadError: string | null
 }
 
 const DISPLAY_ZONE_ORDER: ZoneId[] = ["P1W", "P1E", "P2W", "P2E", "JF", "NM"]
@@ -22,18 +33,26 @@ const ZONE_TILE_APPEARANCE: Record<ZoneId, { card: string }> = {
   NM: { card: "border-primary/30 bg-primary/10" },
 }
 
-function formatPerTreeValue(day: ZoneFiveDayHistory): string {
-  return day.perTreeLitres === null ? "No Record" : `${day.perTreeLitres.toLocaleString("en-IN")} L/tree`
+const ACTUAL_TONE_CLASSES: Record<ActualWaterComparison["tone"], string> = {
+  neutral: "bg-slate-100 text-slate-700 ring-slate-200",
+  red: "bg-red-100 text-red-950 ring-red-300",
+  yellow: "bg-amber-100 text-amber-950 ring-amber-300",
+  "light-green": "bg-emerald-100 text-emerald-950 ring-emerald-300",
+  "dark-green": "bg-emerald-700 text-white ring-emerald-800",
 }
 
 function AreaBox({
   zone,
   selected,
   onSelect,
+  persistedScheduleRows,
+  scheduleLoadStatus,
 }: {
   zone: Zone
   selected: boolean
   onSelect: () => void
+  persistedScheduleRows: MotorRunScheduleRow[]
+  scheduleLoadStatus: ScheduleLoadStatus
 }) {
   return (
     <button
@@ -63,17 +82,37 @@ function AreaBox({
       </div>
 
       <div className="flex-1 space-y-1 px-2.5 py-2">
-        {(zone.fiveDayHistory ?? []).map((day) => (
-          <div key={`${zone.id}-${day.date}`} className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-1 rounded-md bg-muted/25 px-1.5 py-1 text-[11px] leading-tight">
-            <div>
-              <div className="whitespace-nowrap font-semibold text-muted-foreground">{day.displayDate}</div>
-              {day.isCurrentIncompleteDay ? <div className="text-[9px] font-bold uppercase leading-none tracking-wide text-amber-600">In progress</div> : null}
+        <div className="grid grid-cols-[2.3rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 border-b border-border/70 px-1 pb-1 text-[9px] font-extrabold uppercase leading-tight tracking-wide text-muted-foreground" role="row">
+          <span className="text-left" role="columnheader">Date</span>
+          <span className="text-right" role="columnheader">Scheduled</span>
+          <span className="text-right" role="columnheader">Actual</span>
+        </div>
+        {(zone.fiveDayHistory ?? []).map((day: ZoneFiveDayHistory) => {
+          const scheduled = scheduledWaterForZoneDate(persistedScheduleRows, scheduleLoadStatus, zone.id, day.date)
+          const comparison = compareActualWater(scheduled, day.perTreeLitres)
+          const actualDisplay = formatActualWater(day)
+          return (
+            <div key={`${zone.id}-${day.date}`} className="grid grid-cols-[2.3rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-md bg-muted/25 px-1 py-1 text-[9px] leading-tight tabular-nums" role="row">
+              <div className="min-w-0 text-left" role="cell">
+                <div className="whitespace-nowrap font-semibold text-muted-foreground">{day.displayDate}</div>
+                {day.isCurrentIncompleteDay ? <div className="text-[8px] font-bold uppercase leading-none tracking-wide text-amber-700">In progress</div> : null}
+              </div>
+              <div className="min-w-0 whitespace-nowrap text-right font-semibold text-foreground" role="cell">
+                {scheduled.display}
+              </div>
+              <div className="min-w-0 text-right" role="cell">
+                <span
+                  className={cn("inline-flex max-w-full items-center justify-end whitespace-nowrap rounded px-1 py-0.5 font-extrabold ring-1 ring-inset", ACTUAL_TONE_CLASSES[comparison.tone])}
+                  data-water-status={comparison.status}
+                  aria-label={`${actualDisplay}. ${comparison.explanation}.`}
+                  title={comparison.explanation}
+                >
+                  {actualDisplay}
+                </span>
+              </div>
             </div>
-            <div className={cn("whitespace-nowrap text-right font-bold", day.perTreeLitres === null ? "text-muted-foreground" : "text-foreground")}>
-              {formatPerTreeValue(day)}
-            </div>
-          </div>
-        ))}
+          )
+        })}
         {zone.fiveDayHistory?.length ? null : (
           <div className="rounded-md border border-dashed border-border p-2 text-[11px] text-muted-foreground">Seven-day history unavailable.</div>
         )}
@@ -100,11 +139,24 @@ function AreaBox({
   )
 }
 
-export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, isLoading = false }: Props) {
+export function IrrigationMapWithDetails({
+  zones,
+  selectedZoneId,
+  onSelectZone,
+  isLoading = false,
+  persistedScheduleRows,
+  scheduleLoadStatus,
+  scheduleLoadError,
+}: Props) {
   const displayZones = [...zones].sort((left, right) => DISPLAY_ZONE_ORDER.indexOf(left.id) - DISPLAY_ZONE_ORDER.indexOf(right.id))
 
   return (
-    <Panel title="Farm Irrigation Table" icon={Map} headerRight={<span className="text-xs text-muted-foreground">Seven-day water per tree</span>}>
+    <Panel title="Farm Irrigation Table" icon={Map} headerRight={<span className="text-xs text-muted-foreground">Seven-day scheduled vs actual</span>}>
+      {scheduleLoadStatus === "unavailable" ? (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950" role="status">
+          Motor Run Schedule is unavailable. Scheduled values cannot be compared; actual irrigation data is unchanged{scheduleLoadError ? `: ${scheduleLoadError}` : "."}
+        </div>
+      ) : null}
       {isLoading ? (
         <div className="flex h-[340px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
           Loading live irrigation map...
@@ -118,7 +170,14 @@ export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, 
         >
           <div className="grid min-w-[64rem] grid-cols-6 items-stretch gap-2 xl:min-w-0">
             {displayZones.map((zone) => (
-              <AreaBox key={zone.id} zone={zone} selected={selectedZoneId === zone.id} onSelect={() => onSelectZone(zone.id)} />
+              <AreaBox
+                key={zone.id}
+                zone={zone}
+                selected={selectedZoneId === zone.id}
+                onSelect={() => onSelectZone(zone.id)}
+                persistedScheduleRows={persistedScheduleRows}
+                scheduleLoadStatus={scheduleLoadStatus}
+              />
             ))}
           </div>
         </div>
