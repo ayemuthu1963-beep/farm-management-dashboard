@@ -18,6 +18,8 @@ assert.match(
   mapShell,
   /grid min-w-0 grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4/,
 )
+assert.match(farmMap, /<div className="grid gap-3 sm:grid-cols-2">/)
+assert.equal((pipeline.match(/className="md:row-span-2"/g) ?? []).length, 2)
 
 const responsiveLayout = mapShell.slice(mapShell.indexOf('controlsPlacement === "responsive-grid"'))
 assert.ok(responsiveLayout.indexOf("{mapPanel}") < responsiveLayout.indexOf('data-testid="farm-map-tile-grid"'))

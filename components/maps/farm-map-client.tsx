@@ -299,7 +299,7 @@ function ClassificationLegend({
 
   return (
     <Panel title="Current Performance Classification" icon={Trees}>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => onFilter("All")}

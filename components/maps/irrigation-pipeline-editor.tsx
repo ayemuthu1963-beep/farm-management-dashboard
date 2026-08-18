@@ -890,7 +890,11 @@ export function IrrigationPipelineEditor({ map, leaflet, trees }: IrrigationPipe
       </Panel>
 
       {nodeForm ? (
-        <Panel title={manualDraft ? "New Manual Pipeline Node" : `Point ${selectedNode?.displayLabel ?? ""}`} icon={MapPinPlus}>
+        <Panel
+          title={manualDraft ? "New Manual Pipeline Node" : `Point ${selectedNode?.displayLabel ?? ""}`}
+          icon={MapPinPlus}
+          className="md:row-span-2"
+        >
           <div className="grid gap-3 text-sm">
             {selectedNode ? <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/60 p-2 text-xs"><span>Survey: {selectedNode.surveyIndex ? `PS-${String(selectedNode.surveyIndex).padStart(3, "0")}` : "Manual"}</span><span>Status: {selectedNode.status}</span><span>Original: {selectedNode.originalLatitude?.toFixed(7) ?? "—"}, {selectedNode.originalLongitude?.toFixed(7) ?? "—"}</span><span>Current: {currentNode(selectedNode).currentLatitude.toFixed(7)}, {currentNode(selectedNode).currentLongitude.toFixed(7)}</span><span>Accuracy: {selectedNode.gpsAccuracyMetres?.toFixed(2) ?? "—"} m</span><span>Moved: {(pendingMove?.nodeId === selectedNode.nodeId ? pipelineDistanceMetres(selectedNode.originalLatitude ?? pendingMove.latitude, selectedNode.originalLongitude ?? pendingMove.longitude, pendingMove.latitude, pendingMove.longitude) : selectedNode.movedDistanceMetres ?? 0).toFixed(2)} m</span><span>Revision: {selectedNode.revision}</span><span>Source: {selectedNode.sourceIdentifier}</span></div> : null}
             <label className="grid gap-1 text-xs font-semibold">Equipment type<select value={nodeForm.equipmentType} disabled={!editMode} onChange={(event) => setNodeForm({ ...nodeForm, equipmentType: event.target.value as PipelineEquipmentType })} className={inputClass()}>{PIPELINE_EQUIPMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
@@ -913,7 +917,11 @@ export function IrrigationPipelineEditor({ map, leaflet, trees }: IrrigationPipe
       ) : null}
 
       {segmentForm ? (
-        <Panel title={draw.endNodeId ? "New Pipeline Segment" : `Pipe ${selectedSegment?.segmentCode ?? ""}`} icon={GitBranch}>
+        <Panel
+          title={draw.endNodeId ? "New Pipeline Segment" : `Pipe ${selectedSegment?.segmentCode ?? ""}`}
+          icon={GitBranch}
+          className="md:row-span-2"
+        >
           <div className="grid gap-3 text-sm">
             <label className="grid gap-1 text-xs font-semibold">Segment code<input value={segmentForm.segmentCode} disabled={!editMode} onChange={(event) => setSegmentForm({ ...segmentForm, segmentCode: event.target.value })} className={inputClass()} /></label>
             <label className="grid gap-1 text-xs font-semibold">Line class<select value={segmentForm.lineClass} disabled={!editMode} onChange={(event) => setSegmentForm({ ...segmentForm, lineClass: event.target.value as PipelineLineClass | "" })} className={inputClass()}><option value="">Select class</option>{PIPELINE_LINE_CLASSES.map((value) => <option key={value}>{value}</option>)}</select></label>
