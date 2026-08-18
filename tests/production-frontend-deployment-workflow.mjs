@@ -59,6 +59,9 @@ assert.match(helper, /Production source differs from Preview-approved file/)
 assert.match(helper, /preview_feature_revision/)
 assert.match(helper, /production_source_matches_preview=true/)
 assert.match(helper, /coordinated-frontend-after-backend/)
+assert.match(helper, /readonly coordinated_preview_revision="108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"/)
+assert.match(helper, /readonly coordinated_preview_feature_revision="04fd5664137809605721665cafd6ffaad4264ec9"/)
+assert.match(helper, /readonly coordinated_preview_merge_base="9842f21a4bb04ff4f1750790392dbfee0dc941d3"/)
 assert.match(helper, /readonly coordinated_candidate_revision="9a577add2308b85637fcf05ee49b6274e19cc2dc"/)
 assert.match(helper, /readonly coordinated_candidate_tree="e102fe82bdb6b009012933684c6db3d927f53a7a"/)
 assert.match(helper, /readonly coordinated_backend_revision="94b28f17702e409e13d25e288fc5cd4b9bbef545"/)
@@ -86,6 +89,51 @@ assert.doesNotMatch(helper, /\bsudo\b/)
 assert.doesNotMatch(helper, /nginx\s+-s\s+reload/)
 assert.doesNotMatch(helper, /certbot/)
 assert.doesNotMatch(helper, /production_touched=0/)
+
+const approvedVerifiedFiles = [
+  "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/irrigation/irrigation-plan-tables.tsx",
+  "lib/irrigation-plan.ts",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/operator-settings-persistence.mjs",
+]
+const approvedProductionAdaptations = [
+  "app/api/operator-settings/[[...path]]/route.ts",
+  "tests/irrigation-plan.mjs",
+]
+const approvedAllowedPaths = [
+  "app/api/operator-settings/[[...path]]/route.ts",
+  "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/irrigation/irrigation-plan-tables.tsx",
+  "deploy/production-release-manifest.json",
+  "lib/irrigation-plan.ts",
+  "package.json",
+  "tests/farm-calendar-production-promotion.mjs",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/irrigation-plan.mjs",
+  "tests/operator-settings-persistence.mjs",
+]
+const approvedRuntimePaths = [
+  "app/api/operator-settings/[[...path]]/route.ts",
+  "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/irrigation/irrigation-plan-tables.tsx",
+  "lib/irrigation-plan.ts",
+]
+const approvedProvenanceRows = [
+  "app/irrigation-management/page.tsx|d0b0dc1968a03261f2b145c533e4d4970e471608|d0b0dc1968a03261f2b145c533e4d4970e471608|989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22|989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+  "components/irrigation/irrigation-charts-hybrid.tsx|8df1c1b400435aefb55734061693a1745646030f|8df1c1b400435aefb55734061693a1745646030f|392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff|392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
+  "components/irrigation/irrigation-map-with-details.tsx|be77048141de46f12485fc5e3c2c0d6a44059374|be77048141de46f12485fc5e3c2c0d6a44059374|b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e|b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
+  "components/irrigation/irrigation-plan-tables.tsx|8dec6117d5185bda57de7b22b3de013c639d9c28|8dec6117d5185bda57de7b22b3de013c639d9c28|4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390|4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
+  "lib/irrigation-plan.ts|f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f|f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f|c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67|c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
+  "tests/irrigation-management-corrections.mjs|aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6|aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6|a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778|a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
+  "tests/operator-settings-persistence.mjs|9f5befbe0152aa1791c30e3a954cb538e5742b13|9f5befbe0152aa1791c30e3a954cb538e5742b13|aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50|aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
+]
 
 const coordinatedState = {
   candidate: "9a577add2308b85637fcf05ee49b6274e19cc2dc",
@@ -145,7 +193,7 @@ try {
   const manifestPath = join(validatorRoot, "manifest.json")
   const actualPath = join(validatorRoot, "actual.txt")
   writeFileSync(validatorPath, `${manifestValidatorMatch[1]}\n`, "utf8")
-  writeFileSync(actualPath, "app/irrigation-management/page.tsx\n", "utf8")
+  writeFileSync(actualPath, `${approvedAllowedPaths.join("\n")}\n`, "utf8")
   const manifest = {
     schema_version: 1,
     environment: "Production",
@@ -156,7 +204,8 @@ try {
       revision: "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
       image_id: "sha256:d8cee1e9e591db1b1d35930ac0d89d1bf8b9e2ae2723722c5fe6e418832ec186",
       feature_revision: "04fd5664137809605721665cafd6ffaad4264ec9",
-      verified_files: ["app/irrigation-management/page.tsx"],
+      verified_files: approvedVerifiedFiles,
+      production_adaptations: approvedProductionAdaptations,
     },
     protected_invariants: {
       preview: "unchanged",
@@ -167,7 +216,7 @@ try {
       schedules: "unchanged",
       proxy_configuration: "unchanged",
     },
-    allowed_paths: ["app/irrigation-management/page.tsx"],
+    allowed_paths: approvedAllowedPaths,
   }
   const validateManifest = (payload, candidate = coordinatedState.candidate, tree = coordinatedState.tree) => {
     writeFileSync(manifestPath, JSON.stringify(payload), "utf8")
@@ -188,8 +237,92 @@ try {
     ...manifest,
     protected_invariants: { ...manifest.protected_invariants, backend: "unchanged" },
   }).status, 0)
+  assert.notEqual(validateManifest({
+    ...manifest,
+    preview_approved: { ...manifest.preview_approved, revision: "0".repeat(40) },
+  }).status, 0)
+  assert.notEqual(validateManifest({
+    ...manifest,
+    preview_approved: { ...manifest.preview_approved, feature_revision: "0".repeat(40) },
+  }).status, 0)
+  assert.notEqual(validateManifest({
+    ...manifest,
+    preview_approved: { ...manifest.preview_approved, verified_files: approvedVerifiedFiles.slice(0, -1) },
+  }).status, 0)
+  assert.notEqual(validateManifest({
+    ...manifest,
+    preview_approved: { ...manifest.preview_approved, production_adaptations: approvedProductionAdaptations.slice(0, -1) },
+  }).status, 0)
 } finally {
   rmSync(validatorRoot, { recursive: true, force: true })
 }
+
+const provenanceValidatorMatch = helper.match(
+  /<<'PY_COORDINATED_CONTENT_PROVENANCE'\n([\s\S]*?)\nPY_COORDINATED_CONTENT_PROVENANCE/,
+)
+assert.ok(provenanceValidatorMatch)
+const provenanceRoot = mkdtempSync(join(tmpdir(), "mfms-content-provenance-"))
+try {
+  const validatorPath = join(provenanceRoot, "validate.py")
+  const evidencePath = join(provenanceRoot, "evidence.tsv")
+  const runtimePath = join(provenanceRoot, "runtime.txt")
+  writeFileSync(validatorPath, `${provenanceValidatorMatch[1]}\n`, "utf8")
+  const exactIdentity = [
+    "coordinated-frontend-after-backend",
+    "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
+    coordinatedState.candidate,
+    coordinatedState.tree,
+    "04fd5664137809605721665cafd6ffaad4264ec9",
+    "9842f21a4bb04ff4f1750790392dbfee0dc941d3",
+  ]
+  const validateProvenance = ({
+    identity = exactIdentity,
+    rows = approvedProvenanceRows,
+    runtime = approvedRuntimePaths,
+  } = {}) => {
+    writeFileSync(evidencePath, `${rows.join("\n")}\n`, "utf8")
+    writeFileSync(runtimePath, `${runtime.join("\n")}\n`, "utf8")
+    return spawnSync("python3", [
+      validatorPath,
+      ...identity,
+      evidencePath,
+      runtimePath,
+    ], { encoding: "utf8" })
+  }
+
+  assert.equal(validateProvenance().status, 0)
+
+  const changedByte = [...approvedProvenanceRows]
+  changedByte[0] = changedByte[0].replace(
+    "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+    "089d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+  )
+  assert.notEqual(validateProvenance({ rows: changedByte }).status, 0)
+  assert.notEqual(validateProvenance({ rows: approvedProvenanceRows.slice(0, -1) }).status, 0)
+  assert.notEqual(validateProvenance({
+    rows: [...approvedProvenanceRows, `extra.tsx|${"a".repeat(40)}|${"a".repeat(40)}|${"b".repeat(64)}|${"b".repeat(64)}`],
+  }).status, 0)
+  assert.notEqual(validateProvenance({
+    rows: [approvedProvenanceRows[0].replace("app/irrigation-management/page.tsx", "app/irrigation-management/renamed.tsx"), ...approvedProvenanceRows.slice(1)],
+  }).status, 0)
+  for (const index of [0, 1, 2, 3, 4, 5]) {
+    const changedIdentity = [...exactIdentity]
+    changedIdentity[index] = index === 0 ? "frontend-only" : "0".repeat(40)
+    assert.notEqual(validateProvenance({ identity: changedIdentity }).status, 0)
+  }
+  assert.notEqual(validateProvenance({ runtime: approvedRuntimePaths.slice(0, -1) }).status, 0)
+  assert.notEqual(validateProvenance({ runtime: [...approvedRuntimePaths, "app/unapproved.tsx"] }).status, 0)
+} finally {
+  rmSync(provenanceRoot, { recursive: true, force: true })
+}
+
+const manifestFunction = helper.slice(
+  helper.indexOf("validate_release_manifest()"),
+  helper.indexOf("write_state()"),
+)
+assert.match(manifestFunction, /if \[\[ "\$candidate_revision" == "\$coordinated_candidate_revision" \]\]; then\n\s+validate_exact_coordinated_content_provenance\n\s+else\n\s+git -C "\$source_dir" merge-base --is-ancestor/)
+assert.match(helper, /<\(git -C "\$source_dir" cat-file blob "\$preview_blob"\)/)
+assert.match(helper, /<\(git -C "\$source_dir" cat-file blob "\$candidate_blob"\)/)
+assert.doesNotMatch(manifestFunction, /if \[\[ "\$candidate_revision" != "\$coordinated_candidate_revision" \]\]; then\s+git -C "\$source_dir" merge-base --is-ancestor/)
 
 console.log("Production frontend deployment and rollback workflow tests passed.")

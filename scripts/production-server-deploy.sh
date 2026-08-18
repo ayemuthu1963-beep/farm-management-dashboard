@@ -56,6 +56,9 @@ readonly coordinated_frontend_baseline_image_id="sha256:6f3e81bef1f52c643e12c37a
 readonly coordinated_frontend_baseline_environment_sha256="530e3be8c0957715d98b4253b2b7d50c39f5115b85d8e70543ac7f3cb09883d7"
 readonly coordinated_frontend_baseline_ipv4="172.19.128.7"
 readonly coordinated_verification_actor="production-release-verification"
+readonly coordinated_preview_revision="108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"
+readonly coordinated_preview_feature_revision="04fd5664137809605721665cafd6ffaad4264ec9"
+readonly coordinated_preview_merge_base="9842f21a4bb04ff4f1750790392dbfee0dc941d3"
 
 [[ "$production_url" == "https://muthufarms.com" ]] \
   || blocked "the public target is not Production"
@@ -120,6 +123,7 @@ preview_approved_revision=""
 preview_approved_image_id=""
 preview_feature_revision=""
 preview_verified_file_count=""
+preview_deployment_kind=""
 candidate_tree=""
 coordinated_database_before="$work_dir/coordinated-database.before.json"
 coordinated_database_after_read="$work_dir/coordinated-database.after-read.json"
@@ -984,6 +988,179 @@ assert_coordinated_release_state_unchanged() {
     || blocked "coordinated frontend deployment changed the Production database"
 }
 
+validate_exact_coordinated_content_provenance() {
+  local evidence_file="$work_dir/coordinated-content-provenance.tsv"
+  local runtime_paths="$work_dir/coordinated-runtime-paths.txt"
+  local preview_path preview_blob candidate_blob preview_sha256 candidate_sha256
+  local actual_merge_base
+
+  [[ "$preview_deployment_kind" == "coordinated-frontend-after-backend" ]] \
+    || blocked "exact content provenance is limited to the coordinated frontend release"
+  [[ "$preview_approved_revision" == "$coordinated_preview_revision" ]] \
+    || blocked "coordinated Preview revision differs from the content-provenance approval"
+  [[ "$preview_feature_revision" == "$coordinated_preview_feature_revision" ]] \
+    || blocked "coordinated feature revision differs from the content-provenance approval"
+  [[ "$candidate_revision" == "$coordinated_candidate_revision" ]] \
+    || blocked "coordinated candidate differs from the content-provenance approval"
+  [[ "$candidate_tree" == "$coordinated_candidate_tree" ]] \
+    || blocked "coordinated candidate tree differs from the content-provenance approval"
+
+  actual_merge_base=$(git -C "$source_dir" merge-base \
+    "$preview_feature_revision" "$preview_approved_revision")
+  [[ "$actual_merge_base" == "$coordinated_preview_merge_base" ]] \
+    || blocked "coordinated Preview and feature merge base differs from approval"
+  if git -C "$source_dir" merge-base --is-ancestor \
+    "$preview_feature_revision" "$preview_approved_revision"
+  then
+    blocked "coordinated content-provenance exception requires the approved non-ancestral graph"
+  fi
+
+  : > "$evidence_file"
+  for preview_path in "${preview_contract_lines[@]:4}"; do
+    preview_blob=$(git -C "$source_dir" rev-parse "$preview_approved_revision:$preview_path") \
+      || blocked "Preview-approved file is unavailable: $preview_path"
+    candidate_blob=$(git -C "$source_dir" rev-parse "$candidate_revision:$preview_path") \
+      || blocked "Production candidate file is unavailable: $preview_path"
+    preview_sha256=$(git -C "$source_dir" cat-file blob "$preview_blob" | sha256sum | awk '{print $1}')
+    candidate_sha256=$(git -C "$source_dir" cat-file blob "$candidate_blob" | sha256sum | awk '{print $1}')
+    cmp \
+      <(git -C "$source_dir" cat-file blob "$preview_blob") \
+      <(git -C "$source_dir" cat-file blob "$candidate_blob") \
+      || blocked "Production source differs from Preview-approved file: $preview_path"
+    printf '%s|%s|%s|%s|%s\n' \
+      "$preview_path" "$preview_blob" "$candidate_blob" "$preview_sha256" "$candidate_sha256" \
+      >> "$evidence_file"
+  done
+
+  git -C "$source_dir" diff --name-only \
+    "$original_revision..$candidate_revision" -- app components hooks lib \
+    | LC_ALL=C sort -u > "$runtime_paths"
+
+  python3 - \
+    "$preview_deployment_kind" \
+    "$preview_approved_revision" \
+    "$candidate_revision" \
+    "$candidate_tree" \
+    "$preview_feature_revision" \
+    "$actual_merge_base" \
+    "$evidence_file" \
+    "$runtime_paths" <<'PY_COORDINATED_CONTENT_PROVENANCE'
+import pathlib
+import sys
+
+(
+    deployment_kind,
+    preview_revision,
+    candidate_revision,
+    candidate_tree,
+    feature_revision,
+    merge_base,
+    evidence_path,
+    runtime_path,
+) = sys.argv[1:]
+
+expected_kind = "coordinated-frontend-after-backend"
+expected_preview = "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"
+expected_candidate = "9a577add2308b85637fcf05ee49b6274e19cc2dc"
+expected_tree = "e102fe82bdb6b009012933684c6db3d927f53a7a"
+expected_feature = "04fd5664137809605721665cafd6ffaad4264ec9"
+expected_merge_base = "9842f21a4bb04ff4f1750790392dbfee0dc941d3"
+expected_rows = {
+    "app/irrigation-management/page.tsx": (
+        "d0b0dc1968a03261f2b145c533e4d4970e471608",
+        "d0b0dc1968a03261f2b145c533e4d4970e471608",
+        "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+        "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+    ),
+    "components/irrigation/irrigation-charts-hybrid.tsx": (
+        "8df1c1b400435aefb55734061693a1745646030f",
+        "8df1c1b400435aefb55734061693a1745646030f",
+        "392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
+        "392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
+    ),
+    "components/irrigation/irrigation-map-with-details.tsx": (
+        "be77048141de46f12485fc5e3c2c0d6a44059374",
+        "be77048141de46f12485fc5e3c2c0d6a44059374",
+        "b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
+        "b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
+    ),
+    "components/irrigation/irrigation-plan-tables.tsx": (
+        "8dec6117d5185bda57de7b22b3de013c639d9c28",
+        "8dec6117d5185bda57de7b22b3de013c639d9c28",
+        "4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
+        "4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
+    ),
+    "lib/irrigation-plan.ts": (
+        "f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f",
+        "f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f",
+        "c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
+        "c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
+    ),
+    "tests/irrigation-management-corrections.mjs": (
+        "aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6",
+        "aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6",
+        "a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
+        "a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
+    ),
+    "tests/operator-settings-persistence.mjs": (
+        "9f5befbe0152aa1791c30e3a954cb538e5742b13",
+        "9f5befbe0152aa1791c30e3a954cb538e5742b13",
+        "aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
+        "aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
+    ),
+}
+expected_runtime_paths = {
+    "app/api/operator-settings/[[...path]]/route.ts",
+    "app/irrigation-management/page.tsx",
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
+    "components/irrigation/irrigation-plan-tables.tsx",
+    "lib/irrigation-plan.ts",
+}
+
+identity = (
+    deployment_kind,
+    preview_revision,
+    candidate_revision,
+    candidate_tree,
+    feature_revision,
+    merge_base,
+)
+expected_identity = (
+    expected_kind,
+    expected_preview,
+    expected_candidate,
+    expected_tree,
+    expected_feature,
+    expected_merge_base,
+)
+if identity != expected_identity:
+    raise SystemExit("coordinated content-provenance identity mismatch")
+
+rows = {}
+for line in pathlib.Path(evidence_path).read_text(encoding="utf-8").splitlines():
+    if not line:
+        continue
+    parts = line.split("|")
+    if len(parts) != 5:
+        raise SystemExit("invalid coordinated content-provenance evidence row")
+    path, preview_blob, candidate_blob, preview_sha256, candidate_sha256 = parts
+    if path in rows:
+        raise SystemExit("duplicate coordinated content-provenance path")
+    rows[path] = (preview_blob, candidate_blob, preview_sha256, candidate_sha256)
+if rows != expected_rows:
+    raise SystemExit("coordinated content-provenance evidence differs from approval")
+
+runtime_paths = {
+    line
+    for line in pathlib.Path(runtime_path).read_text(encoding="utf-8").splitlines()
+    if line
+}
+if runtime_paths != expected_runtime_paths:
+    raise SystemExit("coordinated candidate contains an unapproved or missing runtime path")
+PY_COORDINATED_CONTENT_PROVENANCE
+}
+
 validate_release_manifest() {
   local manifest="$source_dir/deploy/production-release-manifest.json"
   local actual_paths="$work_dir/actual-paths.txt"
@@ -1024,6 +1201,21 @@ coordinated_invariants = {
 }
 approved_coordinated_candidate = "9a577add2308b85637fcf05ee49b6274e19cc2dc"
 approved_coordinated_tree = "e102fe82bdb6b009012933684c6db3d927f53a7a"
+approved_preview_revision = "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"
+approved_feature_revision = "04fd5664137809605721665cafd6ffaad4264ec9"
+approved_verified_files = [
+    "app/irrigation-management/page.tsx",
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
+    "components/irrigation/irrigation-plan-tables.tsx",
+    "lib/irrigation-plan.ts",
+    "tests/irrigation-management-corrections.mjs",
+    "tests/operator-settings-persistence.mjs",
+]
+approved_production_adaptations = [
+    "app/api/operator-settings/[[...path]]/route.ts",
+    "tests/irrigation-plan.mjs",
+]
 
 if data.get("schema_version") != 1:
     raise SystemExit("invalid manifest schema")
@@ -1066,6 +1258,16 @@ for path in verified_files:
     if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
         raise SystemExit("Preview verified file path is invalid")
 
+if deployment_kind == "coordinated-frontend-after-backend":
+    if preview_revision != approved_preview_revision:
+        raise SystemExit("coordinated Preview revision differs from approval")
+    if feature_revision != approved_feature_revision:
+        raise SystemExit("coordinated feature revision differs from approval")
+    if verified_files != approved_verified_files:
+        raise SystemExit("coordinated Preview verified file list differs from approval")
+    if preview.get("production_adaptations") != approved_production_adaptations:
+        raise SystemExit("coordinated Production adaptations differ from approval")
+
 allowed = data.get("allowed_paths")
 if not isinstance(allowed, list) or not allowed:
     raise SystemExit("manifest allowed_paths is empty")
@@ -1101,6 +1303,7 @@ if unexpected or missing:
 if not set(verified_files).issubset(set(actual)):
     raise SystemExit("Preview verified files must be changed by the Production candidate")
 
+print(deployment_kind)
 print(preview_revision)
 print(preview_image_id)
 print(feature_revision)
@@ -1109,12 +1312,13 @@ for path in verified_files:
 PY_RELEASE_MANIFEST
 
   mapfile -t preview_contract_lines < "$preview_contract"
-  [[ "${#preview_contract_lines[@]}" -ge 4 ]] \
+  [[ "${#preview_contract_lines[@]}" -ge 5 ]] \
     || blocked "Preview approval contract is incomplete"
-  preview_approved_revision=${preview_contract_lines[0]}
-  preview_approved_image_id=${preview_contract_lines[1]}
-  preview_feature_revision=${preview_contract_lines[2]}
-  preview_verified_file_count=$((${#preview_contract_lines[@]} - 3))
+  preview_deployment_kind=${preview_contract_lines[0]}
+  preview_approved_revision=${preview_contract_lines[1]}
+  preview_approved_image_id=${preview_contract_lines[2]}
+  preview_feature_revision=${preview_contract_lines[3]}
+  preview_verified_file_count=$((${#preview_contract_lines[@]} - 4))
 
   container_exists "$preview_container" || blocked "Preview frontend container is missing"
   container_running "$preview_container" || blocked "Preview frontend container is not running"
@@ -1124,17 +1328,22 @@ PY_RELEASE_MANIFEST
     || blocked "live Preview revision differs from the approved artifact"
 
   git -C "$source_dir" fetch --no-tags origin \
-    "$preview_approved_revision" "$preview_feature_revision" >/dev/null 2>&1
-  git -C "$source_dir" merge-base --is-ancestor \
-    "$preview_feature_revision" "$preview_approved_revision" \
-    || blocked "Preview approval does not contain the verified feature revision"
-  for preview_path in "${preview_contract_lines[@]:3}"; do
-    git -C "$source_dir" cat-file -e "$preview_approved_revision:$preview_path" \
-      || blocked "Preview-approved file is unavailable: $preview_path"
-    cmp "$source_dir/$preview_path" \
-      <(git -C "$source_dir" show "$preview_approved_revision:$preview_path") \
-      || blocked "Production source differs from Preview-approved file: $preview_path"
-  done
+    "$preview_approved_revision" "$preview_feature_revision" "$coordinated_preview_merge_base" \
+    >/dev/null 2>&1
+  if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
+    validate_exact_coordinated_content_provenance
+  else
+    git -C "$source_dir" merge-base --is-ancestor \
+      "$preview_feature_revision" "$preview_approved_revision" \
+      || blocked "Preview approval does not contain the verified feature revision"
+    for preview_path in "${preview_contract_lines[@]:4}"; do
+      git -C "$source_dir" cat-file -e "$preview_approved_revision:$preview_path" \
+        || blocked "Preview-approved file is unavailable: $preview_path"
+      cmp "$source_dir/$preview_path" \
+        <(git -C "$source_dir" show "$preview_approved_revision:$preview_path") \
+        || blocked "Production source differs from Preview-approved file: $preview_path"
+    done
+  fi
 }
 
 write_state() {
