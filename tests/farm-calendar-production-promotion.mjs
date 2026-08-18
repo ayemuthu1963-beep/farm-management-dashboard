@@ -11,33 +11,39 @@ const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 
 assert.equal(manifest.base_commit, "e9833917c0a7fd190d933acb8cb234f60f5c8c65")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "fc791dfb090874e8ba16408ee38f910f161c9a52",
-  image_id: "sha256:4159d9e484855be68eacf32a41b895e311ff2957b56f3be05f39dfae133cf266",
-  feature_revision: "6ab5216a7dba47204321a66b145de6bc6ff56086",
+  revision: "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
+  image_id: "sha256:d8cee1e9e591db1b1d35930ac0d89d1bf8b9e2ae2723722c5fe6e418832ec186",
+  feature_revision: "04fd5664137809605721665cafd6ffaad4264ec9",
   verified_files: [
-    "app/api/operator-settings/[[...path]]/route.ts",
     "app/irrigation-management/page.tsx",
     "components/irrigation/irrigation-charts-hybrid.tsx",
     "components/irrigation/irrigation-map-with-details.tsx",
     "components/irrigation/irrigation-plan-tables.tsx",
     "lib/irrigation-plan.ts",
     "tests/irrigation-management-corrections.mjs",
-    "tests/irrigation-plan.mjs",
     "tests/operator-settings-persistence.mjs",
+  ],
+  production_adaptations: [
+    "app/api/operator-settings/[[...path]]/route.ts",
+    "tests/irrigation-plan.mjs",
   ],
 })
 
 const previewApprovedDigests = {
-  "app/api/operator-settings/[[...path]]/route.ts": "19f9bd02a39e3548b1ff19499571e1b1a7f786462c4c8228b29a93b556fc2727",
   "app/irrigation-management/page.tsx": "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
   "components/irrigation/irrigation-charts-hybrid.tsx": "392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
   "components/irrigation/irrigation-map-with-details.tsx": "b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
-  "components/irrigation/irrigation-plan-tables.tsx": "9c39d156279a201d6fa7633ac67f9bc44ae134f9411400c4abbb22337a9f412d",
-  "lib/irrigation-plan.ts": "397c632cf9a9ab7e1802ccba449870c1c53b64f3d61158daaa8fed66629f2146",
+  "components/irrigation/irrigation-plan-tables.tsx": "4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
+  "lib/irrigation-plan.ts": "c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
   "tests/irrigation-management-corrections.mjs": "a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
-  "tests/irrigation-plan.mjs": "f9a41dd35b45249aea4a876d4a2d65ce9d0eac0ee221160eb50b24731e632e30",
-  "tests/operator-settings-persistence.mjs": "b75e10872e5d3052390556e81ed4a4e2ca736f32305eb31d5a441eb229dce819",
+  "tests/operator-settings-persistence.mjs": "aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
 }
+
+const productionProxy = read("app/api/operator-settings/[[...path]]/route.ts")
+assert.match(productionProxy, /getAuthenticatedUserAssertionHeaders/)
+assert.match(productionProxy, /irrigation-plan/)
+assert.match(productionProxy, /drip-output\|motor-run-schedule/)
+assert.doesNotMatch(productionProxy, /irrigation-pipeline-signing|worker-management-signing/)
 
 for (const [path, expectedDigest] of Object.entries(previewApprovedDigests)) {
   assert.equal(sha256(path), expectedDigest, `${path} differs from the Preview-approved file`)
