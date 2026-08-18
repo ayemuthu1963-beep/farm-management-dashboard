@@ -1,6 +1,16 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
 
@@ -68,8 +78,25 @@ assert.match(gate, /Production migration release must contain a declared migrati
 assert.match(gate, /Production migration release has an empty migration plan/)
 assert.match(gate, /actual = hashlib\.sha256\(content\)\.hexdigest\(\)/)
 assert.match(gate, /if actual != checksum:/)
-assert.match(gate, /pg_dump --format=custom/)
+assert.match(gate, /exec pg_dump[\s\S]*?--format=custom/)
 assert.match(gate, /pg_restore --list/)
+assert.match(gate, /readonly database_backup_credential_file="\/etc\/mfms-production\/backup\/mfms_backup\.env"/)
+assert.match(gate, /readonly database_backup_role="mfms_backup"/)
+assert.match(gate, /readonly database_backup_postgres_major="16"/)
+assert.match(gate, /Production backup credential owner UID is invalid/)
+assert.match(gate, /permissions must be exactly 0640 and non-writable by group\/others/)
+assert.match(gate, /must contain exactly MFMS_BACKUP_PASSWORD/)
+assert.match(gate, /Production backup role is not login-capable/)
+assert.match(gate, /Production backup connection resolved to the wrong database/)
+assert.match(gate, /missing_schema_usage/)
+assert.match(gate, /missing_table_select/)
+assert.match(gate, /missing_sequence_select/)
+assert.match(gate, /--network none/)
+assert.match(gate, /--tmpfs \/var\/lib\/postgresql\/data:rw,nosuid,nodev,size=2g/)
+assert.match(gate, /createdb --username=postgres --template=template0 "\$database_name"/)
+assert.match(gate, /database_backup_restore_verified="true"/)
+assert.match(gate, /A validated Production database backup is required before migration/)
+assert.match(gate, /A verified isolated Production database restore is required before migration/)
 assert.match(gate, /com\.muthufarms\.mfms\.source-contract/)
 assert.match(gate, /database_migrations=forward-only/)
 assert.match(gate, /database_role=mfms_prod_app/)
@@ -77,6 +104,124 @@ assert.match(gate, /PRODUCTION_BACKEND_DEPLOYMENT=PASS/)
 assert.match(gate, /PRODUCTION_BACKEND_ROLLBACK=PASS/)
 assert.doesNotMatch(gate, /mfms_server_uat|harvest-api-pilot|production\.muthufarms\.com/)
 assert.doesNotMatch(gate, /docker\s+compose\b|\bsudo\b|nginx\s+-s\s+reload|crontab\s+-[er]/)
+
+const extractEmbeddedPython = (marker) => {
+  const match = gate.match(new RegExp(`<<'${marker}'\\n([\\s\\S]*?)\\n${marker}`))
+  assert.ok(match, `Missing embedded Python marker ${marker}`)
+  return match[1]
+}
+const runPython = (scriptPath, args) => spawnSync("python3", [scriptPath, ...args.map(String)], {
+  encoding: "utf8",
+})
+
+const backupBlock = gate.slice(
+  gate.indexOf("validate_database_backup_credential_state()"),
+  gate.indexOf("verify_migrations()"),
+)
+assert.ok(backupBlock.length > 0)
+assert.doesNotMatch(backupBlock, /\bPOSTGRES_USER\b|\bharvest_app\b|\bmfms_prod_app\b|\bmfms_cluster_admin\b/)
+assert.doesNotMatch(backupBlock, /docker[^\n]*(?:--env|-e)[^\n]*(?:PASSWORD|MFMS_BACKUP)/i)
+assert.doesNotMatch(backupBlock, /(?:echo|logger)[^\n]*backup_password/i)
+assert.match(backupBlock, /printf '%s\\n' "\$backup_password" \| docker exec -i/)
+assert.match(backupBlock, /unset backup_password/)
+assert.match(backupBlock, /read_bytes\(\)\[:5\] == b"PGDMP"/)
+assert.match(backupBlock, /rm -f "\$database_backup_temporary"/)
+assert.match(backupBlock, /database_backup_temporary=""/)
+assert.match(backupBlock, /pg_restore --exit-on-error --no-owner --no-privileges/)
+assert.match(backupBlock, /mfms_production_schema_migrations/)
+assert.match(backupBlock, /database_backup_baseline_migration_sha256/)
+
+const backupFunction = gate.slice(
+  gate.indexOf("create_production_database_backup()"),
+  gate.indexOf("apply_migrations()"),
+)
+assert.match(backupFunction, /if \[\[ "\$status" -ne 0 \]\]; then\n\s+rm -f "\$database_backup_temporary"\n\s+database_backup_temporary=""/)
+assert.match(backupFunction, /Production database backup is empty or not custom format[\s\S]*?return 1/)
+assert.match(backupFunction, /Production database backup listing verification failed[\s\S]*?return 1/)
+assert.ok(backupFunction.indexOf("verify_database_backup_restore") < backupFunction.indexOf('mv "$database_backup_temporary"'))
+assert.ok(backupFunction.indexOf('mv "$database_backup_temporary"') < backupFunction.indexOf('database_backup_verified="true"'))
+const deployFunction = gate.slice(gate.indexOf("deploy_backend()"), gate.indexOf("credential_cutover_backend()"))
+assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("apply_migrations"))
+assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("start_candidate"))
+assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("docker stop"))
+assert.match(gate.slice(gate.indexOf("apply_migrations()"), gate.indexOf("verify_migrations()")), /assert_validated_database_backup/)
+
+const accessValidator = extractEmbeddedPython("PY_DATABASE_BACKUP_ACCESS_VALIDATION")
+const credentialValidator = extractEmbeddedPython("PY_DATABASE_BACKUP_CREDENTIAL_VALIDATION")
+const validatorRoot = mkdtempSync(join(tmpdir(), "mfms-production-backup-validator-"))
+try {
+  const accessValidatorPath = join(validatorRoot, "validate_access.py")
+  const credentialValidatorPath = join(validatorRoot, "validate_credential.py")
+  writeFileSync(accessValidatorPath, `${accessValidator}\n`, "utf8")
+  writeFileSync(credentialValidatorPath, `${credentialValidator}\n`, "utf8")
+
+  const validAccess = {
+    database: "mfms_server_prod",
+    role: "mfms_backup",
+    role_exists: true,
+    role_can_login: true,
+    role_superuser: false,
+    role_createdb: false,
+    role_createrole: false,
+    role_replication: false,
+    role_bypassrls: false,
+    server_major: 16,
+    connect_allowed: true,
+    missing_schema_usage: 0,
+    missing_table_select: 0,
+    missing_sequence_select: 0,
+    large_objects: 0,
+    rls_tables: 0,
+  }
+  const accessReportPath = join(validatorRoot, "access.json")
+  const validateAccess = (payload, database = "mfms_server_prod", role = "mfms_backup") => {
+    writeFileSync(accessReportPath, JSON.stringify(payload), "utf8")
+    return runPython(accessValidatorPath, [accessReportPath, database, role, 16])
+  }
+  assert.equal(validateAccess(validAccess).status, 0)
+  assert.notEqual(validateAccess({ ...validAccess, role_can_login: false }).status, 0)
+  assert.notEqual(validateAccess({ ...validAccess, database: "mfms_server_uat" }).status, 0)
+  assert.notEqual(validateAccess({ ...validAccess, role: "harvest_app" }).status, 0)
+  assert.notEqual(validateAccess({ ...validAccess, missing_table_select: 1 }).status, 0)
+
+  if (process.platform !== "win32" && typeof process.getuid === "function" && typeof process.getgid === "function") {
+    const ownerUid = process.getuid()
+    const runnerGid = process.getgid()
+    const rootDir = join(validatorRoot, "mfms-production")
+    const backupDir = join(rootDir, "backup")
+    const credentialPath = join(backupDir, "mfms_backup.env")
+    mkdirSync(rootDir, { mode: 0o755 })
+    mkdirSync(backupDir, { mode: 0o750 })
+    chmodSync(rootDir, 0o755)
+    chmodSync(backupDir, 0o750)
+    writeFileSync(credentialPath, "MFMS_BACKUP_PASSWORD=test-only-value\n", { mode: 0o640 })
+    chmodSync(credentialPath, 0o640)
+    const validateCredential = (path = credentialPath, expectedUid = ownerUid) => runPython(
+      credentialValidatorPath,
+      [path, expectedUid, runnerGid, runnerGid],
+    )
+
+    assert.equal(validateCredential().status, 0)
+    assert.notEqual(validateCredential(join(backupDir, "missing.env")).status, 0)
+    assert.notEqual(validateCredential(credentialPath, ownerUid + 1).status, 0)
+    chmodSync(credentialPath, 0o660)
+    assert.notEqual(validateCredential().status, 0)
+    chmodSync(credentialPath, 0o640)
+
+    const symlinkPath = join(backupDir, "linked.env")
+    symlinkSync(credentialPath, symlinkPath)
+    assert.notEqual(validateCredential(symlinkPath).status, 0)
+
+    writeFileSync(credentialPath, "WRONG_KEY=test-only-value\n", "utf8")
+    chmodSync(credentialPath, 0o640)
+    assert.notEqual(validateCredential().status, 0)
+    writeFileSync(credentialPath, "MFMS_BACKUP_PASSWORD=test-only-value\nEXTRA=value\n", "utf8")
+    chmodSync(credentialPath, 0o640)
+    assert.notEqual(validateCredential().status, 0)
+  }
+} finally {
+  rmSync(validatorRoot, { recursive: true, force: true })
+}
 
 const exactReleaseApproval = {
   candidate: "94b28f17702e409e13d25e288fc5cd4b9bbef545",
