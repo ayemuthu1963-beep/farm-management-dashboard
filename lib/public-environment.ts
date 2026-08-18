@@ -16,6 +16,15 @@ const ENVIRONMENT_LABELS: Readonly<Record<PublicMfmsEnvironment, string>> = {
   unknown: "ENVIRONMENT UNKNOWN",
 }
 
+const DATABASE_ENVIRONMENT_NAMES: Readonly<Record<PublicMfmsEnvironment, string>> = {
+  production: "Production",
+  preview: "Preview",
+  test: "Test",
+  local: "Local",
+  vercel: "Vercel",
+  unknown: "Unknown",
+}
+
 export function normalizePublicEnvironment(value?: string): PublicMfmsEnvironment {
   const normalized = value?.trim().toLowerCase() ?? ""
   if (normalized === "production" || normalized === "prod") return "production"
@@ -41,5 +50,17 @@ export function publicEnvironmentIdentity(environmentValue?: string, databaseVal
     expectedDatabase,
     database: configuredDatabase ?? expectedDatabase,
     databaseMismatch,
+  }
+}
+
+export function irrigationEnvironmentCopy(environmentValue?: string, databaseValue?: string) {
+  const identity = publicEnvironmentIdentity(environmentValue, databaseValue)
+  const environmentName = identity.databaseMismatch
+    ? DATABASE_ENVIRONMENT_NAMES.unknown
+    : DATABASE_ENVIRONMENT_NAMES[identity.environment]
+
+  return {
+    databaseName: `${environmentName} database`,
+    liveDataBadge: `LIVE ${environmentName.toUpperCase()} DATABASE DATA`,
   }
 }
