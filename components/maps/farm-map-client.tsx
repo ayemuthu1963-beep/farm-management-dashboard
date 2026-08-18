@@ -268,7 +268,7 @@ function popupHtml(feature: FarmMapCoordinateFeature, record?: FarmMapOperationa
 }
 
 function jackfruitPopupHtml(feature: JackfruitFeature) {
-  const coordinateStatus = "Approved Preview/UAT coordinates"
+  const coordinateStatus = "Provisional Revision 04 – Physical Field Audit"
   const displayTreeNo = formatJackfruitTreeNo(feature.properties.treeNo)
   return `
     <div style="min-width:230px;max-width:320px;font-family:inherit">
@@ -1221,6 +1221,9 @@ export function FarmMapClient() {
           </p>
           <p className="text-xs text-muted-foreground">
             Coordinate-only Jackfruit layer. It is not joined to coconut performance classifications.
+          </p>
+          <p className="text-xs font-semibold text-amber-700">
+            Provisional Revision 04 – Physical Field Audit
           </p>
         </div>
       </Panel>
