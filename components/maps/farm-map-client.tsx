@@ -322,8 +322,8 @@ function ClassificationLegend({
               style={{ backgroundColor: style.fill, borderColor: style.border }}
               aria-hidden="true"
             />
-            <span className="min-w-0 flex-1 font-semibold">{classification}</span>
-            <span className="tabular-nums text-muted-foreground">
+            <span className="min-w-0 flex-1 break-words font-semibold leading-tight [overflow-wrap:anywhere]">{classification}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
               {(counts[classification] ?? 0).toLocaleString("en-IN")}
             </span>
           </button>
