@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { CalendarDays, CheckCircle2, Droplets, LoaderCircle, Save } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
+import { irrigationEnvironmentCopy } from "@/lib/public-environment"
 import {
   IRRIGATION_PLAN_DAYS,
   calculatedLphPerTree,
@@ -25,6 +26,11 @@ import {
   type MotorRunScheduleRow,
 } from "@/lib/irrigation-plan"
 import { cn } from "@/lib/utils"
+
+const irrigationEnvironment = irrigationEnvironmentCopy(
+  process.env.NEXT_PUBLIC_MFMS_ENV,
+  process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL,
+)
 
 type SaveState = "idle" | "saving" | "saved" | "error"
 
@@ -414,7 +420,7 @@ export function IrrigationPlanTables() {
     <section aria-labelledby="irrigation-plan-heading" className="min-w-0 space-y-3">
       <div>
         <h2 id="irrigation-plan-heading" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Irrigation Plan</h2>
-        <p className="text-xs text-muted-foreground">Editable drip measurements and weekly motor schedule stored in the Preview database.</p>
+        <p className="text-xs text-muted-foreground">Editable drip measurements and weekly motor schedule stored in the {irrigationEnvironment.databaseName}.</p>
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.8fr)]">
         <DripOutputTable rows={dripRows} onChange={updateDripRow} dirty={dripDirty} isLoading={isLoading} loadError={loadError} saveState={dripSaveState} saveError={dripSaveError} onSave={() => { void saveDripOutput() }} />

@@ -104,7 +104,7 @@ export function IrrigationMapWithDetails({ zones, selectedZoneId, onSelectZone, 
   const displayZones = [...zones].sort((left, right) => DISPLAY_ZONE_ORDER.indexOf(left.id) - DISPLAY_ZONE_ORDER.indexOf(right.id))
 
   return (
-    <Panel title="Farm Irrigation Map" icon={Map} headerRight={<span className="text-xs text-muted-foreground">Seven-day water per tree</span>}>
+    <Panel title="Farm Irrigation Table" icon={Map} headerRight={<span className="text-xs text-muted-foreground">Seven-day water per tree</span>}>
       {isLoading ? (
         <div className="flex h-[340px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
           Loading live irrigation map...

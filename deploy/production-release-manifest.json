@@ -2,47 +2,42 @@
   "schema_version": 1,
   "environment": "Production",
   "target_url": "https://muthufarms.com",
-  "deployment_kind": "coordinated-frontend-after-backend",
-  "base_commit": "e9833917c0a7fd190d933acb8cb234f60f5c8c65",
+  "deployment_kind": "frontend-only",
+  "base_commit": "9a577add2308b85637fcf05ee49b6274e19cc2dc",
   "preview_approved": {
-    "revision": "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
-    "image_id": "sha256:d8cee1e9e591db1b1d35930ac0d89d1bf8b9e2ae2723722c5fe6e418832ec186",
-    "feature_revision": "04fd5664137809605721665cafd6ffaad4264ec9",
+    "revision": "f5c4c465fed1ccd68cab1286e705ed8215b53f17",
+    "image_id": "sha256:e69ee588ebbee6b87264342c5c11ec72ca7f52e8530ffc5c3eadff9678236053",
+    "feature_revision": "6f1773b25195c6daf4c3b58f6989ba9a330a3ea9",
     "verified_files": [
       "app/irrigation-management/page.tsx",
-      "components/irrigation/irrigation-charts-hybrid.tsx",
       "components/irrigation/irrigation-map-with-details.tsx",
       "components/irrigation/irrigation-plan-tables.tsx",
-      "lib/irrigation-plan.ts",
-      "tests/irrigation-management-corrections.mjs",
-      "tests/operator-settings-persistence.mjs"
+      "lib/public-environment.ts",
+      "tests/irrigation-environment-copy.mjs"
     ],
     "production_adaptations": [
-      "app/api/operator-settings/[[...path]]/route.ts",
+      "package.json",
       "tests/irrigation-plan.mjs"
     ]
   },
   "protected_invariants": {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "deployed-first-from-isolated-irrigation-candidate",
-    "database": "additive-production-irrigation-migrations-only",
+    "backend": "unchanged",
+    "database": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/api/operator-settings/[[...path]]/route.ts",
     "app/irrigation-management/page.tsx",
-    "components/irrigation/irrigation-charts-hybrid.tsx",
     "components/irrigation/irrigation-map-with-details.tsx",
     "components/irrigation/irrigation-plan-tables.tsx",
     "deploy/production-release-manifest.json",
-    "lib/irrigation-plan.ts",
+    "lib/public-environment.ts",
     "package.json",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/irrigation-management-corrections.mjs",
-    "tests/irrigation-plan.mjs",
-    "tests/operator-settings-persistence.mjs"
+    "tests/irrigation-environment-copy.mjs",
+    "tests/irrigation-plan.mjs"
   ]
 }
