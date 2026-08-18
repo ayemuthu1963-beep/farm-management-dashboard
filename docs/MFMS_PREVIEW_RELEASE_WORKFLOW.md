@@ -17,4 +17,16 @@
 15. Retain the immediately previous verified images and rollback containers.
 16. Report results and request approval before any Production workflow.
 
+## Vercel callback timing
+
+Keep the protected `validate` and `Vercel` required checks unchanged. A Vercel
+deployment reaching `READY` is not, by itself, evidence that its genuine GitHub
+callback is missing. If the exact commit does not yet show the Vercel GitHub App
+status, allow at least 15 minutes from the deployment's `READY` timestamp before
+classifying the callback as missing or escalating the integration. During that
+window, do not create a replacement check, write a synthetic commit status,
+redeploy merely to retrigger the callback, add a token-based proof workflow, or
+alter branch protection. Merge only after the genuine `Vercel` status is attached
+to the exact PR head SHA and is successful.
+
 Production uses a separate `production-release` branch, approval, images, backup and regression process. Preview never deploys automatically to Production.
