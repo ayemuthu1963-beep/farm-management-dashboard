@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Deploy provisional Revision 04 Jackfruit numbering for physical field audit",
+  "Deploy Irrigation Management title and environment wording correction from 61706bab0447c9b954a035cf6f23d8320ac0de3b (original correction 6f1773b25195c6daf4c3b58f6989ba9a330a3ea9)",
 )
-assert.equal(manifest.base_commit, "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c")
+assert.equal(manifest.base_commit, "fad5596bcba444e7421d3028b422d2560dc2c68d")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,10 +280,14 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/maps/farm-map-client.tsx",
+  "app/irrigation-management/page.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/irrigation/irrigation-plan-tables.tsx",
+  "lib/public-environment.ts",
+  "package.json",
+  "tests/irrigation-environment-copy.mjs",
+  "tests/irrigation-plan.mjs",
   "deploy/preview-release-manifest.json",
-  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026.geojson",
-  "tests/farm-map-jackfruit-affine-review.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
