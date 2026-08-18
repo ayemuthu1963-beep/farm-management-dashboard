@@ -1071,11 +1071,11 @@ export default function FertiliserManagementPage() {
     const available = product ? numberFromApi(product.eligible_available_quantity) ?? 0 : 0
 
     if (!transactionDate) errors.transaction_date = "Date is required"
-    if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Product with eligible stock is required"
+    if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Product with available stock is required"
     if (product?.quantity === null) errors.product_id = "Blank-quantity products cannot be issued"
-    if (product && available <= 0) errors.quantity = "No valid non-expired stock is available for this product"
+    if (product && available <= 0) errors.quantity = "No active stock is available for this product"
     if (!validateDecimalQuantity(quantity)) errors.quantity = QUANTITY_PRECISION_ERROR
-    if (validateDecimalQuantity(quantity) && Number(quantity) > available) errors.quantity = `Insufficient eligible stock. Available: ${formatApiQuantity(product?.eligible_available_quantity ?? null, product?.unit ?? null)}`
+    if (validateDecimalQuantity(quantity) && Number(quantity) > available) errors.quantity = `Insufficient available stock. Available: ${formatApiQuantity(product?.eligible_available_quantity ?? null, product?.unit ?? null)}`
     if (!outgoingUnit) errors.unit = "Unit is required"
     if (product?.unit && outgoingUnit !== product.unit) errors.unit = `Unit must be ${product.unit}`
     if (!purpose) errors.purpose = "Purpose is required"
@@ -1139,8 +1139,8 @@ export default function FertiliserManagementPage() {
     if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Select a valid Product Master item"
     if (product?.quantity === null) errors.product_id = adjustmentType === "ADJUSTMENT_OUT" ? "Blank-quantity products cannot be adjusted out" : "Select a product with a default unit"
     if (!validateDecimalQuantity(quantity)) errors.quantity = QUANTITY_PRECISION_ERROR
-    if (adjustmentType === "ADJUSTMENT_OUT" && product && available <= 0) errors.quantity = "No valid non-expired stock is available for this product"
-    if (adjustmentType === "ADJUSTMENT_OUT" && validateDecimalQuantity(quantity) && Number(quantity) > available) errors.quantity = `Insufficient eligible stock. Available: ${formatApiQuantity(product?.eligible_available_quantity ?? null, product?.unit ?? null)}`
+    if (adjustmentType === "ADJUSTMENT_OUT" && product && available <= 0) errors.quantity = "No active stock is available for this product"
+    if (adjustmentType === "ADJUSTMENT_OUT" && validateDecimalQuantity(quantity) && Number(quantity) > available) errors.quantity = `Insufficient available stock. Available: ${formatApiQuantity(product?.eligible_available_quantity ?? null, product?.unit ?? null)}`
     if (!adjustmentUnit) errors.unit = "Unit is required"
     if (product?.unit && adjustmentUnit !== product.unit) errors.unit = `Unit must be ${product.unit}`
     if (!reason) errors.reason = "Reason is required"
@@ -1533,14 +1533,14 @@ export default function FertiliserManagementPage() {
     .filter((product) => product.quantity !== null && (numberFromApi(product.eligible_available_quantity) ?? 0) > 0)
     .map((product) => (
       <option key={product.product_id} value={product.product_id}>
-        {product.product_name} — {product.category_name} (ID {product.product_id}; {formatApiQuantity(product.eligible_available_quantity, product.unit)} available)
+        {product.product_name} — {product.category_name} (ID {product.product_id}; {formatApiQuantity(product.eligible_available_quantity, product.unit)} available, including expired)
       </option>
     ))
   const adjustmentProductOptions = (liveData?.stock ?? [])
-    .filter((product) => product.unit !== null)
+    .filter((product) => product.unit !== null && (adjustmentType !== "ADJUSTMENT_OUT" || (product.quantity !== null && (numberFromApi(product.eligible_available_quantity) ?? 0) > 0)))
     .map((product) => (
       <option key={product.product_id} value={product.product_id}>
-        {product.product_name} — {product.category_name} (ID {product.product_id}; {formatApiQuantity(product.eligible_available_quantity, product.unit)} eligible)
+        {product.product_name} — {product.category_name} (ID {product.product_id}; {formatApiQuantity(product.eligible_available_quantity, product.unit)} available{adjustmentType === "ADJUSTMENT_OUT" ? ", including expired" : ""})
       </option>
     ))
   const requirementProductOptions = (liveData?.products ?? [])
@@ -1647,14 +1647,14 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "outgoing" ? (
           <Panel title="Outgoing Stock with FEFO Allocation" icon={Send}>
-            <FormIntro text={`Issue stock from the ${fertiliserDatabaseDescription} only. FEFO allocation is automatic: earliest valid expiry first, null-expiry batches last.`} />
+            <FormIntro text={`Issue stock from the ${fertiliserDatabaseDescription} only. FEFO allocation is automatic: earliest expiry first, including expired batches; null-expiry batches last.`} />
             {outgoingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{outgoingStockErrors.form}</div> : null}
             <form onSubmit={submitOutgoingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={outgoingStockErrors.transaction_date} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Product</span>
                 <select name="product" value={outgoingProductId} onChange={(event) => handleOutgoingProductChange(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary">
-                  <option value="">Select product with valid stock</option>
+                  <option value="">Select product with available stock</option>
                   {outgoingProductOptions}
                 </select>
                 <FieldError>{outgoingStockErrors.product_id}</FieldError>
@@ -1664,7 +1664,7 @@ export default function FertiliserManagementPage() {
                 <p className="mt-1 text-muted-foreground">
                   {selectedOutgoingStock ? formatApiQuantity(selectedOutgoingStock.eligible_available_quantity, selectedOutgoingStock.unit) : "Select a product"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">Expired, inactive, and zero-balance batches are excluded.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Expired batches are included and allocated first by FEFO. Inactive and zero-balance batches remain excluded.</p>
               </div>
               <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={outgoingStockErrors.quantity} />
               <label className="block text-sm">
@@ -1705,7 +1705,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "adjustment" ? (
           <Panel title="Stock Adjustment" icon={ClipboardList}>
-            <FormIntro text="Record MFMS Preview stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation and excludes expired stock." />
+            <FormIntro text="Record MFMS Preview stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation, including expired stock." />
             {stockAdjustmentErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{stockAdjustmentErrors.form}</div> : null}
             <form onSubmit={submitAdjustment} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={stockAdjustmentErrors.transaction_date} />
@@ -1729,7 +1729,7 @@ export default function FertiliserManagementPage() {
                 <p className="mt-1 text-muted-foreground">
                   {selectedAdjustmentStock ? formatApiQuantity(selectedAdjustmentStock.eligible_available_quantity, selectedAdjustmentStock.unit) : "Select a product"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">Adjustment Out uses only non-expired eligible stock.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Adjustment Out includes expired stock and allocates the oldest expiry first. Inactive and zero-balance batches remain excluded.</p>
               </div>
               <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={stockAdjustmentErrors.quantity} />
               <label className="block text-sm">
