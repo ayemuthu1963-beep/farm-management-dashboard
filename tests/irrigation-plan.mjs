@@ -92,7 +92,7 @@ assert.match(proxy, /getAuthenticatedUserAssertionHeaders/)
 assert.doesNotMatch(proxy, /signActorAssertion/)
 
 assert.doesNotMatch(map, /Selected Zone Details/)
-assert.match(map, /^\s*<Panel title="Farm Irrigation Map"/m)
+assert.match(map, /^\s*<Panel title="Farm Irrigation Table"/m)
 for (const retained of ["physicalPlot", "valveOpenTime", "totalWaterSupplied", "waterPerTree", "recordsCount", "configuredMotorValves", "fiveDayHistory"]) {
   assert.match(map, new RegExp(`zone\\.${retained}`))
 }
