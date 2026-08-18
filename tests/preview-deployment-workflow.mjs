@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Deploy the Farm Map full-width responsive layout and accessible fullscreen control to Preview only",
+  "Refine the Preview Farm Map card packing and classification labels after live responsive review",
 )
-assert.equal(manifest.base_commit, "f5c4c465fed1ccd68cab1286e705ed8215b53f17")
+assert.equal(manifest.base_commit, "b4370dd82383dde8a573cb4e93ca7da3944243d3")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -281,8 +281,7 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 const expectedReleasePaths = [
   "components/maps/farm-map-client.tsx",
-  "components/maps/farm-orthomosaic-map.tsx",
-  "package.json",
+  "components/maps/irrigation-pipeline-editor.tsx",
   "tests/farm-map-fullscreen-layout.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",

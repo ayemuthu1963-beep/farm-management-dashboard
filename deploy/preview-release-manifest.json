@@ -3,12 +3,11 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Deploy the Farm Map full-width responsive layout and accessible fullscreen control to Preview only",
-  "base_commit": "f5c4c465fed1ccd68cab1286e705ed8215b53f17",
+  "release_note": "Refine the Preview Farm Map card packing and classification labels after live responsive review",
+  "base_commit": "b4370dd82383dde8a573cb4e93ca7da3944243d3",
   "allowed_paths": [
     "components/maps/farm-map-client.tsx",
-    "components/maps/farm-orthomosaic-map.tsx",
-    "package.json",
+    "components/maps/irrigation-pipeline-editor.tsx",
     "tests/farm-map-fullscreen-layout.mjs",
     "deploy/preview-release-manifest.json",
     "tests/preview-deployment-workflow.mjs"
