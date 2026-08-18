@@ -22,6 +22,7 @@ const map = read("components/irrigation/irrigation-map-with-details.tsx")
 const proxy = read("app/api/operator-settings/[[...path]]/route.ts")
 
 const dripRows = initialDripOutputRows()
+assert.deepEqual(dripRows.map((row) => row.zoneId), ["zone-p2e", "zone-p2w", "zone-p1e", "zone-p1w", "zone-nm", "zone-jf"])
 assert.deepEqual(dripRows.map((row) => row.zone), ["P2E", "P2W", "P1E", "P1W", "NM", "JF"])
 assert.deepEqual(
   dripRows.map((row) => [row.designedLph, row.designedSecondsPer100ml, row.measuredSecondsPer100ml, row.dripsPerTree]),
@@ -39,13 +40,14 @@ assert.equal(formatIrrigationPlanNumber(calculatedLphPerTree(dripRows[0])), "96"
 assert.equal(formatIrrigationPlanNumber(calculatedMeasuredLph(dripRows[4])), "2.4")
 assert.equal(formatIrrigationPlanNumber(calculatedLphPerTree(dripRows[4])), "48")
 
-const editedDripRows = dripRows.map((row) => row.zone === "NM" ? { ...row, measuredSecondsPer100ml: "120", dripsPerTree: "25" } : row)
-assert.equal(formatIrrigationPlanNumber(calculatedMeasuredLph(editedDripRows[4])), "3")
-assert.equal(formatIrrigationPlanNumber(calculatedLphPerTree(editedDripRows[4])), "75")
+const editedDripRows = dripRows.map((row) => row.zoneId === "zone-p2e" ? { ...row, measuredSecondsPer100ml: "120" } : row)
+assert.equal(formatIrrigationPlanNumber(calculatedMeasuredLph(editedDripRows[0])), "3")
+assert.equal(formatIrrigationPlanNumber(calculatedLphPerTree(editedDripRows[0])), "72")
 assert.deepEqual(dripOutputValidationMessages(editedDripRows), [])
 const reloadedDripRows = parseDripOutputRows(dripOutputPayload(editedDripRows).rows)
-assert.equal(reloadedDripRows[4].measuredSecondsPer100ml, "120")
-assert.equal(formatIrrigationPlanNumber(calculatedLphPerTree(reloadedDripRows[4])), "75")
+assert.equal(reloadedDripRows[0].zoneId, "zone-p2e")
+assert.equal(reloadedDripRows[0].measuredSecondsPer100ml, "120")
+assert.equal(formatIrrigationPlanNumber(calculatedLphPerTree(reloadedDripRows[0])), "72")
 
 for (const invalid of ["", "0", "invalid", "Infinity"]) {
   const invalidRows = dripRows.map((row, index) => index === 0 ? { ...row, measuredSecondsPer100ml: invalid } : row)
@@ -56,6 +58,7 @@ for (const invalid of ["", "0", "invalid", "Infinity"]) {
 assert.deepEqual(IRRIGATION_PLAN_DAYS.map((day) => day.label), ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
 const scheduleRows = initialMotorRunScheduleRows()
 assert.equal(scheduleRows.length, 6)
+assert.deepEqual(scheduleRows.map((row) => row.scheduleId), ["schedule-m1-p1e", "schedule-m1-p1w", "schedule-m1-nm", "schedule-m2-p2w", "schedule-m3-p2e", "schedule-m3-jf"])
 for (const row of scheduleRows) assert.deepEqual(row.days.sun, { min: "", ltrs: "" })
 for (const plot of ["P2W", "P2E"]) {
   const row = scheduleRows.find((candidate) => candidate.plot === plot)
@@ -66,6 +69,7 @@ for (const plot of ["P2W", "P2E"]) {
 }
 const editedSchedule = scheduleRows.map((row) => row.plot === "JF" ? { ...row, days: { ...row.days, sun: { min: "15", ltrs: "16" } } } : row)
 const reloadedSchedule = parseMotorRunScheduleRows(motorRunSchedulePayload(editedSchedule).rows)
+assert.equal(reloadedSchedule.find((row) => row.plot === "JF").scheduleId, "schedule-m3-jf")
 assert.deepEqual(reloadedSchedule.find((row) => row.plot === "JF").days.sun, { min: "15", ltrs: "16" })
 
 assert.match(plan, /title="Drip Output"/)
@@ -82,7 +86,10 @@ assert.match(plan, /Saved successfully/)
 assert.match(plan, /Unsaved changes/)
 assert.match(plan, /irrigation-plan\/drip-output/)
 assert.match(plan, /irrigation-plan\/motor-run-schedule/)
+assert.match(plan, /Promise\.all/)
 assert.match(proxy, /irrigation-plan\\\/\(drip-output\|motor-run-schedule\)/)
+assert.match(proxy, /getAuthenticatedUserAssertionHeaders/)
+assert.doesNotMatch(proxy, /signActorAssertion/)
 
 assert.doesNotMatch(map, /Selected Zone Details/)
 assert.match(map, /^\s*<Panel title="Farm Irrigation Map"/m)

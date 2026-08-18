@@ -2,29 +2,31 @@
   "schema_version": 1,
   "environment": "Production",
   "target_url": "https://muthufarms.com",
-  "deployment_kind": "frontend-only",
+  "deployment_kind": "coordinated-frontend-after-backend",
   "base_commit": "e9833917c0a7fd190d933acb8cb234f60f5c8c65",
   "preview_approved": {
-    "revision": "fc791dfb090874e8ba16408ee38f910f161c9a52",
-    "image_id": "sha256:4159d9e484855be68eacf32a41b895e311ff2957b56f3be05f39dfae133cf266",
-    "feature_revision": "6ab5216a7dba47204321a66b145de6bc6ff56086",
+    "revision": "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
+    "image_id": "sha256:d8cee1e9e591db1b1d35930ac0d89d1bf8b9e2ae2723722c5fe6e418832ec186",
+    "feature_revision": "04fd5664137809605721665cafd6ffaad4264ec9",
     "verified_files": [
-      "app/api/operator-settings/[[...path]]/route.ts",
       "app/irrigation-management/page.tsx",
       "components/irrigation/irrigation-charts-hybrid.tsx",
       "components/irrigation/irrigation-map-with-details.tsx",
       "components/irrigation/irrigation-plan-tables.tsx",
       "lib/irrigation-plan.ts",
       "tests/irrigation-management-corrections.mjs",
-      "tests/irrigation-plan.mjs",
       "tests/operator-settings-persistence.mjs"
+    ],
+    "production_adaptations": [
+      "app/api/operator-settings/[[...path]]/route.ts",
+      "tests/irrigation-plan.mjs"
     ]
   },
   "protected_invariants": {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "unchanged",
-    "database": "unchanged",
+    "backend": "deployed-first-from-isolated-irrigation-candidate",
+    "database": "additive-production-irrigation-migrations-only",
     "odk": "unchanged",
     "schedules": "unchanged",
     "proxy_configuration": "unchanged"
