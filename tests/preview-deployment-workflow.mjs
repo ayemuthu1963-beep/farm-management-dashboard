@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Complete authenticated Irrigation Plan persistence on the current live Preview baseline",
+  "Deploy provisional Revision 04 Jackfruit numbering for physical field audit",
 )
-assert.equal(manifest.base_commit, "278a727939eecc1e3d7f55755399f34f5ad0d945")
+assert.equal(manifest.base_commit, "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,12 +280,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "components/irrigation/irrigation-plan-tables.tsx",
+  "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/irrigation-plan.ts",
-  "tests/irrigation-plan.mjs",
-  "tests/operator-settings-persistence.mjs",
+  "public/map-data/coordinates/Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026.geojson",
+  "tests/farm-map-jackfruit-affine-review.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

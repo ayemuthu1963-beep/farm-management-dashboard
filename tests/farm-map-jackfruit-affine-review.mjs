@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 
 const approvedName =
   "Muthu_Farms_Jackfruit_Tree_Coordinates_Affine_Corrected_Proposal_2026.geojson"
-const approvedHash = "a5c6b63c753e517cd080ae19791f350dc8cdcb71ebdb1192316e032c6d50a539"
+const approvedHash = "8f21cb5617f3f6c598f4f81894f7334b974a0df749e081b0eb487cb58d3c1930"
 const normalizedAssetHash = (bytes) =>
   createHash("sha256")
     .update(bytes.toString("utf8").replaceAll("\r\n", "\n"))
@@ -29,6 +29,26 @@ for (const feature of collection.features) {
 }
 assert.doesNotMatch(approvedBytes.toString("utf8"), /classification|harvest|status|remark/i)
 
+const geometryFingerprint = ([longitude, latitude]) => {
+  const packed = Buffer.allocUnsafe(16)
+  packed.writeDoubleBE(longitude, 0)
+  packed.writeDoubleBE(latitude, 8)
+  return createHash("sha256").update(packed).digest("hex")
+}
+const canonicalLines = collection.features
+  .toSorted((left, right) => Number(left.properties.treeNo) - Number(right.properties.treeNo))
+  .map((feature) => {
+    const [longitude, latitude] = feature.geometry.coordinates
+    const { crop, treeNo, canonicalId } = feature.properties
+    return `${geometryFingerprint(feature.geometry.coordinates)}|${longitude}|${latitude}|${crop}|${treeNo}|${canonicalId}`
+  })
+assert.equal(
+  createHash("sha256").update(canonicalLines.join("\n")).digest("hex"),
+  "7ac3cf7c56e93a4356711e91e60b8ae9c60ba77033378365bd4fe333b4e543a6",
+)
+const treeEight = collection.features.find((feature) => feature.properties.treeNo === "8")
+assert.deepEqual(treeEight.geometry.coordinates, [77.07864125630444, 10.479850604619228])
+
 // Historical source and translation artifacts remain in the repository for evidence and rollback.
 for (const [name, hash] of [
   ["Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026.geojson", "c3964898cc53729d71fd509f79421d12c8e962110ea4e83084f633d1d66714f9"],
@@ -50,11 +70,12 @@ assert.match(mapClient, /type JackfruitCoordinateVariant = "affine"/)
 assert.match(mapClient, /Panel title="Jackfruit Trees"/)
 assert.match(mapClient, /<span>Jackfruit Trees<\/span>/)
 assert.match(mapClient, /approved Jackfruit coordinates loaded/)
-assert.match(mapClient, /Approved Preview\/UAT coordinates/)
+assert.doesNotMatch(mapClient, /Approved Preview\/UAT coordinates/)
 assert.match(mapClient, /formatJackfruitTreeNo/)
 assert.match(mapClient, /parseJackfruitTreeSearch/)
 assert.match(mapClient, /Jackfruit Tree Number search/)
 assert.match(mapClient, /Coordinate-only Jackfruit layer/)
+assert.match(mapClient, /Provisional Revision 04 – Physical Field Audit/)
 assert.match(mapClient, /#dfff00/)
 assert.match(mapClient, /applyJackfruitMapState\("affine"\)/)
 assert.match(mapClient, /farmCombinedLayer\.jackfruitCoordinatesUrl/)
