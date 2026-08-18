@@ -48,6 +48,9 @@ readonly database_backup_dir="$state_dir/database-backups"
 readonly database_backup_credential_file="/etc/mfms-production/backup/mfms_backup.env"
 readonly database_backup_role="mfms_backup"
 readonly database_backup_postgres_major="16"
+readonly database_backup_restore_readiness_timeout_seconds="120"
+readonly database_backup_restore_stability_probes="3"
+readonly database_backup_restore_stability_interval_seconds="2"
 readonly database_backup_baseline_migration="db/migrations/20260814_operator_settings_v2.sql"
 readonly database_backup_baseline_migration_sha256="bdd4d1e4dcf067a73b84880b19a4dc6d3241aa9b557c0a303f40dfd725ab6846"
 readonly database_url_override_file="/home/muthu/mfms_secrets/database-roles/prod-app.database_url"
@@ -122,6 +125,7 @@ database_backup_sha256=""
 database_backup_bytes=""
 database_backup_temporary=""
 database_backup_restore_container=""
+database_backup_restore_volume=""
 database_backup_restore_postgres_major=""
 database_backup_verified="false"
 database_backup_restore_verified="false"
@@ -857,44 +861,277 @@ SQL_DATABASE_BACKUP_ACCESS
   validate_database_backup_access_report "$access_report"
 }
 
+wait_for_stable_database_backup_restore() {
+  local restore_container=$1 expected_container_id=$2
+  python3 - \
+    "$restore_container" \
+    "$expected_container_id" \
+    "$database_name" \
+    "$database_backup_postgres_major" \
+    "$database_backup_restore_readiness_timeout_seconds" \
+    "$database_backup_restore_stability_probes" \
+    "$database_backup_restore_stability_interval_seconds" \
+    <<'PY_DATABASE_BACKUP_FINAL_READINESS'
+import subprocess
+import sys
+import time
+
+
+class ReadinessFailure(RuntimeError):
+    pass
+
+
+def run_command(args):
+    return subprocess.run(args, capture_output=True, text=True, check=False)
+
+
+def emit(message):
+    print(message, flush=True)
+
+
+def inspect_container(container, expected_id):
+    result = run_command([
+        "docker",
+        "inspect",
+        "--format",
+        "{{.Id}}|{{.State.Status}}|{{.RestartCount}}",
+        container,
+    ])
+    if result.returncode != 0:
+        raise ReadinessFailure("container_inspect_failed")
+    parts = result.stdout.strip().split("|")
+    if len(parts) != 3:
+        raise ReadinessFailure("container_state_invalid")
+    identity, status, restart_text = parts
+    if identity != expected_id:
+        raise ReadinessFailure("container_identity_changed")
+    try:
+        restart_count = int(restart_text)
+    except ValueError as exc:
+        raise ReadinessFailure("container_restart_count_invalid") from exc
+    if status != "running":
+        raise ReadinessFailure(f"container_not_running_{status}")
+    if restart_count != 0:
+        raise ReadinessFailure("container_restarted")
+    return identity
+
+
+def final_postgres_process(container):
+    result = run_command([
+        "docker",
+        "exec",
+        container,
+        "sh",
+        "-c",
+        "comm=$(cat /proc/1/comm 2>/dev/null || true); "
+        "cmdline=$(xargs -0 echo </proc/1/cmdline 2>/dev/null || true); "
+        "postmaster_pid=$(sed -n '1p' /var/lib/postgresql/data/postmaster.pid 2>/dev/null || true); "
+        "printf '%s|%s|%s\\n' \"$comm\" \"$cmdline\" \"$postmaster_pid\"",
+    ])
+    if result.returncode != 0:
+        return False, "exec_failed"
+    parts = result.stdout.strip().split("|", 2)
+    if len(parts) != 3:
+        return False, "process_state_invalid"
+    comm, command_line, postmaster_pid = parts
+    is_final = comm == "postgres" and command_line.split(" ", 1)[0] == "postgres" and postmaster_pid == "1"
+    return is_final, comm or "unknown"
+
+
+def initialization_complete(container):
+    result = run_command(["docker", "logs", container])
+    if result.returncode != 0:
+        raise ReadinessFailure("container_logs_unavailable")
+    return "PostgreSQL init process complete; ready for start up." in (result.stdout + result.stderr)
+
+
+def main():
+    if len(sys.argv) != 8:
+        raise SystemExit("restore readiness arguments are invalid")
+    container, expected_id, expected_database = sys.argv[1:4]
+    expected_major = int(sys.argv[4])
+    timeout_seconds = int(sys.argv[5])
+    required_probes = int(sys.argv[6])
+    stability_interval = float(sys.argv[7])
+    if timeout_seconds < 1 or required_probes < 3 or stability_interval <= 0:
+        raise SystemExit("restore readiness limits are invalid")
+
+    deadline = time.monotonic() + timeout_seconds
+    last_phase = None
+    target_database_created = False
+    stable_probes = 0
+    stable_start_time = None
+
+    try:
+        while time.monotonic() < deadline:
+            inspect_container(container, expected_id)
+            marker_seen = initialization_complete(container)
+            is_final, pid1_name = final_postgres_process(container)
+
+            if not marker_seen or not is_final:
+                phase = f"initializing marker={str(marker_seen).lower()} pid1={pid1_name}"
+                if phase != last_phase:
+                    emit(f"RESTORE_READINESS_TRANSITION={phase}")
+                    last_phase = phase
+                time.sleep(1)
+                continue
+
+            if last_phase != "final-postgres":
+                emit("RESTORE_READINESS_TRANSITION=final-postgres marker=true pid1=postgres")
+                last_phase = "final-postgres"
+
+            inspect_container(container, expected_id)
+            ready = run_command([
+                "docker",
+                "exec",
+                container,
+                "pg_isready",
+                "--username=postgres",
+                "--dbname=postgres",
+            ])
+            if ready.returncode != 0:
+                stable_probes = 0
+                stable_start_time = None
+                emit("RESTORE_READINESS_RESET=pg_isready_failed")
+                time.sleep(1)
+                continue
+
+            if not target_database_created:
+                created = run_command([
+                    "docker",
+                    "exec",
+                    container,
+                    "createdb",
+                    "--username=postgres",
+                    "--template=template0",
+                    expected_database,
+                ])
+                if created.returncode != 0:
+                    raise ReadinessFailure("restore_database_create_failed")
+                target_database_created = True
+                emit(f"RESTORE_READINESS_DATABASE={expected_database}")
+
+            inspect_container(container, expected_id)
+            probe = run_command([
+                "docker",
+                "exec",
+                container,
+                "psql",
+                "--username=postgres",
+                f"--dbname={expected_database}",
+                "--no-psqlrc",
+                "--tuples-only",
+                "--no-align",
+                "--field-separator=|",
+                "--set=ON_ERROR_STOP=1",
+                "--command=SELECT current_database(), current_setting('server_version_num'), pg_postmaster_start_time() IS NOT NULL, pg_postmaster_start_time();",
+            ])
+            if probe.returncode != 0:
+                stable_probes = 0
+                stable_start_time = None
+                emit("RESTORE_READINESS_RESET=sql_probe_failed")
+                time.sleep(stability_interval)
+                continue
+
+            values = probe.stdout.strip().split("|", 3)
+            if len(values) != 4:
+                stable_probes = 0
+                stable_start_time = None
+                emit("RESTORE_READINESS_RESET=sql_probe_invalid")
+                time.sleep(stability_interval)
+                continue
+            actual_database, version_text, start_time_present, postmaster_start_time = values
+            try:
+                actual_major = int(version_text) // 10000
+            except ValueError:
+                actual_major = -1
+            if (
+                actual_database != expected_database
+                or actual_major != expected_major
+                or start_time_present != "t"
+                or not postmaster_start_time
+            ):
+                raise ReadinessFailure("sql_probe_identity_mismatch")
+
+            inspect_container(container, expected_id)
+            still_final, _ = final_postgres_process(container)
+            if not still_final:
+                raise ReadinessFailure("final_postgres_process_changed")
+
+            if stable_start_time != postmaster_start_time:
+                if stable_start_time is not None:
+                    emit("RESTORE_READINESS_RESET=postmaster_start_time_changed")
+                stable_start_time = postmaster_start_time
+                stable_probes = 0
+            stable_probes += 1
+            emit(f"RESTORE_READINESS_PROBE={stable_probes}/{required_probes}")
+            if stable_probes >= required_probes:
+                inspect_container(container, expected_id)
+                emit(
+                    "RESTORE_READINESS_STABLE="
+                    f"database={expected_database} major={expected_major} probes={stable_probes} "
+                    "identity=unchanged restarts=0"
+                )
+                return
+            time.sleep(stability_interval)
+        raise ReadinessFailure("stable_final_server_timeout")
+    except ReadinessFailure as exc:
+        emit(
+            "RESTORE_READINESS_FAILURE="
+            f"reason={exc} phase={last_phase or 'unknown'} probes={stable_probes}/{required_probes}"
+        )
+        raise SystemExit(1) from None
+
+
+if __name__ == "__main__":
+    main()
+PY_DATABASE_BACKUP_FINAL_READINESS
+}
+
 verify_database_backup_restore() {
-  local database_container=$1 dump_file=$2 database_image restore_report attempt version_num
+  local database_container=$1 dump_file=$2 database_image restore_report restore_container_id
   database_image=$(docker inspect --format '{{.Image}}' "$database_container")
   [[ "$database_image" =~ ^sha256:[0-9a-f]{64}$ ]] \
     || blocked "Production database image identity is invalid"
 
   database_backup_restore_container="mfms-production-backup-restore-${run_id}-${timestamp}"
+  database_backup_restore_volume="${database_backup_restore_container}-data"
   [[ -z "$(docker ps -aq --filter "name=^/${database_backup_restore_container}$")" ]] \
     || blocked "Production backup restore container name already exists"
+  [[ -z "$(docker volume ls -q --filter "name=^${database_backup_restore_volume}$")" ]] \
+    || blocked "Production backup restore volume name already exists"
+  docker volume create \
+    --label "com.muthufarms.mfms.purpose=production-backup-restore" \
+    --label "com.muthufarms.mfms.run-id=$run_id" \
+    "$database_backup_restore_volume" >/dev/null
+  [[ "$(docker volume inspect --format '{{.Name}}' "$database_backup_restore_volume")" \
+      == "$database_backup_restore_volume" ]] \
+    || blocked "Production backup restore volume identity is invalid"
+  [[ "$(docker volume inspect --format '{{index .Labels "com.muthufarms.mfms.purpose"}}|{{index .Labels "com.muthufarms.mfms.run-id"}}' \
+      "$database_backup_restore_volume")" == "production-backup-restore|$run_id" ]] \
+    || blocked "Production backup restore volume labels are invalid"
+  docker run --rm \
+    --network none \
+    --restart no \
+    --entrypoint sh \
+    --mount "type=volume,source=$database_backup_restore_volume,target=/var/lib/postgresql/data,volume-nocopy" \
+    "$database_image" \
+    -ec 'test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"' \
+    || blocked "Production backup restore volume is not empty"
   docker run -d \
     --name "$database_backup_restore_container" \
     --network none \
     --restart no \
     --shm-size 256m \
-    --tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,size=2g \
+    --mount "type=volume,source=$database_backup_restore_volume,target=/var/lib/postgresql/data,volume-nocopy" \
     --env POSTGRES_HOST_AUTH_METHOD=trust \
     "$database_image" >/dev/null
-
-  for attempt in $(seq 1 60); do
-    if docker exec "$database_backup_restore_container" \
-      pg_isready --username=postgres --dbname=postgres >/dev/null 2>&1; then
-      break
-    fi
-    sleep 1
-  done
-  docker exec "$database_backup_restore_container" \
-    pg_isready --username=postgres --dbname=postgres >/dev/null 2>&1 \
-    || blocked "Disposable PostgreSQL restore environment did not become ready"
-
-  version_num=$(docker exec "$database_backup_restore_container" \
-    psql --username=postgres --dbname=postgres --no-psqlrc --tuples-only --no-align \
-      --set=ON_ERROR_STOP=1 --command="show server_version_num")
-  database_backup_restore_postgres_major=$((version_num / 10000))
-  [[ "$database_backup_restore_postgres_major" == "$database_backup_postgres_major" ]] \
-    || blocked "Disposable PostgreSQL restore environment has the wrong major version"
-
-  docker exec "$database_backup_restore_container" \
-    createdb --username=postgres --template=template0 "$database_name"
+  restore_container_id=$(docker inspect --format '{{.Id}}' "$database_backup_restore_container")
+  [[ "$restore_container_id" =~ ^[0-9a-f]{64}$ ]] \
+    || blocked "Production backup restore container identity is invalid"
+  wait_for_stable_database_backup_restore \
+    "$database_backup_restore_container" "$restore_container_id"
+  database_backup_restore_postgres_major="$database_backup_postgres_major"
   docker exec -i "$database_backup_restore_container" \
     pg_restore --exit-on-error --no-owner --no-privileges \
       --username=postgres --dbname="$database_name" < "$dump_file"
@@ -943,6 +1180,8 @@ PY_DATABASE_BACKUP_RESTORE_VALIDATION
 
   docker rm -f "$database_backup_restore_container" >/dev/null
   database_backup_restore_container=""
+  docker volume rm "$database_backup_restore_volume" >/dev/null
+  database_backup_restore_volume=""
   database_backup_restore_verified="true"
 }
 
@@ -1261,6 +1500,12 @@ cleanup() {
     docker rm -f "$database_backup_restore_container" >/dev/null 2>&1 || true
   fi
   database_backup_restore_container=""
+  if [[ -n "$database_backup_restore_volume" \
+      && "$database_backup_restore_volume" == mfms-production-backup-restore-*-data \
+      && -n "$(docker volume ls -q --filter "name=^${database_backup_restore_volume}$")" ]]; then
+    docker volume rm -f "$database_backup_restore_volume" >/dev/null 2>&1 || true
+  fi
+  database_backup_restore_volume=""
   if [[ -n "$database_backup_temporary" \
       && "$database_backup_temporary" == "$database_backup_dir"/."$database_name".* ]]; then
     rm -f "$database_backup_temporary"
