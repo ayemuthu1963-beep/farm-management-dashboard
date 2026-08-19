@@ -7,6 +7,7 @@ import {
   getRecentIrrigationHistoryDates,
   IRRIGATION_PERIOD_VALIDATION_ERRORS,
   resolveIrrigationDateBounds,
+  shiftIsoDate,
 } from "@/lib/irrigation-period"
 import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
@@ -56,6 +57,12 @@ function isWithinRange(entryDate: string, startDate?: string, endDate?: string):
   if (startDate && entryDate < startDate) return false
   if (endDate && entryDate > endDate) return false
   return true
+}
+
+function getSelectedDates(startDate: string, endDate: string): string[] {
+  const dates: string[] = []
+  for (let date = startDate; date <= endDate; date = shiftIsoDate(date, 1)) dates.push(date)
+  return dates
 }
 
 function runtimeWater(totalMinutes: number, zoneId: ZoneId): number {
@@ -158,7 +165,13 @@ function buildRecord(entry: MergedMotorRuntimeEntry, zoneId: ZoneId): Irrigation
   }
 }
 
-function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: Record<ZoneId, ZoneFiveDayHistory[]>): IrrigationData {
+function buildData(
+  entries: MotorRuntimeEntry[],
+  label: string,
+  fiveDayHistory: Record<ZoneId, ZoneFiveDayHistory[]>,
+  startDate: string,
+  endDate: string,
+): IrrigationData {
   const mergedEntries = mergeEntries(entries)
   const byZone = new Map<ZoneId, MergedMotorRuntimeEntry[]>()
   const minutesByDate = new Map<string, Map<ZoneId, number>>()
@@ -194,15 +207,20 @@ function buildData(entries: MotorRuntimeEntry[], label: string, fiveDayHistory: 
     return { ...config, motor: motors.length > 0 ? motors.join(", ") : config.configuredMotorValves.join(", "), valveOpenTime: zoneMinutes > 0 ? formatRuntimeMinutes(zoneMinutes) : "--", totalRuntimeMinutes: zoneMinutes, totalRuntimeHours: Number((zoneMinutes / 60).toFixed(2)), totalWaterSupplied: totalWater, waterPerTree: cropWater.litresPerTree, waterPerTreeDisplay: zoneMinutes > 0 ? `${cropWater.crop}: ${cropWater.litresPerTree.toLocaleString("en-IN")} L/tree/hour equivalent` : "No runtime recorded", cropWater: [cropWater], lastIrrigatedDate: formatDate(lastEntryDate), daysSinceIrrigation: null, recordsCount: zoneEntries.length, status, statusLabel: statusColors[status].label, fiveDayHistory: fiveDayHistory[zoneId] ?? [] }
   })
 
-  const trend: TrendPoint[] = Array.from(minutesByDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([date, dateMinutes]) => {
-    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: 0, P1W: 0, P2E: 0, P2W: 0, JF: 0, NM: 0 }
-    for (const zoneId of zoneOrder) {
-      const minutes = dateMinutes.get(zoneId) ?? 0
-      point[zoneId] = cropWaterFigure(zoneId, minutes).litresPerTree
-      point.totalWaterLitres += runtimeWater(minutes, zoneId)
-      point.totalRuntimeHours += minutes / 60
+  const trend: TrendPoint[] = getSelectedDates(startDate, endDate).map((date) => {
+    const dateMinutes = minutesByDate.get(date)
+    if (!dateMinutes || dateMinutes.size === 0) {
+      return { date, displayDate: formatShortDate(date), totalWaterLitres: null, totalRuntimeHours: null, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null }
     }
-    point.totalRuntimeHours = Number(point.totalRuntimeHours.toFixed(2))
+    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null }
+    for (const zoneId of zoneOrder) {
+      const minutes = dateMinutes.get(zoneId)
+      if (minutes === undefined) continue
+      point[zoneId] = cropWaterFigure(zoneId, minutes).litresPerTree
+      point.totalWaterLitres = (point.totalWaterLitres ?? 0) + runtimeWater(minutes, zoneId)
+      point.totalRuntimeHours = (point.totalRuntimeHours ?? 0) + minutes / 60
+    }
+    point.totalRuntimeHours = Number((point.totalRuntimeHours ?? 0).toFixed(2))
     return point
   })
 
@@ -253,7 +271,13 @@ export async function GET(request: Request) {
       litresPerTreePerHourByZone,
       today: getIrrigationDateBounds("today").startDate,
     })
-    return NextResponse.json(buildData(selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)), label, fiveDayHistory), { headers: { "Cache-Control": "no-store, max-age=0" } })
+    return NextResponse.json(buildData(
+      selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)),
+      label,
+      fiveDayHistory,
+      startDate,
+      endDate,
+    ), { headers: { "Cache-Control": "no-store, max-age=0" } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to fetch irrigation data"
     const isBadRequest = IRRIGATION_PERIOD_VALIDATION_ERRORS.includes(message as typeof IRRIGATION_PERIOD_VALIDATION_ERRORS[number])

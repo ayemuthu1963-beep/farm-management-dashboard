@@ -61,6 +61,17 @@ function farmTodayIso(): string {
   return `${year}-${month}-${day}`
 }
 
+function shiftIsoDate(isoDate: string, offsetDays: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, day + offsetDays)).toISOString().slice(0, 10)
+}
+
+function selectedDateKeys(startDate: string, endDate: string): string[] {
+  const dates: string[] = []
+  for (let date = startDate; date <= endDate; date = shiftIsoDate(date, 1)) dates.push(date)
+  return dates
+}
+
 function runtimeHours(totalMinutes: number): number {
   return Math.round((totalMinutes / 60) * 100) / 100
 }
@@ -188,16 +199,16 @@ export async function GET(request: Request) {
       entriesByDate.set(entry.entry_date, rows)
     }
 
-    const dateKeys = Array.from(entriesByDate.keys()).sort()
+    const dateKeys = selectedDateKeys(startDate ?? "", endDate ?? "")
     const chartData = dateKeys.map((date) => {
-      const point: Record<string, string | number> = { date: displayDate(date) }
+      const point: Record<string, string | number | null> = { date: displayDate(date) }
       const dayEntries = entriesByDate.get(date) ?? []
       for (const id of motorIds) {
         const motorNo = Number(id.slice(1))
-        const totalMinutes = dayEntries
-          .filter((entry) => entry.motor_no === motorNo)
+        const motorEntries = dayEntries.filter((entry) => entry.motor_no === motorNo)
+        const totalMinutes = motorEntries
           .reduce((sum, entry) => sum + entry.total_minutes, 0)
-        point[id] = runtimeHours(totalMinutes)
+        point[id] = motorEntries.length > 0 ? runtimeHours(totalMinutes) : null
       }
       return point
     })
@@ -207,11 +218,13 @@ export async function GET(request: Request) {
       const totalMinutes = dayEntries.reduce((sum, entry) => sum + entry.total_minutes, 0)
       return {
         date: displayDate(date),
-        totalRuntimeHours: runtimeHours(totalMinutes),
-        totalWaterLitres: dayEntries.reduce(
-          (sum, entry) => sum + pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
-          0,
-        ),
+        totalRuntimeHours: dayEntries.length > 0 ? runtimeHours(totalMinutes) : null,
+        totalWaterLitres: dayEntries.length > 0
+          ? dayEntries.reduce(
+            (sum, entry) => sum + pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
+            0,
+          )
+          : null,
       }
     })
 

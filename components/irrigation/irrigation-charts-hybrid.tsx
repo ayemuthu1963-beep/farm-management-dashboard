@@ -12,16 +12,19 @@ interface Props {
 }
 
 function fmt(value: unknown, name: unknown): [string, string] {
-  const n = typeof value === "number" ? value : Number(value ?? 0)
   const label = String(name)
+  if (value === null || value === undefined) return ["", label]
+  const n = typeof value === "number" ? value : Number(value)
   if (label.toLowerCase().includes("runtime")) return [`${n.toLocaleString("en-IN")} h`, label]
   if (label.toLowerCase().includes("tree")) return [`${formatNumberIN(n)} L/tree`, label]
   return [`${formatNumberIN(n)} L`, label]
 }
 
 function fmtPerTree(value: unknown, name: unknown): [string, string] {
-  const n = typeof value === "number" ? value : Number(value ?? 0)
-  return [`${formatNumberIN(n)} L/tree`, String(name)]
+  const label = String(name)
+  if (value === null || value === undefined) return ["", label]
+  const n = typeof value === "number" ? value : Number(value)
+  return [`${formatNumberIN(n)} L/tree`, label]
 }
 
 const perTreeSeries = [
@@ -69,7 +72,8 @@ export function IrrigationChartsHybrid({ zones, trend, isLoading = false, errorM
   }
   if (errorMessage) return <ChartStates label={errorMessage} />
 
-  const hasAnyData = zones.some((zone) => zone.totalRuntimeMinutes > 0) || trend.length > 0
+  const hasAnyData = zones.some((zone) => zone.totalRuntimeMinutes > 0)
+    || trend.some((point) => point.totalRuntimeHours !== null || point.totalWaterLitres !== null)
   if (!hasAnyData) return <ChartStates label="No live irrigation records for the selected period." />
 
   return (

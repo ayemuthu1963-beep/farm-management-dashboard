@@ -17,20 +17,36 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Use the dedicated farmland and location pin icon on the Farm Map homepage card",
+  "Include today in irrigation and water dashboard defaults, leaving missing values blank",
 )
-assert.equal(manifest.base_commit, "98f2a8b685b89b1f144b3a7918f8365328ab6831")
+assert.equal(manifest.base_commit, "25937caa78a65201ba569e2a839ba8b9ca8582bd")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e",
-  image_id: "sha256:b0e5301a08386cf1defb78be947f8b07b95b85c43dee0b3895d0228affbc0220",
-  feature_revision: "ccfd04a15b713dbef1ba47248324b412042fe215",
+  revision: "7cf302811f87f4db4be3248131289ac72aba54b7",
+  image_id: "sha256:b3f4a156e539fd4d867bf0e8b70a13f66f152594fb80f0e83be0243d791164ae",
+  feature_revision: "dde91ecec3ad92d5e8b4546db993e1815e5fe0f2",
   verified_files: [
-    "public/mfms/icons/farm-map.svg",
+    "app/api/irrigation-management/route.ts",
+    "app/api/motor-runtime/dashboard/route.ts",
+    "components/farm/date-range-selector.tsx",
+    "components/farm/well-chart.tsx",
+    "components/farm/well-table.tsx",
+    "components/irrigation/irrigation-charts-hybrid.tsx",
+    "components/irrigation/irrigation-map-with-details.tsx",
+    "components/motor/motor-date-range-selector.tsx",
+    "components/motor/motor-irrigation-trend.tsx",
+    "lib/irrigation-data.ts",
+    "lib/irrigation-period.ts",
+    "lib/irrigation-schedule-comparison.ts",
+    "lib/motor-data.ts",
+    "lib/well-data.ts",
   ],
   production_adaptations: [
     "deploy/production-release-manifest.json",
-    "lib/mfms-navigation.ts",
     "tests/farm-calendar-production-promotion.mjs",
+    "tests/irrigation-management-corrections.mjs",
+    "tests/motor-runtime-water-pumped.mjs",
+    "tests/well-water-authoritative-daily-values.mjs",
+    "tests/well-water-page-corrections.mjs",
   ],
 })
 assert.deepEqual(manifest.protected_invariants, {
@@ -50,10 +66,26 @@ assert.equal(
 )
 
 assert.deepEqual(manifest.allowed_paths, [
+  "app/api/irrigation-management/route.ts",
+  "app/api/motor-runtime/dashboard/route.ts",
+  "components/farm/date-range-selector.tsx",
+  "components/farm/well-chart.tsx",
+  "components/farm/well-table.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/motor/motor-date-range-selector.tsx",
+  "components/motor/motor-irrigation-trend.tsx",
   "deploy/production-release-manifest.json",
-  "lib/mfms-navigation.ts",
-  "public/mfms/icons/farm-map.svg",
+  "lib/irrigation-data.ts",
+  "lib/irrigation-period.ts",
+  "lib/irrigation-schedule-comparison.ts",
+  "lib/motor-data.ts",
+  "lib/well-data.ts",
   "tests/farm-calendar-production-promotion.mjs",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/well-water-authoritative-daily-values.mjs",
+  "tests/well-water-page-corrections.mjs",
 ])
 
 const farmMap = mfmsNavigationItems.find((item) => item.id === "farm-map")
@@ -89,4 +121,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Farm Map icon and preserved expired fertiliser Preview-to-Production contracts: PASS")
+console.log("Dashboard date defaults and preserved Production promotion contracts: PASS")

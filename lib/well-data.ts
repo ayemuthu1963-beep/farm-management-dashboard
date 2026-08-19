@@ -47,6 +47,7 @@ export interface WellDashboardResponse {
 
 export interface WellDailyRecord {
   date: string
+  isPlaceholder: boolean
   morningWater: number | null
   eveningWater: number | null
   morningWaterDisplay: string
@@ -175,26 +176,64 @@ function waterDisplay(value: number | null): string {
 }
 
 function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
+  const isPlaceholder = row.reading_count === 0
   const configurationWarning =
-    row.remarks === SOUTH_WELL_CONFIGURATION_WARNING
+    !isPlaceholder && row.remarks === SOUTH_WELL_CONFIGURATION_WARNING
       ? SOUTH_WELL_CONFIGURATION_WARNING
       : undefined
-  const morningWater = toNullableFiniteNumber(row.morning_water_liters)
-  const eveningWater = toNullableFiniteNumber(row.evening_water_liters)
+  const morningWater = isPlaceholder ? null : toNullableFiniteNumber(row.morning_water_liters)
+  const eveningWater = isPlaceholder ? null : toNullableFiniteNumber(row.evening_water_liters)
 
   return {
     date: formatTableDate(row.date),
+    isPlaceholder,
     morningWater,
     eveningWater,
-    morningWaterDisplay: waterDisplay(morningWater),
-    eveningWaterDisplay: waterDisplay(eveningWater),
+    morningWaterDisplay: isPlaceholder ? "" : waterDisplay(morningWater),
+    eveningWaterDisplay: isPlaceholder ? "" : waterDisplay(eveningWater),
     motorRuntimeMinutes: toNullableFiniteNumber(row.motor_runtime_minutes) ?? 0,
-    waterPumpedOut: toNullableFiniteNumber(row.water_pumped_out_liters),
-    observedStorageChange: toNullableFiniteNumber(row.observed_storage_change_liters),
-    differenceInMorningReadings: toNullableFiniteNumber(row.difference_in_morning_readings_litres),
-    remarks: row.remarks,
+    waterPumpedOut: isPlaceholder ? null : toNullableFiniteNumber(row.water_pumped_out_liters),
+    observedStorageChange: isPlaceholder ? null : toNullableFiniteNumber(row.observed_storage_change_liters),
+    differenceInMorningReadings: isPlaceholder ? null : toNullableFiniteNumber(row.difference_in_morning_readings_litres),
+    remarks: isPlaceholder ? "" : row.remarks,
     configurationWarning,
   }
+}
+
+function shiftIsoDate(isoDate: string, offsetDays: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, day + offsetDays)).toISOString().slice(0, 10)
+}
+
+function blankDailyRecord(date: string): WellDailyRecord {
+  return {
+    date: formatTableDate(date),
+    isPlaceholder: true,
+    morningWater: null,
+    eveningWater: null,
+    morningWaterDisplay: "",
+    eveningWaterDisplay: "",
+    motorRuntimeMinutes: 0,
+    waterPumpedOut: null,
+    observedStorageChange: null,
+    differenceInMorningReadings: null,
+    remarks: "",
+  }
+}
+
+function buildCalendarRecords(
+  rows: WellDailyApiRow[],
+  startDate?: string,
+  endDate?: string,
+): WellDailyRecord[] {
+  if (!startDate || !endDate || startDate > endDate) return rows.map(toDailyRecord)
+  const rowsByDate = new Map(rows.map((row) => [row.date, row]))
+  const records: WellDailyRecord[] = []
+  for (let date = endDate; date >= startDate; date = shiftIsoDate(date, -1)) {
+    const row = rowsByDate.get(date)
+    records.push(row ? toDailyRecord(row) : blankDailyRecord(date))
+  }
+  return records
 }
 
 function capacityFromRows(rows: WellDailyApiRow[]): string {
@@ -238,8 +277,16 @@ export function buildWellDashboardData(payload: WellDashboardResponse): WellDash
   const dailyRows = payload.daily_rows ?? [...(payload.north_rows ?? []), ...(payload.south_rows ?? [])]
   const northRows = dailyRows.filter((row) => row.well_id === "north" || row.well_code === "well1")
   const southRows = dailyRows.filter((row) => row.well_id === "south" || row.well_code === "well2")
-  const northWellRecords = northRows.map(toDailyRecord)
-  const southWellRecords = southRows.map(toDailyRecord)
+  const northWellRecords = buildCalendarRecords(
+    northRows,
+    payload.summary?.selected_start_date,
+    payload.summary?.selected_end_date,
+  )
+  const southWellRecords = buildCalendarRecords(
+    southRows,
+    payload.summary?.selected_start_date,
+    payload.summary?.selected_end_date,
+  )
 
   return {
     northWellRecords,

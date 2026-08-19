@@ -38,15 +38,15 @@ function isoFromUtcDate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-export function getFarmIsoDate(offsetDays = 0): string {
-  const { year, month, day } = farmDateParts()
+export function getFarmIsoDate(offsetDays = 0, now = new Date()): string {
+  const { year, month, day } = farmDateParts(now)
   const utcDate = new Date(Date.UTC(year, month - 1, day + offsetDays))
   return isoFromUtcDate(utcDate)
 }
 
-export function getMotorDefaultDateRange(): MotorDateRange {
-  const startDate = getFarmIsoDate(-6)
-  const endDate = getFarmIsoDate(-1)
+export function getMotorDefaultDateRange(now = new Date()): MotorDateRange {
+  const startDate = getFarmIsoDate(-6, now)
+  const endDate = getFarmIsoDate(0, now)
   return {
     startDate,
     endDate,
@@ -59,7 +59,7 @@ export function calculateDisplayedDays(startDate: string, endDate: string): numb
   const start = Date.parse(`${startDate}T00:00:00Z`)
   const end = Date.parse(`${endDate}T00:00:00Z`)
   if (Number.isNaN(start) || Number.isNaN(end) || start > end) return 0
-  return Math.round((end - start) / 86_400_000)
+  return Math.round((end - start) / 86_400_000) + 1
 }
 
 export function validateMotorDateRange(value: MotorDateRange): string | null {
@@ -134,7 +134,7 @@ export function MotorDateRangeSelector({ value, errorMessage, onChange, onResetD
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Default uses {FARM_TIME_ZONE}: Start Date = today − 6 days; End Date = today − 1 day.
+        Default uses {FARM_TIME_ZONE}: Start Date = today − 6 days; End Date = today.
       </p>
       {errorMessage && (
         <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">

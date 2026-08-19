@@ -25,7 +25,7 @@ function shiftIsoDate(isoDate: string, offsetDays: number) {
 }
 
 export function getDefaultWellDateRange(days = 6, now = new Date()) {
-  const endDate = shiftIsoDate(farmIsoDate(now), -1)
+  const endDate = farmIsoDate(now)
   return {
     startDate: shiftIsoDate(endDate, -(days - 1)),
     endDate,

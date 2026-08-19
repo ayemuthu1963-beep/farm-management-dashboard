@@ -101,14 +101,14 @@ export interface IrrigationRecord {
 export interface TrendPoint {
   date: string
   displayDate: string
-  totalWaterLitres: number
-  totalRuntimeHours: number
-  P1E: number
-  P1W: number
-  P2E: number
-  P2W: number
-  JF: number
-  NM: number
+  totalWaterLitres: number | null
+  totalRuntimeHours: number | null
+  P1E: number | null
+  P1W: number | null
+  P2E: number | null
+  P2W: number | null
+  JF: number | null
+  NM: number | null
 }
 
 export interface IrrigationSummary {
