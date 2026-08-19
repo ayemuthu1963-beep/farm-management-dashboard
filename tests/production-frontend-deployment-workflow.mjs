@@ -59,21 +59,23 @@ assert.match(helper, /Production source differs from Preview-approved file/)
 assert.match(helper, /preview_feature_revision/)
 assert.match(helper, /production_source_matches_preview=true/)
 assert.match(helper, /coordinated-frontend-after-backend/)
-assert.match(helper, /readonly coordinated_preview_revision="108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"/)
-assert.match(helper, /readonly coordinated_preview_feature_revision="04fd5664137809605721665cafd6ffaad4264ec9"/)
-assert.match(helper, /readonly coordinated_preview_merge_base="9842f21a4bb04ff4f1750790392dbfee0dc941d3"/)
-assert.match(helper, /readonly coordinated_candidate_revision="9a577add2308b85637fcf05ee49b6274e19cc2dc"/)
-assert.match(helper, /readonly coordinated_candidate_tree="e102fe82bdb6b009012933684c6db3d927f53a7a"/)
-assert.match(helper, /readonly coordinated_backend_revision="94b28f17702e409e13d25e288fc5cd4b9bbef545"/)
-assert.match(helper, /readonly coordinated_backend_container_id="969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47"/)
-assert.match(helper, /readonly coordinated_backend_image_id="sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512"/)
-assert.match(helper, /readonly coordinated_frontend_baseline_revision="e9833917c0a7fd190d933acb8cb234f60f5c8c65"/)
-assert.match(helper, /readonly coordinated_frontend_baseline_container_id="2e8781b403c115b08a15faf0f88e75fca1faa8a6f055128365329e159a119436"/)
-assert.match(helper, /readonly coordinated_frontend_baseline_image_id="sha256:6f3e81bef1f52c643e12c37a72b195d146a28e3f2eb6ca681cc6d9192b3081a8"/)
+assert.match(helper, /readonly coordinated_preview_revision="00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"/)
+assert.match(helper, /readonly coordinated_preview_feature_revision="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"/)
+assert.match(helper, /readonly coordinated_preview_merge_base="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"/)
+assert.match(helper, /readonly coordinated_candidate_revision="98f2a8b685b89b1f144b3a7918f8365328ab6831"/)
+assert.match(helper, /readonly coordinated_candidate_tree="df66d0dd2c93b9baa321741acd4fec5ab5bddbc9"/)
+assert.match(helper, /readonly coordinated_backend_revision="42aa24242565ef27c4aa434a579824e44e74e1ee"/)
+assert.match(helper, /readonly coordinated_backend_container_id="016b4a1ed493ca712bf581b39136ba9c46802f9be7ff95ccaa59865ab5d6d607"/)
+assert.match(helper, /readonly coordinated_backend_image_id="sha256:12661b0f748414b6314206070f881524d2c91b7dd0c19a7d726900e220486287"/)
+assert.match(helper, /readonly coordinated_backend_environment_sha256="d4f79adfac2a47311efa4fc94e39ef966d46a5007486bfab088c52407b6f315a"/)
+assert.match(helper, /readonly coordinated_frontend_baseline_revision="11d2a1493a7546328b5d7c2ee1bb002d7df0249b"/)
+assert.match(helper, /readonly coordinated_frontend_baseline_container_id="7f701efa397478d20f74e7a07bf1be74dfe57ff3fccbeb287c55f6c51e8c2753"/)
+assert.match(helper, /readonly coordinated_frontend_baseline_image_id="sha256:f4b44f015e09af5b40af98ee86b468e762f8a3ee7e124e3f85923edbed815eba"/)
+assert.match(helper, /readonly coordinated_frontend_baseline_environment_sha256="ccedcc9c454bc1f4e5d13572d0458ddf75d64d29fd132a9a216aebeaccddd65b"/)
 assert.match(helper, /readonly coordinated_frontend_baseline_ipv4="172\.19\.128\.7"/)
-assert.match(helper, /mfms_server_prod-pre-94b28f17702e409e13d25e288fc5cd4b9bbef545-20260818T050946Z\.dump/)
-assert.match(helper, /readonly coordinated_backup_bytes="1762112"/)
-assert.match(helper, /readonly coordinated_backup_sha256="9ea00949fd57a579bbee1b6765f8faf7bc88268166bc05c5cc087088dcd47e13"/)
+assert.match(helper, /mfms_server_prod-pre-42aa24242565ef27c4aa434a579824e44e74e1ee-20260819T001045Z\.dump/)
+assert.match(helper, /readonly coordinated_backup_bytes="1775062"/)
+assert.match(helper, /readonly coordinated_backup_sha256="3958e3f213c39d6a02a85c89152f72d841d7f4dc810f27e661d9d4ec6dff046a"/)
 assert.match(helper, /87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1/)
 assert.match(helper, /5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9/)
 assert.match(helper, /server\[\[:space:\]\]\+mfms-v0-preview-web:3000/)
@@ -91,64 +93,40 @@ assert.doesNotMatch(helper, /certbot/)
 assert.doesNotMatch(helper, /production_touched=0/)
 
 const approvedVerifiedFiles = [
-  "app/irrigation-management/page.tsx",
-  "components/irrigation/irrigation-charts-hybrid.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/irrigation/irrigation-plan-tables.tsx",
-  "lib/irrigation-plan.ts",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/operator-settings-persistence.mjs",
+  "tests/fertiliser-master-management.mjs",
 ]
 const approvedProductionAdaptations = [
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "tests/irrigation-plan.mjs",
+  "app/fertiliser-management/page.tsx",
+  "deploy/production-release-manifest.json",
+  "tests/farm-calendar-production-promotion.mjs",
 ]
 const approvedAllowedPaths = [
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "app/irrigation-management/page.tsx",
-  "components/irrigation/irrigation-charts-hybrid.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/irrigation/irrigation-plan-tables.tsx",
+  "app/fertiliser-management/page.tsx",
   "deploy/production-release-manifest.json",
-  "lib/irrigation-plan.ts",
-  "package.json",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/irrigation-plan.mjs",
-  "tests/operator-settings-persistence.mjs",
+  "tests/fertiliser-master-management.mjs",
 ]
 const approvedRuntimePaths = [
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "app/irrigation-management/page.tsx",
-  "components/irrigation/irrigation-charts-hybrid.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/irrigation/irrigation-plan-tables.tsx",
-  "lib/irrigation-plan.ts",
+  "app/fertiliser-management/page.tsx",
 ]
 const approvedProvenanceRows = [
-  "app/irrigation-management/page.tsx|d0b0dc1968a03261f2b145c533e4d4970e471608|d0b0dc1968a03261f2b145c533e4d4970e471608|989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22|989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
-  "components/irrigation/irrigation-charts-hybrid.tsx|8df1c1b400435aefb55734061693a1745646030f|8df1c1b400435aefb55734061693a1745646030f|392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff|392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
-  "components/irrigation/irrigation-map-with-details.tsx|be77048141de46f12485fc5e3c2c0d6a44059374|be77048141de46f12485fc5e3c2c0d6a44059374|b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e|b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
-  "components/irrigation/irrigation-plan-tables.tsx|8dec6117d5185bda57de7b22b3de013c639d9c28|8dec6117d5185bda57de7b22b3de013c639d9c28|4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390|4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
-  "lib/irrigation-plan.ts|f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f|f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f|c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67|c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
-  "tests/irrigation-management-corrections.mjs|aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6|aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6|a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778|a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
-  "tests/operator-settings-persistence.mjs|9f5befbe0152aa1791c30e3a954cb538e5742b13|9f5befbe0152aa1791c30e3a954cb538e5742b13|aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50|aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
+  "tests/fertiliser-master-management.mjs|e6ced2c6d369e4790e15e25406321302601ed9be|e6ced2c6d369e4790e15e25406321302601ed9be|49696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b|49696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b",
 ]
 
 const coordinatedState = {
-  candidate: "9a577add2308b85637fcf05ee49b6274e19cc2dc",
-  tree: "e102fe82bdb6b009012933684c6db3d927f53a7a",
-  backendRevision: "94b28f17702e409e13d25e288fc5cd4b9bbef545",
-  backendContainer: "969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47",
-  backendImage: "sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512",
-  backupSha256: "9ea00949fd57a579bbee1b6765f8faf7bc88268166bc05c5cc087088dcd47e13",
+  candidate: "98f2a8b685b89b1f144b3a7918f8365328ab6831",
+  tree: "df66d0dd2c93b9baa321741acd4fec5ab5bddbc9",
+  backendRevision: "42aa24242565ef27c4aa434a579824e44e74e1ee",
+  backendContainer: "016b4a1ed493ca712bf581b39136ba9c46802f9be7ff95ccaa59865ab5d6d607",
+  backendImage: "sha256:12661b0f748414b6314206070f881524d2c91b7dd0c19a7d726900e220486287",
+  backupSha256: "3958e3f213c39d6a02a85c89152f72d841d7f4dc810f27e661d9d4ec6dff046a",
   settingsSha256: "87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1",
   auditSha256: "5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9",
-  frontendRevision: "e9833917c0a7fd190d933acb8cb234f60f5c8c65",
-  frontendContainer: "2e8781b403c115b08a15faf0f88e75fca1faa8a6f055128365329e159a119436",
-  frontendImage: "sha256:6f3e81bef1f52c643e12c37a72b195d146a28e3f2eb6ca681cc6d9192b3081a8",
+  frontendRevision: "11d2a1493a7546328b5d7c2ee1bb002d7df0249b",
+  frontendContainer: "7f701efa397478d20f74e7a07bf1be74dfe57ff3fccbeb287c55f6c51e8c2753",
+  frontendImage: "sha256:f4b44f015e09af5b40af98ee86b468e762f8a3ee7e124e3f85923edbed815eba",
   network: "harvest-net|172.19.128.7",
-  endpointEvidence: "GET200|PUT200|GET200|PUT200",
+  endpointEvidence: "FERTILISER_GET200|FEFO|EXPIRED|NULL_LAST|ZERO_EXCLUDED|INACTIVE_EXCLUDED",
 }
 const coordinatedStateAccepted = (state) => Object.entries(coordinatedState)
   .every(([key, value]) => state[key] === value)
@@ -174,13 +152,29 @@ assert.match(coordinatedValidation, /mfms_production_schema_migrations/)
 assert.match(coordinatedValidation, /mfms_irrigation_plan_settings/)
 assert.match(coordinatedValidation, /mfms_irrigation_plan_audit/)
 assert.match(coordinatedValidation, /mfms_irrigation_plan_audit_no_change/)
-assert.match(helper, /production-release-verification/)
-assert.match(coordinatedValidation, /authenticated irrigation GET 200 evidence/)
-assert.match(coordinatedValidation, /authenticated irrigation PUT 200 evidence/)
-assert.match(coordinatedValidation, /\{"get", "put"\}\.issubset/)
+for (const table of [
+  "fertiliser_categories",
+  "fertiliser_products",
+  "fertiliser_stock_batches",
+  "fertiliser_stock_transactions",
+  "fertiliser_transaction_allocations",
+]) {
+  assert.match(coordinatedValidation, new RegExp(table))
+}
+assert.match(coordinatedValidation, /authenticated fertiliser stock GET 200 evidence/)
+assert.match(coordinatedValidation, /expired active positive-balance batch/)
+assert.match(coordinatedValidation, /expired-before-later FEFO case/)
+assert.match(coordinatedValidation, /dated-before-null FEFO case/)
+assert.match(coordinatedValidation, /zero-balance exclusion case/)
+assert.match(coordinatedValidation, /inactive product exclusion case/)
+assert.match(coordinatedValidation, /eligible_available_quantity/)
+assert.match(coordinatedValidation, /SET TRANSACTION READ ONLY/)
+assert.doesNotMatch(coordinatedValidation, /urlopen\([^)]*data\s*=/)
 assert.match(coordinatedValidation, /cmp -s "\$coordinated_database_before" "\$coordinated_database_after_read"/)
 assert.match(deployFunction, /assert_coordinated_release_state_unchanged/)
 assert.match(deployFunction, /deployment_kind=coordinated-frontend-after-backend/)
+assert.match(deployFunction, /coordinated_fertiliser_data_fingerprint_verified=true/)
+assert.match(deployFunction, /coordinated_fertiliser_api_verified=true/)
 assert.match(helper, /cmp -s "\$coordinated_database_before" "\$coordinated_database_after_deploy"/)
 assert.doesNotMatch(coordinatedValidation, /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i)
 assert.doesNotMatch(deployFunction, /apply_migrations|pg_dump|pg_restore|docker stop[^\n]*harvest-api|docker rename[^\n]*harvest-api/)
@@ -201,17 +195,17 @@ try {
     deployment_kind: "coordinated-frontend-after-backend",
     base_commit: coordinatedState.frontendRevision,
     preview_approved: {
-      revision: "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
-      image_id: "sha256:d8cee1e9e591db1b1d35930ac0d89d1bf8b9e2ae2723722c5fe6e418832ec186",
-      feature_revision: "04fd5664137809605721665cafd6ffaad4264ec9",
+      revision: "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e",
+      image_id: "sha256:b0e5301a08386cf1defb78be947f8b07b95b85c43dee0b3895d0228affbc0220",
+      feature_revision: "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4",
       verified_files: approvedVerifiedFiles,
       production_adaptations: approvedProductionAdaptations,
     },
     protected_invariants: {
       preview: "unchanged",
       test: "unchanged",
-      backend: "deployed-first-from-isolated-irrigation-candidate",
-      database: "additive-production-irrigation-migrations-only",
+      backend: "deployed-first-from-isolated-fertiliser-candidate",
+      database: "unchanged",
       odk: "unchanged",
       schedules: "unchanged",
       proxy_configuration: "unchanged",
@@ -269,11 +263,11 @@ try {
   writeFileSync(validatorPath, `${provenanceValidatorMatch[1]}\n`, "utf8")
   const exactIdentity = [
     "coordinated-frontend-after-backend",
-    "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c",
+    "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e",
     coordinatedState.candidate,
     coordinatedState.tree,
-    "04fd5664137809605721665cafd6ffaad4264ec9",
-    "9842f21a4bb04ff4f1750790392dbfee0dc941d3",
+    "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4",
+    "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4",
   ]
   const validateProvenance = ({
     identity = exactIdentity,
@@ -294,8 +288,8 @@ try {
 
   const changedByte = [...approvedProvenanceRows]
   changedByte[0] = changedByte[0].replace(
-    "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
-    "089d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
+    "49696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b",
+    "09696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b",
   )
   assert.notEqual(validateProvenance({ rows: changedByte }).status, 0)
   assert.notEqual(validateProvenance({ rows: approvedProvenanceRows.slice(0, -1) }).status, 0)
@@ -303,7 +297,7 @@ try {
     rows: [...approvedProvenanceRows, `extra.tsx|${"a".repeat(40)}|${"a".repeat(40)}|${"b".repeat(64)}|${"b".repeat(64)}`],
   }).status, 0)
   assert.notEqual(validateProvenance({
-    rows: [approvedProvenanceRows[0].replace("app/irrigation-management/page.tsx", "app/irrigation-management/renamed.tsx"), ...approvedProvenanceRows.slice(1)],
+    rows: [approvedProvenanceRows[0].replace("tests/fertiliser-master-management.mjs", "tests/fertiliser-renamed.mjs")],
   }).status, 0)
   for (const index of [0, 1, 2, 3, 4, 5]) {
     const changedIdentity = [...exactIdentity]
