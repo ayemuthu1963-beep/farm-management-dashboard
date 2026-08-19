@@ -268,9 +268,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Allow expired fertiliser stock in Outgoing Stock and Adjustment Out",
+  "Include today in irrigation and water dashboard defaults, leaving missing values blank",
 )
-assert.equal(manifest.base_commit, "8c1ce1b2b2945e8968104fb5699d6cbfb16b795f")
+assert.equal(manifest.base_commit, "dde91ecec3ad92d5e8b4546db993e1815e5fe0f2")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,8 +280,24 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/fertiliser-management/page.tsx",
-  "tests/fertiliser-master-management.mjs",
+  "app/api/irrigation-management/route.ts",
+  "app/api/motor-runtime/dashboard/route.ts",
+  "components/farm/date-range-selector.tsx",
+  "components/farm/well-chart.tsx",
+  "components/farm/well-table.tsx",
+  "components/irrigation/irrigation-charts-hybrid.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
+  "components/motor/motor-date-range-selector.tsx",
+  "components/motor/motor-irrigation-trend.tsx",
+  "lib/irrigation-data.ts",
+  "lib/irrigation-period.ts",
+  "lib/irrigation-schedule-comparison.ts",
+  "lib/motor-data.ts",
+  "lib/well-data.ts",
+  "tests/irrigation-management-corrections.mjs",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/well-water-authoritative-daily-values.mjs",
+  "tests/well-water-page-corrections.mjs",
   "deploy/preview-release-manifest.json",
   "tests/preview-deployment-workflow.mjs",
 ]
