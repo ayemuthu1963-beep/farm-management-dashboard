@@ -496,7 +496,7 @@ for (const zoneId of ["P1E", "P1W", "P2E", "P2W", "JF", "NM"]) {
 }
 assert.deepEqual(cropLitresPerTreePerHour, { Coconut: 100, Nutmeg: 60, Jackfruit: 60 })
 assert.match(route, /point\[zoneId\] = cropWaterFigure\(zoneId, minutes\)\.litresPerTree/)
-assert.match(route, /point\.totalWaterLitres \+= runtimeWater\(minutes, zoneId\)/)
+assert.match(route, /point\.totalWaterLitres = \(point\.totalWaterLitres \?\? 0\) \+ runtimeWater\(minutes, zoneId\)/)
 assert.match(charts, /<Legend content=\{<PerTreeLegend \/>\}/)
 
 const chartModule = loadTsxModule("components/irrigation/irrigation-charts-hybrid.tsx", {
