@@ -11,11 +11,16 @@ the confirmation text `DEPLOY PRODUCTION FRONTEND ONLY`. It invokes the
 server-side forced-command helper with a dedicated SSH identity. Neither
 workflow has a push, pull-request, schedule, or workflow-run trigger.
 
-Before switching the frontend, the helper verifies the 21-container baseline,
-zero unhealthy containers, zero failed systemd units, all three API health
+Before switching the frontend, the helper verifies an explicit Production
+service manifest for the frontend, API, database, authentication, harvest
+counter, and reverse proxy. It also verifies zero unhealthy containers, zero
+failed systemd units, all three API health
 endpoints, environment-specific database roles and database names, Production
 `harvest-api` ownership of `172.19.0.2`, the `172.19.128.0/17` dynamic pool,
 the current Production frontend image/revision, and retained rollback state.
+Preview and Test candidate containers are governed by their deployment locks
+and do not invalidate Production preflight solely by changing a whole-server
+container count.
 
 Every future Production frontend candidate must be the exact
 `production-release` head and contain `deploy/production-release-manifest.json`.
