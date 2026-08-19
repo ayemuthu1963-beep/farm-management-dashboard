@@ -2,35 +2,35 @@
   "schema_version": 1,
   "environment": "Production",
   "target_url": "https://muthufarms.com",
-  "deployment_kind": "coordinated-frontend-after-backend",
-  "release_note": "Allow expired fertiliser stock in Outgoing Stock and Adjustment Out",
-  "base_commit": "11d2a1493a7546328b5d7c2ee1bb002d7df0249b",
+  "deployment_kind": "frontend-only",
+  "release_note": "Use the dedicated farmland and location pin icon on the Farm Map homepage card",
+  "base_commit": "98f2a8b685b89b1f144b3a7918f8365328ab6831",
   "preview_approved": {
     "revision": "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e",
     "image_id": "sha256:b0e5301a08386cf1defb78be947f8b07b95b85c43dee0b3895d0228affbc0220",
-    "feature_revision": "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4",
+    "feature_revision": "ccfd04a15b713dbef1ba47248324b412042fe215",
     "verified_files": [
-      "tests/fertiliser-master-management.mjs"
+      "public/mfms/icons/farm-map.svg"
     ],
     "production_adaptations": [
-      "app/fertiliser-management/page.tsx",
       "deploy/production-release-manifest.json",
+      "lib/mfms-navigation.ts",
       "tests/farm-calendar-production-promotion.mjs"
     ]
   },
   "protected_invariants": {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "deployed-first-from-isolated-fertiliser-candidate",
+    "backend": "unchanged",
     "database": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/fertiliser-management/page.tsx",
     "deploy/production-release-manifest.json",
-    "tests/farm-calendar-production-promotion.mjs",
-    "tests/fertiliser-master-management.mjs"
+    "lib/mfms-navigation.ts",
+    "public/mfms/icons/farm-map.svg",
+    "tests/farm-calendar-production-promotion.mjs"
   ]
 }
