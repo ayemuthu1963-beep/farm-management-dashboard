@@ -270,7 +270,7 @@ assert.equal(
   manifest.release_note,
   "Include today in irrigation and water dashboard defaults, leaving missing values blank",
 )
-assert.equal(manifest.base_commit, "dde91ecec3ad92d5e8b4546db993e1815e5fe0f2")
+assert.equal(manifest.base_commit, "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
