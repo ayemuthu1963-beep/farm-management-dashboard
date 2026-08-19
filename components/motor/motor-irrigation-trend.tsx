@@ -10,8 +10,9 @@ interface Props {
 }
 
 function fmt(value: unknown, name: unknown): [string, string] {
-  const n = typeof value === "number" ? value : Number(value ?? 0)
   const label = String(name)
+  if (value === null || value === undefined) return ["", label]
+  const n = typeof value === "number" ? value : Number(value)
   if (label.toLowerCase().includes("runtime")) return [`${n.toLocaleString("en-IN")} h`, label]
   return [`${formatNumberIN(n)} L`, label]
 }

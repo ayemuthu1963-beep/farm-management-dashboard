@@ -154,6 +154,11 @@ assert.deepEqual([null, 0, 95, 96, 123, 144, 145].map((actual) => compareActualW
   "red", "red", "yellow", "light-green", "light-green", "light-green", "dark-green",
 ])
 assert.equal(compareActualWater(scheduled96, null).status, "scheduled-missing")
+assert.deepEqual(compareActualWater(scheduled96, null, true), {
+  status: "current-day-pending",
+  tone: "neutral",
+  explanation: "Today's actual irrigation data has not arrived yet",
+})
 assert.equal(compareActualWater(scheduled96, 0).status, "scheduled-missing")
 assert.equal(compareActualWater(scheduled96, 123).status, "within-schedule")
 assert.equal(compareActualWater(scheduled96, 144).status, "within-schedule")
@@ -173,6 +178,7 @@ assert.equal(compareActualWater(unavailable, 123).status, "schedule-unavailable"
 assert.equal(formatLitresPerTree(96.5), "96.5 L/Tree")
 assert.equal(formatLitresPerTree(96.25), "96.25 L/Tree")
 assert.equal(formatActualWater({ perTreeLitres: null }), "No records")
+assert.equal(formatActualWater({ perTreeLitres: null, isCurrentIncompleteDay: true }), "")
 assert.equal(formatActualWater({ perTreeLitres: 0 }), "0 L/Tree")
 
 // Unsaved editor values cannot affect tiles until a successful refetch becomes
@@ -315,21 +321,21 @@ assert.deepEqual(getIrrigationDateBounds("yesterday", 7, afterIstMidnight), {
 })
 for (const days of IRRIGATION_LAST_N_DAY_OPTIONS) {
   const query = new URLSearchParams(buildIrrigationPeriodQuery("lastN", days, afterIstMidnight))
-  const expectedStart = new Date(Date.UTC(2026, 7, 1 - (days - 1))).toISOString().slice(0, 10)
+  const expectedStart = new Date(Date.UTC(2026, 7, 2 - (days - 1))).toISOString().slice(0, 10)
   assert.equal(query.get("period"), "lastN")
   assert.equal(query.get("days"), String(days))
   assert.equal(query.get("startDate"), expectedStart)
-  assert.equal(query.get("endDate"), "2026-08-01")
+  assert.equal(query.get("endDate"), "2026-08-02")
 }
 const defaultQuery = new URLSearchParams(buildIrrigationPeriodQuery("lastN", undefined, afterIstMidnight))
 assert.equal(defaultQuery.get("days"), "7")
-assert.equal(defaultQuery.get("startDate"), "2026-07-26")
-assert.equal(defaultQuery.get("endDate"), "2026-08-01")
+assert.equal(defaultQuery.get("startDate"), "2026-07-27")
+assert.equal(defaultQuery.get("endDate"), "2026-08-02")
 
 // The same resolver used by the API route validates and resolves query input.
 assert.deepEqual(resolveIrrigationDateBounds(new URLSearchParams("period=lastN&days=10"), afterIstMidnight), {
-  startDate: "2026-07-23",
-  endDate: "2026-08-01",
+  startDate: "2026-07-24",
+  endDate: "2026-08-02",
   label: "Last 10 Days",
 })
 assert.deepEqual(resolveIrrigationDateBounds(new URLSearchParams("period=custom&startDate=2026-07-11&endDate=2026-07-19"), afterIstMidnight), {
@@ -395,7 +401,10 @@ assert.deepEqual(historyDates, [
 ])
 assert.equal(new Set(historyDates).size, 7)
 assert.match(route, /const historyDates = getRecentIrrigationHistoryDates\(endDate\)/)
+assert.match(route, /getSelectedDates\(startDate, endDate\)/)
+assert.match(route, /totalWaterLitres: null, totalRuntimeHours: null/)
 assert.match(map, /Seven-day scheduled vs actual/)
+assert.match(map, /day\.isCurrentIncompleteDay/)
 assert.doesNotMatch(map, /Five-day water per tree/)
 
 const history = buildRecentIrrigationHistory({

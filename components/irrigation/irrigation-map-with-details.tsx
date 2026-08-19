@@ -89,7 +89,7 @@ function AreaBox({
         </div>
         {(zone.fiveDayHistory ?? []).map((day: ZoneFiveDayHistory) => {
           const scheduled = scheduledWaterForZoneDate(persistedScheduleRows, scheduleLoadStatus, zone.id, day.date)
-          const comparison = compareActualWater(scheduled, day.perTreeLitres)
+          const comparison = compareActualWater(scheduled, day.perTreeLitres, day.isCurrentIncompleteDay)
           const actualDisplay = formatActualWater(day)
           return (
             <div key={`${zone.id}-${day.date}`} className="grid grid-cols-[2.3rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-md bg-muted/25 px-1 py-1 text-[9px] leading-tight tabular-nums" role="row">
@@ -101,14 +101,18 @@ function AreaBox({
                 {scheduled.display}
               </div>
               <div className="min-w-0 text-right" role="cell">
-                <span
-                  className={cn("inline-flex max-w-full items-center justify-end whitespace-nowrap rounded px-1 py-0.5 font-extrabold ring-1 ring-inset", ACTUAL_TONE_CLASSES[comparison.tone])}
-                  data-water-status={comparison.status}
-                  aria-label={`${actualDisplay}. ${comparison.explanation}.`}
-                  title={comparison.explanation}
-                >
-                  {actualDisplay}
-                </span>
+                {actualDisplay ? (
+                  <span
+                    className={cn("inline-flex max-w-full items-center justify-end whitespace-nowrap rounded px-1 py-0.5 font-extrabold ring-1 ring-inset", ACTUAL_TONE_CLASSES[comparison.tone])}
+                    data-water-status={comparison.status}
+                    aria-label={`${actualDisplay}. ${comparison.explanation}.`}
+                    title={comparison.explanation}
+                  >
+                    {actualDisplay}
+                  </span>
+                ) : (
+                  <span className="sr-only" data-water-status={comparison.status}>{comparison.explanation}</span>
+                )}
               </div>
             </div>
           )

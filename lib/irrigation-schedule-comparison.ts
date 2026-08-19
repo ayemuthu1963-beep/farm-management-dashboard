@@ -24,6 +24,7 @@ export type ScheduledWaterKind = "loading" | "scheduled" | "not-scheduled" | "un
 export type ActualWaterStatus =
   | "schedule-loading"
   | "schedule-unavailable"
+  | "current-day-pending"
   | "scheduled-missing"
   | "below-schedule"
   | "within-schedule"
@@ -135,7 +136,8 @@ export function formatLitresPerTree(value: number): string {
   return `${value.toLocaleString("en-IN", { maximumFractionDigits: 20 })} L/Tree`
 }
 
-export function formatActualWater(day: Pick<ZoneFiveDayHistory, "perTreeLitres">): string {
+export function formatActualWater(day: Pick<ZoneFiveDayHistory, "perTreeLitres" | "isCurrentIncompleteDay">): string {
+  if (day.isCurrentIncompleteDay && day.perTreeLitres === null) return ""
   return day.perTreeLitres === null ? "No records" : formatLitresPerTree(day.perTreeLitres)
 }
 
@@ -165,7 +167,11 @@ export function scheduledWaterForZoneDate(
 export function compareActualWater(
   scheduled: ScheduledWater,
   actualLitres: number | null,
+  isCurrentIncompleteDay = false,
 ): ActualWaterComparison {
+  if (isCurrentIncompleteDay && actualLitres === null) {
+    return { status: "current-day-pending", tone: "neutral", explanation: "Today's actual irrigation data has not arrived yet" }
+  }
   if (scheduled.kind === "loading") {
     return { status: "schedule-loading", tone: "neutral", explanation: "Scheduled water is still loading" }
   }
