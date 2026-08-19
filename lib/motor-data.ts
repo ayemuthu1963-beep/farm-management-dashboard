@@ -32,15 +32,15 @@ export interface MotorSummaryStat {
 
 export interface MotorChartPoint {
   date: string
-  M1: number
-  M2: number
-  M3: number
+  M1: number | null
+  M2: number | null
+  M3: number | null
 }
 
 export interface MotorIrrigationTrendPoint {
   date: string
-  totalRuntimeHours: number
-  totalWaterLitres: number
+  totalRuntimeHours: number | null
+  totalWaterLitres: number | null
 }
 
 export interface ValveRecord {

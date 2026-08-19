@@ -45,7 +45,9 @@ export function WellChart({ data }: WellChartProps) {
             axisLine={false}
           />
           <Tooltip
-            formatter={(value, name) => [`${formatNumberIN(Math.round(Number(value)))} L`, name]}
+            formatter={(value, name) => value === null || value === undefined
+              ? ["", name]
+              : [`${formatNumberIN(Math.round(Number(value)))} L`, name]}
             contentStyle={{
               borderRadius: 8,
               border: "1px solid var(--border)",

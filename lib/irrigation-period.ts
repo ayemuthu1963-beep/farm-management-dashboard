@@ -66,8 +66,8 @@ export function getIrrigationDateBounds(
 
   const days = normalizeIrrigationLastNDays(lastNDays)
   return {
-    startDate: shiftIsoDate(yesterday, -(days - 1)),
-    endDate: yesterday,
+    startDate: shiftIsoDate(today, -(days - 1)),
+    endDate: today,
     label: `Last ${days} Days`,
   }
 }
@@ -114,6 +114,6 @@ export function resolveIrrigationDateBounds(
 }
 
 export function getRecentIrrigationHistoryDates(endDate?: string, now = new Date()): string[] {
-  const finalDate = endDate ?? shiftIsoDate(getIstIsoDate(now), -1)
+  const finalDate = endDate ?? getIstIsoDate(now)
   return Array.from({ length: 7 }, (_, index) => shiftIsoDate(finalDate, -index))
 }

@@ -131,6 +131,29 @@ assert.equal(southEveningOnly.morningWaterDisplay, "—")
 assert.equal(southEveningOnly.eveningWater, 390000)
 assert.equal(southEveningOnly.eveningWaterDisplay, "3,90,000")
 assert.equal(southEveningOnly.differenceInMorningReadings, null)
+
+const dashboardWithMissingCurrentDay = buildWellDashboardData({
+  ...payload,
+  summary: {
+    ...payload.summary,
+    selected_end_date: "2026-07-27",
+    calendar_days: 3,
+  },
+})
+const blankNorthToday = dashboardWithMissingCurrentDay.northWellRecords[0]
+const blankSouthToday = dashboardWithMissingCurrentDay.southWellRecords[0]
+assert.equal(blankNorthToday.date, "27/07/2026")
+assert.equal(blankNorthToday.isPlaceholder, true)
+assert.equal(blankNorthToday.morningWaterDisplay, "")
+assert.equal(blankNorthToday.eveningWaterDisplay, "")
+assert.equal(blankNorthToday.waterPumpedOut, null)
+assert.equal(blankSouthToday.isPlaceholder, true)
+assert.deepEqual(toChartData(dashboardWithMissingCurrentDay.northWellRecords).at(-1), {
+  date: "27/07/2026",
+  morningWater: null,
+  eveningWater: null,
+  pumpedOut: null,
+})
 assert.equal(formatSignedLitres(25000, true), "+25,000 L")
 assert.equal(formatSignedLitres(-25000, true), "−25,000 L")
 assert.equal(formatSignedLitres(0, true), "0 L")
