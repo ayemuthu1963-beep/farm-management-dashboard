@@ -12,76 +12,63 @@ const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Production")
 assert.equal(manifest.target_url, "https://muthufarms.com")
-assert.equal(manifest.deployment_kind, "frontend-only")
+assert.equal(manifest.deployment_kind, "coordinated-frontend-after-backend")
 assert.equal(
   manifest.release_note,
-  "Farm Irrigation Table scheduled-versus-actual comparison",
+  "Allow expired fertiliser stock in Outgoing Stock and Adjustment Out",
 )
-assert.equal(manifest.base_commit, "a3e63db408ffbd063d2f58724eed617d130eff22")
+assert.equal(manifest.base_commit, "11d2a1493a7546328b5d7c2ee1bb002d7df0249b")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "8c1ce1b2b2945e8968104fb5699d6cbfb16b795f",
-  image_id: "sha256:131f76a8dd6532e171dbd68c1da678b1313887ec67fe8af1ee3971cf061c009d",
-  feature_revision: "0857b91f661e05b8321bc1646347af248bb8f42b",
+  revision: "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e",
+  image_id: "sha256:b0e5301a08386cf1defb78be947f8b07b95b85c43dee0b3895d0228affbc0220",
+  feature_revision: "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4",
   verified_files: [
-    "app/irrigation-management/page.tsx",
-    "components/irrigation/irrigation-map-with-details.tsx",
-    "components/irrigation/irrigation-plan-tables.tsx",
-    "lib/irrigation-schedule-comparison.ts",
-    "tests/irrigation-management-corrections.mjs",
+    "tests/fertiliser-master-management.mjs",
   ],
   production_adaptations: [
+    "app/fertiliser-management/page.tsx",
     "deploy/production-release-manifest.json",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/irrigation-plan.mjs",
   ],
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
   test: "unchanged",
-  backend: "unchanged",
+  backend: "deployed-first-from-isolated-fertiliser-candidate",
   database: "unchanged",
   odk: "unchanged",
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
 
-const previewApprovedDigests = {
-  "app/irrigation-management/page.tsx": "68842b3d1797923e6c7d0e0cbfe530a63be4d4a84deb9b0fdc1f428e833bc8b5",
-  "components/irrigation/irrigation-map-with-details.tsx": "20029ea95772ee82d3dcd0d23d673e20d0a3676163b1da5592756d83e480370f",
-  "components/irrigation/irrigation-plan-tables.tsx": "3303a86d059a9acb7e587eac27a6861facfc11381458e5879b71fed30fbe783a",
-  "lib/irrigation-schedule-comparison.ts": "4fa217a24e009c6f3f58ae597c53c45b7256d22671b10abf2858dccd8da594e9",
-  "tests/irrigation-management-corrections.mjs": "de58b8e7aa95868075cb91743ef9a174626c3c952d42f92ecb0727b9cad24d7d",
-}
-for (const [file, expectedDigest] of Object.entries(previewApprovedDigests)) {
-  assert.equal(sha256(file), expectedDigest, `${file} differs from the Preview-approved blob`)
-}
+assert.equal(
+  sha256("tests/fertiliser-master-management.mjs"),
+  "49696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b",
+  "The focused fertiliser regression test differs from the Preview-approved file",
+)
 
 assert.deepEqual(manifest.allowed_paths, [
-  "app/irrigation-management/page.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/irrigation/irrigation-plan-tables.tsx",
+  "app/fertiliser-management/page.tsx",
   "deploy/production-release-manifest.json",
-  "lib/irrigation-schedule-comparison.ts",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/irrigation-plan.mjs",
+  "tests/fertiliser-master-management.mjs",
 ])
 
-const page = read("app/irrigation-management/page.tsx")
-const table = read("components/irrigation/irrigation-map-with-details.tsx")
-const plan = read("components/irrigation/irrigation-plan-tables.tsx")
-assert.match(page, /parsePersistedMotorRunScheduleRows/)
-assert.match(page, /motor-run-schedule/)
-assert.match(table, /Farm Irrigation Table/)
-assert.match(table, /data-water-status=/)
-assert.match(table, /min-w-\[96rem\]/)
-assert.match(plan, /onPersistedScheduleChange/)
-assert.match(plan, /parsePersistedMotorRunScheduleRows/)
+const page = read("app/fertiliser-management/page.tsx")
+const adjustmentTypeHandler = page.split("const handleAdjustmentTypeChange", 2)[1].split("const handleRequirementProductChange", 1)[0]
 
-const productionProxy = read("app/api/operator-settings/[[...path]]/route.ts")
-assert.match(productionProxy, /getAuthenticatedUserAssertionHeaders/)
-assert.match(productionProxy, /irrigation-plan/)
-assert.match(productionProxy, /drip-output\|motor-run-schedule/)
-assert.doesNotMatch(productionProxy, /irrigation-pipeline-signing|worker-management-signing/)
+assert.match(page, /earliest expiry first, including expired batches; null-expiry batches last/)
+assert.match(page, /Expired batches are included and allocated first by FEFO/)
+assert.match(page, /Adjustment Out includes expired stock and allocates the oldest expiry first/)
+assert.match(page, /adjustmentType !== "ADJUSTMENT_OUT".*eligible_available_quantity/)
+assert.match(adjustmentTypeHandler, /value !== "ADJUSTMENT_OUT"/)
+assert.match(adjustmentTypeHandler, /eligible_available_quantity/)
+assert.match(page, /const mfmsEnvironmentLabel = process\.env\.NEXT_PUBLIC_MFMS_ENV_BANNER/)
+assert.match(page, /const mfmsDatabaseLabel = process\.env\.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL/)
+assert.doesNotMatch(page, /source: "mfms_server_uat"/)
+assert.doesNotMatch(page, /No valid non-expired stock is available/)
+assert.doesNotMatch(page, /uses only non-expired eligible stock/)
+assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
+assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Farm Irrigation Table scheduled-versus-actual Preview-to-Production parity checks: PASS")
+console.log("Expired fertiliser stock Preview-to-Production contract checks: PASS")
