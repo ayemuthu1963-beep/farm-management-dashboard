@@ -37,28 +37,28 @@ readonly state_dir="/home/muthu/.local/state/mfms-production-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
-readonly coordinated_candidate_revision="9a577add2308b85637fcf05ee49b6274e19cc2dc"
-readonly coordinated_candidate_tree="e102fe82bdb6b009012933684c6db3d927f53a7a"
-readonly coordinated_backend_revision="94b28f17702e409e13d25e288fc5cd4b9bbef545"
-readonly coordinated_backend_container_id="969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47"
-readonly coordinated_backend_image_id="sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512"
-readonly coordinated_backend_environment_sha256="90213d0772f3fa45c40987748bc4b1815cdb55fb24e701ecd4a2bcc941e81e12"
-readonly coordinated_backup_path="/home/muthu/.local/state/mfms-production-github/database-backups/mfms_server_prod-pre-94b28f17702e409e13d25e288fc5cd4b9bbef545-20260818T050946Z.dump"
-readonly coordinated_backup_bytes="1762112"
-readonly coordinated_backup_sha256="9ea00949fd57a579bbee1b6765f8faf7bc88268166bc05c5cc087088dcd47e13"
+readonly coordinated_candidate_revision="98f2a8b685b89b1f144b3a7918f8365328ab6831"
+readonly coordinated_candidate_tree="df66d0dd2c93b9baa321741acd4fec5ab5bddbc9"
+readonly coordinated_backend_revision="42aa24242565ef27c4aa434a579824e44e74e1ee"
+readonly coordinated_backend_container_id="016b4a1ed493ca712bf581b39136ba9c46802f9be7ff95ccaa59865ab5d6d607"
+readonly coordinated_backend_image_id="sha256:12661b0f748414b6314206070f881524d2c91b7dd0c19a7d726900e220486287"
+readonly coordinated_backend_environment_sha256="d4f79adfac2a47311efa4fc94e39ef966d46a5007486bfab088c52407b6f315a"
+readonly coordinated_backup_path="/home/muthu/.local/state/mfms-production-github/database-backups/mfms_server_prod-pre-42aa24242565ef27c4aa434a579824e44e74e1ee-20260819T001045Z.dump"
+readonly coordinated_backup_bytes="1775062"
+readonly coordinated_backup_sha256="3958e3f213c39d6a02a85c89152f72d841d7f4dc810f27e661d9d4ec6dff046a"
 readonly coordinated_settings_migration="db/migrations/20260818_production_irrigation_plan_settings.sql"
 readonly coordinated_settings_sha256="87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1"
 readonly coordinated_audit_migration="db/migrations/20260818_production_irrigation_plan_persistence_v2.sql"
 readonly coordinated_audit_sha256="5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9"
-readonly coordinated_frontend_baseline_revision="e9833917c0a7fd190d933acb8cb234f60f5c8c65"
-readonly coordinated_frontend_baseline_container_id="2e8781b403c115b08a15faf0f88e75fca1faa8a6f055128365329e159a119436"
-readonly coordinated_frontend_baseline_image_id="sha256:6f3e81bef1f52c643e12c37a72b195d146a28e3f2eb6ca681cc6d9192b3081a8"
-readonly coordinated_frontend_baseline_environment_sha256="530e3be8c0957715d98b4253b2b7d50c39f5115b85d8e70543ac7f3cb09883d7"
+readonly coordinated_frontend_baseline_revision="11d2a1493a7546328b5d7c2ee1bb002d7df0249b"
+readonly coordinated_frontend_baseline_container_id="7f701efa397478d20f74e7a07bf1be74dfe57ff3fccbeb287c55f6c51e8c2753"
+readonly coordinated_frontend_baseline_image_id="sha256:f4b44f015e09af5b40af98ee86b468e762f8a3ee7e124e3f85923edbed815eba"
+readonly coordinated_frontend_baseline_environment_sha256="ccedcc9c454bc1f4e5d13572d0458ddf75d64d29fd132a9a216aebeaccddd65b"
 readonly coordinated_frontend_baseline_ipv4="172.19.128.7"
 readonly coordinated_verification_actor="production-release-verification"
-readonly coordinated_preview_revision="108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"
-readonly coordinated_preview_feature_revision="04fd5664137809605721665cafd6ffaad4264ec9"
-readonly coordinated_preview_merge_base="9842f21a4bb04ff4f1750790392dbfee0dc941d3"
+readonly coordinated_preview_revision="00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"
+readonly coordinated_preview_feature_revision="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
+readonly coordinated_preview_merge_base="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
 
 [[ "$production_url" == "https://muthufarms.com" ]] \
   || blocked "the public target is not Production"
@@ -769,6 +769,20 @@ try:
             ORDER BY tgname
         """)
         triggers = cursor.fetchall()
+        fertiliser_tables = {}
+        for table_name, order_by in (
+            ("fertiliser_categories", "category_id"),
+            ("fertiliser_products", "product_id"),
+            ("fertiliser_stock_batches", "batch_id"),
+            ("fertiliser_stock_transactions", "transaction_id"),
+            ("fertiliser_transaction_allocations", "allocation_id"),
+        ):
+            cursor.execute(f"SELECT * FROM {table_name} ORDER BY {order_by}")
+            rows = cursor.fetchall()
+            fertiliser_tables[table_name] = {
+                "count": len(rows),
+                "sha256": digest(rows),
+            }
 finally:
     connection.rollback()
     connection.close()
@@ -800,6 +814,7 @@ print(json.dumps({
     "put_audit_evidence": put_audit_evidence,
     "triggers": triggers,
     "trigger_sha256": digest(triggers),
+    "fertiliser_tables": fertiliser_tables,
 }, default=str, separators=(",", ":"), sort_keys=True))
 PY_COORDINATED_DATABASE
   [[ -s "$output" ]] || blocked "coordinated database evidence is empty"
@@ -830,23 +845,44 @@ if evidence.get("triggers") != [{"tgenabled": "O", "tgname": "mfms_irrigation_pl
 for key in ("ledger_sha256", "settings_sha256", "audit_sha256", "trigger_sha256"):
     if re.fullmatch(r"[0-9a-f]{64}", str(evidence.get(key, ""))) is None:
         raise SystemExit(f"coordinated database evidence has an invalid {key}")
+expected_fertiliser_tables = {
+    "fertiliser_categories",
+    "fertiliser_products",
+    "fertiliser_stock_batches",
+    "fertiliser_stock_transactions",
+    "fertiliser_transaction_allocations",
+}
+fertiliser_tables = evidence.get("fertiliser_tables")
+if not isinstance(fertiliser_tables, dict) or set(fertiliser_tables) != expected_fertiliser_tables:
+    raise SystemExit("coordinated fertiliser database fingerprint is incomplete")
+for table_name, fingerprint in fertiliser_tables.items():
+    if not isinstance(fingerprint.get("count"), int) or fingerprint["count"] < 0:
+        raise SystemExit(f"coordinated fertiliser row count is invalid: {table_name}")
+    if re.fullmatch(r"[0-9a-f]{64}", str(fingerprint.get("sha256", ""))) is None:
+        raise SystemExit(f"coordinated fertiliser fingerprint is invalid: {table_name}")
 PY_VALIDATE_COORDINATED_DATABASE
 }
 
-probe_authenticated_irrigation_get() {
-  local path=$1
-  docker exec -i "$backend_container" python - "$path" <<'PY_AUTHENTICATED_IRRIGATION_GET'
+probe_authenticated_fertiliser_get() {
+  docker exec -i "$backend_container" python - <<'PY_AUTHENTICATED_FERTILISER_GET'
 import base64
+from collections import defaultdict
+from datetime import date
+from decimal import Decimal
 import hashlib
 import hmac
 import json
+import os
 import sys
 import time
 from urllib.request import Request, urlopen
 
+import psycopg
+from psycopg.rows import dict_row
+
 from app.config import get_settings
 
-path = sys.argv[1]
+path = "/api/fertiliser/stock"
 actor = "production-frontend-coordinated-guard"
 settings = get_settings()
 timestamp = str(int(time.time()))
@@ -870,43 +906,166 @@ request = Request(
 )
 with urlopen(request, timeout=10) as response:
     payload = json.load(response)
-    if response.status != 200 or not isinstance(payload.get("rows"), list) or len(payload["rows"]) != 6:
-        raise SystemExit("authenticated irrigation GET contract failed")
-print(f"authenticated_endpoint=GET {path} 200")
-PY_AUTHENTICATED_IRRIGATION_GET
+    if response.status != 200 or not isinstance(payload, list):
+        raise SystemExit("authenticated fertiliser stock GET contract failed")
+
+connection = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+try:
+    with connection.cursor() as cursor:
+        cursor.execute("SET TRANSACTION READ ONLY")
+        cursor.execute("""
+            with positive_batch_movements as (
+                select
+                    b.batch_id,
+                    coalesce(sum(
+                        case
+                            when t.transaction_type in ('OPENING', 'INCOMING', 'ADJUSTMENT_IN') then t.quantity
+                            else 0
+                        end
+                    ), 0) as positive_quantity
+                from fertiliser_stock_batches b
+                left join fertiliser_stock_transactions t on t.batch_id = b.batch_id
+                group by b.batch_id
+            ),
+            allocated as (
+                select
+                    a.batch_id,
+                    coalesce(sum(a.allocated_quantity), 0) as allocated_quantity
+                from fertiliser_transaction_allocations a
+                join fertiliser_stock_transactions t on t.transaction_id = a.transaction_id
+                where t.transaction_type in ('OUTGOING', 'ADJUSTMENT_OUT', 'DISPOSAL')
+                group by a.batch_id
+            )
+            select
+                b.product_id,
+                b.batch_id,
+                b.is_active as batch_is_active,
+                b.expiry_date,
+                b.received_date,
+                p.is_active as product_is_active,
+                c.is_active as category_is_active,
+                coalesce(pbm.positive_quantity, 0) - coalesce(a.allocated_quantity, 0) as available_quantity
+            from fertiliser_stock_batches b
+            join fertiliser_products p on p.product_id = b.product_id
+            join fertiliser_categories c on c.category_id = p.category_id
+            left join positive_batch_movements pbm on pbm.batch_id = b.batch_id
+            left join allocated a on a.batch_id = b.batch_id
+            order by b.product_id, b.expiry_date asc nulls last,
+                     b.received_date asc nulls last, b.batch_id asc
+        """)
+        batch_rows = cursor.fetchall()
+        cursor.execute("""
+            select p.product_id
+            from fertiliser_products p
+            join fertiliser_categories c on c.category_id = p.category_id
+            where p.is_active = false or c.is_active = false
+            order by p.product_id
+        """)
+        inactive_master_ids = {int(row["product_id"]) for row in cursor.fetchall()}
+finally:
+    connection.rollback()
+    connection.close()
+
+api_by_product = {int(row["product_id"]): row for row in payload}
+if len(api_by_product) != len(payload):
+    raise SystemExit("authenticated fertiliser stock GET returned duplicate products")
+
+available_by_product = defaultdict(list)
+inactive_product_ids = set(inactive_master_ids)
+zero_balance_count = 0
+for row in batch_rows:
+    product_id = int(row["product_id"])
+    quantity = Decimal(row["available_quantity"])
+    if not row["product_is_active"] or not row["category_is_active"]:
+        inactive_product_ids.add(product_id)
+    if (
+        row["batch_is_active"]
+        and row["product_is_active"]
+        and row["category_is_active"]
+        and quantity <= 0
+    ):
+        zero_balance_count += 1
+    if (
+        row["batch_is_active"]
+        and row["product_is_active"]
+        and row["category_is_active"]
+        and quantity > 0
+    ):
+        available_by_product[product_id].append(row)
+
+if inactive_product_ids.intersection(api_by_product):
+    raise SystemExit("inactive fertiliser product or category appeared in the stock API")
+if not inactive_product_ids:
+    raise SystemExit("live fertiliser evidence has no inactive product exclusion case")
+if zero_balance_count == 0:
+    raise SystemExit("live fertiliser evidence has no zero-balance exclusion case")
+
+expired_positive_count = 0
+mixed_expired_later = False
+dated_then_null = False
+for product_id, rows in available_by_product.items():
+    api_row = api_by_product.get(product_id)
+    if api_row is None:
+        raise SystemExit("active positive-balance fertiliser product is missing from the stock API")
+    expected_total = sum((Decimal(row["available_quantity"]) for row in rows), Decimal("0"))
+    actual_total = Decimal(str(api_row.get("eligible_available_quantity", "0")))
+    if actual_total != expected_total:
+        raise SystemExit("fertiliser available quantity differs from all active positive-balance batches")
+
+    seen_null = False
+    previous_expiry = None
+    has_expired = False
+    has_later = False
+    has_dated = False
+    has_null = False
+    for row in rows:
+        expiry = row["expiry_date"]
+        if expiry is None:
+            seen_null = True
+            has_null = True
+            continue
+        if seen_null or (previous_expiry is not None and expiry < previous_expiry):
+            raise SystemExit("fertiliser batch evidence is not FEFO with null expiry last")
+        previous_expiry = expiry
+        has_dated = True
+        if expiry < date.today():
+            has_expired = True
+            expired_positive_count += 1
+        else:
+            has_later = True
+    mixed_expired_later = mixed_expired_later or (has_expired and has_later)
+    dated_then_null = dated_then_null or (has_dated and has_null)
+
+if expired_positive_count == 0:
+    raise SystemExit("live fertiliser evidence has no expired active positive-balance batch")
+if not mixed_expired_later:
+    raise SystemExit("live fertiliser evidence has no expired-before-later FEFO case")
+if not dated_then_null:
+    raise SystemExit("live fertiliser evidence has no dated-before-null FEFO case")
+
+print(
+    f"authenticated_endpoint=GET {path} 200 "
+    f"expired_positive_batches={expired_positive_count} "
+    f"zero_balance_batches_excluded={zero_balance_count}"
+)
+PY_AUTHENTICATED_FERTILISER_GET
 }
 
-verify_authenticated_irrigation_endpoint_evidence() {
-  local backend_logs="$work_dir/coordinated-backend.log" path
+verify_authenticated_fertiliser_endpoint_evidence() {
+  local backend_logs="$work_dir/coordinated-backend.log"
   curl -fsS --max-time 10 http://127.0.0.1:8001/openapi.json \
     | python3 -c '
 import json
 import sys
 
 paths = json.load(sys.stdin).get("paths", {})
-required = (
-    "/api/operator-settings/irrigation-plan/drip-output",
-    "/api/operator-settings/irrigation-plan/motor-run-schedule",
-)
-raise SystemExit(0 if all({"get", "put"}.issubset(paths.get(path, {})) for path in required) else 1)
-' || blocked "coordinated backend OpenAPI is missing an irrigation GET or PUT operation"
-  for path in \
-    /api/operator-settings/irrigation-plan/drip-output \
-    /api/operator-settings/irrigation-plan/motor-run-schedule
-  do
-    probe_authenticated_irrigation_get "$path" \
-      || blocked "coordinated authenticated irrigation GET failed: $path"
-  done
+raise SystemExit(0 if "get" in paths.get("/api/fertiliser/stock", {}) else 1)
+' || blocked "coordinated backend OpenAPI is missing the fertiliser stock GET operation"
+  probe_authenticated_fertiliser_get \
+    || blocked "coordinated authenticated fertiliser stock GET failed"
   docker logs "$backend_container" > "$backend_logs" 2>&1
-  for path in \
-    /api/operator-settings/irrigation-plan/drip-output \
-    /api/operator-settings/irrigation-plan/motor-run-schedule
-  do
-    grep -Fq "\"GET $path HTTP/1.1\" 200 OK" "$backend_logs" \
-      || blocked "coordinated authenticated irrigation GET 200 evidence is missing: $path"
-    grep -Fq "\"PUT $path HTTP/1.1\" 200 OK" "$backend_logs" \
-      || blocked "coordinated authenticated irrigation PUT 200 evidence is missing: $path"
-  done
+  grep -Fq '"GET /api/fertiliser/stock HTTP/1.1" 200 OK' "$backend_logs" \
+    || blocked "coordinated authenticated fertiliser stock GET 200 evidence is missing"
 }
 
 validate_exact_coordinated_release_state() {
@@ -965,7 +1124,7 @@ raise SystemExit(0 if mounts == expected else 1)
 
   validate_coordinated_backup
   snapshot_coordinated_database_state "$coordinated_database_before"
-  verify_authenticated_irrigation_endpoint_evidence
+  verify_authenticated_fertiliser_endpoint_evidence
   snapshot_coordinated_database_state "$coordinated_database_after_read"
   cmp -s "$coordinated_database_before" "$coordinated_database_after_read" \
     || blocked "coordinated read-only endpoint preflight changed the Production database"
@@ -1009,11 +1168,9 @@ validate_exact_coordinated_content_provenance() {
     "$preview_feature_revision" "$preview_approved_revision")
   [[ "$actual_merge_base" == "$coordinated_preview_merge_base" ]] \
     || blocked "coordinated Preview and feature merge base differs from approval"
-  if git -C "$source_dir" merge-base --is-ancestor \
-    "$preview_feature_revision" "$preview_approved_revision"
-  then
-    blocked "coordinated content-provenance exception requires the approved non-ancestral graph"
-  fi
+  git -C "$source_dir" merge-base --is-ancestor \
+    "$preview_feature_revision" "$preview_approved_revision" \
+    || blocked "coordinated Preview approval does not contain the fertiliser feature"
 
   : > "$evidence_file"
   for preview_path in "${preview_contract_lines[@]:4}"; do
@@ -1060,62 +1217,21 @@ import sys
 ) = sys.argv[1:]
 
 expected_kind = "coordinated-frontend-after-backend"
-expected_preview = "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"
-expected_candidate = "9a577add2308b85637fcf05ee49b6274e19cc2dc"
-expected_tree = "e102fe82bdb6b009012933684c6db3d927f53a7a"
-expected_feature = "04fd5664137809605721665cafd6ffaad4264ec9"
-expected_merge_base = "9842f21a4bb04ff4f1750790392dbfee0dc941d3"
+expected_preview = "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"
+expected_candidate = "98f2a8b685b89b1f144b3a7918f8365328ab6831"
+expected_tree = "df66d0dd2c93b9baa321741acd4fec5ab5bddbc9"
+expected_feature = "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
+expected_merge_base = "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
 expected_rows = {
-    "app/irrigation-management/page.tsx": (
-        "d0b0dc1968a03261f2b145c533e4d4970e471608",
-        "d0b0dc1968a03261f2b145c533e4d4970e471608",
-        "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
-        "989d946de2bebd41318a5471f88a781c397750409928366c415b5fd75d690d22",
-    ),
-    "components/irrigation/irrigation-charts-hybrid.tsx": (
-        "8df1c1b400435aefb55734061693a1745646030f",
-        "8df1c1b400435aefb55734061693a1745646030f",
-        "392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
-        "392d90595ee35870670ffa4a2cc0ca2efafea2b6e0f6efd95d8025039a5fa8ff",
-    ),
-    "components/irrigation/irrigation-map-with-details.tsx": (
-        "be77048141de46f12485fc5e3c2c0d6a44059374",
-        "be77048141de46f12485fc5e3c2c0d6a44059374",
-        "b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
-        "b60ff79e5577187a0d4398537e857ea5eb610beb32a74a6a391b2c1b907eb19e",
-    ),
-    "components/irrigation/irrigation-plan-tables.tsx": (
-        "8dec6117d5185bda57de7b22b3de013c639d9c28",
-        "8dec6117d5185bda57de7b22b3de013c639d9c28",
-        "4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
-        "4bb25e9c7d5c8a07c3200fc48ad8c263c92113b655207d1d525de4e14da5f390",
-    ),
-    "lib/irrigation-plan.ts": (
-        "f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f",
-        "f5f8ff688cf0ac5c3cb31ae2af3638e80dcefe3f",
-        "c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
-        "c0bace98f52146e6b69a39d000ffed07bb7eb3d99c85c7da7407867a35d37e67",
-    ),
-    "tests/irrigation-management-corrections.mjs": (
-        "aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6",
-        "aa116ec795d6f7f8028c5549c3dd76c56e1a0ea6",
-        "a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
-        "a1f8f9e26a9a09ac1916ffb74ab74f36e3c89d38dc829035e4ee72765e32e778",
-    ),
-    "tests/operator-settings-persistence.mjs": (
-        "9f5befbe0152aa1791c30e3a954cb538e5742b13",
-        "9f5befbe0152aa1791c30e3a954cb538e5742b13",
-        "aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
-        "aeff3f0e066a7203da11310cd9510b185976c5973336154af93441f57e535e50",
+    "tests/fertiliser-master-management.mjs": (
+        "e6ced2c6d369e4790e15e25406321302601ed9be",
+        "e6ced2c6d369e4790e15e25406321302601ed9be",
+        "49696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b",
+        "49696b7a5c89979d01d0501e45fdaeda8a079a057d51e7e803d5b5d4ea388c2b",
     ),
 }
 expected_runtime_paths = {
-    "app/api/operator-settings/[[...path]]/route.ts",
-    "app/irrigation-management/page.tsx",
-    "components/irrigation/irrigation-charts-hybrid.tsx",
-    "components/irrigation/irrigation-map-with-details.tsx",
-    "components/irrigation/irrigation-plan-tables.tsx",
-    "lib/irrigation-plan.ts",
+    "app/fertiliser-management/page.tsx",
 }
 
 identity = (
@@ -1193,28 +1309,23 @@ frontend_only_invariants = {
 coordinated_invariants = {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "deployed-first-from-isolated-irrigation-candidate",
-    "database": "additive-production-irrigation-migrations-only",
+    "backend": "deployed-first-from-isolated-fertiliser-candidate",
+    "database": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
     "proxy_configuration": "unchanged",
 }
-approved_coordinated_candidate = "9a577add2308b85637fcf05ee49b6274e19cc2dc"
-approved_coordinated_tree = "e102fe82bdb6b009012933684c6db3d927f53a7a"
-approved_preview_revision = "108314fee0f3ae0d7962e1a7f0d7b98866a75a5c"
-approved_feature_revision = "04fd5664137809605721665cafd6ffaad4264ec9"
+approved_coordinated_candidate = "98f2a8b685b89b1f144b3a7918f8365328ab6831"
+approved_coordinated_tree = "df66d0dd2c93b9baa321741acd4fec5ab5bddbc9"
+approved_preview_revision = "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"
+approved_feature_revision = "a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
 approved_verified_files = [
-    "app/irrigation-management/page.tsx",
-    "components/irrigation/irrigation-charts-hybrid.tsx",
-    "components/irrigation/irrigation-map-with-details.tsx",
-    "components/irrigation/irrigation-plan-tables.tsx",
-    "lib/irrigation-plan.ts",
-    "tests/irrigation-management-corrections.mjs",
-    "tests/operator-settings-persistence.mjs",
+    "tests/fertiliser-master-management.mjs",
 ]
 approved_production_adaptations = [
-    "app/api/operator-settings/[[...path]]/route.ts",
-    "tests/irrigation-plan.mjs",
+    "app/fertiliser-management/page.tsx",
+    "deploy/production-release-manifest.json",
+    "tests/farm-calendar-production-promotion.mjs",
 ]
 
 if data.get("schema_version") != 1:
@@ -1398,7 +1509,7 @@ prepare_production_candidate() {
 
 preflight_production() {
   [[ "$candidate_revision" == "$coordinated_candidate_revision" ]] \
-    || blocked "the coordinated frontend preflight is approved only for the exact irrigation candidate"
+    || blocked "the coordinated frontend preflight is approved only for the exact fertiliser candidate"
   prepare_production_candidate
   echo "preflight_environment=Production"
   echo "preflight_component=frontend"
@@ -1414,7 +1525,7 @@ preflight_production() {
   echo "preflight_backup_path=$coordinated_backup_path"
   echo "preflight_backup_bytes=$coordinated_backup_bytes"
   echo "preflight_backup_sha256=$coordinated_backup_sha256"
-  echo "preflight_authenticated_irrigation_operations=4"
+  echo "preflight_authenticated_fertiliser_operations=1"
   echo "preflight_database_evidence_sha256=$(sha256sum "$coordinated_database_before" | awk '{print $1}')"
   echo "database_writes=none"
   echo "backend_replacement=none"
@@ -1496,8 +1607,8 @@ deploy_production() {
     echo "deployment_kind=coordinated-frontend-after-backend"
     echo "coordinated_backend_verified=true"
     echo "coordinated_backup_verified=true"
-    echo "coordinated_migrations_verified=true"
-    echo "coordinated_endpoints_verified=true"
+    echo "coordinated_fertiliser_data_fingerprint_verified=true"
+    echo "coordinated_fertiliser_api_verified=true"
   fi
   echo "rollback_container=$transaction_backup"
   if [[ "$worker_secret_loaded" -eq 1 ]]; then
