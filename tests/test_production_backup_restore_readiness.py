@@ -1,7 +1,11 @@
 import contextlib
 import io
+import json
 import pathlib
 import re
+import subprocess
+import sys
+import tempfile
 import types
 import unittest
 
@@ -9,6 +13,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts" / "production-server-backend-deploy.sh"
 MARKER = "PY_DATABASE_BACKUP_FINAL_READINESS"
+RESTORE_VALIDATION_MARKER = "PY_DATABASE_BACKUP_RESTORE_VALIDATION"
 
 
 def load_readiness_module():
@@ -19,6 +24,35 @@ def load_readiness_module():
     namespace = {"__name__": "mfms_restore_readiness"}
     exec(compile(match.group(1), str(HELPER), "exec"), namespace)
     return namespace
+
+
+def run_restore_validator(*, ledger_count, baseline_migration_count):
+    source = HELPER.read_text(encoding="utf-8").replace("\r\n", "\n")
+    match = re.search(
+        rf"<<'{RESTORE_VALIDATION_MARKER}'\n([\s\S]*?)\n{RESTORE_VALIDATION_MARKER}",
+        source,
+    )
+    if not match:
+        raise AssertionError("embedded restore validator is missing")
+    payload = {
+        "database": "mfms_server_prod",
+        "harvest_records": True,
+        "motor_runtime_entries": True,
+        "mfms_motor_operator_settings": True,
+        "mfms_irrigation_targets": True,
+        "well_water_readings": True,
+        "migration_ledger": True,
+        "ledger_count": ledger_count,
+        "baseline_migration_count": baseline_migration_count,
+    }
+    with tempfile.TemporaryDirectory() as directory:
+        report = pathlib.Path(directory) / "restore.json"
+        report.write_text(json.dumps(payload), encoding="utf-8")
+        return subprocess.run(
+            [sys.executable, "-c", match.group(1), str(report), "mfms_server_prod"],
+            capture_output=True,
+            text=True,
+        )
 
 
 class FakeTime:
@@ -178,6 +212,21 @@ class RestoreReadinessTests(unittest.TestCase):
             run_gate(fake, timeout=4)
         self.assertEqual(fake.createdb_count, 0)
         self.assertFalse(any("pg_restore" in command for args in fake.commands for command in args))
+
+
+class RestoreLedgerValidationTests(unittest.TestCase):
+    def test_forward_migration_rows_do_not_block_a_retry(self):
+        result = run_restore_validator(ledger_count=3, baseline_migration_count=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_missing_ledger_or_baseline_fails_closed(self):
+        for ledger_count, baseline_count in ((0, 0), (3, 0), (True, 1)):
+            with self.subTest(ledger_count=ledger_count, baseline_count=baseline_count):
+                result = run_restore_validator(
+                    ledger_count=ledger_count,
+                    baseline_migration_count=baseline_count,
+                )
+                self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

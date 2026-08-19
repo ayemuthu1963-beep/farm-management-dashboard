@@ -48,6 +48,7 @@ readonly database_backup_dir="$state_dir/database-backups"
 readonly database_backup_credential_file="/etc/mfms-production/backup/mfms_backup.env"
 readonly database_backup_role="mfms_backup"
 readonly database_backup_postgres_major="16"
+readonly database_backup_restore_tmpfs_size_bytes="2147483648"
 readonly database_backup_restore_readiness_timeout_seconds="120"
 readonly database_backup_restore_stability_probes="3"
 readonly database_backup_restore_stability_interval_seconds="2"
@@ -144,7 +145,6 @@ database_backup_sha256=""
 database_backup_bytes=""
 database_backup_temporary=""
 database_backup_restore_container=""
-database_backup_restore_volume=""
 database_backup_restore_postgres_major=""
 database_backup_verified="false"
 database_backup_restore_verified="false"
@@ -1261,46 +1261,44 @@ PY_DATABASE_BACKUP_FINAL_READINESS
 }
 
 verify_database_backup_restore() {
-  local database_container=$1 dump_file=$2 database_image restore_report restore_container_id
+  local database_container=$1 dump_file=$2 database_image restore_report restore_container_id restore_mounts
   database_image=$(docker inspect --format '{{.Image}}' "$database_container")
   [[ "$database_image" =~ ^sha256:[0-9a-f]{64}$ ]] \
     || blocked "Production database image identity is invalid"
 
   database_backup_restore_container="mfms-production-backup-restore-${run_id}-${timestamp}"
-  database_backup_restore_volume="${database_backup_restore_container}-data"
   [[ -z "$(docker ps -aq --filter "name=^/${database_backup_restore_container}$")" ]] \
     || blocked "Production backup restore container name already exists"
-  [[ -z "$(docker volume ls -q --filter "name=^${database_backup_restore_volume}$")" ]] \
-    || blocked "Production backup restore volume name already exists"
-  docker volume create \
-    --label "com.muthufarms.mfms.purpose=production-backup-restore" \
-    --label "com.muthufarms.mfms.run-id=$run_id" \
-    "$database_backup_restore_volume" >/dev/null
-  [[ "$(docker volume inspect --format '{{.Name}}' "$database_backup_restore_volume")" \
-      == "$database_backup_restore_volume" ]] \
-    || blocked "Production backup restore volume identity is invalid"
-  [[ "$(docker volume inspect --format '{{index .Labels "com.muthufarms.mfms.purpose"}}|{{index .Labels "com.muthufarms.mfms.run-id"}}' \
-      "$database_backup_restore_volume")" == "production-backup-restore|$run_id" ]] \
-    || blocked "Production backup restore volume labels are invalid"
-  docker run --rm \
-    --network none \
-    --restart no \
-    --entrypoint sh \
-    --mount "type=volume,source=$database_backup_restore_volume,target=/var/lib/postgresql/data,volume-nocopy" \
-    "$database_image" \
-    -ec 'test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"' \
-    || blocked "Production backup restore volume is not empty"
   docker run -d \
     --name "$database_backup_restore_container" \
     --network none \
     --restart no \
     --shm-size 256m \
-    --mount "type=volume,source=$database_backup_restore_volume,target=/var/lib/postgresql/data,volume-nocopy" \
+    --mount "type=tmpfs,target=/var/lib/postgresql/data,tmpfs-size=$database_backup_restore_tmpfs_size_bytes,tmpfs-mode=0700" \
     --env POSTGRES_HOST_AUTH_METHOD=trust \
     "$database_image" >/dev/null
   restore_container_id=$(docker inspect --format '{{.Id}}' "$database_backup_restore_container")
   [[ "$restore_container_id" =~ ^[0-9a-f]{64}$ ]] \
     || blocked "Production backup restore container identity is invalid"
+  restore_mounts=$(docker inspect --format '{{json .HostConfig.Mounts}}' "$database_backup_restore_container")
+  python3 - "$database_backup_restore_tmpfs_size_bytes" "$restore_mounts" <<'PY_DATABASE_BACKUP_TMPFS_VALIDATION'
+import json
+import sys
+
+expected_size = int(sys.argv[1])
+mounts = json.loads(sys.argv[2])
+matches = [
+    mount
+    for mount in mounts
+    if mount.get("Type") == "tmpfs"
+    and mount.get("Target") == "/var/lib/postgresql/data"
+]
+if len(matches) != 1:
+    raise SystemExit("Production backup restore tmpfs mount is missing or ambiguous")
+options = matches[0].get("TmpfsOptions") or {}
+if options.get("SizeBytes") != expected_size or options.get("Mode") != 0o700:
+    raise SystemExit("Production backup restore tmpfs capacity or mode is invalid")
+PY_DATABASE_BACKUP_TMPFS_VALIDATION
   wait_for_stable_database_backup_restore \
     "$database_backup_restore_container" "$restore_container_id"
   database_backup_restore_postgres_major="$database_backup_postgres_major"
@@ -1346,14 +1344,18 @@ for relation in (
 ):
     if payload.get(relation) is not True:
         raise SystemExit(f"Restored backup is missing baseline relation: {relation}")
-if payload.get("ledger_count") != 1 or payload.get("baseline_migration_count") != 1:
+ledger_count = payload.get("ledger_count")
+if (
+    not isinstance(ledger_count, int)
+    or isinstance(ledger_count, bool)
+    or ledger_count < 1
+    or payload.get("baseline_migration_count") != 1
+):
     raise SystemExit("Restored backup migration ledger does not match the approved Production baseline")
 PY_DATABASE_BACKUP_RESTORE_VALIDATION
 
   docker rm -f "$database_backup_restore_container" >/dev/null
   database_backup_restore_container=""
-  docker volume rm "$database_backup_restore_volume" >/dev/null
-  database_backup_restore_volume=""
   database_backup_restore_verified="true"
 }
 
@@ -1672,12 +1674,6 @@ cleanup() {
     docker rm -f "$database_backup_restore_container" >/dev/null 2>&1 || true
   fi
   database_backup_restore_container=""
-  if [[ -n "$database_backup_restore_volume" \
-      && "$database_backup_restore_volume" == mfms-production-backup-restore-*-data \
-      && -n "$(docker volume ls -q --filter "name=^${database_backup_restore_volume}$")" ]]; then
-    docker volume rm -f "$database_backup_restore_volume" >/dev/null 2>&1 || true
-  fi
-  database_backup_restore_volume=""
   if [[ -n "$database_backup_temporary" \
       && "$database_backup_temporary" == "$database_backup_dir"/."$database_name".* ]]; then
     rm -f "$database_backup_temporary"
