@@ -58,7 +58,7 @@ export default function AdminConsolePage() {
               <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">{environmentLabel}</p>
               <h1 className="mt-2 text-3xl font-black uppercase text-foreground">Admin Console</h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-muted-foreground">
-                Preview administration hub. Entries made here are restricted to the UAT database and must not be used for Production data.
+                Administration hub for {environmentLabel}. Entries are restricted to {databaseLabel}; confirm the configured target before saving.
               </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-xl border border-chart-2/25 bg-chart-2/10 px-4 py-3 text-sm font-extrabold text-chart-2">

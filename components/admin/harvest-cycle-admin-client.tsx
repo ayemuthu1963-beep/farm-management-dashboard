@@ -3,6 +3,14 @@
 import { useMemo, useState, useTransition } from "react"
 import { AlertTriangle, CalendarRange, CheckCircle2, CircleDollarSign, History, LockKeyhole, RefreshCw, ShieldCheck, Sprout } from "lucide-react"
 import { Panel } from "@/components/farm/panel"
+import { publicEnvironmentIdentity } from "@/lib/public-environment"
+
+const harvestCycleIdentity = publicEnvironmentIdentity(
+  process.env.NEXT_PUBLIC_MFMS_ENV,
+  process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL,
+)
+const harvestCycleEnvironment = harvestCycleIdentity.label
+const harvestCycleDatabase = harvestCycleIdentity.database ?? "unconfigured database"
 
 export interface HarvestCycleSummary {
   harvestCycle: string
@@ -207,7 +215,7 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
       setOpenResult({
         ok: true,
         message: "Open New Harvest Cycle saved.",
-        details: [`Cycle ${cycleNo.trim()} was opened in Preview without an End Date.`, "No harvest records were changed."],
+        details: [`Cycle ${cycleNo.trim()} was opened in ${harvestCycleEnvironment} without an End Date.`, "No harvest records were changed."],
       })
       startRefresh(() => window.location.reload())
     } catch (error) {
@@ -269,7 +277,7 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
       setCloseResult({
         ok: true,
         message: "Close Current Harvest Cycle saved.",
-        details: [`Cycle ${closeCycleNo} was marked Locked.`, "Preview database was updated."],
+        details: [`Cycle ${closeCycleNo} was marked Locked.`, `${harvestCycleEnvironment} database was updated.`],
       })
       startRefresh(() => window.location.reload())
     } catch (error) {
@@ -323,7 +331,7 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
       setSaleResult({
         ok: true,
         message: "Update Sale Details saved.",
-        details: [`Cycle ${saleCycleNo} total sale value and remarks were updated.`, "Preview database was updated."],
+        details: [`Cycle ${saleCycleNo} total sale value and remarks were updated.`, `${harvestCycleEnvironment} database was updated.`],
       })
       startRefresh(() => window.location.reload())
     } catch (error) {
@@ -343,9 +351,9 @@ export function HarvestCycleAdminClient({ cycles, latestCycle, openCycle, lastCl
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-black uppercase tracking-wide">Preview database write enabled</p>
-            <p className="mt-1 font-semibold">New Harvest Cycles created here are saved only to the MFMS Preview database.</p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-wide">Production is not targeted by this workflow.</p>
+            <p className="font-black uppercase tracking-wide">{harvestCycleEnvironment} database write enabled</p>
+            <p className="mt-1 font-semibold">New Harvest Cycles created here are saved only to {harvestCycleDatabase}.</p>
+            <p className="mt-1 text-xs font-bold uppercase tracking-wide">Writes are restricted to the configured {harvestCycleEnvironment} target.</p>
           </div>
         </div>
       </section>

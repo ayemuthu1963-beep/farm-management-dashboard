@@ -363,7 +363,7 @@ function fertiliserWriteError(
   const reason =
     (payload && typeof payload.error === "string" && payload.error)
     || detailMessage
-    || "The Preview server rejected the request."
+    || "The application server rejected the request."
   const error = new Error(`${prefix}: ${reason}`) as Error & { fieldErrors?: unknown }
   error.fieldErrors = detail
   return error

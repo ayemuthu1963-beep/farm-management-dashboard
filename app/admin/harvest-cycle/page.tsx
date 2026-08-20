@@ -106,7 +106,7 @@ export default async function HarvestCycleAdminPage() {
               <CalendarRange className="size-7" aria-hidden="true" />
             </span>
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">Preview Admin</p>
+              <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">Harvest Administration</p>
               <h1 className="mt-2 text-3xl font-black uppercase text-foreground">Harvest Cycle Admin</h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-muted-foreground">
                 Open, close and maintain Harvest Cycles, dates, sale details and Cycle totals.

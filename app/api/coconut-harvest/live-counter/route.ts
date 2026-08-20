@@ -2,8 +2,6 @@ import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
-const DEFAULT_COUNTER_URL = "http://mfms-harvest-counter-api-preview:8787/api/harvest-counter/public"
-
 function validDate(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
 }
@@ -21,7 +19,30 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Select a valid harvest date or date range." }, { status: 400 })
   }
 
-  const upstream = new URL(process.env.HARVEST_COUNTER_PUBLIC_API_URL || DEFAULT_COUNTER_URL)
+  const configuredUpstream = process.env.HARVEST_COUNTER_PUBLIC_API_URL?.trim()
+  if (!configuredUpstream) {
+    return NextResponse.json(
+      { error: "Harvest counter upstream is not configured." },
+      { status: 503 },
+    )
+  }
+
+  let upstream: URL
+  try {
+    upstream = new URL(configuredUpstream)
+  } catch {
+    return NextResponse.json(
+      { error: "Harvest counter upstream configuration is invalid." },
+      { status: 503 },
+    )
+  }
+
+  if (upstream.protocol !== "http:" && upstream.protocol !== "https:") {
+    return NextResponse.json(
+      { error: "Harvest counter upstream configuration is invalid." },
+      { status: 503 },
+    )
+  }
   if (useSingleDate) {
     upstream.searchParams.set("date", date)
   } else {

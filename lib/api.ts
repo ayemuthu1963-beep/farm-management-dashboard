@@ -1,7 +1,21 @@
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001"
-
 export function getApiBaseUrl(): string {
-  return (process.env.HARVEST_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "")
+  const configured = process.env.HARVEST_API_BASE_URL?.trim()
+  if (!configured) {
+    throw new Error("HARVEST_API_BASE_URL is required; no cross-environment fallback is permitted.")
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(configured)
+  } catch {
+    throw new Error("HARVEST_API_BASE_URL must be an absolute HTTP or HTTPS URL.")
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("HARVEST_API_BASE_URL must use HTTP or HTTPS.")
+  }
+
+  return configured.replace(/\/$/, "")
 }
 
 export function getBasicAuthHeader(): string | null {
