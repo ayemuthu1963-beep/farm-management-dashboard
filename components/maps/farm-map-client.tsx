@@ -1056,7 +1056,7 @@ export function FarmMapClient() {
       mapHeightClassName="h-[clamp(440px,60vh,620px)] md:h-[clamp(500px,62vh,680px)] lg:h-[clamp(520px,65vh,800px)]"
       mapTitle={
         <>
-          <span>MFMS Farm Map — Preview/UAT</span>
+          <span>MFMS Farm Map</span>
           <span className="ml-2 normal-case tracking-normal text-red-600">
             Markers from zoom {MARKER_ZOOM}; TreeNo labels from zoom {LABEL_ZOOM}.
           </span>

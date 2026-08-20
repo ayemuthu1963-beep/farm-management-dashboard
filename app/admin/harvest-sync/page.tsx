@@ -2,13 +2,20 @@ import Link from "next/link"
 import { ArrowLeft, DatabaseZap } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { HarvestManualReviewWorkspace } from "@/components/admin/harvest-manual-review-workspace"
-import { PreviewAdminNotice } from "@/components/admin/preview-admin-notice"
+import {
+  getPreviewDatabaseLabel,
+  getPreviewEnvironmentLabel,
+  PreviewAdminNotice,
+} from "@/components/admin/preview-admin-notice"
 import { PreviewOdkSourceCard } from "@/components/odk/preview-odk-source-card"
 import { previewOdkForms } from "@/lib/odk-preview"
 
 export const dynamic = "force-dynamic"
 
 export default function HarvestSyncAdminPage() {
+  const environmentLabel = getPreviewEnvironmentLabel()
+  const databaseLabel = getPreviewDatabaseLabel()
+
   return (
     <DashboardShell>
       <div className="space-y-6">
@@ -18,7 +25,7 @@ export default function HarvestSyncAdminPage() {
         </Link>
         <PreviewAdminNotice />
         <section className="rounded-2xl border border-primary/15 bg-card p-6 shadow-sm">
-          <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">Preview Harvest Admin</p>
+          <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-primary">Harvest Administration</p>
           <h1 className="mt-2 flex items-center gap-3 text-3xl font-black uppercase text-foreground">
             <DatabaseZap className="size-8" />
             Harvest Manual Review &amp; Import
@@ -28,8 +35,8 @@ export default function HarvestSyncAdminPage() {
           </p>
           <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <p><span className="font-extrabold">Mode:</span> Manual Review &amp; Import</p>
-            <p><span className="font-extrabold">Environment:</span> Preview / UAT</p>
-            <p><span className="font-extrabold">Database:</span> mfms_server_uat</p>
+            <p><span className="font-extrabold">Environment:</span> {environmentLabel}</p>
+            <p><span className="font-extrabold">Database:</span> {databaseLabel}</p>
             <p><span className="font-extrabold">ODK Project:</span> {previewOdkForms.harvest.projectId}</p>
             <p><span className="font-extrabold">Form:</span> {previewOdkForms.harvest.formId}</p>
           </div>

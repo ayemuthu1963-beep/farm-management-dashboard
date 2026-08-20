@@ -208,6 +208,10 @@ assert.match(deployScript, /data-mfms-environment=\"preview\"/)
 assert.match(deployScript, /data-mfms-database=\"mfms_server_uat\"/)
 assert.match(deployScript, /NEXT_PUBLIC_MFMS_ENV=preview/)
 assert.match(deployScript, /NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat/)
+assert.equal(
+  (previewDockerfile.match(/ENV HARVEST_COUNTER_PUBLIC_API_URL=http:\/\/mfms-harvest-counter-api-preview:8787\/api\/harvest-counter\/public/g) ?? []).length,
+  2,
+)
 assert.doesNotMatch(deployScript, /wait_for_version "\$preview_url"/)
 assert.doesNotMatch(deployScript, /smoke_routes "\$preview_url"/)
 assert.doesNotMatch(
@@ -268,9 +272,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Include today in irrigation and water dashboard defaults, leaving missing values blank",
+  "Correct environment wording and fail closed cross-environment frontend fallbacks",
 )
-assert.equal(manifest.base_commit, "00ac7059f2110ea14b44508c5d4e6412d9bd8f1e")
+assert.equal(manifest.base_commit, "7cf302811f87f4db4be3248131289ac72aba54b7")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -280,26 +284,25 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/irrigation-management/route.ts",
-  "app/api/motor-runtime/dashboard/route.ts",
-  "components/farm/date-range-selector.tsx",
-  "components/farm/well-chart.tsx",
-  "components/farm/well-table.tsx",
-  "components/irrigation/irrigation-charts-hybrid.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/motor/motor-date-range-selector.tsx",
-  "components/motor/motor-irrigation-trend.tsx",
-  "lib/irrigation-data.ts",
-  "lib/irrigation-period.ts",
-  "lib/irrigation-schedule-comparison.ts",
-  "lib/motor-data.ts",
-  "lib/well-data.ts",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/motor-runtime-water-pumped.mjs",
-  "tests/well-water-authoritative-daily-values.mjs",
-  "tests/well-water-page-corrections.mjs",
+  "Dockerfile.preview",
+  "app/admin/harvest-cycle/page.tsx",
+  "app/admin/harvest-sync/page.tsx",
+  "app/admin/page.tsx",
+  "app/api/coconut-harvest/live-counter/route.ts",
+  "app/fertiliser-management/page.tsx",
+  "components/admin/beetle-trap-admin-client.tsx",
+  "components/admin/harvest-cycle-admin-client.tsx",
+  "components/admin/preview-admin-notice.tsx",
+  "components/maps/farm-map-client.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/api.ts",
+  "lib/fertiliser-api.ts",
+  "lib/odk-preview.ts",
+  "package.json",
+  "tests/application-hygiene.mjs",
+  "tests/harvest-sync-exact-duplicates.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/preview-targeted-repair.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

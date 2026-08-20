@@ -356,7 +356,7 @@ export function BeetleTrapAdminClient({ summary }: { summary: AdminSummary }) {
                 Change Trap Type Only requires Trap No and Trap Type. X must be longitude around 77.x and Y latitude around 10.x.
               </p>
             </div>
-            <p className="mt-2 font-semibold text-primary">Loaded {summary.locations.length} active trap locations from Preview.</p>
+            <p className="mt-2 font-semibold text-primary">Loaded {summary.locations.length} active trap locations from the configured database.</p>
           </div>
           <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90" disabled={isTrapChecking}>
             {isTrapChecking ? "Saving..." : "Validate / Save Trap Admin Action"}

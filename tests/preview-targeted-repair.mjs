@@ -14,7 +14,9 @@ const fertiliserApi = read("lib/fertiliser-api.ts")
 
 assert.doesNotMatch(admin, /LOCAL TEST|mfms_local_test/)
 assert.match(admin, /getPreviewEnvironmentLabel/)
-assert.match(adminNotice, /PREVIEW \/ UAT/)
+assert.match(adminNotice, /publicEnvironmentIdentity/)
+assert.match(adminNotice, /LIVE OPERATIONAL DATA/)
+assert.match(adminNotice, /TEST DATA \/ TEST ACTIONS ONLY/)
 assert.match(adminNotice, /MFMS_TARGET_DATABASE/)
 
 assert.doesNotMatch(wellDates, /2026-07-02|2026-07-06/)

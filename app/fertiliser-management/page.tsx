@@ -210,7 +210,7 @@ function mapStockRowsToProducts(rows: FertiliserStockApiRow[]): FertiliserProduc
     unit: row.unit ?? "",
     quantityText: formatApiQuantity(row.quantity, row.unit),
     expiryDate: row.nearest_expiry_date,
-    source: "mfms_server_uat",
+    source: fertiliserDatabase,
     minimumStock: numberFromApi(row.minimum_stock) ?? 0,
     stockStatus: displayStockStatus(row.stock_status),
     expiryStatus: displayExpiryStatus(row.expiry_status),
@@ -1719,7 +1719,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "adjustment" ? (
           <Panel title="Stock Adjustment" icon={ClipboardList}>
-            <FormIntro text="Record MFMS Preview stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation, including expired stock." />
+            <FormIntro text="Record stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation, including expired stock." />
             {stockAdjustmentErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{stockAdjustmentErrors.form}</div> : null}
             <form onSubmit={submitAdjustment} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={stockAdjustmentErrors.transaction_date} />
@@ -1784,7 +1784,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "requirements" ? (
           <Panel title="Future Requirements" icon={ClipboardList}>
-            <FormIntro text="Create Preview planned requirements, move them through approval/order/receipt workflow, and receive stock against a linked requirement. Product and category writes remain disabled." />
+            <FormIntro text="Create planned requirements, move them through approval/order/receipt workflow, and receive stock against a linked requirement. Product and category writes remain disabled." />
             {futureRequirementErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{futureRequirementErrors.form}</div> : null}
             <div className="mt-5">
               <StatGrid>
@@ -2019,7 +2019,7 @@ export default function FertiliserManagementPage() {
                   </>
                 )}
                 {masterFormErrors.form ? <div className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{masterFormErrors.form}</div> : null}
-                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the guarded Preview/UAT database and will appear in the master tables immediately.</div>
+                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the configured {fertiliserDatabaseDescription} and will appear in the master tables immediately.</div>
                 <SubmitRow label={activeModal === "product" ? "Save Product" : "Save Category"} submitting={masterSubmitting} />
               </form>
             </div>

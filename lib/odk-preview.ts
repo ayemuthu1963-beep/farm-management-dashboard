@@ -2,12 +2,14 @@ export const ODK_CENTRAL_BASE_URL = (
   process.env.NEXT_PUBLIC_ODK_CENTRAL_URL ?? "https://odk.muthufarms.com"
 ).replace(/\/$/, "")
 
-const mfmsEnvironment = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "preview").trim().toLowerCase()
+const mfmsEnvironment = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
 const defaultProjectId = ["production", "production-candidate"].includes(mfmsEnvironment)
   ? "22"
   : mfmsEnvironment === "test"
     ? "24"
-    : "23"
+    : ["preview", "uat"].includes(mfmsEnvironment)
+      ? "23"
+      : "unconfigured"
 
 export const PREVIEW_FIELD_COLLECTOR_PROJECT_ID =
   process.env.NEXT_PUBLIC_ODK_PROJECT_ID?.trim() || defaultProjectId
@@ -18,7 +20,9 @@ export const FIELD_COLLECTOR_PROJECT_NAME = ["production", "production-candidate
   ? "Muthu Field Collector"
   : mfmsEnvironment === "test"
     ? "MFMS Test Field Collector"
-    : "MFMS Preview Field Collector"
+    : ["preview", "uat"].includes(mfmsEnvironment)
+      ? "MFMS Preview Field Collector"
+      : "MFMS Field Collector (environment not configured)"
 
 const formVersionsByProjectId: Record<
   string,

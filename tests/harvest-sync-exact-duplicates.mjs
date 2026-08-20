@@ -406,7 +406,8 @@ assert.match(
   /Review ODK Harvest submissions, resolve discrepancies, run a safety dry run and manually import the approved date-specific batch\./,
 )
 assert.match(syncPage, /<span className="font-extrabold">Mode:<\/span> Manual Review &amp; Import/)
-assert.match(syncPage, /Database:<\/span> mfms_server_uat/)
+assert.match(syncPage, /const databaseLabel = getPreviewDatabaseLabel\(\)/)
+assert.match(syncPage, /Database:<\/span> \{databaseLabel\}/)
 assert.match(syncPage, /ODK Project:<\/span> \{previewOdkForms\.harvest\.projectId\}/)
 assert.match(syncPage, /Form:<\/span> \{previewOdkForms\.harvest\.formId\}/)
 assert.match(workspace, /status\?\.projectId \?\? previewOdkForms\.harvest\.projectId/)
