@@ -32,6 +32,9 @@ readonly central_login_url="https://auth.muthufarms.com/login"
 readonly live_port="3014"
 readonly candidate_port="3013"
 readonly expected_running_containers="21"
+readonly approved_log_driver="json-file"
+readonly approved_log_max_size="20m"
+readonly approved_log_max_file="5"
 readonly network_reclaim_attempts="180"
 readonly state_dir="/home/muthu/.local/state/mfms-production-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
@@ -442,6 +445,9 @@ start_candidate() {
     --name "$candidate_container" \
     --network "$production_network" \
     --restart no \
+    --log-driver "$approved_log_driver" \
+    --log-opt "max-size=$approved_log_max_size" \
+    --log-opt "max-file=$approved_log_max_file" \
     -p "127.0.0.1:$candidate_port:3000" \
     --env-file "$environment_file" \
     "$image" >/dev/null
@@ -1566,6 +1572,9 @@ deploy_production() {
     --network "$production_network" \
     --ip "$original_network_ip" \
     --restart unless-stopped \
+    --log-driver "$approved_log_driver" \
+    --log-opt "max-size=$approved_log_max_size" \
+    --log-opt "max-file=$approved_log_max_file" \
     -p "127.0.0.1:$live_port:3000" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null

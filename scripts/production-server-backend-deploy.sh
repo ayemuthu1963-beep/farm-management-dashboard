@@ -56,6 +56,9 @@ readonly database_backup_baseline_migration="db/migrations/20260814_operator_set
 readonly database_backup_baseline_migration_sha256="bdd4d1e4dcf067a73b84880b19a4dc6d3241aa9b557c0a303f40dfd725ab6846"
 readonly database_url_override_file="/home/muthu/mfms_secrets/database-roles/prod-app.database_url"
 readonly approved_restart_policy="unless-stopped"
+readonly approved_log_driver="json-file"
+readonly approved_log_max_size="20m"
+readonly approved_log_max_file="5"
 readonly approved_production_well_odk_cutoff="2026-07-21T06:06:53+05:30"
 readonly approved_temp_mount_source="/tmp"
 readonly approved_temp_mount_target="/host-tmp"
@@ -1531,6 +1534,9 @@ start_candidate() {
     --name "$candidate_container" \
     --network "$production_network" \
     --restart no \
+    --log-driver "$approved_log_driver" \
+    --log-opt "max-size=$approved_log_max_size" \
+    --log-opt "max-file=$approved_log_max_file" \
     -p "127.0.0.1:$candidate_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
@@ -1736,6 +1742,9 @@ deploy_backend() {
     --network "$production_network" \
     --ip "$approved_production_ipv4" \
     --restart "$approved_restart_policy" \
+    --log-driver "$approved_log_driver" \
+    --log-opt "max-size=$approved_log_max_size" \
+    --log-opt "max-file=$approved_log_max_file" \
     -p "127.0.0.1:$live_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
@@ -1803,6 +1812,9 @@ credential_cutover_backend() {
     --network "$production_network" \
     --ip "$approved_production_ipv4" \
     --restart "$approved_restart_policy" \
+    --log-driver "$approved_log_driver" \
+    --log-opt "max-size=$approved_log_max_size" \
+    --log-opt "max-file=$approved_log_max_file" \
     -p "127.0.0.1:$live_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
