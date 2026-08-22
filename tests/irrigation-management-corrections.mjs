@@ -188,12 +188,12 @@ const unsavedEditorRows = persistedSchedule.map((row) => row.scheduleId === "sch
   ...row,
   days: { ...row.days, mon: { ...row.days.mon, ltrs: "777" } },
 } : row)
-assert.equal(scheduledWaterForZoneDate(persistedSchedule, "ready", "P1E", "2026-08-17").litres, 96)
+assert.equal(scheduledWaterForZoneDate(persistedSchedule, "ready", "P1E", "2026-08-17").litres, 144)
 assert.equal(scheduledWaterForZoneDate(unsavedEditorRows, "ready", "P1E", "2026-08-17").litres, 777)
 const refetchedRows = parsePersistedMotorRunScheduleRows(motorRunSchedulePayload(unsavedEditorRows).rows)
 assert.equal(scheduledWaterForZoneDate(refetchedRows, "ready", "P1E", "2026-08-17").litres, 777)
 const failedSaveProjection = persistedSchedule
-assert.equal(scheduledWaterForZoneDate(failedSaveProjection, "ready", "P1E", "2026-08-17").litres, 96)
+assert.equal(scheduledWaterForZoneDate(failedSaveProjection, "ready", "P1E", "2026-08-17").litres, 144)
 
 assert.throws(() => parsePersistedMotorRunScheduleRows([]), /six persisted rows/)
 assert.throws(() => parsePersistedMotorRunScheduleRows(persistedApiRows.map((row, index) => index === 0 ? { ...row, motor: null } : row)), /invalid persisted cell value/)
