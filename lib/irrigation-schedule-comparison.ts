@@ -1,6 +1,7 @@
 import {
   IRRIGATION_PLAN_DAYS,
   SCHEDULE_IDS,
+  irrigationSchedulePlotDisplay,
   type IrrigationPlanDayKey,
   type MotorRunScheduleDay,
   type MotorRunScheduleRow,
@@ -11,10 +12,10 @@ import type { ZoneFiveDayHistory, ZoneId } from "./irrigation-data"
 export const FARM_TIME_ZONE = "Asia/Kolkata"
 
 export const ZONE_SCHEDULE_IDS: Readonly<Record<ZoneId, ScheduleId>> = {
-  P1W: "schedule-m1-p1w",
-  P1E: "schedule-m1-p1e",
-  P2W: "schedule-m2-p2w",
-  P2E: "schedule-m3-p2e",
+  P1W: "schedule-m2-p2w",
+  P1E: "schedule-m3-p2e",
+  P2W: "schedule-m1-p1w",
+  P2E: "schedule-m1-p1e",
   JF: "schedule-m3-jf",
   NM: "schedule-m1-nm",
 }
@@ -90,7 +91,7 @@ export function parsePersistedMotorRunScheduleRows(value: unknown): MotorRunSche
       key: scheduleId,
       scheduleId,
       motor: persistedCellValue(item.motor),
-      plot: persistedCellValue(item.plot),
+      plot: irrigationSchedulePlotDisplay(scheduleId),
       days,
     }
   })

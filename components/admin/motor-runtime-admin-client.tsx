@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AlertTriangle, CheckCircle2, CircleDot, Gauge, Info } from "lucide-react"
+import { motorPlotDisplayLabels, type StoredMotorPlot } from "@/lib/plot-identity"
 
 type MotorId = "M1" | "M2" | "M3"
 
@@ -24,28 +25,28 @@ interface AreaRow {
 const areaRows: AreaRow[] = [
   {
     key: "Plot2_East",
-    label: "Plot 2 East",
+    label: "Plot 1 East",
     m1: { motor: "M1", motorNo: 1, valveNo: 1, valve: "Valve1" },
     m2: { motor: "M2", motorNo: 2, valveNo: 7, valve: "Valve7" },
     m3: { motor: "M3", motorNo: 3, valveNo: 13, valve: "Valve13" },
   },
   {
     key: "Plot2_West",
-    label: "Plot 2 West",
+    label: "Plot 1 West",
     m1: { motor: "M1", motorNo: 1, valveNo: 2, valve: "Valve2" },
     m2: { motor: "M2", motorNo: 2, valveNo: 8, valve: "Valve8" },
     m3: { motor: "M3", motorNo: 3, valveNo: 14, valve: "Valve14" },
   },
   {
     key: "Plot1_East",
-    label: "Plot 1 East",
+    label: "Plot 2 East",
     m1: { motor: "M1", motorNo: 1, valveNo: 3, valve: "Valve3" },
     m2: { motor: "M2", motorNo: 2, valveNo: 9, valve: "Valve9" },
     m3: { motor: "M3", motorNo: 3, valveNo: null, valve: null },
   },
   {
     key: "Plot1_West",
-    label: "Plot 1 West",
+    label: "Plot 2 West",
     m1: { motor: "M1", motorNo: 1, valveNo: 4, valve: "Valve4" },
     m2: { motor: "M2", motorNo: 2, valveNo: 10, valve: "Valve10" },
     m3: { motor: "M3", motorNo: 3, valveNo: null, valve: null },
@@ -107,13 +108,9 @@ interface Props {
 }
 
 function displayPlotLabel(value: string): string {
-  if (value === "Plot2_East") return "Plot 2 East"
-  if (value === "Plot2_West") return "Plot 2 West"
-  if (value === "Plot1_East") return "Plot 1 East"
-  if (value === "Plot1_West") return "Plot 1 West"
-  if (value === "Nutmug") return "Nutmeg"
-  if (value === "Jack_Fruit") return "Jackfruit"
-  return value
+  return value in motorPlotDisplayLabels
+    ? motorPlotDisplayLabels[value as StoredMotorPlot]
+    : value
 }
 
 function fieldName(row: AreaRow, motor: MotorId, kind: "hours" | "minutes") {
@@ -409,8 +406,8 @@ export function MotorRuntimeAdminClient({ recentEntries, databaseDisplayName, lo
 
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
           <p className="font-bold text-primary">Confirmed Motor 3 mapping</p>
-          <p className="mt-1">Plot 2 East → Motor 3 Valve13, Plot 2 West → Motor 3 Valve14, Jackfruit → Motor 3 Valve15.</p>
-          <p className="mt-1">Motor 3 does not apply to Plot 1 East, Plot 1 West, or Nutmeg, so those cells are disabled.</p>
+          <p className="mt-1">Plot 1 East → Motor 3 Valve13, Plot 1 West → Motor 3 Valve14, Jackfruit → Motor 3 Valve15.</p>
+          <p className="mt-1">Motor 3 does not apply to Plot 2 East, Plot 2 West, or Nutmeg, so those cells are disabled.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

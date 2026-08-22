@@ -1,6 +1,7 @@
 import type { PerformanceClassification } from "@/lib/farm-map/classification-styles"
+import type { PlotName } from "@/lib/plot-identity"
 
-export type PlotName = "Plot 1" | "Plot 2"
+export type { PlotName } from "@/lib/plot-identity"
 
 export interface FarmMapCoordinateFeature {
   type: "Feature"

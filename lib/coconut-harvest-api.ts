@@ -1,6 +1,7 @@
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHarvestRow } from "@/lib/coconut-harvest-data"
 import { compareTreeNumbers } from "@/lib/tree-number-options"
+import { isPlotName, plotNameForTreeNo, type PlotName } from "@/lib/plot-identity"
 
 interface ApiCycleRow {
   harvest_cycle: string
@@ -359,17 +360,11 @@ function mapLifecycleSapling(sapling: ApiTreeLifecycleSapling): TreePerformanceC
   }
 }
 
-function lifecycleSaplingPlot(sapling: ApiTreeLifecycleSapling): "Plot 1" | "Plot 2" | "" {
-  const normalizedPlot = (sapling.plot ?? "")
-    .trim()
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]/g, "")
-
-  if (normalizedPlot === "plot1" || normalizedPlot === "p1" || normalizedPlot === "1") return "Plot 1"
-  if (normalizedPlot === "plot2" || normalizedPlot === "p2" || normalizedPlot === "2") return "Plot 2"
-
+function lifecycleSaplingPlot(sapling: ApiTreeLifecycleSapling): PlotName | "" {
+  // Tree number is authoritative while legacy API rows may still carry the
+  // previous plot label.
   const inferredPlot = inferPlotFromTreeNumber(sapling.tree_no)
-  return inferredPlot === "Plot 1" || inferredPlot === "Plot 2" ? inferredPlot : ""
+  return isPlotName(inferredPlot) ? inferredPlot : ""
 }
 
 async function fetchTreeLifecycleSaplings(authHeader: string): Promise<ApiTreeLifecycleSapling[] | null> {
@@ -1172,9 +1167,8 @@ function classificationReason(
 }
 
 function inferPlotFromTreeNumber(treeNo: string): string {
-  const numericTreeNo = Number.parseFloat(treeNo)
-  if (!Number.isFinite(numericTreeNo)) return ""
-  return numericTreeNo >= 1000 ? "Plot 2" : "Plot 1"
+  const plot = plotNameForTreeNo(treeNo)
+  return plot === "Other" ? "" : plot
 }
 
 function parseTreeWiseExportRows(csv: string, salePriceByCycle: Map<string, number>): ApiDetailedQueryRow[] {

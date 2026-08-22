@@ -23,7 +23,7 @@ const proxy = read("app/api/operator-settings/[[...path]]/route.ts")
 
 const dripRows = initialDripOutputRows()
 assert.deepEqual(dripRows.map((row) => row.zoneId), ["zone-p2e", "zone-p2w", "zone-p1e", "zone-p1w", "zone-nm", "zone-jf"])
-assert.deepEqual(dripRows.map((row) => row.zone), ["P2E", "P2W", "P1E", "P1W", "NM", "JF"])
+assert.deepEqual(dripRows.map((row) => row.zone), ["P1E", "P1W", "P2E", "P2W", "NM", "JF"])
 assert.deepEqual(
   dripRows.map((row) => [row.designedLph, row.designedSecondsPer100ml, row.measuredSecondsPer100ml, row.dripsPerTree]),
   [
@@ -60,7 +60,7 @@ const scheduleRows = initialMotorRunScheduleRows()
 assert.equal(scheduleRows.length, 6)
 assert.deepEqual(scheduleRows.map((row) => row.scheduleId), ["schedule-m1-p1e", "schedule-m1-p1w", "schedule-m1-nm", "schedule-m2-p2w", "schedule-m3-p2e", "schedule-m3-jf"])
 for (const row of scheduleRows) assert.deepEqual(row.days.sun, { min: "", ltrs: "" })
-for (const plot of ["P2W", "P2E"]) {
+for (const plot of ["P1W", "P1E"]) {
   const row = scheduleRows.find((candidate) => candidate.plot === plot)
   assert.ok(row)
   for (const day of ["mon", "tue", "wed", "thu", "fri", "sat"]) {

@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
+import { motorPlotDisplayLabels } from "@/lib/plot-identity"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -29,14 +30,7 @@ type RuntimeEntry = {
 const motorIds: MotorId[] = ["M1", "M2", "M3"]
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const FARM_TIME_ZONE = "Asia/Kolkata"
-const plotLabels: Record<string, string> = {
-  Plot2_East: "Plot 2 East",
-  Plot2_West: "Plot 2 West",
-  Plot1_East: "Plot 1 East",
-  Plot1_West: "Plot 1 West",
-  Nutmug: "Nutmeg",
-  Jack_Fruit: "Jackfruit",
-}
+const plotLabels: Record<string, string> = motorPlotDisplayLabels
 
 function motorId(motorNo: number): MotorId {
   return `M${motorNo}` as MotorId

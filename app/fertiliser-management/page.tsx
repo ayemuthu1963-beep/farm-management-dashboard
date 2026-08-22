@@ -32,7 +32,8 @@ import { cn } from "@/lib/utils"
 import {
   duplicateConfirmationNotes,
   fertiliserCategories,
-  fertiliserLocations,
+  fertiliserLocationDisplay,
+  fertiliserLocationOptions,
   fertiliserPurposes,
   fertiliserUnits,
   formatFertiliserExpiry,
@@ -681,7 +682,7 @@ function TransactionHistoryTableV2({
                   <td className="px-3 py-2.5 text-muted-foreground">{Number(txn.quantity).toLocaleString("en-IN", { maximumFractionDigits: 3 })} {txn.unit}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.purpose ?? "—"}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.crop ?? "—"}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{txn.plot_location ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{fertiliserLocationDisplay(txn.plot_location) || "—"}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.source}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.reference_number ?? "—"}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.remarks ?? "—"}</td>
@@ -1688,7 +1689,7 @@ export default function FertiliserManagementPage() {
               </label>
               <SelectField label="Purpose" name="purpose" error={outgoingStockErrors.purpose}><option value="">Select purpose</option>{fertiliserPurposes.map((purpose) => <option key={purpose} value={purpose}>{purpose}</option>)}</SelectField>
               <InputField label="Crop (optional)" name="crop" />
-              <SelectField label="Plot / location" name="plotLocation" error={outgoingStockErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+              <SelectField label="Plot / location" name="plotLocation" error={outgoingStockErrors.plot_location}><option value="">Select location</option>{fertiliserLocationOptions.map((location) => <option key={location.value} value={location.value}>{location.label}</option>)}</SelectField>
               <InputField label="Remarks" name="remarks" />
               <div className="md:col-span-2">
                 <button type="submit" disabled={outgoingSubmitting || dataMode !== "live"} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
@@ -1704,7 +1705,7 @@ export default function FertiliserManagementPage() {
                   <div><dt className="text-xs font-semibold uppercase text-muted-foreground">Transaction</dt><dd className="text-foreground">{outgoingResult.transaction.transaction_id}</dd></div>
                   <div><dt className="text-xs font-semibold uppercase text-muted-foreground">Issued</dt><dd className="text-foreground">{formatApiQuantity(outgoingResult.transaction.quantity, outgoingResult.transaction.unit)}</dd></div>
                   <div><dt className="text-xs font-semibold uppercase text-muted-foreground">Purpose</dt><dd className="text-foreground">{outgoingResult.transaction.purpose}</dd></div>
-                  <div><dt className="text-xs font-semibold uppercase text-muted-foreground">Plot / location</dt><dd className="text-foreground">{outgoingResult.transaction.plot_location}</dd></div>
+                  <div><dt className="text-xs font-semibold uppercase text-muted-foreground">Plot / location</dt><dd className="text-foreground">{fertiliserLocationDisplay(outgoingResult.transaction.plot_location)}</dd></div>
                 </dl>
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full min-w-[620px] border-collapse text-sm">
@@ -1815,7 +1816,7 @@ export default function FertiliserManagementPage() {
               </label>
               <SelectField label="Priority" name="priority" error={futureRequirementErrors.priority}><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></SelectField>
               <InputField label="Purpose" name="purpose" error={futureRequirementErrors.purpose} />
-              <SelectField label="Plot / Location" name="plotLocation" error={futureRequirementErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+              <SelectField label="Plot / Location" name="plotLocation" error={futureRequirementErrors.plot_location}><option value="">Select location</option>{fertiliserLocationOptions.map((location) => <option key={location.value} value={location.value}>{location.label}</option>)}</SelectField>
               <InputField label="Crop" name="crop" />
               <InputField label="Planned application date" name="plannedApplicationDate" type="date" />
               <InputField label="Supplier" name="supplier" />
@@ -1896,7 +1897,7 @@ export default function FertiliserManagementPage() {
                               <InputField label="Required quantity" name="requiredQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" defaultValue={item.required_quantity} error={futureRequirementErrors.required_quantity} />
                               <SelectField label="Priority" name="priority" defaultValue={item.priority} error={futureRequirementErrors.priority}><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></SelectField>
                               <InputField label="Purpose" name="purpose" defaultValue={item.purpose} error={futureRequirementErrors.purpose} />
-                              <SelectField label="Plot / Location" name="plotLocation" defaultValue={item.plot_location} error={futureRequirementErrors.plot_location}><option value="">Select location</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+                              <SelectField label="Plot / Location" name="plotLocation" defaultValue={item.plot_location} error={futureRequirementErrors.plot_location}><option value="">Select location</option>{fertiliserLocationOptions.map((location) => <option key={location.value} value={location.value}>{location.label}</option>)}</SelectField>
                               <InputField label="Crop" name="crop" defaultValue={item.crop ?? ""} />
                               <InputField label="Planned application date" name="plannedApplicationDate" type="date" defaultValue={item.planned_application_date ?? ""} />
                               <InputField label="Supplier" name="supplier" defaultValue={item.supplier_name ?? ""} />
@@ -1945,7 +1946,7 @@ export default function FertiliserManagementPage() {
                 <InputField label="Product search" name="product" />
                 <SelectField label="Type" name="transactionType"><option value="">All types</option>{["OPENING", "INCOMING", "OUTGOING", "ADJUSTMENT_IN", "ADJUSTMENT_OUT"].map((type) => <option key={type} value={type}>{type}</option>)}</SelectField>
                 <SelectField label="Source" name="source"><option value="">All sources</option><option value="Excel_Import">Excel_Import</option><option value="Manual_Admin_TEST">Manual_Admin_TEST</option></SelectField>
-                <SelectField label="Plot / location" name="plotLocation"><option value="">All locations</option>{fertiliserLocations.map((location) => <option key={location} value={location}>{location}</option>)}</SelectField>
+                <SelectField label="Plot / location" name="plotLocation"><option value="">All locations</option>{fertiliserLocationOptions.map((location) => <option key={location.value} value={location.value}>{location.label}</option>)}</SelectField>
                 <InputField label="Reference / remarks / reason" name="search" />
                 <div className="flex items-end gap-2 md:col-span-4">
                   <button type="submit" disabled={historyLoading} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">{historyLoading ? "Filtering..." : "Apply Filters"}</button>

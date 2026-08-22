@@ -100,18 +100,18 @@ interface ClassificationLegendItem {
 
 const classificationLegendByPlot: Record<"Plot 1" | "Plot 2", ClassificationLegendItem[]> = {
   "Plot 1": [
+    { classification: "Match Winner", criteria: "200 to 299 nuts in last 10 harvests" },
+    { classification: "Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests" },
+    { classification: "Tail Ender", criteria: "100 to 149 nuts in last 10 harvests" },
+    { classification: "Bench Player", criteria: "Less than 100 nuts in last 10 harvests" },
+    { classification: "Future Better", criteria: "Saplings under 36 completed months" },
+  ],
+  "Plot 2": [
     { classification: "Century Maker", criteria: "Over 400 nuts in last 10 harvests" },
     { classification: "Match Winner", criteria: "300 to 399 nuts in last 10 harvests" },
     { classification: "Reliable Batter", criteria: "225 to 299 nuts in last 10 harvests" },
     { classification: "Tail Ender", criteria: "175 to 224 nuts in last 10 harvests" },
     { classification: "Bench Player", criteria: "Less than 175 nuts in last 10 harvests" },
-    { classification: "Future Better", criteria: "Saplings under 36 completed months" },
-  ],
-  "Plot 2": [
-    { classification: "Match Winner", criteria: "200 to 299 nuts in last 10 harvests" },
-    { classification: "Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests" },
-    { classification: "Tail Ender", criteria: "100 to 149 nuts in last 10 harvests" },
-    { classification: "Bench Player", criteria: "Less than 100 nuts in last 10 harvests" },
     { classification: "Future Better", criteria: "Saplings under 36 completed months" },
   ],
 }

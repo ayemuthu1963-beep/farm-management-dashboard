@@ -20,6 +20,7 @@ import { fetchAllMotorRuntimeEntries } from "../lib/irrigation-upstream.ts"
 import {
   IRRIGATION_PLAN_DAYS,
   SCHEDULE_IDS,
+  irrigationSchedulePlotDisplay,
   initialMotorRunScheduleRows,
   motorRunSchedulePayload,
 } from "../lib/irrigation-plan.ts"
@@ -79,7 +80,7 @@ const summaryCards = read("components/irrigation/irrigation-summary-cards.tsx")
 const zoneStatusCards = read("components/irrigation/zone-status-cards.tsx")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
 const comparisonModule = loadTsxModule("lib/irrigation-schedule-comparison.ts", {
-  "./irrigation-plan": { IRRIGATION_PLAN_DAYS, SCHEDULE_IDS },
+  "./irrigation-plan": { IRRIGATION_PLAN_DAYS, SCHEDULE_IDS, irrigationSchedulePlotDisplay },
   "./irrigation-data": {},
 })
 const {
@@ -97,10 +98,10 @@ const {
 // for its exact stable schedule identifier, independent of row order.
 assert.equal(FARM_TIME_ZONE, "Asia/Kolkata")
 assert.deepEqual(ZONE_SCHEDULE_IDS, {
-  P1W: "schedule-m1-p1w",
-  P1E: "schedule-m1-p1e",
-  P2W: "schedule-m2-p2w",
-  P2E: "schedule-m3-p2e",
+  P1W: "schedule-m2-p2w",
+  P1E: "schedule-m3-p2e",
+  P2W: "schedule-m1-p1w",
+  P2E: "schedule-m1-p1e",
   JF: "schedule-m3-jf",
   NM: "schedule-m1-nm",
 })
@@ -139,7 +140,7 @@ const sevenDates = getRecentIrrigationHistoryDates("2026-08-17", new Date("2026-
 assert.deepEqual(sevenDates, ["2026-08-17", "2026-08-16", "2026-08-15", "2026-08-14", "2026-08-13", "2026-08-12", "2026-08-11"])
 assert.equal(new Set(sevenDates).size, 7)
 
-const p1eWithDistinctMinutes = persistedSchedule.map((row) => row.scheduleId === "schedule-m1-p1e" ? {
+const p1eWithDistinctMinutes = persistedSchedule.map((row) => row.scheduleId === "schedule-m3-p2e" ? {
   ...row,
   days: { ...row.days, mon: { min: "999", ltrs: "96" } },
 } : row)
@@ -183,7 +184,7 @@ assert.equal(formatActualWater({ perTreeLitres: 0 }), "0 L/Tree")
 
 // Unsaved editor values cannot affect tiles until a successful refetch becomes
 // the new persisted source. A failed save leaves the prior projection intact.
-const unsavedEditorRows = persistedSchedule.map((row) => row.scheduleId === "schedule-m1-p1e" ? {
+const unsavedEditorRows = persistedSchedule.map((row) => row.scheduleId === "schedule-m3-p2e" ? {
   ...row,
   days: { ...row.days, mon: { ...row.days.mon, ltrs: "777" } },
 } : row)
@@ -440,8 +441,8 @@ for (const source of [zoneStatusCards, map]) {
 
 // Zone Status uses full zone names, crop-specific icons, and six restrained tile tones.
 assert.doesNotMatch(zoneStatusCards, /\{zone\.abbr\}/)
-assert.match(zoneStatusCards, /Overlay: Plot 1 East \+ Plot 2 West/)
-assert.doesNotMatch(zoneStatusCards, /Overlay: P1E \+ P2W/)
+assert.match(zoneStatusCards, /Overlay: Plot 2 East \+ Plot 1 West/)
+assert.doesNotMatch(zoneStatusCards, /Overlay: P2E \+ P1W/)
 assert.match(zoneStatusCards, />Irrigation Target</)
 assert.match(zoneStatusCards, /type="text"/)
 assert.match(zoneStatusCards, /placeholder="\*{16}"/)

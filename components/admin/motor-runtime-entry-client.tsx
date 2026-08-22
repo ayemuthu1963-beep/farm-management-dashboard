@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { motorPlotDisplayLabels, type StoredMotorPlot } from "@/lib/plot-identity"
 
-const plots = [
+const plots: Array<{ plot: StoredMotorPlot; motors: Array<{ motor: number; valve: number }> }> = [
   { plot: "Plot2_East", motors: [{ motor: 1, valve: 1 }, { motor: 2, valve: 7 }, { motor: 3, valve: 13 }] },
   { plot: "Plot2_West", motors: [{ motor: 1, valve: 2 }, { motor: 2, valve: 8 }, { motor: 3, valve: 14 }] },
   { plot: "Plot1_East", motors: [{ motor: 1, valve: 3 }, { motor: 2, valve: 9 }] },
@@ -14,7 +15,7 @@ const plots = [
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function MotorRuntimeEntryClient() {
-  const [form, setForm] = useState({ entry_date: today(), plot: "Plot1_East", motorValve: "1:3", hours: "0", minutes: "15", remarks: "Local RC Admin Console test" })
+  const [form, setForm] = useState({ entry_date: today(), plot: "Plot2_East", motorValve: "1:1", hours: "0", minutes: "15", remarks: "Local RC Admin Console test" })
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -61,7 +62,7 @@ export function MotorRuntimeEntryClient() {
   return (
     <form onSubmit={submit} className="grid gap-4 md:grid-cols-3">
       <label className="flex flex-col gap-1 text-sm font-bold">Entry Date<input className="rounded-lg border p-2" type="date" value={form.entry_date} onChange={(e) => update("entry_date", e.target.value)} /></label>
-      <label className="flex flex-col gap-1 text-sm font-bold">Plot<select className="rounded-lg border p-2" value={form.plot} onChange={(e) => update("plot", e.target.value)}>{plots.map((item) => <option key={item.plot}>{item.plot}</option>)}</select></label>
+      <label className="flex flex-col gap-1 text-sm font-bold">Plot<select className="rounded-lg border p-2" value={form.plot} onChange={(e) => update("plot", e.target.value)}>{plots.map((item) => <option key={item.plot} value={item.plot}>{motorPlotDisplayLabels[item.plot]}</option>)}</select></label>
       <label className="flex flex-col gap-1 text-sm font-bold">Motor / Valve<select className="rounded-lg border p-2" value={form.motorValve} onChange={(e) => update("motorValve", e.target.value)}>{selectedPlot.motors.map((item) => <option key={`${item.motor}:${item.valve}`} value={`${item.motor}:${item.valve}`}>Motor {item.motor} / Valve{item.valve}</option>)}</select></label>
       <label className="flex flex-col gap-1 text-sm font-bold">Hours<input className="rounded-lg border p-2" type="number" min="0" max="24" value={form.hours} onChange={(e) => update("hours", e.target.value)} /></label>
       <label className="flex flex-col gap-1 text-sm font-bold">Minutes<input className="rounded-lg border p-2" type="number" min="0" max="59" value={form.minutes} onChange={(e) => update("minutes", e.target.value)} /></label>

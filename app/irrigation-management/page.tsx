@@ -166,7 +166,7 @@ export default function IrrigationManagementPage() {
         <section className="space-y-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Zone Status</h2>
-            <p className="text-xs text-muted-foreground">Nutmeg is counted as its own operational zone and does not merge with P1E or P2W.</p>
+            <p className="text-xs text-muted-foreground">Nutmeg is counted as its own operational zone and does not merge with P2E or P1W.</p>
           </div>
           <ZoneStatusCards zones={data.zones} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} />
         </section>

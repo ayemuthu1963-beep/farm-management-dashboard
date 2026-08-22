@@ -39,6 +39,11 @@ import type {
 } from "@/lib/farm-map/types"
 import { treeNumberOptionKey, type TreeNumberOption } from "@/lib/tree-number-options"
 import type { PipelineTreeOption } from "@/lib/irrigation-pipeline-types"
+import {
+  EXPECTED_COCONUT_PLOT_COUNTS,
+  PLOT_NAMES,
+  plotNameForTreeNo,
+} from "@/lib/plot-identity"
 
 const IrrigationPipelineEditor = dynamic(
   () =>
@@ -89,7 +94,6 @@ const LABEL_ZOOM = 20
 const OPERATIONAL_REFRESH_MS = 5 * 60 * 1000
 const EXPECTED_TREE_COUNT = 2_117
 const EXPECTED_JACKFRUIT_COUNT = 582
-const EXPECTED_PLOT_COUNTS: Record<PlotName, number> = { "Plot 1": 954, "Plot 2": 1_163 }
 
 function escapeHtml(value: string) {
   return value
@@ -122,16 +126,14 @@ function validateCoordinateCollection(value: unknown): FarmMapCoordinateCollecti
 
   const seen = new Set<string>()
   const counts: Record<PlotName, number> = { "Plot 1": 0, "Plot 2": 0 }
-  for (const feature of collection.features) {
+  const normalizedFeatures = collection.features.map((feature) => {
     const treeNo = canonicalTreeNo(feature?.properties?.treeNo)
-    const plot = feature?.properties?.plot
     const coordinates = feature?.geometry?.coordinates
     if (
       feature?.type !== "Feature" ||
       feature?.geometry?.type !== "Point" ||
       treeNo === null ||
       treeNo !== feature.properties.treeNo ||
-      (plot !== "Plot 1" && plot !== "Plot 2") ||
       !Array.isArray(coordinates) ||
       coordinates.length !== 2 ||
       !coordinates.every(Number.isFinite)
@@ -140,14 +142,20 @@ function validateCoordinateCollection(value: unknown): FarmMapCoordinateCollecti
     }
     if (seen.has(treeNo)) throw new Error(`Duplicate spatial TreeNo ${treeNo}`)
     seen.add(treeNo)
+    const plot = plotNameForTreeNo(treeNo)
+    if (plot === "Other") throw new Error(`TreeNo ${treeNo} has no approved plot assignment`)
     counts[plot] += 1
-  }
-  for (const plot of ["Plot 1", "Plot 2"] as PlotName[]) {
-    if (counts[plot] !== EXPECTED_PLOT_COUNTS[plot]) {
+    return {
+      ...feature,
+      properties: { ...feature.properties, plot },
+    }
+  })
+  for (const plot of PLOT_NAMES) {
+    if (counts[plot] !== EXPECTED_COCONUT_PLOT_COUNTS[plot]) {
       throw new Error(`${plot} coordinate count is ${counts[plot]}`)
     }
   }
-  return collection
+  return { ...collection, features: normalizedFeatures }
 }
 
 function validateOperationalPayload(value: unknown): FarmMapOperationalPayload {
@@ -1171,7 +1179,7 @@ export function FarmMapClient() {
             Operational data as of: {formatTimestamp(dataAsOf)}
           </p>
           <p className="text-xs text-muted-foreground">
-            Plot 1: 954 corrected coordinates · Plot 2: 1,163 unchanged coordinates
+            Plot 1: 1,163 coordinates · Plot 2: 954 coordinates
           </p>
         </div>
       </Panel>

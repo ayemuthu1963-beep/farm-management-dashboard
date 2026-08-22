@@ -472,7 +472,7 @@ export default function TreePerformancePage() {
 
         {pageStatus === "real" ? (
           <>
-            <Panel title="Plot 1: Tree numbers 1 to 999" icon={Trophy}>
+            <Panel title="Plot 1: Tree numbers 1001 onward" icon={Trophy}>
               <PerformanceTable rows={treePerformanceData.plot1Performance} plot="Plot 1" onSelect={loadCategoryDetails} />
               {selectedCategory?.plot === "Plot 1" && (
                 <CategoryDetailTable
@@ -484,7 +484,7 @@ export default function TreePerformancePage() {
               )}
             </Panel>
 
-            <Panel title="Plot 2: Tree numbers above 1000" icon={Trophy}>
+            <Panel title="Plot 2: Tree numbers 1 to 999" icon={Trophy}>
               <PerformanceTable rows={treePerformanceData.plot2Performance} plot="Plot 2" onSelect={loadCategoryDetails} />
               {selectedCategory?.plot === "Plot 2" && (
                 <CategoryDetailTable

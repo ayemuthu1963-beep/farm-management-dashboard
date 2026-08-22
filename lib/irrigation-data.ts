@@ -29,12 +29,12 @@ export interface ZoneConfig {
 export const zoneOrder: ZoneId[] = ["P1E", "P1W", "P2E", "P2W", "JF", "NM"]
 
 export const zoneConfigs: Record<ZoneId, ZoneConfig> = {
-  P1E: { id: "P1E", name: "Plot 1 East", abbr: "P1E", plot: "Plot1_East", crop: "Coconut", physicalPlot: "Plot 1 East", configuredMotorValves: ["Motor 1 Valve 3", "Motor 2 Valve 9"] },
-  P1W: { id: "P1W", name: "Plot 1 West", abbr: "P1W", plot: "Plot1_West", crop: "Coconut", physicalPlot: "Plot 1 West", configuredMotorValves: ["Motor 1 Valve 4", "Motor 2 Valve 10"] },
-  P2E: { id: "P2E", name: "Plot 2 East", abbr: "P2E", plot: "Plot2_East", crop: "Coconut", physicalPlot: "Plot 2 East", configuredMotorValves: ["Motor 1 Valve 1", "Motor 2 Valve 7", "Motor 3 Valve 13"] },
-  P2W: { id: "P2W", name: "Plot 2 West", abbr: "P2W", plot: "Plot2_West", crop: "Coconut", physicalPlot: "Plot 2 West", configuredMotorValves: ["Motor 1 Valve 2", "Motor 2 Valve 8", "Motor 3 Valve 14"] },
+  P1E: { id: "P1E", name: "Plot 1 East", abbr: "P1E", plot: "Plot2_East", crop: "Coconut", physicalPlot: "Plot 1 East", configuredMotorValves: ["Motor 1 Valve 1", "Motor 2 Valve 7", "Motor 3 Valve 13"] },
+  P1W: { id: "P1W", name: "Plot 1 West", abbr: "P1W", plot: "Plot2_West", crop: "Coconut", physicalPlot: "Plot 1 West", configuredMotorValves: ["Motor 1 Valve 2", "Motor 2 Valve 8", "Motor 3 Valve 14"] },
+  P2E: { id: "P2E", name: "Plot 2 East", abbr: "P2E", plot: "Plot1_East", crop: "Coconut", physicalPlot: "Plot 2 East", configuredMotorValves: ["Motor 1 Valve 3", "Motor 2 Valve 9"] },
+  P2W: { id: "P2W", name: "Plot 2 West", abbr: "P2W", plot: "Plot1_West", crop: "Coconut", physicalPlot: "Plot 2 West", configuredMotorValves: ["Motor 1 Valve 4", "Motor 2 Valve 10"] },
   JF: { id: "JF", name: "Jackfruit", abbr: "JF", plot: "Jack_Fruit", crop: "Jackfruit", physicalPlot: "Jackfruit block", configuredMotorValves: ["Motor 1 Valve 6", "Motor 2 Valve 12", "Motor 3 Valve 15"] },
-  NM: { id: "NM", name: "Nutmeg", abbr: "NM", plot: "Nutmug", crop: "Nutmeg", physicalPlot: "Nutmeg operational zone", overlaps: ["P1E", "P2W"], configuredMotorValves: ["Motor 1 Valve 5", "Motor 2 Valve 11"] },
+  NM: { id: "NM", name: "Nutmeg", abbr: "NM", plot: "Nutmug", crop: "Nutmeg", physicalPlot: "Nutmeg operational zone", overlaps: ["P2E", "P1W"], configuredMotorValves: ["Motor 1 Valve 5", "Motor 2 Valve 11"] },
 }
 
 export const zoneNames = Object.fromEntries(zoneOrder.map((id) => [id, zoneConfigs[id].name])) as Record<ZoneId, string>

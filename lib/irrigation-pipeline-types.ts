@@ -1,3 +1,5 @@
+import { pipelineZoneDisplayCodes } from "@/lib/plot-identity"
+
 export const PIPELINE_EQUIPMENT_TYPES = [
   "Unclassified",
   "Motor",
@@ -21,6 +23,10 @@ export type PipelineStatus = (typeof PIPELINE_STATUSES)[number]
 export type PipelineLineClass = (typeof PIPELINE_LINE_CLASSES)[number]
 export type PipelineConfidence = (typeof PIPELINE_CONFIDENCE)[number]
 export type VerificationStatus = "Draft" | "Needs review" | "Verified"
+
+export function pipelineZoneDisplayCode(zone: PipelineZone): PipelineZone {
+  return pipelineZoneDisplayCodes[zone]
+}
 
 export type PipelineCapabilities = {
   username: string

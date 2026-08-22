@@ -52,10 +52,10 @@ export interface IrrigationPlanResponse {
 }
 
 const defaultDripRows: Omit<DripOutputRow, "key">[] = [
-  { zoneId: "zone-p2e", zone: "P2E", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
-  { zoneId: "zone-p2w", zone: "P2W", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
-  { zoneId: "zone-p1e", zone: "P1E", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
-  { zoneId: "zone-p1w", zone: "P1W", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
+  { zoneId: "zone-p2e", zone: "P1E", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
+  { zoneId: "zone-p2w", zone: "P1W", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
+  { zoneId: "zone-p1e", zone: "P2E", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
+  { zoneId: "zone-p1w", zone: "P2W", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "24" },
   { zoneId: "zone-nm", zone: "NM", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "150", dripsPerTree: "20" },
   { zoneId: "zone-jf", zone: "JF", designedLph: "4", designedSecondsPer100ml: "90", measuredSecondsPer100ml: "90", dripsPerTree: "16" },
 ]
@@ -82,11 +82,11 @@ const triple144 = () => scheduleDay("30×3", "144")
 const blank = () => scheduleDay()
 
 const defaultScheduleRows: Omit<MotorRunScheduleRow, "key">[] = [
-  { scheduleId: "schedule-m1-p1e", motor: "1", plot: "P1E", days: scheduleDays(sixty96(), sixty96(), sixty96(), sixty96(), sixty96(), sixty96()) },
-  { scheduleId: "schedule-m1-p1w", motor: "1", plot: "P1W", days: scheduleDays(sixty96(), sixty96(), sixty96(), sixty96(), sixty96(), sixty96()) },
+  { scheduleId: "schedule-m1-p1e", motor: "1", plot: "P2E", days: scheduleDays(sixty96(), sixty96(), sixty96(), sixty96(), sixty96(), sixty96()) },
+  { scheduleId: "schedule-m1-p1w", motor: "1", plot: "P2W", days: scheduleDays(sixty96(), sixty96(), sixty96(), sixty96(), sixty96(), sixty96()) },
   { scheduleId: "schedule-m1-nm", motor: "1", plot: "NM", days: scheduleDays(sixty48(), blank(), sixty48(), blank(), sixty48(), blank()) },
-  { scheduleId: "schedule-m2-p2w", motor: "2", plot: "P2W", days: scheduleDays(triple144(), triple144(), triple144(), triple144(), triple144(), triple144()) },
-  { scheduleId: "schedule-m3-p2e", motor: "3", plot: "P2E", days: scheduleDays(triple144(), triple144(), triple144(), triple144(), triple144(), triple144()) },
+  { scheduleId: "schedule-m2-p2w", motor: "2", plot: "P1W", days: scheduleDays(triple144(), triple144(), triple144(), triple144(), triple144(), triple144()) },
+  { scheduleId: "schedule-m3-p2e", motor: "3", plot: "P1E", days: scheduleDays(triple144(), triple144(), triple144(), triple144(), triple144(), triple144()) },
   { scheduleId: "schedule-m3-jf", motor: "3", plot: "JF", days: scheduleDays(sixty64(), blank(), blank(), blank(), sixty64(), blank()) },
 ]
 
@@ -100,6 +100,22 @@ function inputValue(value: unknown): string {
     : typeof value === "string"
       ? value
       : ""
+}
+
+const dripZoneDisplayById: Record<DripZoneId, string> = Object.fromEntries(
+  defaultDripRows.map((row) => [row.zoneId, row.zone]),
+) as Record<DripZoneId, string>
+
+const schedulePlotDisplayById: Record<ScheduleId, string> = Object.fromEntries(
+  defaultScheduleRows.map((row) => [row.scheduleId, row.plot]),
+) as Record<ScheduleId, string>
+
+export function irrigationPlanZoneDisplay(zoneId: DripZoneId): string {
+  return dripZoneDisplayById[zoneId]
+}
+
+export function irrigationSchedulePlotDisplay(scheduleId: ScheduleId): string {
+  return schedulePlotDisplayById[scheduleId]
 }
 
 function cloneScheduleDays(days: Record<IrrigationPlanDayKey, MotorRunScheduleDay>) {
@@ -137,7 +153,7 @@ export function parseDripOutputRows(value: unknown): DripOutputRow[] {
     return {
       key: suppliedId,
       zoneId: suppliedId,
-      zone: inputValue(row.zone),
+      zone: irrigationPlanZoneDisplay(suppliedId),
       designedLph: inputValue(row.designedLph),
       designedSecondsPer100ml: inputValue(row.designedSecondsPer100ml),
       measuredSecondsPer100ml: inputValue(row.measuredSecondsPer100ml),
@@ -163,7 +179,7 @@ export function parseMotorRunScheduleRows(value: unknown): MotorRunScheduleRow[]
       key: suppliedId,
       scheduleId: suppliedId,
       motor: inputValue(row.motor),
-      plot: inputValue(row.plot),
+      plot: irrigationSchedulePlotDisplay(suppliedId),
       days: Object.fromEntries(IRRIGATION_PLAN_DAYS.map(({ key }) => {
         const day = isRecord(days[key]) ? days[key] : {}
         return [key, { min: inputValue(day.min), ltrs: inputValue(day.ltrs) }]

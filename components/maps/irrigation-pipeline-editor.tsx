@@ -31,6 +31,7 @@ import {
   PIPELINE_LINE_CLASSES,
   PIPELINE_STATUSES,
   PIPELINE_ZONES,
+  pipelineZoneDisplayCode,
   type PipelineCapabilities,
   type PipelineConfidence,
   type PipelineEquipmentType,
@@ -221,7 +222,7 @@ function ZoneChecks({ value, onChange, disabled = false }: { value: PipelineZone
             onChange={(event) => onChange(event.target.checked ? [...value, zone] : value.filter((item) => item !== zone))}
             className="accent-primary"
           />
-          {zone}
+          {pipelineZoneDisplayCode(zone)}
         </label>
       ))}
     </div>
@@ -439,7 +440,7 @@ export function IrrigationPipelineEditor({ map, leaflet, trees }: IrrigationPipe
             segment.segmentCode,
             segment.pipeSizeValue ? `${segment.pipeSizeValue} ${segment.pipeSizeUnit ?? ""}` : "size?",
             subline?.sublineCode,
-            segment.irrigationZoneCodes.join("/"),
+            segment.irrigationZoneCodes.map(pipelineZoneDisplayCode).join("/"),
           ].filter(Boolean).join(" · ")
           leaflet.marker([midpoint[1], midpoint[0]], {
             pane: "pipeline-nodes",
@@ -883,7 +884,7 @@ export function IrrigationPipelineEditor({ map, leaflet, trees }: IrrigationPipe
         <div className="grid grid-cols-2 gap-2">
           <select aria-label="Pipeline status filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PipelineStatus | "All")} className={inputClass()}><option>All</option>{PIPELINE_STATUSES.map((status) => <option key={status}>{status}</option>)}</select>
           <select aria-label="Equipment type filter" value={equipmentFilter} onChange={(event) => setEquipmentFilter(event.target.value as PipelineEquipmentType | "All")} className={inputClass()}><option>All</option>{PIPELINE_EQUIPMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
-          <select aria-label="Irrigation zone filter" value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value as PipelineZone | "All")} className={inputClass()}><option>All</option>{PIPELINE_ZONES.map((zone) => <option key={zone}>{zone}</option>)}</select>
+          <select aria-label="Irrigation zone filter" value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value as PipelineZone | "All")} className={inputClass()}><option>All</option>{PIPELINE_ZONES.map((zone) => <option key={zone} value={zone}>{pipelineZoneDisplayCode(zone)}</option>)}</select>
           <input aria-label="Survey index filter" type="number" min="1" max="89" value={surveyFilter} onChange={(event) => setSurveyFilter(event.target.value)} placeholder="Survey index" className={inputClass()} />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">Showing {visibleNodes.length} of {nodes.length} points. Nearby points are never merged or auto-connected.</p>

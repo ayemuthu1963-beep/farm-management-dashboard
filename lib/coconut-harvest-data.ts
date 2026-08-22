@@ -39,8 +39,8 @@ export const treeClassifications: string[] = [
 ]
 
 export const detailedQueryClassifications = {
-  plot1: treeClassifications,
-  plot2: ["All", "Match Winner", "Reliable Batter", "Tail Ender", "Bench Player", "Future Better"],
+  plot1: ["All", "Match Winner", "Reliable Batter", "Tail Ender", "Bench Player", "Future Better"],
+  plot2: treeClassifications,
 } as const
 
 // ===========================================================================
@@ -153,8 +153,8 @@ export interface PerformanceRow {
   averageNuts: number
 }
 
-/** Plot 1 — tree numbers 1 to 999. */
-export const plot1Performance: PerformanceRow[] = [
+/** Plot 2 — tree numbers 1 to 999. */
+export const plot2Performance: PerformanceRow[] = [
   { rank: 1, category: "💯 Century Maker", criteria: "Over 400 nuts in last 10 harvests", treeCount: 62, minNuts: 401, maxNuts: 545, averageNuts: 434.58 },
   { rank: 2, category: "🔥 Match Winner", criteria: "300 to 399 nuts in last 10 harvests", treeCount: 275, minNuts: 300, maxNuts: 398, averageNuts: 341.62 },
   { rank: 3, category: "👍 Reliable Batter", criteria: "225 to 299 nuts in last 10 harvests", treeCount: 208, minNuts: 225, maxNuts: 299, averageNuts: 264.79 },
@@ -162,8 +162,8 @@ export const plot1Performance: PerformanceRow[] = [
   { rank: 5, category: "🪑 Bench Player", criteria: "Less than 175 nuts in last 10 harvests", treeCount: 341, minNuts: 0, maxNuts: 172, averageNuts: 26.37 },
 ]
 
-/** Plot 2 — tree numbers above 1000. */
-export const plot2Performance: PerformanceRow[] = [
+/** Plot 1 — tree numbers 1001 onward. */
+export const plot1Performance: PerformanceRow[] = [
   { rank: 1, category: "🔥 Match Winner", criteria: "200 to 299 nuts in last 10 harvests", treeCount: 36, minNuts: 200, maxNuts: 290, averageNuts: 224.58 },
   { rank: 2, category: "👍 Reliable Batter", criteria: "150 to 199 nuts in last 10 harvests", treeCount: 145, minNuts: 150, maxNuts: 198, averageNuts: 170.91 },
   { rank: 3, category: "😬 Tail Ender", criteria: "100 to 149 nuts in last 10 harvests", treeCount: 359, minNuts: 100, maxNuts: 149, averageNuts: 123.9 },

@@ -2,26 +2,26 @@ import { createHash } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-const [plot1Source, plot2Source, outputDirectory] = process.argv.slice(2)
+const [legacyPlot1Source, legacyPlot2Source, outputDirectory] = process.argv.slice(2)
 
-if (!plot1Source || !plot2Source || !outputDirectory) {
+if (!legacyPlot1Source || !legacyPlot2Source || !outputDirectory) {
   console.error(
-    "Usage: node scripts/prepare-farm-map-trees.mjs <plot1.geojson> <plot2.geojson> <output-directory>",
+    "Usage: node scripts/prepare-farm-map-trees.mjs <legacy-plot1.geojson> <legacy-plot2.geojson> <output-directory>",
   )
   process.exit(2)
 }
 
 const definitions = [
   {
-    plot: "Plot 1",
-    source: plot1Source,
-    output: "plot1-coconut-trees-v1.geojson",
+    plot: "Plot 2",
+    source: legacyPlot1Source,
+    output: "plot2-coconut-trees-v1.geojson",
     expectedCount: 954,
   },
   {
-    plot: "Plot 2",
-    source: plot2Source,
-    output: "plot2-coconut-trees-v1.geojson",
+    plot: "Plot 1",
+    source: legacyPlot2Source,
+    output: "plot1-coconut-trees-v1.geojson",
     expectedCount: 1163,
   },
 ]

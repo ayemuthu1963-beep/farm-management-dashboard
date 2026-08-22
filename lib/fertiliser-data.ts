@@ -831,6 +831,21 @@ export const fertiliserPurposes = [
 
 export const fertiliserLocations = ["Plot 1", "Plot 2", "Coconut Block", "Jackfruit Block", "Nutmeg Block", "Main Store", "Other"]
 
+/**
+ * Fertiliser rows keep their original stored location value so historical
+ * records and API filters remain stable. Only the public plot label changes.
+ */
+export function fertiliserLocationDisplay(value: string | null | undefined): string {
+  if (value === "Plot 1") return "Plot 2"
+  if (value === "Plot 2") return "Plot 1"
+  return value ?? ""
+}
+
+export const fertiliserLocationOptions = fertiliserLocations.map((value) => ({
+  value,
+  label: fertiliserLocationDisplay(value),
+}))
+
 export const duplicateConfirmationNotes = [
   "Grosure appears in Insecticide and NPK Fertilizer. Both entries are retained for later administrator confirmation.",
 ]

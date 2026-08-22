@@ -274,8 +274,8 @@ function BeetleAreaTable({ data }: { data: BeetleDashboardData | null }) {
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
         <p><span className="font-semibold text-foreground">Cumulative period:</span> {data.cumulative_period_label ?? data.selected_period?.label ?? "Not configured"}</p>
         {data.cumulative_config_status !== "ok" && data.cumulative_config_message ? <p className="mt-1 text-amber-700">{data.cumulative_config_message}</p> : null}
-        <p className="mt-1">Plot 1: 20 Red Palm Weevil traps · 16 Rhinoceros Beetle traps</p>
-        <p>Plot 2: 19 Red Palm Weevil traps · 23 Rhinoceros Beetle traps</p>
+        <p className="mt-1">Plot 1: 19 Red Palm Weevil traps · 23 Rhinoceros Beetle traps</p>
+        <p>Plot 2: 20 Red Palm Weevil traps · 16 Rhinoceros Beetle traps</p>
       </div>
       <div className="grid gap-3 md:hidden">
         {rows.map((row) => (

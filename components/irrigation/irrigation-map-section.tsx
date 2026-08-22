@@ -16,10 +16,10 @@ export function IrrigationMapSection({ zones }: IrrigationMapSectionProps) {
 
   // SVG zone map layout — all five zones visible without scrolling
   const zoneShapes = [
-    { id: "P1E" as const, label: "PLOT 1 EAST", path: "M 8 8 L 28 8 L 28 28 L 8 28 Z", labelX: 18, labelY: 18 },
-    { id: "P1W" as const, label: "PLOT 1 WEST", path: "M 8 38 L 28 38 L 28 58 L 8 58 Z", labelX: 18, labelY: 48 },
-    { id: "P2E" as const, label: "PLOT 2 EAST", path: "M 72 8 L 92 8 L 92 28 L 72 28 Z", labelX: 82, labelY: 18 },
-    { id: "P2W" as const, label: "PLOT 2 WEST", path: "M 72 38 L 92 38 L 92 58 L 72 58 Z", labelX: 82, labelY: 48 },
+    { id: "P1E" as const, label: "PLOT 1 EAST", path: "M 72 8 L 92 8 L 92 28 L 72 28 Z", labelX: 82, labelY: 18 },
+    { id: "P1W" as const, label: "PLOT 1 WEST", path: "M 72 38 L 92 38 L 92 58 L 72 58 Z", labelX: 82, labelY: 48 },
+    { id: "P2E" as const, label: "PLOT 2 EAST", path: "M 8 8 L 28 8 L 28 28 L 8 28 Z", labelX: 18, labelY: 18 },
+    { id: "P2W" as const, label: "PLOT 2 WEST", path: "M 8 38 L 28 38 L 28 58 L 8 58 Z", labelX: 18, labelY: 48 },
     { id: "JF" as const, label: "JACKFRUIT", path: "M 36 68 L 64 68 L 64 88 L 36 88 Z", labelX: 50, labelY: 78 },
   ]
 

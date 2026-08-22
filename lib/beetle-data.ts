@@ -46,7 +46,7 @@ export const beetleSummary: BeetleSummary[] = [
   { label: "Red Palm Weevil Traps", value: "39", unit: "red beetle", icon: "weevil" },
   { label: "Next Inspection Due", value: nextInspectionDate, unit: "in 2 days", icon: "calendar" },
   { label: "Highest Infection Trap", value: "Trap 21", unit: "42 beetles since reset", icon: "alert" },
-  { label: "Highest Infection Area", value: "Plot 1 – NE Zone", unit: "68 beetles", icon: "area" },
+  { label: "Highest Infection Area", value: "Plot 2 – NE Zone", unit: "68 beetles", icon: "area" },
 ]
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ export interface Trap {
   lastInspection: string
 }
 
-export const traps: Trap[] = [
+const legacyTraps: Trap[] = [
   // Top 10 (highest cumulative counts) — exact placeholder values
   { trapNo: "Trap 21", type: "Red Palm Weevil", plot: "plot1", x: 24, y: 30, lastCount: 6, cumulativeCount: 42, risk: "Very High", lastInspection: lastInspectionDate },
   { trapNo: "Trap 36", type: "Rhinoceros", plot: "plot2", x: 58, y: 26, lastCount: 5, cumulativeCount: 38, risk: "Very High", lastInspection: lastInspectionDate },
@@ -105,6 +105,11 @@ export const traps: Trap[] = [
     }
   }).filter((trap): trap is Trap => trap !== null),
 ]
+
+export const traps: Trap[] = legacyTraps.map((trap) => ({
+  ...trap,
+  plot: trap.plot === "plot1" ? "plot2" : "plot1",
+}))
 
 // Top 10 traps since last reset (derived — highest cumulative first)
 export const topTraps: Trap[] = [...traps].sort((a, b) => b.cumulativeCount - a.cumulativeCount).slice(0, 10)
@@ -155,12 +160,12 @@ export interface AreaInfection {
 }
 
 export const areaInfections: AreaInfection[] = [
-  { area: "Plot 1 – North East Zone", count: 68 },
-  { area: "Plot 1 – Central Zone", count: 54 },
-  { area: "Plot 2 – North Zone", count: 47 },
-  { area: "Plot 2 – West Zone", count: 39 },
-  { area: "Plot 1 – South Zone", count: 26 },
-  { area: "Plot 2 – South Zone", count: 18 },
+  { area: "Plot 2 – North East Zone", count: 68 },
+  { area: "Plot 2 – Central Zone", count: 54 },
+  { area: "Plot 1 – North Zone", count: 47 },
+  { area: "Plot 1 – West Zone", count: 39 },
+  { area: "Plot 2 – South Zone", count: 26 },
+  { area: "Plot 1 – South Zone", count: 18 },
 ]
 
 // ---------------------------------------------------------------------------
@@ -173,8 +178,8 @@ export interface PlotMap {
 }
 
 export const plotMaps: PlotMap[] = [
-  { id: "plot1", label: "Plot 1", image: "/mfms/beetle/plot1-orthomosaic.png" },
-  { id: "plot2", label: "Plot 2", image: "/mfms/beetle/plot2-orthomosaic.png" },
+  { id: "plot1", label: "Plot 1", image: "/mfms/beetle/plot2-orthomosaic.png" },
+  { id: "plot2", label: "Plot 2", image: "/mfms/beetle/plot1-orthomosaic.png" },
 ]
 
 // ---------------------------------------------------------------------------

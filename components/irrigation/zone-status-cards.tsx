@@ -184,7 +184,7 @@ export function ZoneStatusCards({ zones, selectedZoneId, onSelectZone }: ZoneSta
 
             {zone.id === "NM" ? (
               <div className="mx-4 mb-4 mt-2 inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2 py-1 text-[11px] font-semibold text-fuchsia-700">
-                <Waves className="size-3" aria-hidden="true" /> Overlay: Plot 1 East + Plot 2 West
+                <Waves className="size-3" aria-hidden="true" /> Overlay: Plot 2 East + Plot 1 West
               </div>
             ) : null}
           </div>
