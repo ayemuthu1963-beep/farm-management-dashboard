@@ -16,6 +16,30 @@ function safeError(status: number, message: string) {
   return NextResponse.json({ error: message }, { status, headers: NO_STORE_HEADERS })
 }
 
+async function readLimitedBody(response: Response): Promise<Uint8Array | null> {
+  const reader = response.body?.getReader()
+  if (!reader) return new Uint8Array()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    totalBytes += value.byteLength
+    if (totalBytes > RESPONSE_LIMIT_BYTES) {
+      await reader.cancel("Analyzer response exceeds the configured limit.")
+      return null
+    }
+    chunks.push(value)
+  }
+  const body = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return body
+}
+
 function safeString(value: unknown, max = 2000): value is string {
   return typeof value === "string" && value.length <= max
 }
@@ -128,8 +152,8 @@ export async function GET(request: NextRequest) {
     })
     const contentLength = Number(response.headers.get("content-length") ?? "0")
     if (Number.isFinite(contentLength) && contentLength > RESPONSE_LIMIT_BYTES) return safeError(502, "AI Farm Analyzer returned an oversized response.")
-    const responseBody = await response.arrayBuffer()
-    if (responseBody.byteLength > RESPONSE_LIMIT_BYTES) return safeError(502, "AI Farm Analyzer returned an oversized response.")
+    const responseBody = await readLimitedBody(response)
+    if (!responseBody) return safeError(502, "AI Farm Analyzer returned an oversized response.")
     let payload: unknown = null
     try {
       payload = JSON.parse(new TextDecoder().decode(responseBody))
