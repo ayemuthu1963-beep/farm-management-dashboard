@@ -272,9 +272,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Correct environment wording and fail closed cross-environment frontend fallbacks",
+  "Add the authenticated MFMS AI Farm Analyzer to Preview",
 )
-assert.equal(manifest.base_commit, "7cf302811f87f4db4be3248131289ac72aba54b7")
+assert.equal(manifest.base_commit, "b063c4b2ca008c1c765f959c9c7049ad08d8fd6e")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -284,25 +284,15 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "Dockerfile.preview",
-  "app/admin/harvest-cycle/page.tsx",
-  "app/admin/harvest-sync/page.tsx",
-  "app/admin/page.tsx",
-  "app/api/coconut-harvest/live-counter/route.ts",
-  "app/fertiliser-management/page.tsx",
-  "components/admin/beetle-trap-admin-client.tsx",
-  "components/admin/harvest-cycle-admin-client.tsx",
-  "components/admin/preview-admin-notice.tsx",
-  "components/maps/farm-map-client.tsx",
+  "app/ai-farm-analyzer/page.tsx",
+  "app/api/ai-analyzer/route.ts",
+  "components/ai-analyzer/ai-analyzer-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/api.ts",
-  "lib/fertiliser-api.ts",
-  "lib/odk-preview.ts",
+  "lib/ai-analyzer-types.ts",
+  "lib/mfms-navigation.ts",
   "package.json",
-  "tests/application-hygiene.mjs",
-  "tests/harvest-sync-exact-duplicates.mjs",
+  "tests/ai-farm-analyzer.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/preview-targeted-repair.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
