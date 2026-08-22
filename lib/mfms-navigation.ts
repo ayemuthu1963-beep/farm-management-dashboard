@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  BrainCircuit,
   Bug,
   Citrus,
   CloudSun,
@@ -240,6 +241,18 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     showInSidebar: true,
     order: 13.5,
     ctaLabel: "Ask MFMS Intelligence",
+  },
+  {
+    id: "ai-farm-analyzer",
+    label: "AI Farm Analyzer",
+    href: "/ai-farm-analyzer",
+    icon: BrainCircuit,
+    description: "Evidence-backed farm alerts with optional constrained AI explanations",
+    status: "active",
+    showOnDashboard: false,
+    showInSidebar: true,
+    order: 13.6,
+    ctaLabel: "Open AI Farm Analyzer",
   },
   {
     id: "inventory-management",
