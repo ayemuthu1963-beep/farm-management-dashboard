@@ -164,7 +164,7 @@ function isSafePanelChart(value: unknown, sections: Array<Record<string, unknown
 
 function isSafeResponse(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value) || (!hasExactFields(value, RESPONSE_FIELDS) && !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS))) return false
-  if (typeof value.answer !== "string" || typeof value.status !== "string" || !["ANSWERED", "BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT", "CLARIFICATION_REQUIRED"].includes(value.status) || typeof value.data_as_of !== "string" || typeof value.data_source_status !== "string") return false
+  if (typeof value.answer !== "string" || typeof value.status !== "string" || !["ANSWERED", "BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT", "CLARIFICATION_REQUIRED"].includes(value.status) || (value.data_as_of !== null && typeof value.data_as_of !== "string") || typeof value.data_source_status !== "string") return false
   if (![value.period, value.period_start, value.period_end, value.denominator, value.blocked_reason].every((item) => item === null || typeof item === "string")) return false
   if (!Array.isArray(value.cycles) || value.cycles.length > 19 || !value.cycles.every((cycle) => typeof cycle === "string" && /^\d+$/.test(cycle))) return false
   if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 32 || !value.quality_flags.every((flag) => typeof flag === "string")) return false
