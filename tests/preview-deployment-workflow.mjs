@@ -272,9 +272,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Reconcile the verified AI Farm Analyzer with the current governed Data Analyser Preview baseline",
+  "Include the UI Sheet Total as the final typed row in the Worker Management Excel export",
 )
-assert.equal(manifest.base_commit, "415df4d211e03e28794b93ad788045b98527092f")
+assert.equal(manifest.base_commit, "a41ba4062625dd2f33b376e65c27fd2afc64375b")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -284,9 +284,14 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "docs/MFMS_PREVIEW_UNIFIED_RELEASE_20260823.md",
+  "lib/worker-wage-excel.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "tests/worker-management.mjs",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-wage-excel.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
