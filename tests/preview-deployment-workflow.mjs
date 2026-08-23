@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
-import { readFileSync, statSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { spawnSync } from "node:child_process"
 
 const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
 
@@ -10,6 +13,7 @@ const releaseSignalWorkflow = readText(".github/workflows/preview-release-candid
 const preflightScript = readText("scripts/preview-server-preflight.sh")
 const deployScript = readText("scripts/preview-server-deploy.sh")
 const previewDockerfile = readText("Dockerfile.preview")
+const acceptanceDockerfile = readText("Dockerfile.acceptance")
 const gitAttributes = readText(".gitattributes")
 const manifest = JSON.parse(
   readFileSync("deploy/preview-release-manifest.json", "utf8"),
@@ -22,6 +26,19 @@ if (process.platform !== "win32") {
   assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
 }
 assert.equal(gitAttributes, "*.sh text eol=lf\n")
+assert.match(
+  acceptanceDockerfile,
+  /FROM node@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS node_toolchain/,
+)
+assert.match(
+  acceptanceDockerfile,
+  /FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc/,
+)
+assert.match(acceptanceDockerfile, /isolated-linux-acceptance-test-only/)
+assert.match(acceptanceDockerfile, /node --version \| grep -Fx 'v24\.19\.0'/)
+assert.match(acceptanceDockerfile, /python3 --version \| grep -Fx 'Python 3\.14\.7'/)
+assert.doesNotMatch(acceptanceDockerfile, /\b(?:apk|apt-get|pip|npm|pnpm)\s+(?:add|install)\b/)
+assert.doesNotMatch(acceptanceDockerfile, /OPENAI_API_KEY/)
 
 for (const workflow of manualWorkflows) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
@@ -272,9 +289,11 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Reconcile the verified AI Farm Analyzer with the current governed Data Analyser Preview baseline",
+  "Reconcile explicit on-demand AI controls with the owner-approved F2A UX1 Preview baseline while keeping the provider disabled",
 )
-assert.equal(manifest.base_commit, "415df4d211e03e28794b93ad788045b98527092f")
+assert.equal(manifest.base_commit, "a7d74621e1c1366a7f631d3e28d8909e9b521e25")
+assert.equal(manifest.matched_backend_commit, "be0af54344c99a856b268a27eb4c0e96789b31b3")
+assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -284,11 +303,56 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/api/ai-analyzer/route.ts",
+  "components/ai-analyzer/ai-analyzer-client.tsx",
+  "Dockerfile.acceptance",
   "deploy/preview-release-manifest.json",
-  "docs/MFMS_PREVIEW_UNIFIED_RELEASE_20260823.md",
+  "lib/ai-analyzer-types.ts",
+  "tests/ai-farm-analyzer.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
+
+// Exercise the exact Python validator embedded in the governed deployment
+// script. This prevents manifest and runtime guard contracts from drifting
+// apart while keeping the validator itself authoritative.
+const validatorPrefix = `python3 - "$manifest" "$actual_paths" "$original_revision" <<'PY'\n`
+const validatorStart = deployScript.indexOf(validatorPrefix)
+assert.notEqual(validatorStart, -1, "embedded manifest validator is missing")
+const validatorBodyStart = validatorStart + validatorPrefix.length
+const validatorEnd = deployScript.indexOf("\nPY\n}", validatorBodyStart)
+assert.notEqual(validatorEnd, -1, "embedded manifest validator terminator is missing")
+const validatorProgram = deployScript.slice(validatorBodyStart, validatorEnd)
+const validatorFixture = mkdtempSync(join(tmpdir(), "mfms-preview-manifest-"))
+try {
+  const fixtureManifest = join(validatorFixture, "manifest.json")
+  const fixturePaths = join(validatorFixture, "actual-paths.txt")
+  writeFileSync(fixtureManifest, `${JSON.stringify(manifest)}\n`, { mode: 0o600 })
+  writeFileSync(fixturePaths, `${expectedReleasePaths.join("\n")}\n`, { mode: 0o600 })
+  const python = process.platform === "win32" ? "py" : "python3"
+  const pythonArgs = process.platform === "win32"
+    ? ["-3", "-", fixtureManifest, fixturePaths, manifest.base_commit]
+    : ["-", fixtureManifest, fixturePaths, manifest.base_commit]
+  const validation = spawnSync(python, pythonArgs, {
+    input: validatorProgram,
+    encoding: "utf8",
+  })
+  assert.equal(
+    validation.status,
+    0,
+    `governed manifest validator rejected the release manifest: ${validation.stderr}`,
+  )
+
+  const incompatible = { ...manifest, schema_version: 2 }
+  writeFileSync(fixtureManifest, `${JSON.stringify(incompatible)}\n`, { mode: 0o600 })
+  const rejection = spawnSync(python, pythonArgs, {
+    input: validatorProgram,
+    encoding: "utf8",
+  })
+  assert.notEqual(rejection.status, 0, "incompatible manifest schema was accepted")
+} finally {
+  rmSync(validatorFixture, { recursive: true, force: true })
+}
 
 const smokeScript = readText("scripts/test-preview-release.sh")
 assert.match(smokeScript, /check \/admin\/tree-lifecycle "Tree Lifecycle \/ Sapling Status"/)
