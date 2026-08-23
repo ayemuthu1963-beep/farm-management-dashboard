@@ -291,7 +291,7 @@ assert.equal(
   "Reconcile explicit on-demand AI controls with the owner-approved F2A UX1 Preview baseline while keeping the provider disabled",
 )
 assert.equal(manifest.base_commit, "a7d74621e1c1366a7f631d3e28d8909e9b521e25")
-assert.equal(manifest.matched_backend_commit, "be0af54344c99a856b268a27eb4c0e96789b31b3")
+assert.equal(manifest.matched_backend_commit, "fb2ffdef1d9a514d1db2091fab10ca8399f52a06")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
