@@ -14,7 +14,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react"
-import type { AnalyzerAlert, AnalyzerResponse, AnalyzerSeverity } from "@/lib/ai-analyzer-types"
+import type { AiGenerationResult, AnalyzerAlert, AnalyzerResponse, AnalyzerSeverity } from "@/lib/ai-analyzer-types"
 import { cn } from "@/lib/utils"
 
 
@@ -80,7 +80,19 @@ function AlertCard({ alert, selected, onSelect }: { alert: AnalyzerAlert; select
   </button>
 }
 
-function EvidencePanel({ alert }: { alert: AnalyzerAlert }) {
+function EvidencePanel({
+  alert,
+  aiEnabled,
+  generating,
+  generationStatus,
+  onGenerate,
+}: {
+  alert: AnalyzerAlert
+  aiEnabled: boolean
+  generating: boolean
+  generationStatus: string | null
+  onGenerate: () => void
+}) {
   const explanation = alert.ai_explanation ?? alert.deterministic_fallback_explanation
   const explanationIsAi = Boolean(alert.ai_explanation)
   return <article className="space-y-5 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
@@ -113,6 +125,19 @@ function EvidencePanel({ alert }: { alert: AnalyzerAlert }) {
       <div className="flex items-center gap-2 text-violet-950">{explanationIsAi ? <Bot className="size-5" aria-hidden="true" /> : <FileSearch className="size-5" aria-hidden="true" />}<h3 id="explanation-heading" className="font-bold">{explanationIsAi ? "AI explanation" : "Deterministic fallback explanation"}</h3></div>
       <p className="mt-3 text-sm leading-6 text-violet-950">{explanation}</p>
       <p className="mt-3 text-[11px] text-violet-800">{explanationIsAi ? `Model ${alert.model_name} · prompt ${alert.prompt_version}${alert.ai_usage?.cache_hit ? " · evidence-cache hit" : ""}` : "AI was disabled, unavailable, over its limit, or safely rejected. The Analyzer remains functional."}</p>
+      {!explanationIsAi ? <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={!aiEnabled || generating}
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-900 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {generating ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Bot className="size-4" aria-hidden="true" />}
+          {generating ? "Generating…" : "Generate AI explanation"}
+        </button>
+        <span className="text-xs font-semibold text-violet-800">{aiEnabled ? "On demand for this alert only" : "Live AI unavailable — deterministic fallback remains active"}</span>
+      </div> : null}
+      {generationStatus ? <p role="status" className="mt-3 text-xs font-semibold text-violet-900">{generationStatus}</p> : null}
     </section>
 
     <section className="rounded-xl border border-border bg-muted/30 p-4" aria-labelledby="checks-heading">
@@ -129,6 +154,8 @@ export function AiAnalyzerClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -145,6 +172,33 @@ export function AiAnalyzerClient() {
       setLoading(false)
     }
   }, [])
+
+  const generateExplanation = useCallback(async (alert: AnalyzerAlert) => {
+    if (!data?.ai_enabled || generatingId) return
+    setGeneratingId(alert.alert_id)
+    setGenerationStatus(null)
+    try {
+      const response = await fetch("/api/ai-analyzer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alert_id: alert.alert_id, evidence_hash: alert.evidence_hash }),
+        cache: "no-store",
+      })
+      const payload = await response.json().catch(() => null) as AiGenerationResult | { error?: string } | null
+      if (!response.ok || !payload || !("alert" in payload)) {
+        throw new Error(payload && "error" in payload ? payload.error : "AI explanation is unavailable.")
+      }
+      setData((current) => current ? {
+        ...current,
+        alerts: current.alerts.map((item) => item.alert_id === payload.alert.alert_id ? payload.alert : item),
+      } : current)
+      setGenerationStatus(payload.status === "cache_hit" ? "Validated explanation loaded from the evidence cache; no provider call was made." : payload.status === "generated" ? "Validated AI explanation generated for this alert." : "Deterministic fallback remains active.")
+    } catch (reason) {
+      setGenerationStatus(reason instanceof Error ? reason.message : "AI explanation is unavailable; deterministic fallback remains active.")
+    } finally {
+      setGeneratingId(null)
+    }
+  }, [data?.ai_enabled, generatingId])
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => { void refresh() }, 0)
@@ -204,8 +258,8 @@ export function AiAnalyzerClient() {
     </section>
 
     <section className="grid items-start gap-5 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.7fr)]" aria-label="Alert list and evidence">
-      <div className="space-y-3">{visibleAlerts.map((alert) => <AlertCard key={alert.alert_id} alert={alert} selected={selected?.alert_id === alert.alert_id} onSelect={() => setSelectedId(alert.alert_id)} />)}{visibleAlerts.length === 0 ? <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">No alerts match the selected filters.</div> : null}</div>
-      {selected ? <EvidencePanel alert={selected} /> : <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">Select an alert to inspect its evidence.</div>}
+      <div className="space-y-3">{visibleAlerts.map((alert) => <AlertCard key={alert.alert_id} alert={alert} selected={selected?.alert_id === alert.alert_id} onSelect={() => { setSelectedId(alert.alert_id); setGenerationStatus(null) }} />)}{visibleAlerts.length === 0 ? <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">No alerts match the selected filters.</div> : null}</div>
+      {selected ? <EvidencePanel alert={selected} aiEnabled={data.ai_enabled} generating={generatingId === selected.alert_id} generationStatus={generationStatus} onGenerate={() => void generateExplanation(selected)} /> : <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">Select an alert to inspect its evidence.</div>}
     </section>
 
     <section className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">

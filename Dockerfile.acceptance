@@ -1,0 +1,22 @@
+ARG ACCEPTANCE_BASE_IMAGE
+FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS python_toolchain
+
+FROM ${ACCEPTANCE_BASE_IMAGE}
+
+LABEL com.muthufarms.mfms.purpose=isolated-linux-acceptance-test-only
+
+# The source builder supplies the lockfile-resolved application and test
+# dependencies. Node 24.19.0 and Python 3.14.7 come from immutable official
+# Alpine 3.24 image digests and never enter the Preview runtime image.
+# Keep the verified source-builder image as the final base so its complete Node,
+# pnpm and libstdc++/libgcc runtime remains intact. The matching Alpine 3.24
+# Python toolchain is copied only into this test image.
+COPY --from=python_toolchain /usr/local /usr/local
+
+WORKDIR /app
+ENV CI=true \
+    MFMS_ANALYZER_AI_ENABLED=false \
+    MFMS_ACCEPTANCE_IMAGE=1
+
+RUN node --version | grep -Fx 'v24.19.0' \
+    && python3 --version | grep -Fx 'Python 3.14.7'
