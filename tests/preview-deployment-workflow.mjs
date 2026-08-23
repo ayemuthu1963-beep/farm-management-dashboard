@@ -28,12 +28,13 @@ if (process.platform !== "win32") {
 assert.equal(gitAttributes, "*.sh text eol=lf\n")
 assert.match(
   acceptanceDockerfile,
-  /FROM node@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS node_toolchain/,
+  /FROM node@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43\n/,
 )
 assert.match(
   acceptanceDockerfile,
-  /FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc/,
+  /FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS python_toolchain/,
 )
+assert.match(acceptanceDockerfile, /COPY --from=python_toolchain \/usr\/local \/usr\/local/)
 assert.match(acceptanceDockerfile, /isolated-linux-acceptance-test-only/)
 assert.match(acceptanceDockerfile, /node --version \| grep -Fx 'v24\.19\.0'/)
 assert.match(acceptanceDockerfile, /python3 --version \| grep -Fx 'Python 3\.14\.7'/)

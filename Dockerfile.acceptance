@@ -1,16 +1,19 @@
 ARG ACCEPTANCE_BASE_IMAGE
 FROM ${ACCEPTANCE_BASE_IMAGE} AS acceptance_source
 
-FROM node@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS node_toolchain
+FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS python_toolchain
 
-FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
+FROM node@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
 
 LABEL com.muthufarms.mfms.purpose=isolated-linux-acceptance-test-only
 
 # The source builder supplies the lockfile-resolved application and test
 # dependencies. Node 24.19.0 and Python 3.14.7 come from immutable official
 # Alpine 3.24 image digests and never enter the Preview runtime image.
-COPY --from=node_toolchain /usr/local /usr/local
+# Keep the Node image as the final base so its pinned libstdc++/libgcc runtime
+# remains complete. The matching Alpine 3.24 Python toolchain has no overlap
+# with Node's executables and is copied only into this test image.
+COPY --from=python_toolchain /usr/local /usr/local
 COPY --from=acceptance_source /app /app
 
 WORKDIR /app
