@@ -11,7 +11,8 @@ const PROXY_TIMEOUT_MS = 20_000
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
 const RESPONSE_FIELDS = ["analysis_plan", "answer", "blocked_reason", "chart", "cycles", "data_as_of", "data_source_status", "denominator", "metabase_call_made", "period", "period_end", "period_start", "provider_call_made", "quality_flags", "status", "table"]
 const COMPOSITE_RESPONSE_FIELDS = [...RESPONSE_FIELDS, "charts", "freshness", "sections"]
-const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows", "irrigation_runtime", "water_delivered", "north_morning", "north_evening", "south_morning", "south_evening", "beetle_traps_inspected", "beetle_captures"])
+const ACTIONABLE_RESPONSE_FIELDS = [...RESPONSE_FIELDS, "denominator_details", "lifecycle_as_of_date", "lifecycle_filter"]
+const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows", "irrigation_runtime", "water_delivered", "north_morning", "north_evening", "south_morning", "south_evening", "beetle_traps_inspected", "beetle_captures", "c1_nuts", "c2_nuts", "c3_nuts", "c4_nuts", "c5_nuts", "early_avg", "recent_avg", "change", "change_percentage", "direction"])
 const METRICS = new Set(["total_nuts", "total_bunches", "harvested_tree_cycle_records", "distinct_observed_harvested_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch"])
 const IRRIGATION_METRICS = new Set(["runtime_minutes", "estimated_delivered_litres"])
 const WELL_WATER_METRICS = new Set(["calibrated_litres"])
@@ -89,9 +90,14 @@ function isSafePlan(value: unknown, allowComposite = true): boolean {
       && [null, "Morning", "Evening"].includes(filters.reading_period as null | string)
       && [null, "MISSING_MORNING_READING", "MISSING_EVENING_READING", "DUPLICATE_PERIOD", "CAPACITY_CONFLICT"].includes(filters.quality_filter as null | string)
   }
-  if (!hasExactFields(value, ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "series", "chart_type"])) return false
+  const baseFields = ["domain", "metric", "group_by", "filters", "period", "sort", "limit", "series", "chart_type"]
+  const directionFields = [...baseFields, "analysis_kind", "direction_class"]
+  const directionPlan = hasExactFields(value, directionFields)
+  if (!hasExactFields(value, baseFields) && !directionPlan) return false
   const filters = value.filters; const period = value.period; const sort = value.sort
-  if (!isRecord(filters) || !hasExactFields(filters, ["plots", "tree_numbers"]) || !isRecord(period) || !hasExactFields(period, ["kind", "count", "cycles"]) || !isRecord(sort) || !hasExactFields(sort, ["metric", "direction"])) return false
+  if (!isRecord(filters) || (!hasExactFields(filters, ["plots", "tree_numbers"]) && !hasExactFields(filters, ["plots", "tree_numbers", "current_lifecycle_status"])) || !isRecord(period) || !hasExactFields(period, ["kind", "count", "cycles"]) || !isRecord(sort) || !hasExactFields(sort, ["metric", "direction"])) return false
+  if ("current_lifecycle_status" in filters && filters.current_lifecycle_status !== "Harvest Tree") return false
+  if (directionPlan && (value.analysis_kind !== "five_cycle_direction" || !["Improved", "Declined"].includes(String(value.direction_class)) || filters.current_lifecycle_status !== "Harvest Tree" || period.kind !== "latest_n" || period.count !== 5 || !Array.isArray(period.cycles) || period.cycles.length !== 0 || sort.metric !== "absolute_change" || sort.direction !== (value.direction_class === "Improved" ? "desc" : "asc"))) return false
   return value.domain === "harvest"
     && typeof value.metric === "string" && METRICS.has(value.metric)
     && typeof value.group_by === "string" && ["none", "tree", "plot", "cycle"].includes(value.group_by)
@@ -100,7 +106,7 @@ function isSafePlan(value: unknown, allowComposite = true): boolean {
     && typeof period.kind === "string" && ["latest_n", "latest_completed", "all_completed", "cycles"].includes(period.kind)
     && (period.count === null || (typeof period.count === "number" && Number.isInteger(period.count) && period.count >= 1 && period.count <= 19))
     && Array.isArray(period.cycles) && period.cycles.length <= 19 && period.cycles.every((item) => typeof item === "string" && /^\d+$/.test(item))
-    && typeof sort.metric === "string" && METRICS.has(sort.metric) && (sort.direction === "asc" || sort.direction === "desc")
+    && typeof sort.metric === "string" && (directionPlan ? sort.metric === "absolute_change" : METRICS.has(sort.metric)) && (sort.direction === "asc" || sort.direction === "desc")
     && (value.limit === null || (typeof value.limit === "number" && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 50))
     && (value.series === "none" || value.series === "plot")
     && (value.chart_type === null || value.chart_type === "line" || value.chart_type === "bar")
@@ -111,7 +117,7 @@ function isSafeCell(value: unknown, format: string, key: string) {
   if (format === "integer") return typeof value === "number" && Number.isInteger(value) && value >= 0
   if (format === "text") return typeof value === "string" && value.length <= 128
   if (format === "date") return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
-  if (format === "decimal6") return typeof value === "string" && /^\d+\.\d{6}$/.test(value)
+  if (format === "decimal6") return typeof value === "string" && /^-?\d+\.\d{6}$/.test(value)
   if (format === "flags") return Array.isArray(value) && value.length <= 8 && value.every((item) => typeof item === "string" && item.length <= 128)
   return false
 }
@@ -162,14 +168,26 @@ function isSafePanelChart(value: unknown, sections: Array<Record<string, unknown
   return isSafeChart({ type: value.type, x_field: value.x_field, y_fields: value.y_fields, series_field: value.series_field, rows: value.rows }, section.table)
 }
 
+function isSafeActionableMetadata(value: Record<string, unknown>) {
+  const details = value.denominator_details
+  const fields = ["complete_five_cycle_history", "current_harvest_trees_considered", "declined_count", "improved_count", "incomplete_five_cycle_history", "lifecycle_as_of_date", "unchanged_count"]
+  if (!isRecord(details) || !hasExactFields(details, fields)) return false
+  const countFields = fields.filter((field) => field !== "lifecycle_as_of_date")
+  if (!countFields.every((field) => typeof details[field] === "number" && Number.isInteger(details[field]) && Number(details[field]) >= 0)) return false
+  if (value.lifecycle_filter !== "Current Harvest Trees only" || typeof value.lifecycle_as_of_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.lifecycle_as_of_date) || details.lifecycle_as_of_date !== value.lifecycle_as_of_date) return false
+  return Number(details.complete_five_cycle_history) + Number(details.incomplete_five_cycle_history) === Number(details.current_harvest_trees_considered)
+    && Number(details.improved_count) + Number(details.declined_count) + Number(details.unchanged_count) === Number(details.complete_five_cycle_history)
+}
+
 function isSafeResponse(value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value) || (!hasExactFields(value, RESPONSE_FIELDS) && !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS))) return false
+  if (!isRecord(value) || (!hasExactFields(value, RESPONSE_FIELDS) && !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS) && !hasExactFields(value, ACTIONABLE_RESPONSE_FIELDS))) return false
   if (typeof value.answer !== "string" || typeof value.status !== "string" || !["ANSWERED", "BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT", "CLARIFICATION_REQUIRED"].includes(value.status) || (value.data_as_of !== null && typeof value.data_as_of !== "string") || typeof value.data_source_status !== "string") return false
   if (![value.period, value.period_start, value.period_end, value.denominator, value.blocked_reason].every((item) => item === null || typeof item === "string")) return false
   if (!Array.isArray(value.cycles) || value.cycles.length > 19 || !value.cycles.every((cycle) => typeof cycle === "string" && /^\d+$/.test(cycle))) return false
   if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 32 || !value.quality_flags.every((flag) => typeof flag === "string")) return false
   const baseValid = typeof value.metabase_call_made === "boolean" && typeof value.provider_call_made === "boolean"
     && isSafePlan(value.analysis_plan) && isSafeTable(value.table) && isSafeChart(value.chart, value.table)
+  if (hasExactFields(value, ACTIONABLE_RESPONSE_FIELDS)) return baseValid && isSafeActionableMetadata(value)
   if (!baseValid || !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS)) return baseValid
   if (!Array.isArray(value.sections) || value.sections.length < 2 || value.sections.length > 4 || !value.sections.every(isSafeSection)) return false
   const sections = value.sections as Array<Record<string, unknown>>

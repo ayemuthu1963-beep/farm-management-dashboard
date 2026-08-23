@@ -19,6 +19,11 @@ type ResultFreshness = {
   oldest_source_domain: DomainName; quality_flags: string[];
 }
 type PanelChart = ResultChart & { domain: DomainName; title: string }
+type ActionableDenominators = {
+  current_harvest_trees_considered: number; complete_five_cycle_history: number;
+  incomplete_five_cycle_history: number; improved_count: number; declined_count: number;
+  unchanged_count: number; lifecycle_as_of_date: string;
+}
 
 type IntelligenceResponse = {
   answer: string; status: string; data_as_of: string | null; period: string | null;
@@ -27,6 +32,7 @@ type IntelligenceResponse = {
   analysis_plan: Record<string, unknown> | null; table: ResultTable | null; chart: ResultChart | null;
   blocked_reason: string | null; metabase_call_made: boolean; provider_call_made: boolean;
   sections?: DomainSection[]; freshness?: ResultFreshness; charts?: PanelChart[];
+  denominator_details?: ActionableDenominators; lifecycle_filter?: string; lifecycle_as_of_date?: string;
 }
 
 const examples = [
@@ -163,7 +169,7 @@ export function IntelligenceClient() {
     <section aria-label="Example questions" className="rounded-2xl border border-border bg-card p-4 sm:p-6">
       <h2 className="text-sm font-semibold">Try a verified question</h2>
       <div className="mt-3 flex flex-wrap gap-2">{examples.map((example) => <button key={example} type="button" onClick={() => setQuestion(example)} className="rounded-full border border-border bg-muted px-3 py-2 text-left text-xs hover:bg-primary/10">{example}</button>)}</div>
-      <p className="mt-3 text-xs text-muted-foreground">Eligible-tree, per-tree irrigation, missed-harvest, revenue, recharge, sufficiency, forecasting, causal, trap-effectiveness, placement, and treatment recommendations remain blocked.</p>
+      <p className="mt-3 text-xs text-muted-foreground">Historical lifecycle reconstruction, per-tree irrigation, missed-harvest, revenue, recharge, sufficiency, forecasting, causal, trap-effectiveness, placement, and treatment recommendations remain blocked.</p>
     </section>
 
     {result && <section aria-live="polite" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
@@ -190,8 +196,18 @@ export function IntelligenceClient() {
           {(result.period_start || result.period_end) && <div><dt className="font-semibold">Dates</dt><dd>{result.period_start ?? "—"} to {result.period_end ?? "—"}</dd></div>}
           {result.cycles.length > 0 && <div><dt className="font-semibold">Cycles</dt><dd>{result.cycles.join(", ")}</dd></div>}
           {result.denominator && <div><dt className="font-semibold">Denominator</dt><dd>{result.denominator}</dd></div>}
+          {result.lifecycle_filter && <div><dt className="font-semibold">Lifecycle filter</dt><dd>{result.lifecycle_filter}</dd></div>}
+          {result.lifecycle_as_of_date && <div><dt className="font-semibold">Lifecycle as of</dt><dd>{result.lifecycle_as_of_date}</dd></div>}
           <div><dt className="font-semibold">Data source status</dt><dd className="break-words">{result.data_source_status}</dd></div>
         </dl>
+        {result.denominator_details && <dl className="mt-4 grid gap-2 border-t border-border pt-4 text-sm sm:grid-cols-3">
+          <div><dt className="font-semibold">Current Harvest Trees considered</dt><dd>{result.denominator_details.current_harvest_trees_considered.toLocaleString()}</dd></div>
+          <div><dt className="font-semibold">Complete five-cycle history</dt><dd>{result.denominator_details.complete_five_cycle_history.toLocaleString()}</dd></div>
+          <div><dt className="font-semibold">Excluded for incomplete history</dt><dd>{result.denominator_details.incomplete_five_cycle_history.toLocaleString()}</dd></div>
+          <div><dt className="font-semibold">Improved</dt><dd>{result.denominator_details.improved_count.toLocaleString()}</dd></div>
+          <div><dt className="font-semibold">Declined</dt><dd>{result.denominator_details.declined_count.toLocaleString()}</dd></div>
+          <div><dt className="font-semibold">Unchanged</dt><dd>{result.denominator_details.unchanged_count.toLocaleString()}</dd></div>
+        </dl>}
       </div>
       {result.quality_flags.length > 0 && <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-950"><span className="font-semibold">Quality flags: </span>{result.quality_flags.join(", ")}</div>}
     </section>}
