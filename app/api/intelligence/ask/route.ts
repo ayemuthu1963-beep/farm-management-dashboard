@@ -12,7 +12,9 @@ const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" }
 const RESPONSE_FIELDS = ["analysis_plan", "answer", "blocked_reason", "chart", "cycles", "data_as_of", "data_source_status", "denominator", "metabase_call_made", "period", "period_end", "period_start", "provider_call_made", "quality_flags", "status", "table"]
 const COMPOSITE_RESPONSE_FIELDS = [...RESPONSE_FIELDS, "charts", "freshness", "sections"]
 const ACTIONABLE_RESPONSE_FIELDS = [...RESPONSE_FIELDS, "denominator_details", "lifecycle_as_of_date", "lifecycle_filter"]
-const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows", "irrigation_runtime", "water_delivered", "north_morning", "north_evening", "south_morning", "south_evening", "beetle_traps_inspected", "beetle_captures", "c1_nuts", "c2_nuts", "c3_nuts", "c4_nuts", "c5_nuts", "early_avg", "recent_avg", "change", "change_percentage", "direction"])
+const EXPORT_RESPONSE_FIELDS = [...RESPONSE_FIELDS, "export_context"]
+const ACTIONABLE_EXPORT_RESPONSE_FIELDS = [...ACTIONABLE_RESPONSE_FIELDS, "export_context"]
+const TABLE_FIELDS = new Set(["rank", "tree_no", "plot", "cycle", "start_date", "end_date", "total_nuts", "total_bunches", "harvest_records", "distinct_observed_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch", "quality_flags", "scope", "zone", "motor", "well", "date", "runtime_display", "runtime_minutes", "estimated_delivered_litres", "allocation_count", "morning_litres", "evening_litres", "completeness", "inspection_date", "traps_inspected", "total_captures", "positive_catch_traps", "zero_catch_traps", "average_per_inspected_trap", "coverage_percent", "trap_no", "trap_type", "linked_tree", "inspection_events", "average_per_inspected_event", "last_inspection", "captures", "source_rows", "irrigation_runtime", "water_delivered", "north_morning", "north_evening", "south_morning", "south_evening", "beetle_traps_inspected", "beetle_captures", "c1_nuts", "c2_nuts", "c3_nuts", "c4_nuts", "c5_nuts", "early_avg", "recent_avg", "change", "change_percentage", "direction", "current_lifecycle_status", "plantation_date"])
 const METRICS = new Set(["total_nuts", "total_bunches", "harvested_tree_cycle_records", "distinct_observed_harvested_trees", "average_nuts_per_harvested_record", "average_bunches_per_harvested_record", "nuts_per_bunch"])
 const IRRIGATION_METRICS = new Set(["runtime_minutes", "estimated_delivered_litres"])
 const WELL_WATER_METRICS = new Set(["calibrated_litres"])
@@ -113,7 +115,7 @@ function isSafePlan(value: unknown, allowComposite = true): boolean {
 }
 
 function isSafeCell(value: unknown, format: string, key: string) {
-  if (value === null) return format === "decimal6" || format === "integer" || (format === "text" && key === "linked_tree")
+  if (value === null) return format === "decimal6" || format === "integer" || format === "date" || (format === "text" && key === "linked_tree")
   if (format === "integer") return typeof value === "number" && Number.isInteger(value) && value >= 0
   if (format === "text") return typeof value === "string" && value.length <= 128
   if (format === "date") return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -170,24 +172,44 @@ function isSafePanelChart(value: unknown, sections: Array<Record<string, unknown
 
 function isSafeActionableMetadata(value: Record<string, unknown>) {
   const details = value.denominator_details
-  const fields = ["complete_five_cycle_history", "current_harvest_trees_considered", "declined_count", "improved_count", "incomplete_five_cycle_history", "lifecycle_as_of_date", "unchanged_count"]
+  const fields = ["complete_five_cycle_history", "current_harvest_trees_considered", "declined_count", "improved_count", "incomplete_five_cycle_history", "lifecycle_as_of_date", "unchanged_count", "warehouse_refresh_id"]
   if (!isRecord(details) || !hasExactFields(details, fields)) return false
-  const countFields = fields.filter((field) => field !== "lifecycle_as_of_date")
+  const countFields = fields.filter((field) => field !== "lifecycle_as_of_date" && field !== "warehouse_refresh_id")
   if (!countFields.every((field) => typeof details[field] === "number" && Number.isInteger(details[field]) && Number(details[field]) >= 0)) return false
-  if (value.lifecycle_filter !== "Current Harvest Trees only" || typeof value.lifecycle_as_of_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.lifecycle_as_of_date) || details.lifecycle_as_of_date !== value.lifecycle_as_of_date) return false
+  if (value.lifecycle_filter !== "Current Harvest Trees only" || typeof value.lifecycle_as_of_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.lifecycle_as_of_date) || details.lifecycle_as_of_date !== value.lifecycle_as_of_date || typeof details.warehouse_refresh_id !== "string" || details.warehouse_refresh_id.length < 1) return false
   return Number(details.complete_five_cycle_history) + Number(details.incomplete_five_cycle_history) === Number(details.current_harvest_trees_considered)
     && Number(details.improved_count) + Number(details.declined_count) + Number(details.unchanged_count) === Number(details.complete_five_cycle_history)
 }
 
+function isSafeExportContext(value: unknown, table: unknown) {
+  const fields = ["all_matching_row_count", "answer_type", "available_columns", "context_id", "default_columns", "displayed_row_count", "filename_stem", "harvest_data_as_of", "lifecycle_as_of_date", "question", "rows", "selected_cycles", "verification", "version", "warehouse_refresh_id"]
+  if (!isRecord(value) || !hasExactFields(value, fields) || value.version !== "MFMS_INTELLIGENCE_EXPORT_CONTEXT_V1" || !isRecord(table)) return false
+  if (![value.question, value.answer_type, value.filename_stem, value.warehouse_refresh_id].every((item) => typeof item === "string" && item.length > 0) || typeof value.context_id !== "string" || !/^[0-9a-f]{64}$/.test(value.context_id)) return false
+  if (value.harvest_data_as_of !== null && typeof value.harvest_data_as_of !== "string") return false
+  if (value.lifecycle_as_of_date !== null && !(typeof value.lifecycle_as_of_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.lifecycle_as_of_date))) return false
+  if (!Array.isArray(value.selected_cycles) || value.selected_cycles.length > 19 || !value.selected_cycles.every((item) => typeof item === "string" && /^\d+$/.test(item))) return false
+  if (!Array.isArray(value.available_columns) || !Array.isArray(value.rows) || value.rows.length < 1 || value.rows.length > 2200 || value.all_matching_row_count !== value.rows.length || !Array.isArray(table.rows) || value.displayed_row_count !== table.rows.length) return false
+  const keys: string[] = []; const formats = new Map<string, string>()
+  for (const column of value.available_columns) {
+    if (!isRecord(column) || !hasExactFields(column, ["category", "default_selected", "format", "key", "label", "required"]) || typeof column.key !== "string" || !TABLE_FIELDS.has(column.key) || formats.has(column.key) || typeof column.label !== "string" || typeof column.format !== "string" || !["integer", "text", "date", "decimal6", "flags"].includes(column.format) || !["Core", "Harvest", "Lifecycle", "Direction", "Quality", "Period"].includes(String(column.category)) || typeof column.default_selected !== "boolean" || typeof column.required !== "boolean") return false
+    keys.push(column.key); formats.set(column.key, column.format)
+  }
+  if (!Array.isArray(value.default_columns) || !value.default_columns.every((key) => typeof key === "string" && keys.includes(key))) return false
+  if (JSON.stringify(value.available_columns.filter((column) => isRecord(column) && column.default_selected).map((column) => (column as Record<string, unknown>).key)) !== JSON.stringify(value.default_columns)) return false
+  if (!value.rows.every((row) => isRecord(row) && JSON.stringify(Object.keys(row)) === JSON.stringify(keys) && keys.every((key) => isSafeCell(row[key], formats.get(key) ?? "", key)))) return false
+  return isRecord(value.verification) && hasExactFields(value.verification, ["applied_filters", "complete_history_denominator", "denominator", "direction_rule", "duplicate_tree_1112_policy", "incomplete_history_exclusions", "lifecycle_filter", "period", "period_end", "period_start", "precision_policy", "quality_policy"])
+}
+
 function isSafeResponse(value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value) || (!hasExactFields(value, RESPONSE_FIELDS) && !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS) && !hasExactFields(value, ACTIONABLE_RESPONSE_FIELDS))) return false
+  if (!isRecord(value) || (!hasExactFields(value, RESPONSE_FIELDS) && !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS) && !hasExactFields(value, ACTIONABLE_RESPONSE_FIELDS) && !hasExactFields(value, EXPORT_RESPONSE_FIELDS) && !hasExactFields(value, ACTIONABLE_EXPORT_RESPONSE_FIELDS))) return false
   if (typeof value.answer !== "string" || typeof value.status !== "string" || !["ANSWERED", "BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT", "CLARIFICATION_REQUIRED"].includes(value.status) || (value.data_as_of !== null && typeof value.data_as_of !== "string") || typeof value.data_source_status !== "string") return false
   if (![value.period, value.period_start, value.period_end, value.denominator, value.blocked_reason].every((item) => item === null || typeof item === "string")) return false
   if (!Array.isArray(value.cycles) || value.cycles.length > 19 || !value.cycles.every((cycle) => typeof cycle === "string" && /^\d+$/.test(cycle))) return false
   if (!Array.isArray(value.quality_flags) || value.quality_flags.length > 32 || !value.quality_flags.every((flag) => typeof flag === "string")) return false
   const baseValid = typeof value.metabase_call_made === "boolean" && typeof value.provider_call_made === "boolean"
     && isSafePlan(value.analysis_plan) && isSafeTable(value.table) && isSafeChart(value.chart, value.table)
-  if (hasExactFields(value, ACTIONABLE_RESPONSE_FIELDS)) return baseValid && isSafeActionableMetadata(value)
+  if (hasExactFields(value, ACTIONABLE_RESPONSE_FIELDS) || hasExactFields(value, ACTIONABLE_EXPORT_RESPONSE_FIELDS)) return baseValid && isSafeActionableMetadata(value) && (!hasExactFields(value, ACTIONABLE_EXPORT_RESPONSE_FIELDS) || isSafeExportContext(value.export_context, value.table))
+  if (hasExactFields(value, EXPORT_RESPONSE_FIELDS)) return baseValid && isSafeExportContext(value.export_context, value.table)
   if (!baseValid || !hasExactFields(value, COMPOSITE_RESPONSE_FIELDS)) return baseValid
   if (!Array.isArray(value.sections) || value.sections.length < 2 || value.sections.length > 4 || !value.sections.every(isSafeSection)) return false
   const sections = value.sections as Array<Record<string, unknown>>

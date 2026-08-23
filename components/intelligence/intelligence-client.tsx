@@ -1,8 +1,9 @@
 "use client"
 
 import { FormEvent, useMemo, useState } from "react"
-import { AlertTriangle, CheckCircle2, LoaderCircle, Send } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Download, LoaderCircle, Send } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { buildIntelligenceWorkbook, formatIntelligenceScalar, intelligenceWorkbookFilename, type IntelligenceColumn, type IntelligenceExportContext } from "@/lib/mfms-intelligence-excel"
 
 type TableCell = string | number | null | string[]
 type TableColumn = { key: string; label: string; format: "integer" | "text" | "date" | "decimal6" | "flags" }
@@ -22,7 +23,7 @@ type PanelChart = ResultChart & { domain: DomainName; title: string }
 type ActionableDenominators = {
   current_harvest_trees_considered: number; complete_five_cycle_history: number;
   incomplete_five_cycle_history: number; improved_count: number; declined_count: number;
-  unchanged_count: number; lifecycle_as_of_date: string;
+  unchanged_count: number; lifecycle_as_of_date: string; warehouse_refresh_id: string;
 }
 
 type IntelligenceResponse = {
@@ -33,6 +34,7 @@ type IntelligenceResponse = {
   blocked_reason: string | null; metabase_call_made: boolean; provider_call_made: boolean;
   sections?: DomainSection[]; freshness?: ResultFreshness; charts?: PanelChart[];
   denominator_details?: ActionableDenominators; lifecycle_filter?: string; lifecycle_as_of_date?: string;
+  export_context?: IntelligenceExportContext;
 }
 
 const examples = [
@@ -62,14 +64,13 @@ const EMPTY_FAILURE: IntelligenceResponse = {
   provider_call_made: false,
 }
 
-function renderCell(value: TableCell, format: TableColumn["format"]) {
+function renderCell(value: TableCell, format: TableColumn["format"], key: string) {
   if (value === null) return "—"
-  if (format === "integer" && typeof value === "number") return value.toLocaleString()
   if (format === "flags" && Array.isArray(value)) {
     if (value.length === 0) return "—"
     return <div className="max-w-64 space-y-1">{value.map((flag) => <div key={flag} className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-900">{flag}</div>)}</div>
   }
-  return String(value)
+  return formatIntelligenceScalar(value as string | number | null, format, key)
 }
 
 function GovernedChart({ chart, title = "Verified chart" }: { chart: ResultChart; title?: string }) {
@@ -93,10 +94,10 @@ function GovernedChart({ chart, title = "Verified chart" }: { chart: ResultChart
     <div className="h-72 w-full" aria-label="Deterministic verified analytics result chart">
       <ResponsiveContainer width="100%" height="100%">
         {chart.type === "line" ? <LineChart data={rows} margin={{ top: 8, right: 18, left: 8, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey={chart.x_field} /><YAxis /><Tooltip /><Legend />
+          <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey={chart.x_field} /><YAxis /><Tooltip formatter={(value) => typeof value === "number" && !Number.isInteger(value) ? value.toFixed(1) : value} /><Legend />
           {valueFields.map((field, index) => <Line key={field} type="monotone" dataKey={field} stroke={colors[index % colors.length]} strokeWidth={2} dot />)}
         </LineChart> : <BarChart data={rows} margin={{ top: 8, right: 18, left: 8, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey={chart.x_field} /><YAxis /><Tooltip /><Legend />
+          <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey={chart.x_field} /><YAxis /><Tooltip formatter={(value) => typeof value === "number" && !Number.isInteger(value) ? value.toFixed(1) : value} /><Legend />
           {valueFields.map((field, index) => <Bar key={field} dataKey={field} fill={colors[index % colors.length]} />)}
         </BarChart>}
       </ResponsiveContainer>
@@ -104,19 +105,85 @@ function GovernedChart({ chart, title = "Verified chart" }: { chart: ResultChart
   </div>
 }
 
-function GovernedTable({ table }: { table: ResultTable }) {
-  return <div className="mt-5 overflow-x-auto rounded-xl border border-border">
-    <table className="min-w-[760px] w-full border-collapse text-left text-sm">
-      <caption className="px-3 py-3 text-left text-sm font-semibold">{table.title}</caption>
-      <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>{table.columns.map((column) => <th key={column.key} className={`px-3 py-3 font-semibold ${["integer", "decimal6"].includes(column.format) ? "text-right" : "text-left"}`}>{column.label}</th>)}</tr></thead>
-      <tbody className="divide-y divide-border">{table.rows.map((row, rowIndex) => <tr key={`${rowIndex}-${String(row.date ?? row.tree_no ?? row.cycle ?? row.plot ?? "result")}`} className="bg-background align-top">
-        {table.columns.map((column) => <td key={column.key} className={`px-3 py-3 ${["integer", "decimal6"].includes(column.format) ? "text-right tabular-nums" : "text-left"} ${column.key === "tree_no" ? "font-mono font-semibold" : ""}`}>{renderCell(row[column.key], column.format)}</td>)}
-      </tr>)}</tbody>
-    </table>
+function fallbackContext(table: ResultTable, question: string, metadata?: Partial<IntelligenceResponse>): IntelligenceExportContext {
+  const available = table.columns.map((column) => ({ ...column, category: "Core" as const, required: column.key === "tree_no", default_selected: true }))
+  return {
+    version: "MFMS_INTELLIGENCE_EXPORT_CONTEXT_V1", context_id: "0".repeat(64), question,
+    answer_type: table.title, filename_stem: table.title.replaceAll(/[^A-Za-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "") || "Results",
+    warehouse_refresh_id: "Signed response snapshot", harvest_data_as_of: metadata?.data_as_of ?? null,
+    lifecycle_as_of_date: metadata?.lifecycle_as_of_date ?? null, selected_cycles: metadata?.cycles ?? [],
+    displayed_row_count: table.rows.length, all_matching_row_count: table.rows.length,
+    default_columns: table.columns.map((column) => column.key), available_columns: available,
+    rows: table.rows, verification: {
+      period: metadata?.period ?? null, period_start: metadata?.period_start ?? null, period_end: metadata?.period_end ?? null,
+      denominator: metadata?.denominator ?? null, complete_history_denominator: null, incomplete_history_exclusions: null,
+      lifecycle_filter: metadata?.lifecycle_filter ?? null, direction_rule: null, applied_filters: metadata?.analysis_plan ?? null,
+      quality_policy: metadata?.quality_flags ?? [], duplicate_tree_1112_policy: "INCLUDE_ALL_CURRENT_AUTHORITATIVE",
+      precision_policy: "Calculations use full governed precision; displayed and exported calculated values are rounded to one decimal place.",
+    },
+  }
+}
+
+function GovernedTable({ table, context, question = "Verified MFMS Intelligence result", metadata }: { table: ResultTable; context?: IntelligenceExportContext; question?: string; metadata?: Partial<IntelligenceResponse> }) {
+  const exportContext = context ?? fallbackContext(table, question, metadata)
+  const [selectedKeys, setSelectedKeys] = useState<string[]>(exportContext.default_columns)
+  const [scope, setScope] = useState<"displayed" | "all">("all")
+  const selectedColumns = useMemo(() => {
+    const defaultOrder = exportContext.default_columns.filter((key) => selectedKeys.includes(key))
+    const additions = exportContext.available_columns.filter((column) => !exportContext.default_columns.includes(column.key) && selectedKeys.includes(column.key)).map((column) => column.key)
+    const order = [...defaultOrder, ...additions]
+    return order.map((key) => exportContext.available_columns.find((column) => column.key === key)).filter((column): column is IntelligenceColumn => Boolean(column))
+  }, [exportContext, selectedKeys])
+  const displayedRows = exportContext.rows.slice(0, exportContext.displayed_row_count)
+  const exportCount = scope === "all" ? exportContext.all_matching_row_count : exportContext.displayed_row_count
+
+  function toggleColumn(column: IntelligenceColumn) {
+    if (column.required) return
+    setSelectedKeys((current) => current.includes(column.key) ? current.filter((key) => key !== column.key) : [...current, column.key])
+  }
+
+  function downloadWorkbook() {
+    const blob = buildIntelligenceWorkbook(exportContext, selectedColumns.map((column) => column.key), scope)
+    const url = URL.createObjectURL(blob); const anchor = document.createElement("a")
+    anchor.href = url; anchor.download = intelligenceWorkbookFilename(exportContext); anchor.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  return <div className="mt-5 space-y-3">
+    <details className="rounded-xl border border-border bg-muted/20 p-3" open={exportContext.available_columns.some((column) => !column.default_selected)}>
+      <summary className="cursor-pointer text-sm font-semibold">Additional columns</summary>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold" onClick={() => setSelectedKeys(exportContext.available_columns.map((column) => column.key))}>Select all available</button>
+        <button type="button" className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold" onClick={() => setSelectedKeys(exportContext.default_columns)}>Reset to default</button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{exportContext.available_columns.map((column) => <label key={column.key} className="flex items-center gap-2 rounded-md bg-background px-2 py-1.5 text-xs">
+        <input type="checkbox" checked={selectedKeys.includes(column.key)} disabled={column.required} onChange={() => toggleColumn(column)} />
+        <span>{column.label}</span><span className="ml-auto text-[10px] text-muted-foreground">{column.category}</span>
+      </label>)}</div>
+    </details>
+
+    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
+      <fieldset className="flex flex-wrap gap-4 text-xs"><legend className="mb-1 font-semibold">Export row scope</legend>
+        <label className="flex items-center gap-2"><input type="radio" name={`scope-${exportContext.context_id}`} checked={scope === "displayed"} onChange={() => setScope("displayed")} />Displayed rows ({exportContext.displayed_row_count})</label>
+        <label className="flex items-center gap-2"><input type="radio" name={`scope-${exportContext.context_id}`} checked={scope === "all"} onChange={() => setScope("all")} />All matching rows ({exportContext.all_matching_row_count})</label>
+      </fieldset>
+      <button type="button" onClick={downloadWorkbook} disabled={selectedColumns.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Download className="size-4" />Export to Excel · {exportCount}</button>
+      <p className="w-full text-[11px] text-muted-foreground">Calculations use full governed precision; displayed and exported calculated values are rounded to one decimal place.</p>
+    </div>
+
+    <div className="overflow-x-auto rounded-xl border border-border">
+      <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+        <caption className="px-3 py-3 text-left text-sm font-semibold">{table.title}</caption>
+        <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>{selectedColumns.map((column) => <th key={column.key} className={`px-3 py-3 font-semibold ${["integer", "decimal6"].includes(column.format) ? "text-right" : "text-left"} ${column.key === "rank" ? "sticky left-0 z-20 bg-muted" : column.key === "tree_no" ? "sticky left-14 z-20 bg-muted" : ""}`}>{column.label}</th>)}</tr></thead>
+        <tbody className="divide-y divide-border">{displayedRows.map((row, rowIndex) => <tr key={`${rowIndex}-${String(row.date ?? row.tree_no ?? row.cycle ?? row.plot ?? "result")}`} className="bg-background align-top">
+          {selectedColumns.map((column) => <td key={column.key} className={`px-3 py-3 ${["integer", "decimal6"].includes(column.format) ? "text-right tabular-nums" : "text-left"} ${column.key === "tree_no" ? "sticky left-14 z-10 bg-background font-mono font-semibold" : column.key === "rank" ? "sticky left-0 z-10 bg-background" : ""}`}>{renderCell(row[column.key], column.format, column.key)}</td>)}
+        </tr>)}</tbody>
+      </table>
+    </div>
   </div>
 }
 
-function DomainCard({ section }: { section: DomainSection }) {
+function DomainCard({ section, question }: { section: DomainSection; question: string }) {
   return <article className="rounded-xl border border-border bg-background p-4">
     <h3 className="font-bold">{section.title}</h3>
     <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{section.headline}</p>
@@ -129,7 +196,7 @@ function DomainCard({ section }: { section: DomainSection }) {
     {section.quality_flags.length > 0 && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-[11px] text-amber-950"><span className="font-semibold">Quality: </span>{section.quality_flags.join(", ")}</div>}
     {(section.table || section.chart) && <details className="mt-4">
       <summary className="cursor-pointer text-sm font-semibold text-primary">Open verified details</summary>
-      {section.table && <GovernedTable table={section.table} />}
+      {section.table && <GovernedTable table={section.table} question={question} metadata={{ data_as_of: section.data_as_of, period: section.period, denominator: section.denominator, quality_flags: section.quality_flags }} />}
       {section.chart && <GovernedChart chart={section.chart} title={`${section.title} — verified chart`} />}
     </details>}
   </article>
@@ -137,13 +204,14 @@ function DomainCard({ section }: { section: DomainSection }) {
 
 export function IntelligenceClient() {
   const [question, setQuestion] = useState(examples[0])
+  const [askedQuestion, setAskedQuestion] = useState(examples[0])
   const [result, setResult] = useState<IntelligenceResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function ask(event: FormEvent) {
     event.preventDefault()
     if (!question.trim() || loading) return
-    setLoading(true); setResult(null)
+    setLoading(true); setResult(null); setAskedQuestion(question.trim())
     try {
       const response = await fetch("/api/intelligence/ask", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -176,8 +244,8 @@ export function IntelligenceClient() {
       <div className="flex items-center gap-2">{answered ? <CheckCircle2 className="size-5 text-emerald-600" /> : <AlertTriangle className="size-5 text-amber-600" />}<h2 className="font-bold">{answered ? "Verified answer" : "Blocked or clarification required"}</h2></div>
       <p className="mt-4 whitespace-pre-wrap text-sm leading-6">{result.answer || result.blocked_reason}</p>
 
-      {result.sections && result.sections.length > 0 && <div className="mt-5 grid gap-4 lg:grid-cols-2">{result.sections.map((section) => <DomainCard key={section.domain} section={section} />)}</div>}
-      {result.table && <GovernedTable table={result.table} />}
+      {result.sections && result.sections.length > 0 && <div className="mt-5 grid gap-4 lg:grid-cols-2">{result.sections.map((section) => <DomainCard key={section.domain} section={section} question={askedQuestion} />)}</div>}
+      {result.table && <GovernedTable key={result.export_context?.context_id ?? `${askedQuestion}-${result.table.title}`} table={result.table} context={result.export_context} question={askedQuestion} metadata={result} />}
       {result.chart && <GovernedChart chart={result.chart} />}
       {result.charts && result.charts.length > 0 && <div className="mt-5 space-y-4" aria-label="Independent cross-domain chart panels">{result.charts.map(({ domain, title, ...chart }) => <GovernedChart key={`${domain}-${title}`} chart={chart} title={title} />)}</div>}
 
