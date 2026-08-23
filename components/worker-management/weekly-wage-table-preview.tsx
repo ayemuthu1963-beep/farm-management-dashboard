@@ -19,6 +19,12 @@ import {
 } from "@/lib/worker-management-api"
 import { formatWholeINR } from "@/lib/worker-management-format"
 import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
+import {
+  buildWorkerWageWorkbook,
+  calculateWageSheetTotals,
+  WORKER_WAGE_TOTAL_LABEL,
+  type WageWorkbookCell,
+} from "@/lib/worker-wage-excel"
 import type { DailyWageResponse, FarmScheme, LedgerTransaction, SettlementRow, WorkerAccount } from "@/lib/worker-management-types"
 import { Badge, SectionTitle, WorkerButton } from "./worker-ui"
 
@@ -42,7 +48,7 @@ const wageWeeks = {
     heading: "15 Aug – 21 Aug 2026",
     startDate: "2026-08-15",
     endDate: "2026-08-21",
-    exportFile: "worker-wages-15-21-Aug-2026.csv",
+    exportFile: "worker-wages-15-21-Aug-2026.xlsx",
     days: daySlots.map((day, index) => ({ ...day, date: `${15 + index}.08`, isoDate: `2026-08-${15 + index}` })),
   },
   previous: {
@@ -51,7 +57,7 @@ const wageWeeks = {
     heading: "8 Aug – 14 Aug 2026",
     startDate: "2026-08-08",
     endDate: "2026-08-14",
-    exportFile: "worker-wages-08-14-Aug-2026.csv",
+    exportFile: "worker-wages-08-14-Aug-2026.xlsx",
     days: daySlots.map((day, index) => ({ ...day, date: `${String(8 + index).padStart(2, "0")}.08`, isoDate: `2026-08-${String(8 + index).padStart(2, "0")}` })),
   },
 } as const
@@ -285,12 +291,6 @@ function MoneyInput({
       />
     </div>
   )
-}
-
-function csvCell(value: string | number | null) {
-  if (value === null) return ""
-  const text = String(value)
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
 function LabourCountInput({
@@ -580,13 +580,22 @@ export function WeeklyWageTablePreview() {
   }, [loadWeek])
 
   const totals = useMemo(
-    () => ({
-      wages: rows.reduce((total, row) => total + weekWages(row), 0),
-      wageToPay: rows
-        .filter((row) => !isDependentWorker(row))
-        .reduce((total, row) => total + wageToBePaid(row, pairedDependent(rows, row)), 0),
-      advances: rows.filter((row) => !isDependentWorker(row)).reduce((total, row) => total + amount(row.cashPaidInWeek), 0),
-    }),
+    () =>
+      calculateWageSheetTotals(
+        rows.map((row) => {
+          const dependent = pairedDependent(rows, row)
+          return {
+            dailyWages: daySlots.map((day) => dailyWage(row, day.key)),
+            weekWages: weekWages(row),
+            loanPayment: amount(row.loanPayment),
+            wageToPay: wageToBePaid(row, dependent),
+            earlierLoanBalance: amount(row.earlierLoanBalance),
+            cashPaidInWeek: amount(row.cashPaidInWeek),
+            presentBalance: presentBalance(row),
+            includeFinancials: !isDependentWorker(row),
+          }
+        }),
+      ),
     [rows],
   )
 
@@ -924,7 +933,7 @@ export function WeeklyWageTablePreview() {
       "Cash paid in week",
       "Present balance",
     ]
-    const exportRows = rows.flatMap((row) => {
+    const exportRows: WageWorkbookCell[][] = rows.flatMap((row) => {
       const dependent = pairedDependent(rows, row)
       const financials = isDependentWorker(row)
         ? [weekWages(row), "", "", "", "", ""]
@@ -954,8 +963,10 @@ export function WeeklyWageTablePreview() {
         ],
       ]
     })
-    const csv = [header, ...exportRows].map((exportRow) => exportRow.map((value) => csvCell(value === "" ? null : value)).join(",")).join("\r\n")
-    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }))
+    const workbook = buildWorkerWageWorkbook({ headers: header, detailRows: exportRows, totals })
+    const url = URL.createObjectURL(
+      new Blob([workbook], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    )
     const link = document.createElement("a")
     link.href = url
     link.download = selectedWeek.exportFile
@@ -1314,37 +1325,19 @@ export function WeeklyWageTablePreview() {
             <tfoot>
               <tr className="bg-slate-950 text-white">
                 <th scope="row" className="sticky left-0 z-10 border-r border-slate-700 bg-slate-950 px-3 py-3 text-sm font-bold">
-                  Sheet total
+                  {WORKER_WAGE_TOTAL_LABEL}
                 </th>
-                {workDays.map((workDay) => (
+                {workDays.map((workDay, dayIndex) => (
                   <td key={workDay.key} className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">
-                    {formatWholeINR(rows.reduce((total, row) => total + dailyWage(row, workDay.key), 0))}
+                    {formatWholeINR(totals.dailyWages[dayIndex])}
                   </td>
                 ))}
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.wages)}</td>
-                <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">
-                  {formatWholeINR(
-                    rows
-                      .filter((row) => !isDependentWorker(row))
-                      .reduce((total, row) => total + amount(row.loanPayment), 0),
-                  )}
-                </td>
+                <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.loanPayment)}</td>
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.wageToPay)}</td>
-                <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">
-                  {formatWholeINR(
-                    rows
-                      .filter((row) => !isDependentWorker(row))
-                      .reduce((total, row) => total + amount(row.earlierLoanBalance), 0),
-                  )}
-                </td>
+                <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.earlierLoanBalance)}</td>
                 <td className="border-r border-slate-700 px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.advances)}</td>
-                <td className="px-3 py-3 text-right text-sm font-bold tabular-nums">
-                  {formatWholeINR(
-                    rows
-                      .filter((row) => !isDependentWorker(row))
-                      .reduce((total, row) => total + (presentBalance(row) ?? 0), 0),
-                  )}
-                </td>
+                <td className="px-3 py-3 text-right text-sm font-bold tabular-nums">{formatWholeINR(totals.presentBalance)}</td>
               </tr>
             </tfoot>
           </table>
