@@ -80,6 +80,15 @@ function isSafeSourceReference(value: unknown): boolean {
     && safeNullableString(value.source_timestamp, 80)
 }
 
+function isSafeAiUsage(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return [value.input_tokens, value.output_tokens, value.total_tokens, value.estimated_cost_microusd, value.provider_attempts]
+    .every((item) => Number.isInteger(item) && Number(item) >= 0)
+    && safeString(value.estimated_cost_usd, 32)
+    && /^\d+\.\d{6}$/.test(String(value.estimated_cost_usd))
+    && typeof value.cache_hit === "boolean"
+}
+
 function isSafeAlert(value: unknown): boolean {
   if (!isRecord(value)) return false
   const severity = String(value.severity)
@@ -107,7 +116,15 @@ function isSafeAlert(value: unknown): boolean {
     && safeString(value.generation_timestamp, 80)
     && safeString(value.deterministic_fallback_explanation, 2000)
     && safeString(value.evidence_hash, 128)
-    && (value.ai_usage === null || isRecord(value.ai_usage))
+    && (value.ai_usage === null || isSafeAiUsage(value.ai_usage))
+}
+
+function isSafeGenerationResult(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return ["generated", "cache_hit", "disabled", "blocked", "fallback"].includes(String(value.status))
+    && isSafeAlert(value.alert)
+    && typeof value.provider_call_made === "boolean"
+    && safeNullableString(value.reason_code, 120)
 }
 
 function isSafeAnalyzerResponse(value: unknown): boolean {
@@ -165,5 +182,59 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
   } catch {
     return safeError(503, "AI Farm Analyzer is temporarily unavailable.")
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const environment = (process.env.MFMS_ENV ?? process.env.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
+  if (!new Set(["preview", "uat"]).has(environment)) return safeError(403, "AI Farm Analyzer is available only in Preview.")
+  const authHeader = getBasicAuthHeader()
+  if (!authHeader) return safeError(503, "The Preview backend is not configured.")
+
+  let requestBody: unknown
+  try {
+    requestBody = await request.json()
+  } catch {
+    return safeError(400, "A valid alert request is required.")
+  }
+  if (!isRecord(requestBody)
+    || Object.keys(requestBody).some((key) => !["alert_id", "evidence_hash"].includes(key))
+    || !safeString(requestBody.alert_id, 180)
+    || !safeString(requestBody.evidence_hash, 128)
+    || !/^[a-f0-9]{64}$/i.test(requestBody.evidence_hash)) {
+    return safeError(400, "A valid single-alert generation request is required.")
+  }
+
+  const target = new URL(`${getApiBaseUrl()}/api/ai-analyzer/alerts/${encodeURIComponent(requestBody.alert_id)}/explanation`)
+  let actorHeaders: Record<string, string>
+  try {
+    actorHeaders = getAuthenticatedUserAssertionHeaders({ requestHeaders: request.headers, method: "POST", target })
+  } catch (error) {
+    const status = error instanceof MfmsAdminIdentityError ? error.status : 503
+    return safeError(status, "An authenticated Preview session is required.")
+  }
+  try {
+    const response = await fetch(target, {
+      method: "POST",
+      headers: { Authorization: authHeader, Accept: "application/json", "Content-Type": "application/json", ...actorHeaders },
+      body: JSON.stringify({ evidence_hash: requestBody.evidence_hash }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45_000),
+    })
+    const contentLength = Number(response.headers.get("content-length") ?? "0")
+    if (Number.isFinite(contentLength) && contentLength > RESPONSE_LIMIT_BYTES) return safeError(502, "AI Farm Analyzer returned an oversized response.")
+    const responseBody = await readLimitedBody(response)
+    if (!responseBody) return safeError(502, "AI Farm Analyzer returned an oversized response.")
+    let payload: unknown = null
+    try {
+      payload = JSON.parse(new TextDecoder().decode(responseBody))
+    } catch {
+      payload = null
+    }
+    if (!response.ok) return safeError(response.status, "AI explanation is temporarily unavailable.")
+    if (!isSafeGenerationResult(payload)) return safeError(502, "AI Farm Analyzer returned an invalid explanation response.")
+    return NextResponse.json(payload, { headers: NO_STORE_HEADERS })
+  } catch {
+    return safeError(503, "AI explanation is temporarily unavailable.")
   }
 }
