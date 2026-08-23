@@ -26,10 +26,8 @@ if (process.platform !== "win32") {
   assert.equal(statSync("scripts/preview-server-deploy.sh").mode & 0o777, 0o755)
 }
 assert.equal(gitAttributes, "*.sh text eol=lf\n")
-assert.match(
-  acceptanceDockerfile,
-  /FROM node@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43\n/,
-)
+assert.match(acceptanceDockerfile, /^ARG ACCEPTANCE_BASE_IMAGE\n/m)
+assert.match(acceptanceDockerfile, /^FROM \$\{ACCEPTANCE_BASE_IMAGE\}$/m)
 assert.match(
   acceptanceDockerfile,
   /FROM python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS python_toolchain/,
