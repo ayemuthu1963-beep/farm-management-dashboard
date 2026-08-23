@@ -53,9 +53,18 @@ export type AnalyzerAlert = {
     input_tokens: number
     output_tokens: number
     total_tokens: number
-    estimated_cost_usd: number
+    estimated_cost_microusd: number
+    estimated_cost_usd: string
     cache_hit: boolean
+    provider_attempts: number
   } | null
+}
+
+export type AiGenerationResult = {
+  status: "generated" | "cache_hit" | "disabled" | "blocked" | "fallback"
+  alert: AnalyzerAlert
+  provider_call_made: boolean
+  reason_code: string | null
 }
 
 export type AnalyzerResponse = {
