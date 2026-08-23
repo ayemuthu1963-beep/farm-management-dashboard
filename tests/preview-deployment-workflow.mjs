@@ -272,9 +272,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the authenticated MFMS AI Farm Analyzer to Preview",
+  "Reconcile the verified AI Farm Analyzer with the current governed Data Analyser Preview baseline",
 )
-assert.equal(manifest.base_commit, "b063c4b2ca008c1c765f959c9c7049ad08d8fd6e")
+assert.equal(manifest.base_commit, "415df4d211e03e28794b93ad788045b98527092f")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -284,14 +284,8 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/ai-farm-analyzer/page.tsx",
-  "app/api/ai-analyzer/route.ts",
-  "components/ai-analyzer/ai-analyzer-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/ai-analyzer-types.ts",
-  "lib/mfms-navigation.ts",
-  "package.json",
-  "tests/ai-farm-analyzer.mjs",
+  "docs/MFMS_PREVIEW_UNIFIED_RELEASE_20260823.md",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)

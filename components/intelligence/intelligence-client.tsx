@@ -21,7 +21,7 @@ type ResultFreshness = {
 type PanelChart = ResultChart & { domain: DomainName; title: string }
 
 type IntelligenceResponse = {
-  answer: string; status: string; data_as_of: string; period: string | null;
+  answer: string; status: string; data_as_of: string | null; period: string | null;
   period_start: string | null; period_end: string | null; cycles: string[];
   denominator: string | null; quality_flags: string[]; data_source_status: string;
   analysis_plan: Record<string, unknown> | null; table: ResultTable | null; chart: ResultChart | null;
