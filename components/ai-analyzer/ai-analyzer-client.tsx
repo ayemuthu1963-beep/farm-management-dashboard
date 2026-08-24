@@ -15,18 +15,14 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import type { AiGenerationResult, AnalyzerAlert, AnalyzerResponse, AnalyzerSeverity } from "@/lib/ai-analyzer-types"
+import {
+  filterAnalyzerAlerts,
+  resolveVisibleAnalyzerAlert,
+  type AnalyzerFilterState,
+} from "@/lib/ai-analyzer-filtering"
 import { cn } from "@/lib/utils"
 
-
-type FilterState = {
-  crop: string
-  plot: string
-  zone: string
-  date: string
-  severity: "all" | AnalyzerSeverity
-}
-
-const INITIAL_FILTERS: FilterState = { crop: "all", plot: "all", zone: "all", date: "", severity: "all" }
+const INITIAL_FILTERS: AnalyzerFilterState = { crop: "all", plot: "all", zone: "all", date: "", severity: "all" }
 
 const severityStyle: Record<AnalyzerSeverity, string> = {
   critical: "border-red-300 bg-red-50 text-red-900",
@@ -43,13 +39,6 @@ function displayTimestamp(value: string | null) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })
-}
-
-function matchesDate(alert: AnalyzerAlert, selected: string) {
-  if (!selected) return true
-  if (alert.start_date && selected < alert.start_date) return false
-  if (alert.end_date && selected > alert.end_date) return false
-  return alert.start_date === selected || alert.end_date === selected || Boolean(alert.start_date && alert.end_date)
 }
 
 function statusLabel(status: AnalyzerResponse["farm_status"]) {
@@ -150,7 +139,7 @@ function EvidencePanel({
 
 export function AiAnalyzerClient() {
   const [data, setData] = useState<AnalyzerResponse | null>(null)
-  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS)
+  const [filters, setFilters] = useState<AnalyzerFilterState>(INITIAL_FILTERS)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -211,15 +200,21 @@ export function AiAnalyzerClient() {
     zones: [...new Set(data?.alerts.map((alert) => alert.zone).filter((value): value is string => Boolean(value)) ?? [])].sort(),
   }), [data])
 
-  const visibleAlerts = useMemo(() => (data?.alerts ?? []).filter((alert) => {
-    return (filters.crop === "all" || alert.crop === filters.crop)
-      && (filters.plot === "all" || alert.plot === filters.plot)
-      && (filters.zone === "all" || alert.zone === filters.zone)
-      && (filters.severity === "all" || alert.severity === filters.severity)
-      && matchesDate(alert, filters.date)
-  }), [data, filters])
+  const updateFilter = useCallback(<Key extends keyof AnalyzerFilterState,>(key: Key, value: AnalyzerFilterState[Key]) => {
+    setFilters((current) => ({ ...current, [key]: value }))
+    setSelectedId(null)
+    setGenerationStatus(null)
+  }, [])
 
-  const selected = visibleAlerts.find((alert) => alert.alert_id === selectedId) ?? visibleAlerts[0] ?? null
+  const clearFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS)
+    setSelectedId(null)
+    setGenerationStatus(null)
+  }, [])
+
+  const visibleAlerts = useMemo(() => filterAnalyzerAlerts(data?.alerts ?? [], filters), [data, filters])
+
+  const selected = resolveVisibleAnalyzerAlert(visibleAlerts, selectedId)
 
   if (!data && loading) return <div className="flex min-h-80 items-center justify-center gap-3 rounded-2xl border border-border bg-card"><LoaderCircle className="size-6 animate-spin text-primary" aria-hidden="true" /><span className="font-semibold">Reading deterministic farm evidence…</span></div>
   if (!data) return <div className="rounded-2xl border border-red-300 bg-red-50 p-6 text-red-950"><h2 className="font-bold">Analyzer unavailable</h2><p className="mt-2 text-sm">{error}</p><button type="button" onClick={() => void refresh()} className="mt-4 rounded-lg bg-red-900 px-4 py-2 text-sm font-semibold text-white">Try again</button></div>
@@ -248,13 +243,14 @@ export function AiAnalyzerClient() {
     <section className="rounded-2xl border border-border bg-card p-4 shadow-sm" aria-labelledby="analyzer-filters-heading">
       <h2 id="analyzer-filters-heading" className="text-sm font-bold">Alert filters</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <label className="text-xs font-semibold">Crop<select value={filters.crop} onChange={(event) => setFilters((current) => ({ ...current, crop: event.target.value }))} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All crops</option>{options.crops.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label className="text-xs font-semibold">Plot<select value={filters.plot} onChange={(event) => setFilters((current) => ({ ...current, plot: event.target.value }))} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All plots</option>{options.plots.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label className="text-xs font-semibold">Zone<select value={filters.zone} onChange={(event) => setFilters((current) => ({ ...current, zone: event.target.value }))} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All zones</option>{options.zones.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label className="text-xs font-semibold">Severity<select value={filters.severity} onChange={(event) => setFilters((current) => ({ ...current, severity: event.target.value as FilterState["severity"] }))} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="information">Information</option></select></label>
-        <label className="text-xs font-semibold">Date<input type="date" value={filters.date} onChange={(event) => setFilters((current) => ({ ...current, date: event.target.value }))} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" /></label>
+        <label className="text-xs font-semibold">Crop<select value={filters.crop} onChange={(event) => updateFilter("crop", event.target.value)} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All crops</option>{options.crops.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label className="text-xs font-semibold">Plot<select value={filters.plot} onChange={(event) => updateFilter("plot", event.target.value)} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All plots</option>{options.plots.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label className="text-xs font-semibold">Zone<select value={filters.zone} onChange={(event) => updateFilter("zone", event.target.value)} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All zones</option>{options.zones.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label className="text-xs font-semibold">Severity<select value={filters.severity} onChange={(event) => updateFilter("severity", event.target.value as AnalyzerFilterState["severity"])} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"><option value="all">All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="information">Information</option></select></label>
+        <label className="text-xs font-semibold">Date<input type="date" value={filters.date} onInput={(event) => updateFilter("date", event.currentTarget.value)} onChange={(event) => updateFilter("date", event.currentTarget.value)} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" /></label>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{visibleAlerts.length} of {data.alerts.length} alerts</p><button type="button" onClick={() => setFilters(INITIAL_FILTERS)} className="text-xs font-bold text-primary">Clear filters</button></div>
+      <p className="mt-3 text-[11px] text-muted-foreground">Date uses the Asia/Kolkata farm calendar and matches structured alert dates inclusively. Alerts without a structured date are excluded while Date is active.</p>
+      <div className="mt-3 flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{visibleAlerts.length} of {data.alerts.length} alerts</p><button type="button" onClick={clearFilters} className="text-xs font-bold text-primary">Clear filters</button></div>
     </section>
 
     <section className="grid items-start gap-5 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.7fr)]" aria-label="Alert list and evidence">
