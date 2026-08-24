@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Include the UI Sheet Total as the final typed row in the Worker Management Excel export",
+  "Correct the AI Farm Analyzer structured calendar-date filter without changing the backend",
 )
-assert.equal(manifest.base_commit, "052fbf83d12fba19d0b3bfe9a89ec3ad35c5f6e3")
-assert.equal(manifest.matched_backend_commit, "fb2ffdef1d9a514d1db2091fab10ca8399f52a06")
+assert.equal(manifest.base_commit, "9d27157126d8878ebc7230943681475fa32a0d92")
+assert.equal(manifest.matched_backend_commit, "3f2c9cbe2bb790806154ce138947d62117e9fba0")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -302,14 +302,12 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
+  "components/ai-analyzer/ai-analyzer-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-wage-excel.ts",
+  "lib/ai-analyzer-filtering.ts",
   "package.json",
-  "pnpm-lock.yaml",
-  "tests/worker-management.mjs",
+  "tests/ai-analyzer-date-filter.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-wage-excel.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

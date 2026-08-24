@@ -12,7 +12,8 @@
     "deploy/preview-release-manifest.json",
     "lib/ai-analyzer-filtering.ts",
     "package.json",
-    "tests/ai-analyzer-date-filter.mjs"
+    "tests/ai-analyzer-date-filter.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
