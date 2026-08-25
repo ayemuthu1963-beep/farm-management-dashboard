@@ -28,10 +28,20 @@ export class WorkerApiError extends Error {
   }
 }
 
+export function friendlyWorkerErrorMessage(message: string): string {
+  if (/group_attendee_count/i.test(message)) {
+    if (/whole number|integer/i.test(message)) {
+      return "Enter the number of labourers as a whole number (for example 4)."
+    }
+    return message.replace(/group_attendee_count/gi, "number of labourers")
+  }
+  return message
+}
+
 function normaliseWorkerError(value: unknown): string | null {
   if (typeof value === "string") {
     const message = value.trim()
-    return message || null
+    return message ? friendlyWorkerErrorMessage(message) : null
   }
   if (Array.isArray(value)) {
     const messages = value
