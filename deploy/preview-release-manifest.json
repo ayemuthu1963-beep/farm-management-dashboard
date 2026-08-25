@@ -3,17 +3,17 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Correct the AI Farm Analyzer structured calendar-date filter without changing the backend",
-  "base_commit": "9d27157126d8878ebc7230943681475fa32a0d92",
+  "release_note": "Advance Worker Management to the current Saturday-to-Friday week, clarify labour-count errors, and remove numeric input spinners",
+  "base_commit": "945dfa1ab1c9facf037d1786766204458cf5426e",
   "matched_backend_commit": "3f2c9cbe2bb790806154ce138947d62117e9fba0",
   "matched_private_intelligence_commit": "91bd618883082336ecebd898a56e4fb476f4b4fd",
   "allowed_paths": [
-    "components/ai-analyzer/ai-analyzer-client.tsx",
+    "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/ai-analyzer-filtering.ts",
-    "package.json",
-    "tests/ai-analyzer-date-filter.mjs",
-    "tests/preview-deployment-workflow.mjs"
+    "lib/worker-management-api.ts",
+    "lib/worker-management-format.ts",
+    "tests/preview-deployment-workflow.mjs",
+    "tests/worker-management.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
