@@ -12,11 +12,13 @@ import {
   WorkerBffError,
 } from "../lib/worker-management-signing.ts"
 import {
+  buildWageWeeks,
   calculateDailyWage,
   compareAccountCodes,
   defaultSettlementDate,
   workerAccountOptionLabel,
 } from "../lib/worker-management-format.ts"
+import { friendlyWorkerErrorMessage } from "../lib/worker-management-api.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(join(root, path), "utf8")
@@ -30,6 +32,30 @@ const check = (condition, message) => {
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
 assertions += 2
+
+const augustWeeks = buildWageWeeks("2026-08-25")
+assert.equal(augustWeeks.current.startDate, "2026-08-22")
+assert.equal(augustWeeks.current.endDate, "2026-08-28")
+assert.equal(augustWeeks.current.label, "22–28 Aug 2026 · current week")
+assert.equal(augustWeeks.previous.startDate, "2026-08-15")
+assert.equal(augustWeeks.previous.endDate, "2026-08-21")
+assert.equal(augustWeeks.previous.label, "15–21 Aug 2026 · last week")
+assert.deepEqual(augustWeeks.current.days.map((day) => day.isoDate), [
+  "2026-08-22",
+  "2026-08-23",
+  "2026-08-24",
+  "2026-08-25",
+  "2026-08-26",
+  "2026-08-27",
+  "2026-08-28",
+])
+assert.equal(buildWageWeeks("2026-09-01").current.heading, "29 Aug – 4 Sep 2026")
+assert.equal(buildWageWeeks("2026-01-01").current.heading, "27 Dec 2025 – 2 Jan 2026")
+assert.equal(
+  friendlyWorkerErrorMessage("group_attendee_count must be a whole number."),
+  "Enter the number of labourers as a whole number (for example 4).",
+)
+assertions += 10
 
 for (const [rate, expectedTwoThirds, expectedOneThird] of [
   [400, 266, 133],
@@ -217,11 +243,14 @@ check(weeklyWagePreview.includes("updateAccount"), "Weekly wage table must persi
 check(weeklyWagePreview.includes("updateWeeklyPayment"), "Weekly wage table must persist the auto-calculated wage payment")
 check(weeklyWagePreview.includes("createLedgerTransaction"), "Weekly wage table must persist cash advances in the Worker ledger")
 check(weeklyWagePreview.includes("Save week"), "Weekly wage table must provide an operator save action")
-check(weeklyWagePreview.includes('value="previous"'), "Weekly wage table must let the operator view 8–14 August")
-check(weeklyWagePreview.includes("moveCurrentWeekToPrevious"), "Weekly wage table must support the approved week correction")
-check(weeklyWagePreview.includes("MOVED_WAGE_PLACEHOLDER_NOTE"), "The corrected current-week rows must retain an audit note")
-check(weeklyWagePreview.includes('attendance: item.account_type === "GROUP" ? null : "FULL"'), "Moved daily wage rows must use a database-valid placeholder")
-check(weeklyWagePreview.includes("wage_rate: item.wage_rate_snapshot"), "Moved current-week rows must retain an API-valid historical rate")
+check(weeklyWagePreview.includes("buildWageWeeks"), "Weekly wage table must derive Saturday–Friday dates from the live India calendar date")
+check(weeklyWagePreview.includes("Object.values(wageWeeks)"), "Weekly wage table must offer the current and previous calendar weeks")
+check(weeklyWagePreview.includes("useState<string | null>(null)"), "Time-dependent week dates must wait until the client mounts")
+check(weeklyWagePreview.includes("syncCurrentWeek"), "Weekly wage table must refresh its calendar anchor after a week rollover")
+check(weeklyWagePreview.includes("if (!wageWeeks || !selectedWeek)"), "Server rendering must use a stable loading state before live dates are known")
+check(!weeklyWagePreview.includes("15–21 Aug 2026 · current week"), "Weekly wage table must not hard-code an expired current week")
+check(!weeklyWagePreview.includes("moveCurrentWeekToPrevious"), "The completed one-time August wage move must not remain in the live UI")
+check(weeklyWagePreview.includes("MOVED_WAGE_PLACEHOLDER_NOTE"), "Historical moved wage placeholders must remain readable as blank entries")
 check(weeklyWagePreview.includes("Horizontal table scroll"), "Weekly wage table must provide a horizontal scrollbar above the table")
 check(weeklyWagePreview.includes("w-[1502px] min-w-[1502px] table-fixed"), "Weekly wage table must keep compact fixed-width columns")
 check(weeklyWagePreview.includes('<col className="w-[124px]" />'), "Cash paid in week must use a wider column")
@@ -234,8 +263,7 @@ check(weeklyWagePreview.includes(">Wage<"), "The lower group row must label the 
 check(!weeklyWagePreview.includes("Wage / labourer"), "The former wide wage-per-labourer label must be removed")
 check(!weeklyWagePreview.includes("Enter count and wage"), "Blank custom group cells must not show an entry prompt")
 check(weeklyWagePreview.includes("Export to Excel"), "Weekly wage table must offer an Excel-compatible export")
-check(weeklyWagePreview.includes("worker-wages-15-21-Aug-2026.xlsx"), "Excel export must download the current wage workbook")
-check(weeklyWagePreview.includes("worker-wages-08-14-Aug-2026.xlsx"), "Excel export must support the corrected previous week")
+check(weeklyWagePreview.includes("selectedWeek.exportFile"), "Excel export filename must follow the dynamically selected week")
 check(weeklyWagePreview.includes("buildWorkerWageWorkbook"), "Excel export must generate a typed XLSX workbook")
 check(weeklyWagePreview.includes("calculateWageSheetTotals"), "UI and Excel export must share one Sheet Total aggregation")
 check(weeklyWagePreview.includes("CombinedWeekWage"), "Selected worker week wages must support a three-line combined total")
@@ -266,6 +294,11 @@ check(weeklyWagePreview.includes('negative && value !== "" ? "−₹" : "₹"'),
 check(weeklyWagePreview.includes("window.print()"), "Weekly wage table must offer a print action")
 check(weeklyWagePreview.includes("worker name`}"), "Every listed worker name must be operator editable")
 check(weeklyWagePreview.includes("updateBaseWage"), "Changing a worker's base wage must update all seven daily wages")
+check(!weeklyWagePreview.includes('type="number"'), "Weekly wage inputs must not show browser up/down spinner arrows")
+check(weeklyWagePreview.includes('pattern="[0-9]*"'), "Weekly wage inputs must retain a numeric mobile keyboard without spinner controls")
+check(weeklyWagePreview.includes("readWholeAmountInput"), "Weekly wage inputs must reject decimal and non-numeric characters")
+check(weeklyWagePreview.includes("Number.isSafeInteger(labourerCount)"), "Group counts must be validated before any database write")
+check(weeklyWagePreview.includes("Enter a whole number of labourers for"), "Invalid group counts must identify the worker and date")
 check(weeklyWagePreview.includes("maxLength={7}"), "Worker references must be limited to seven characters")
 check(weeklyWagePreview.includes('"Base wage"'), "Excel export must include the editable base wage")
 check(weeklyWagePreview.includes('"Reference"'), "Excel export must include the worker reference")
@@ -389,5 +422,6 @@ check(bff.includes("export function POST"), "BFF must proxy offline sync push re
 const workerApi = read("lib/worker-management-api.ts")
 check(workerApi.includes("normaliseWorkerError"), "Worker API errors must be normalised for display")
 check(workerApi.includes("record.message"), "Structured FastAPI detail messages must remain readable")
+check(workerApi.includes("friendlyWorkerErrorMessage"), "Technical Worker field names must be converted into operator-readable errors")
 
 console.log(`worker-management: ${assertions} assertions passed`)

@@ -110,6 +110,105 @@ export function toDateInput(date = new Date()): string {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+export const wageDaySlots = [
+  { key: "sat", day: "Sat" },
+  { key: "sun", day: "Sun" },
+  { key: "mon", day: "Mon" },
+  { key: "tue", day: "Tue" },
+  { key: "wed", day: "Wed" },
+  { key: "thu", day: "Thu" },
+  { key: "fri", day: "Fri" },
+] as const
+
+export type WageDayKey = (typeof wageDaySlots)[number]["key"]
+export type WageWeekId = "current" | "previous"
+
+export type WageWeek = {
+  id: WageWeekId
+  label: string
+  heading: string
+  startDate: string
+  endDate: string
+  exportFile: string
+  days: Array<{
+    key: WageDayKey
+    day: (typeof wageDaySlots)[number]["day"]
+    date: string
+    isoDate: string
+  }>
+}
+
+function utcDate(value: string) {
+  return new Date(`${value}T00:00:00Z`)
+}
+
+function wageDateParts(value: string) {
+  const date = utcDate(value)
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  return {
+    day: date.getUTCDate(),
+    day2: String(date.getUTCDate()).padStart(2, "0"),
+    month: months[date.getUTCMonth()],
+    month2: String(date.getUTCMonth() + 1).padStart(2, "0"),
+    year: date.getUTCFullYear(),
+  }
+}
+
+export function saturdayForDate(value: string): string {
+  const daysSinceSaturday = (utcDate(value).getUTCDay() + 1) % 7
+  return addDays(value, -daysSinceSaturday)
+}
+
+function formatWageRange(startDate: string, endDate: string, compact: boolean) {
+  const start = wageDateParts(startDate)
+  const end = wageDateParts(endDate)
+
+  if (start.year !== end.year) {
+    return `${start.day} ${start.month} ${start.year} – ${end.day} ${end.month} ${end.year}`
+  }
+  if (start.month !== end.month) {
+    return `${start.day} ${start.month} – ${end.day} ${end.month} ${end.year}`
+  }
+  return compact
+    ? `${start.day}–${end.day} ${end.month} ${end.year}`
+    : `${start.day} ${start.month} – ${end.day} ${end.month} ${end.year}`
+}
+
+function wageExportFileName(startDate: string, endDate: string) {
+  const start = wageDateParts(startDate)
+  const end = wageDateParts(endDate)
+  return `worker-wages-${start.day2}-${start.month}-${start.year}-to-${end.day2}-${end.month}-${end.year}.xlsx`
+}
+
+function buildWageWeek(id: WageWeekId, startDate: string): WageWeek {
+  const endDate = addDays(startDate, 6)
+  return {
+    id,
+    label: `${formatWageRange(startDate, endDate, true)} · ${id === "current" ? "current week" : "last week"}`,
+    heading: formatWageRange(startDate, endDate, false),
+    startDate,
+    endDate,
+    exportFile: wageExportFileName(startDate, endDate),
+    days: wageDaySlots.map((slot, index) => {
+      const isoDate = addDays(startDate, index)
+      const parts = wageDateParts(isoDate)
+      return {
+        ...slot,
+        date: `${parts.day2}.${parts.month2}`,
+        isoDate,
+      }
+    }),
+  }
+}
+
+export function buildWageWeeks(anchorDate = toDateInput()): Record<WageWeekId, WageWeek> {
+  const currentStart = saturdayForDate(anchorDate)
+  return {
+    current: buildWageWeek("current", currentStart),
+    previous: buildWageWeek("previous", addDays(currentStart, -7)),
+  }
+}
+
 export function addDays(value: string, days: number): string {
   const date = new Date(`${value}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() + days)
