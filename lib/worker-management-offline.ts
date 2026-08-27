@@ -100,9 +100,8 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 
 function openDatabase(): Promise<IDBDatabase> {
   if (databasePromise) return databasePromise
-  let openPromise: Promise<IDBDatabase>
   let settled = false
-  openPromise = new Promise((resolve, reject) => {
+  const openPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = requireIndexedDb().open(DATABASE_NAME, DATABASE_VERSION)
     const clearCachedPromise = () => {
       if (databasePromise === openPromise) databasePromise = null
