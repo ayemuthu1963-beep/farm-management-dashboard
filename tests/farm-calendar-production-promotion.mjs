@@ -100,6 +100,9 @@ assert.equal(workerManagement.ctaLabel, "Open Worker Management")
 const workerWageTable = read("components/worker-management/weekly-wage-table-preview.tsx")
 assert.match(workerWageTable, /Weekly wage sheet saved to the Production database\./)
 assert.match(workerWageTable, /normaliseWeeklyWageEntry/)
+assert.match(workerWageTable, /function approvedAccountCode/)
+assert.match(workerWageTable, /const missingApprovedRows = createInitialRows\(\)/)
+assert.match(workerWageTable, /farmScheme: "TWO_OPTION"/)
 assert.doesNotMatch(workerWageTable, /saved to the Preview database/)
 
 assert.equal(
