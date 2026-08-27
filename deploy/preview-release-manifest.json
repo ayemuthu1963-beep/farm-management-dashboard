@@ -3,14 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Advance Worker Management to the current Saturday-to-Friday week, clarify labour-count errors, and remove numeric input spinners",
-  "base_commit": "945dfa1ab1c9facf037d1786766204458cf5426e",
+  "release_note": "Treat empty Worker Management numeric cells as zero without changing the backend",
+  "base_commit": "c1c127df68e36c15d6e875a0c50b582c0963d2c0",
   "matched_backend_commit": "3f2c9cbe2bb790806154ce138947d62117e9fba0",
   "matched_private_intelligence_commit": "91bd618883082336ecebd898a56e4fb476f4b4fd",
   "allowed_paths": [
     "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/worker-management-api.ts",
     "lib/worker-management-format.ts",
     "tests/preview-deployment-workflow.mjs",
     "tests/worker-management.mjs"
