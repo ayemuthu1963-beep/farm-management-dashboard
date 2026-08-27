@@ -48,7 +48,13 @@ readonly approved_temp_mount_source="/tmp"
 readonly approved_temp_mount_target="/host-tmp"
 readonly approved_storage_mount_source="/home/muthu/mfms_data/preview/motor-screenshot-analysis"
 readonly approved_storage_mount_target="/var/lib/mfms/motor-screenshot-analysis"
-readonly expected_mount_contract="bind|$approved_storage_mount_source|$approved_storage_mount_target|true
+readonly approved_intelligence_mount_source="/home/muthu/.local/state/mfms-preview-intelligence/preview_service_key"
+readonly approved_intelligence_mount_target="/run/secrets/mfms_intelligence_preview_key"
+readonly approved_ai_control_mount_source="/home/muthu/.local/state/mfms-preview-ai-control"
+readonly approved_ai_control_mount_target="/var/lib/mfms/ai-control"
+readonly expected_mount_contract="bind|$approved_ai_control_mount_source|$approved_ai_control_mount_target|true
+bind|$approved_intelligence_mount_source|$approved_intelligence_mount_target|false
+bind|$approved_storage_mount_source|$approved_storage_mount_target|true
 bind|$approved_temp_mount_source|$approved_temp_mount_target|true"
 readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8015"}]}'
 
@@ -140,7 +146,7 @@ assert_approved_mount_contract() {
   local container=$1 contract
   contract=$(mount_contract_for_container "$container")
   [[ "$contract" == "$expected_mount_contract" ]] \
-    || blocked "Preview backend mount contract differs from the approved persistent storage and /tmp bind mounts"
+    || blocked "Preview backend mount contract differs from the approved AI control, intelligence secret, persistent storage, and /tmp bind mounts"
 }
 
 disconnect_preview_network() {
@@ -601,6 +607,7 @@ build_image() {
 
 create_preview_database_backup() {
   local database_host database_container network_snapshot temporary_backup backup_list
+  local -a backup_credentials
   database_host=$(docker exec "$backend_live_container" python -c \
     'from urllib.parse import urlparse; from app.config import get_settings; print(urlparse(get_settings().database_url).hostname or "")')
   [[ "$database_host" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] \
@@ -635,15 +642,38 @@ PY
   )
   [[ -n "$database_container" ]] || blocked "Preview database container is unavailable"
   docker exec "$database_container" sh -c \
-    'command -v pg_dump >/dev/null && command -v pg_restore >/dev/null && test -n "${POSTGRES_USER:-}"' \
-    || blocked "Preview database container lacks the required backup tools or user"
+    'command -v pg_dump >/dev/null && command -v pg_restore >/dev/null' \
+    || blocked "Preview database container lacks the required backup tools"
+
+  ensure_database_url_override
+  mapfile -t backup_credentials < <(
+    python3 - "$database_url_override_file" <<'PY'
+import pathlib
+import sys
+from urllib.parse import unquote, urlsplit
+
+line = pathlib.Path(sys.argv[1]).read_text(encoding="ascii").strip()
+parsed = urlsplit(line.split("=", 1)[1].replace("postgresql+psycopg://", "postgresql://", 1))
+username = unquote(parsed.username or "")
+password = unquote(parsed.password or "")
+if username != "mfms_uat_app" or not password or any(char in password for char in "\r\n"):
+    raise SystemExit("Preview backup credentials are invalid")
+print(username)
+print(password)
+PY
+  )
+  [[ "${#backup_credentials[@]}" -eq 2 && "${backup_credentials[0]}" == "mfms_uat_app" && -n "${backup_credentials[1]}" ]] \
+    || blocked "Preview backup credentials are unavailable"
 
   install -d -m 700 "$database_backup_dir"
   temporary_backup=$(mktemp "$database_backup_dir/.${database_name}.XXXXXX")
   backup_list="$work_dir/database-backup.list"
-  if ! docker exec "$database_container" sh -c \
-    'exec pg_dump --format=custom --compress=9 --no-owner --no-privileges --username="$POSTGRES_USER" --dbname="$1"' \
-    sh "$database_name" > "$temporary_backup"; then
+  if ! docker exec \
+    --env "PGPASSWORD=${backup_credentials[1]}" \
+    "$database_container" \
+    pg_dump --format=custom --compress=9 --no-owner --no-privileges \
+      --username="${backup_credentials[0]}" --dbname="$database_name" \
+    > "$temporary_backup"; then
     rm -f "$temporary_backup"
     blocked "Preview database backup failed"
     return 1
@@ -705,10 +735,13 @@ verify_migrations() {
 start_candidate() {
   candidate_container="$backend_live_container-candidate-$run_id-$timestamp"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$candidate_container" \
     --network "$preview_network" \
     --restart no \
     -p "127.0.0.1:$candidate_port:8000" \
+    --mount "type=bind,source=$approved_ai_control_mount_source,target=$approved_ai_control_mount_target" \
+    --mount "type=bind,source=$approved_intelligence_mount_source,target=$approved_intelligence_mount_target,readonly" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
@@ -894,11 +927,14 @@ deploy_backend() {
   disconnect_preview_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$backend_live_container" \
     --network "$preview_network" \
     --ip "$original_network_ip" \
     --restart "$approved_restart_policy" \
     -p "127.0.0.1:$live_port:8000" \
+    --mount "type=bind,source=$approved_ai_control_mount_source,target=$approved_ai_control_mount_target" \
+    --mount "type=bind,source=$approved_intelligence_mount_source,target=$approved_intelligence_mount_target,readonly" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
@@ -955,11 +991,14 @@ credential_cutover_backend() {
   disconnect_preview_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$backend_live_container" \
     --network "$preview_network" \
     --ip "$original_network_ip" \
     --restart "$approved_restart_policy" \
     -p "127.0.0.1:$live_port:8000" \
+    --mount "type=bind,source=$approved_ai_control_mount_source,target=$approved_ai_control_mount_target" \
+    --mount "type=bind,source=$approved_intelligence_mount_source,target=$approved_intelligence_mount_target,readonly" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
