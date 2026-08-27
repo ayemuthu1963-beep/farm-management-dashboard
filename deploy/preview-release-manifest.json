@@ -3,17 +3,16 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Harden Worker weekly wage attendance, load failure, retry, and offline recovery behavior",
-  "base_commit": "5cd080d427d22f55a2c5a0e32a819ace361b70cb",
+  "release_note": "Correct the Worker Management roster display order using stable account codes",
+  "base_commit": "ac996cd91ee0e90dd805bd0172efa61d6666b22a",
   "matched_backend_commit": "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c",
   "matched_private_intelligence_commit": "91bd618883082336ecebd898a56e4fb476f4b4fd",
   "allowed_paths": [
+    "components/worker-management/weekly-settlement.tsx",
     "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/worker-management-format.ts",
-    "lib/worker-management-offline.ts",
+    "lib/worker-management-roster.ts",
     "tests/preview-deployment-workflow.mjs",
-    "tests/worker-management-offline.mjs",
     "tests/worker-management.mjs"
   ],
   "protected_invariants": {

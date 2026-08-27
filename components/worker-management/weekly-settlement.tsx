@@ -15,7 +15,6 @@ import {
 import {
   accountTypeLabel,
   addDays,
-  compareAccountCodes,
   defaultSettlementDate,
   formatDate,
   formatWholeINR,
@@ -23,6 +22,7 @@ import {
   weekStatusLabel,
 } from "@/lib/worker-management-format"
 import type { LedgerTransaction, SettlementResponse, SettlementRow } from "@/lib/worker-management-types"
+import { compareApprovedWorkerRoster } from "@/lib/worker-management-roster"
 import {
   Badge,
   EmptyState,
@@ -35,21 +35,6 @@ import {
 
 const openingBalanceReference = "OPEN-BAL"
 const dependentWorkerNames = new Set(["Rani", "Chitra"])
-const approvedRoster = [
-  "Kuppan",
-  "Arunan",
-  "Sivan",
-  "Lokesh",
-  "Tiruma",
-  "Rani",
-  "Vijaya",
-  "Mary",
-  "Raja Mani",
-  "Chitra",
-  "Outside Ladies",
-]
-const approvedRosterOrder = new Map(approvedRoster.map((name, index) => [name.toLocaleLowerCase(), index]))
-
 function isDependentWorker(row: Pick<SettlementRow, "display_name">) {
   return dependentWorkerNames.has(row.display_name)
 }
@@ -61,12 +46,6 @@ function pairedDependent(rows: SettlementRow[], row: SettlementRow) {
 
 function combinedWeekWages(rows: SettlementRow[], row: SettlementRow) {
   return money(row.wages) + money(pairedDependent(rows, row)?.wages)
-}
-
-function compareSettlementRows(left: SettlementRow, right: SettlementRow) {
-  const leftOrder = approvedRosterOrder.get(left.display_name.toLocaleLowerCase()) ?? 1000
-  const rightOrder = approvedRosterOrder.get(right.display_name.toLocaleLowerCase()) ?? 1000
-  return leftOrder - rightOrder || compareAccountCodes(left, right)
 }
 
 function SignedAmount({ value, negativeOnly = false }: { value: number | null; negativeOnly?: boolean }) {
@@ -167,7 +146,7 @@ export function WeeklySettlement() {
       return balances
     }, new Map<number, number>())
 
-    return (data?.items ?? []).toSorted(compareSettlementRows).map((item) => {
+    return (data?.items ?? []).toSorted(compareApprovedWorkerRoster).map((item) => {
       const dependent = isDependentWorker(item)
       const pairedWorker = pairedDependent(data?.items ?? [], item)
       const ownWeekWages = money(item.wages)

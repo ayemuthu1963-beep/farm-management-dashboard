@@ -29,6 +29,10 @@ import {
 } from "@/lib/worker-management-format"
 import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
 import {
+  approvedWorkerRoster,
+  compareApprovedWorkerRoster,
+} from "@/lib/worker-management-roster"
+import {
   buildWorkerWageWorkbook,
   calculateWageSheetTotals,
   WORKER_WAGE_TOTAL_LABEL,
@@ -67,19 +71,7 @@ type WageRow = {
   settlementRowVersion: number | null
 }
 
-const workerRates = [
-  { name: "Kuppan", fullWage: 620, rateNote: "Full wage ₹620" },
-  { name: "Arunan", fullWage: 400, rateNote: "₹400 / ₹266 / ₹133" },
-  { name: "Sivan", fullWage: 350, rateNote: "₹350 / ₹233 / ₹116" },
-  { name: "Lokesh", fullWage: 300, rateNote: "₹300 / ₹200 / ₹100" },
-  { name: "Tiruma", fullWage: 300, rateNote: "₹300 / ₹150" },
-  { name: "Rani", fullWage: 300, rateNote: "₹300 / ₹150" },
-  { name: "Vijaya", fullWage: 300, rateNote: "₹300 / ₹150" },
-  { name: "Mary", fullWage: 300, rateNote: "₹300 / ₹150" },
-  { name: "Raja Mani", fullWage: 300, rateNote: "₹300 / ₹150" },
-  { name: "Chitra", fullWage: 300, rateNote: "₹300 / ₹150" },
-  { name: "Outside Ladies", fullWage: 320, rateNote: "₹320 / ₹160" },
-] as const
+const workerRates = approvedWorkerRoster
 
 function blankWeek(): Record<DayKey, ""> {
   return Object.fromEntries(daySlots.map(({ key }) => [key, ""])) as Record<DayKey, "">
@@ -353,7 +345,6 @@ function CombinedWeekWage({ value, addend }: { value: number; addend: number | n
   )
 }
 
-const approvedRosterOrder = new Map(workerRates.map((worker, index) => [worker.name.toLocaleLowerCase(), index]))
 const openingBalanceReference = "OPEN-BAL"
 
 function databaseRows(
@@ -371,11 +362,7 @@ function databaseRows(
     )
     return balances
   }, new Map<number, number>())
-  const sortedAccounts = [...accounts].sort((left, right) => {
-    const leftOrder = approvedRosterOrder.get(left.display_name.toLocaleLowerCase()) ?? 1000
-    const rightOrder = approvedRosterOrder.get(right.display_name.toLocaleLowerCase()) ?? 1000
-    return leftOrder - rightOrder || left.display_name.localeCompare(right.display_name)
-  })
+  const sortedAccounts = [...accounts].sort(compareApprovedWorkerRoster)
 
   const persisted = sortedAccounts.map((account): WageRow => {
     const group = account.account_type === "GROUP"
