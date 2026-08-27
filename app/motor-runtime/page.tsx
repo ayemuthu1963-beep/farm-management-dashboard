@@ -57,7 +57,7 @@ export default function MotorRuntimePage() {
     return () => { isActive = false }
   }, [dateRange, dateRangeError])
 
-  const totalEntries = data.summary.total_entries
+  const totalInformationRecords = data.summary.total_entries + data.summary.confirmed_no_run_count
 
   return (
     <DashboardShell>
@@ -83,7 +83,7 @@ export default function MotorRuntimePage() {
 
         {errorMessage && <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}</div>}
         {isLoading && <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium text-muted-foreground">Loading motor runtime data…</div>}
-        {!isLoading && !errorMessage && totalEntries === 0 && <div className="rounded-xl border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">No motor runtime records found for the selected period.</div>}
+        {!isLoading && !errorMessage && totalInformationRecords === 0 && <div className="rounded-xl border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">No data available for the selected period.</div>}
 
         <MotorStatusCards motors={data.statusCards} />
 

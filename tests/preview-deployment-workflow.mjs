@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Treat empty Worker Management numeric cells as zero without changing the backend",
+  "Display explicit audited Motor Not Run daily records after the matched Preview backend release",
 )
-assert.equal(manifest.base_commit, "c1c127df68e36c15d6e875a0c50b582c0963d2c0")
-assert.equal(manifest.matched_backend_commit, "3f2c9cbe2bb790806154ce138947d62117e9fba0")
+assert.equal(manifest.base_commit, "bf4eee9e0e033c3f5cf2a717650db5058b646450")
+assert.equal(manifest.matched_backend_commit, "1b05f131204060773e4270c2c286f710ff908175")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -302,11 +302,17 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
+  "app/api/motor-runtime/dashboard/route.ts",
+  "app/motor-runtime/page.tsx",
+  "components/admin/motor-not-run-panel.tsx",
+  "components/admin/motor-runtime-management-client.tsx",
+  "components/motor/motor-table.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-format.ts",
+  "lib/motor-data.ts",
+  "lib/motor-runtime-management-api.ts",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/motor-screenshot-analysis-real-workflow.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
