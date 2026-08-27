@@ -29,6 +29,10 @@ import {
 } from "@/lib/worker-management-format"
 import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
 import {
+  approvedWorkerRoster,
+  compareApprovedWorkerRoster,
+} from "@/lib/worker-management-roster"
+import {
   buildWorkerWageWorkbook,
   calculateWageSheetTotals,
   WORKER_WAGE_TOTAL_LABEL,
@@ -67,23 +71,7 @@ type WageRow = {
   settlementRowVersion: number | null
 }
 
-const workerRates = [
-  { name: "Kuppan", fullWage: 620, rateNote: "Full wage ₹620", farmScheme: "THREE_OPTION" },
-  { name: "Arunan", fullWage: 400, rateNote: "₹400 / ₹266 / ₹133", farmScheme: "THREE_OPTION" },
-  { name: "Sivan", fullWage: 350, rateNote: "₹350 / ₹233 / ₹116", farmScheme: "THREE_OPTION" },
-  { name: "Lokesh", fullWage: 300, rateNote: "₹300 / ₹200 / ₹100", farmScheme: "THREE_OPTION" },
-  { name: "Tiruma", fullWage: 300, rateNote: "₹300 / ₹150", farmScheme: "TWO_OPTION" },
-  { name: "Rani", fullWage: 300, rateNote: "₹300 / ₹150", farmScheme: "TWO_OPTION" },
-  { name: "Vijaya", fullWage: 300, rateNote: "₹300 / ₹150", farmScheme: "TWO_OPTION" },
-  { name: "Mary", fullWage: 300, rateNote: "₹300 / ₹150", farmScheme: "TWO_OPTION" },
-  { name: "Raja Mani", fullWage: 300, rateNote: "₹300 / ₹150", farmScheme: "TWO_OPTION" },
-  { name: "Chitra", fullWage: 300, rateNote: "₹300 / ₹150", farmScheme: "TWO_OPTION" },
-  { name: "Outside Ladies", fullWage: 320, rateNote: "₹320 / ₹160", farmScheme: null },
-] as const
-
-function approvedAccountCode(index: number) {
-  return `WG-ROSTER-${String(index + 1).padStart(2, "0")}`
-}
+const workerRates = approvedWorkerRoster
 
 function blankWeek(): Record<DayKey, ""> {
   return Object.fromEntries(daySlots.map(({ key }) => [key, ""])) as Record<DayKey, "">
@@ -103,7 +91,7 @@ function createInitialRows(): WageRow[] {
         accountCode: null,
         accountType: group ? "GROUP" : "FARM",
         accountRowVersion: null,
-        farmScheme: worker.farmScheme,
+        farmScheme: group ? null : "THREE_OPTION",
         name: worker.name,
         loadedName: worker.name,
         rateNote: worker.rateNote,
@@ -357,7 +345,6 @@ function CombinedWeekWage({ value, addend }: { value: number; addend: number | n
   )
 }
 
-const approvedRosterOrder = new Map(workerRates.map((worker, index) => [worker.name.toLocaleLowerCase(), index]))
 const openingBalanceReference = "OPEN-BAL"
 
 function databaseRows(
@@ -375,11 +362,7 @@ function databaseRows(
     )
     return balances
   }, new Map<number, number>())
-  const sortedAccounts = [...accounts].sort((left, right) => {
-    const leftOrder = approvedRosterOrder.get(left.display_name.toLocaleLowerCase()) ?? 1000
-    const rightOrder = approvedRosterOrder.get(right.display_name.toLocaleLowerCase()) ?? 1000
-    return leftOrder - rightOrder || left.display_name.localeCompare(right.display_name)
-  })
+  const sortedAccounts = [...accounts].sort(compareApprovedWorkerRoster)
 
   const persisted = sortedAccounts.map((account): WageRow => {
     const group = account.account_type === "GROUP"
@@ -478,21 +461,8 @@ function databaseRows(
   })
 
   const customCount = populated.filter((row) => row.custom).length
-  const existingCodes = new Set(populated.map((row) => row.accountCode))
-  const existingNames = new Set(populated.map((row) => row.loadedName.toLocaleLowerCase()))
-  const missingApprovedRows = createInitialRows()
-    .filter((row) => !row.custom)
-    .filter((row, index) => {
-      const legacyCode = index < 10 ? `F${String(index + 1).padStart(3, "0")}` : "G001"
-      return (
-        !existingCodes.has(approvedAccountCode(index)) &&
-        !existingCodes.has(legacyCode) &&
-        !existingNames.has(row.loadedName.toLocaleLowerCase())
-      )
-    })
   return [
     ...populated,
-    ...missingApprovedRows,
     ...createInitialRows()
       .filter((row) => row.custom)
       .slice(customCount, 3)
@@ -689,18 +659,15 @@ export function WeeklyWageTablePreview() {
 
         let row = sourceRow
         if (row.accountId === null) {
-          const approvedIndex = workerRates.findIndex((worker) => worker.name === row.loadedName)
           const created = await createAccount({
-            account_code: row.custom || approvedIndex === -1
-              ? `WG-CUSTOM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-              : approvedAccountCode(approvedIndex),
-            account_type: row.accountType,
+            account_code: `WG-CUSTOM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+            account_type: "GROUP",
             display_name: enteredName,
             group_leader_name: null,
-            default_group_size: row.group ? 0 : null,
+            default_group_size: 0,
             operator_reference: row.reference.trim() || null,
             daily_rate: String(amount(row.baseWage)),
-            farm_scheme: row.accountType === "FARM" ? row.farmScheme ?? "THREE_OPTION" : null,
+            farm_scheme: null,
             effective_from: selectedWeek.startDate,
           })
           row = {

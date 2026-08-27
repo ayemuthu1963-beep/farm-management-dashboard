@@ -20,6 +20,10 @@ import {
   workerAccountOptionLabel,
 } from "../lib/worker-management-format.ts"
 import { friendlyWorkerErrorMessage } from "../lib/worker-management-api.ts"
+import {
+  approvedWorkerRoster,
+  compareApprovedWorkerRoster,
+} from "../lib/worker-management-roster.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(join(root, path), "utf8")
@@ -29,6 +33,45 @@ const check = (condition, message) => {
   assert.ok(condition, message)
   assertions += 1
 }
+
+const expectedApprovedRoster = [
+  "Kuppan",
+  "Arunan",
+  "Sivan",
+  "Lokesh",
+  "Tiruma",
+  "Rani",
+  "Mary",
+  "Raja Mani",
+  "Chitra",
+  "Vijaya",
+  "Outside Ladies",
+]
+assert.deepEqual(
+  approvedWorkerRoster.map((worker) => worker.name),
+  expectedApprovedRoster,
+  "The approved Worker Management roster must use the requested display order",
+)
+assert.equal(new Set(approvedWorkerRoster.map((worker) => worker.accountCode)).size, expectedApprovedRoster.length)
+assert.equal(new Set(approvedWorkerRoster.map((worker) => worker.name)).size, expectedApprovedRoster.length)
+assert.deepEqual(
+  approvedWorkerRoster
+    .map((worker) => ({ account_code: worker.accountCode, display_name: worker.name }))
+    .toReversed()
+    .toSorted(compareApprovedWorkerRoster)
+    .map((worker) => worker.display_name),
+  expectedApprovedRoster,
+  "Roster sorting must be driven by stable account codes without duplicates or omissions",
+)
+assert.deepEqual(
+  ["WG-CUSTOM-10", "WG-CUSTOM-2", "WG-CUSTOM-1"]
+    .map((account_code) => ({ account_code }))
+    .toSorted(compareApprovedWorkerRoster)
+    .map((worker) => worker.account_code),
+  ["WG-CUSTOM-1", "WG-CUSTOM-2", "WG-CUSTOM-10"],
+  "Non-roster group entries must use stable natural account-code order",
+)
+assertions += 5
 
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
@@ -348,8 +391,6 @@ check(weeklyWagePreview.includes("attendance: entry.attendance"), "Blank individ
 check(weeklyWagePreview.includes("const [loadSucceeded, setLoadSucceeded] = useState(false)"), "Saving must remain disabled until the database load succeeds")
 check(weeklyWagePreview.includes("disabled={loading || saving || !loadSucceeded}"), "The Save action must remain disabled after a load failure")
 check(weeklyWagePreview.includes("Reload the weekly wage sheet successfully before saving"), "The save handler must reject writes after a failed load")
-check(weeklyWagePreview.includes("account_type: row.accountType"), "Approved starter accounts must retain their Farm or Group type")
-check(weeklyWagePreview.includes('farm_scheme: row.accountType === "FARM"'), "New Farm accounts must retain their approved attendance scheme")
 check(weeklyWagePreview.includes("persistRowDatabaseState(row)"), "Created account IDs must be retained before later save steps run")
 check(!weeklyWagePreview.includes("notes: movedBlank"), "New saves must not preserve blank cells as non-zero migration placeholders")
 check(weeklyWagePreview.includes("maxLength={7}"), "Worker references must be limited to seven characters")
@@ -420,7 +461,7 @@ check(settlement.includes("To loan payment for ${row.display_name}"), "To loan p
 check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
 check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
 check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
-check(settlement.includes(".toSorted(compareSettlementRows)"), "Weekly Settlement must follow the wage-sheet roster order")
+check(settlement.includes(".toSorted(compareApprovedWorkerRoster)"), "Weekly Settlement must follow the shared account-code roster order")
 
 const query = read("components/worker-management/worker-query.tsx")
 check(query.includes("weekDate"), "Query must expose a work-week filter")
