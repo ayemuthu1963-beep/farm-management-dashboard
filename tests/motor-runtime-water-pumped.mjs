@@ -7,6 +7,7 @@ import {
   pumpedLitresForRuntimeMinutes,
   pumpLitresPerHourForPlot,
 } from "../lib/water-pump-rates.ts"
+import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const motorRoute = read("app/api/motor-runtime/dashboard/route.ts")
@@ -21,6 +22,7 @@ const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
 const harvestProxy = read("app/api/admin/harvest-sync/[[...path]]/route.ts")
 const noRunPanel = read("components/admin/motor-not-run-panel.tsx")
 const managementApi = read("lib/motor-runtime-management-api.ts")
+const adminNoRunRoute = read("app/api/admin/motor-runtime/management/[...path]/route.ts")
 
 assert.equal(STANDARD_PUMP_LITRES_PER_HOUR, 50_000)
 assert.equal(JACKFRUIT_NUTMEG_PUMP_LITRES_PER_HOUR, 36_000)
@@ -83,5 +85,77 @@ assert.match(noRunPanel, /Entered by/)
 assert.match(noRunPanel, /Audit timestamp \(IST\)/)
 assert.match(managementApi, /createNoRunRecords/)
 assert.match(managementApi, /voidNoRunRecord/)
+
+const sentinels = {
+  id: "PRIVATE_DATABASE_ID_SENTINEL",
+  entered_by: "PRIVATE_ADMIN_USERNAME_SENTINEL",
+  created_at: "PRIVATE_CREATED_TIMESTAMP_SENTINEL",
+  updated_at: "PRIVATE_UPDATED_TIMESTAMP_SENTINEL",
+  remarks: "PRIVATE_OPTIONAL_REMARKS_SENTINEL",
+  source: "PRIVATE_SOURCE_SENTINEL",
+  voided_by: "PRIVATE_VOID_USER_SENTINEL",
+  voided_at: "PRIVATE_VOID_TIMESTAMP_SENTINEL",
+  audit_timestamp: "PRIVATE_AUDIT_TIMESTAMP_SENTINEL",
+  extra: "PRIVATE_BACKEND_EXTRA_SENTINEL",
+}
+const logCalls = []
+const originalConsole = { log: console.log, warn: console.warn, error: console.error }
+console.log = (...values) => logCalls.push(["log", ...values])
+console.warn = (...values) => logCalls.push(["warn", ...values])
+console.error = (...values) => logCalls.push(["error", ...values])
+let publicNoRunRecords
+try {
+  publicNoRunRecords = projectPublicMotorNoRunRecords([
+    {
+      ...sentinels,
+      operation_date: "2026-08-25",
+      motor_id: "motor-2",
+      status: "Not Run",
+      reason: "Heavy rain",
+      voided_at: null,
+    },
+    {
+      ...sentinels,
+      operation_date: "2026-08-26",
+      motor_id: "motor-3",
+      status: "Not Run",
+      reason: "VOIDED_REASON_SENTINEL",
+    },
+  ])
+} finally {
+  console.log = originalConsole.log
+  console.warn = originalConsole.warn
+  console.error = originalConsole.error
+}
+
+assert.deepEqual(publicNoRunRecords, [{
+  date: "2026-08-25",
+  motorId: "M2",
+  motorName: "Motor 2",
+  status: "Not Run",
+  reason: "Heavy rain",
+  runtime: "0 minutes",
+  water: "0 L",
+}])
+assert.deepEqual(Object.keys(publicNoRunRecords[0]), ["date", "motorId", "motorName", "status", "reason", "runtime", "water"])
+assert.deepEqual(logCalls, [])
+const serializedPublicResponse = JSON.stringify({ noRunRecords: publicNoRunRecords })
+for (const value of Object.values(sentinels)) assert.doesNotMatch(serializedPublicResponse, new RegExp(value))
+assert.doesNotMatch(serializedPublicResponse, /VOIDED_REASON_SENTINEL/)
+assert.match(motorRoute, /projectPublicMotorNoRunRecords\(Array\.isArray\(rawNoRunPayload\) \? rawNoRunPayload : \[\]\)/)
+assert.match(motorRoute, /noRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
+assert.match(motorRoute, /record\.date === date && record\.motorId === id/)
+assert.doesNotMatch(motorRoute, /record\.(?:id|entered_by|created_at|updated_at|remarks|source|voided_by|voided_at|audit_timestamp)/)
+assert.match(motorRoute, /headers: \{ "Cache-Control": "no-store" \}/)
+assert.match(adminNoRunRoute, /return new NextResponse\(response\.body/)
+assert.match(adminNoRunRoute, /"Cache-Control": "private, no-store"/)
+assert.doesNotMatch(adminNoRunRoute, /projectPublicMotorNoRunRecords/)
+assert.match(managementApi, /entered_by: string/)
+assert.match(managementApi, /created_at: string/)
+assert.match(managementApi, /voided_by: string \| null/)
+assert.match(managementApi, /voided_at: string \| null/)
+assert.match(noRunPanel, /record\.remarks \|\| "—"/)
+assert.match(noRunPanel, /record\.entered_by/)
+assert.match(noRunPanel, /auditTime\(record\.created_at\)/)
 
 console.log("Motor Runtime and shared water-pump rate regression passed")
