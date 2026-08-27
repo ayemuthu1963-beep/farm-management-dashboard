@@ -237,3 +237,36 @@ export function calculateDailyWage(
   const fraction = { FULL: 1, HALF: 0.5, ABSENT: 0 }[attendance ?? "ABSENT"]
   return Math.round(rateInPaise * fraction) / 100
 }
+
+export function normaliseWeeklyWageEntry({
+  group,
+  dailyWage,
+  labourers,
+  baseWage,
+}: {
+  group: boolean
+  dailyWage: string | number | null | undefined
+  labourers: string | number | null | undefined
+  baseWage: string | number | null | undefined
+}): {
+  attendance: "ABSENT" | "FULL" | null
+  groupAttendeeCount: number | null
+  wageRateSnapshot: number
+} {
+  const enteredWage = Math.max(0, money(dailyWage))
+  const wageRateSnapshot = enteredWage > 0 ? enteredWage : Math.max(0, money(baseWage))
+
+  if (group) {
+    return {
+      attendance: null,
+      groupAttendeeCount: Math.max(0, money(labourers)),
+      wageRateSnapshot,
+    }
+  }
+
+  return {
+    attendance: enteredWage > 0 ? "FULL" : "ABSENT",
+    groupAttendeeCount: null,
+    wageRateSnapshot,
+  }
+}
