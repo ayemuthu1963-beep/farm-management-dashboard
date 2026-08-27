@@ -19,6 +19,9 @@ export interface MotorDailyRecord {
   plot?: string
   valve?: string
   source?: string
+  status?: "Not Run"
+  enteredBy?: string
+  auditTimestamp?: string
 }
 
 export interface MotorSummaryStat {
@@ -60,6 +63,7 @@ export interface ValveGroup {
 export interface MotorDashboardData {
   summary: {
     total_entries: number
+    confirmed_no_run_count: number
     first_entry_date: string | null
     latest_entry_date: string | null
   }
@@ -72,7 +76,7 @@ export interface MotorDashboardData {
 }
 
 export const emptyMotorDashboardData: MotorDashboardData = {
-  summary: { total_entries: 0, first_entry_date: null, latest_entry_date: null },
+  summary: { total_entries: 0, confirmed_no_run_count: 0, first_entry_date: null, latest_entry_date: null },
   recordsByMotor: { M1: [], M2: [], M3: [] },
   summaryStats: [
     { motor: "Motor 1", motorId: "M1", label: "Total Run Hours", value: 0, unit: "Hours", icon: "clock" },

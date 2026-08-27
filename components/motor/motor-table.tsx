@@ -21,14 +21,14 @@ export function MotorTable({ records }: MotorTableProps) {
           {records.length === 0 && (
             <tr className="border-t border-border">
               <td colSpan={7} className="px-3 py-6 text-center text-sm text-muted-foreground">
-                No motor runtime records found for the selected period.
+                No data available for the selected period.
               </td>
             </tr>
           )}
           {records.map((record, index) => (
             <tr key={`${record.date}-${record.valve ?? "none"}-${index}`} className="border-t border-sky-100/80 hover:bg-white/80">
               <td className="whitespace-nowrap px-3 py-3 text-foreground">{record.date}</td>
-              <td className="px-3 py-3 text-foreground">{record.runHours.toFixed(2)} hrs</td>
+              <td className="px-3 py-3 text-foreground">{record.status === "Not Run" ? "0 minutes" : `${record.runHours.toFixed(2)} hrs`}</td>
               <td className="px-3 py-3 text-foreground">{record.starts}</td>
               <td className="whitespace-nowrap px-3 py-3 text-foreground">{Math.round(record.waterLifted).toLocaleString("en-IN")} L</td>
               <td className="px-3 py-3 text-muted-foreground">{record.plot ?? "--"}</td>
