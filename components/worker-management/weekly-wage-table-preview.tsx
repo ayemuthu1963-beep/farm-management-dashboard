@@ -430,7 +430,11 @@ function databaseRows(
             entered
               ? !group && entry?.attendance_value === "ABSENT"
                 ? 0
-                : readAmount(entry?.wage_rate_snapshot ?? baseWage)
+                : readAmount(
+                    group
+                      ? entry?.wage_rate_snapshot ?? baseWage
+                      : entry?.daily_wage_amount ?? baseWage,
+                  )
               : "",
           ]
         }),
@@ -485,6 +489,7 @@ export function WeeklyWageTablePreview() {
   const [selectedWeekId, setSelectedWeekId] = useState<WageWeekId>("current")
   const [rows, setRows] = useState<WageRow[]>(createInitialRows)
   const [loading, setLoading] = useState(true)
+  const [loadSucceeded, setLoadSucceeded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("Loading the approved roster and week from Preview…")
   const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info")
@@ -508,6 +513,7 @@ export function WeeklyWageTablePreview() {
   const loadWeek = useCallback(async () => {
     if (!selectedWeek || !wageWeeks) return
     setLoading(true)
+    setLoadSucceeded(false)
     setMessageTone("info")
     setMessage("Loading the approved roster and saved wages…")
     try {
@@ -557,9 +563,11 @@ export function WeeklyWageTablePreview() {
       setRows(loadedRows)
       setWeekId(week.week_id)
       setWeekStatus(week.status)
+      setLoadSucceeded(true)
       setMessageTone("success")
       setMessage(week.week_id ? `${selectedWeek.heading} loaded · ${week.status.toLocaleLowerCase()}` : `${selectedWeek.heading} loaded · no entries saved`)
     } catch (error) {
+      setLoadSucceeded(false)
       setMessageTone("error")
       setMessage(error instanceof Error ? error.message : "The weekly wage sheet could not be loaded.")
     } finally {
@@ -612,8 +620,27 @@ export function WeeklyWageTablePreview() {
     }))
   }
 
+  function persistRowDatabaseState(persistedRow: WageRow) {
+    setRows((current) => current.map((row) => row.id === persistedRow.id
+      ? {
+          ...row,
+          accountId: persistedRow.accountId,
+          accountCode: persistedRow.accountCode,
+          accountRowVersion: persistedRow.accountRowVersion,
+          loadedName: persistedRow.loadedName,
+          loadedReference: persistedRow.loadedReference,
+          loadedBaseWage: persistedRow.loadedBaseWage,
+        }
+      : row))
+  }
+
   async function saveWeek() {
     if (!selectedWeek) return
+    if (!loadSucceeded) {
+      setMessageTone("error")
+      setMessage("Reload the weekly wage sheet successfully before saving to the Preview database.")
+      return
+    }
     if (weekStatus === "CLOSED" || weekStatus === "PAID") {
       setMessageTone("error")
       setMessage(`This week is ${weekStatus.toLocaleLowerCase()} and cannot be edited.`)
@@ -665,6 +692,7 @@ export function WeeklyWageTablePreview() {
             loadedReference: row.reference.trim(),
             loadedBaseWage: row.baseWage,
           }
+          persistRowDatabaseState(row)
         } else {
           if (row.accountRowVersion === null) throw new Error(`${enteredName} has no database row version. Reload and try again.`)
           if (enteredName !== row.loadedName || row.reference.trim() !== row.loadedReference) {
@@ -681,6 +709,7 @@ export function WeeklyWageTablePreview() {
               loadedName: enteredName,
               loadedReference: row.reference.trim(),
             }
+            persistRowDatabaseState(row)
           }
           if (amount(row.baseWage) !== amount(row.loadedBaseWage)) {
             await addWageRate(row.accountId as number, {
@@ -688,6 +717,8 @@ export function WeeklyWageTablePreview() {
               farm_scheme: row.accountType === "FARM" ? row.farmScheme ?? "THREE_OPTION" : null,
               effective_from: selectedWeek.startDate,
             })
+            row = { ...row, loadedBaseWage: row.baseWage }
+            persistRowDatabaseState(row)
           }
         }
         persistedRows.push(row)
@@ -703,7 +734,8 @@ export function WeeklyWageTablePreview() {
       for (const [dayIndex, day] of workDays.entries()) {
         const items = persistedRows.map((row) => {
           const entry = normaliseWeeklyWageEntry({
-            group: row.group,
+            accountType: row.accountType,
+            farmScheme: row.farmScheme,
             dailyWage: row.days[day.key],
             labourers: row.labourers[day.key],
             baseWage: row.baseWage,
@@ -959,7 +991,10 @@ export function WeeklyWageTablePreview() {
                 aria-label="Wage week"
                 value={selectedWeekId}
                 disabled={loading || saving}
-                onChange={(event) => setSelectedWeekId(event.target.value as WageWeekId)}
+                onChange={(event) => {
+                  setLoadSucceeded(false)
+                  setSelectedWeekId(event.target.value as WageWeekId)
+                }}
                 className="bg-transparent pr-1 outline-none"
               >
                 {Object.values(wageWeeks).map((week) => (
@@ -967,7 +1002,7 @@ export function WeeklyWageTablePreview() {
                 ))}
               </select>
             </label>
-            <WorkerButton onClick={() => void saveWeek()} disabled={loading || saving}>
+            <WorkerButton onClick={() => void saveWeek()} disabled={loading || saving || !loadSucceeded}>
               {saving ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {saving ? "Saving…" : "Save week"}
             </WorkerButton>

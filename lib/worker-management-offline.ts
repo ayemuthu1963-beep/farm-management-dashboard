@@ -100,8 +100,12 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 
 function openDatabase(): Promise<IDBDatabase> {
   if (databasePromise) return databasePromise
-  databasePromise = new Promise((resolve, reject) => {
+  let settled = false
+  const openPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = requireIndexedDb().open(DATABASE_NAME, DATABASE_VERSION)
+    const clearCachedPromise = () => {
+      if (databasePromise === openPromise) databasePromise = null
+    }
     request.onupgradeneeded = (event) => {
       const database = request.result
       if (event.oldVersion > 0 && event.oldVersion < DATABASE_VERSION) {
@@ -127,14 +131,33 @@ function openDatabase(): Promise<IDBDatabase> {
         database.createObjectStore(META, { keyPath: "key" })
       }
     }
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      if (settled) {
+        request.result.close()
+        return
+      }
+      settled = true
+      request.result.onversionchange = () => {
+        request.result.close()
+        clearCachedPromise()
+      }
+      resolve(request.result)
+    }
     request.onerror = () => {
-      databasePromise = null
+      if (settled) return
+      settled = true
+      clearCachedPromise()
       reject(request.error ?? new Error("Unable to open Worker offline storage."))
     }
-    request.onblocked = () => reject(new Error("Worker offline storage upgrade is blocked by another tab."))
+    request.onblocked = () => {
+      if (settled) return
+      settled = true
+      clearCachedPromise()
+      reject(new Error("Worker offline storage upgrade is blocked by another tab."))
+    }
   })
-  return databasePromise
+  databasePromise = openPromise
+  return openPromise
 }
 
 async function getRecord<T>(storeName: string, key: IDBValidKey): Promise<T | undefined> {
