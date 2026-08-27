@@ -40,6 +40,28 @@ assert.equal(
   "the Preview pilot upgrade must remove legacy UAT operations",
 )
 
+await offline.deleteWorkerOfflineDatabaseForTests()
+const upgradeBlocker = await new Promise((resolve, reject) => {
+  const request = indexedDB.open("mfms-worker-management", 1)
+  request.onupgradeneeded = () => {
+    request.result.createObjectStore("legacy", { keyPath: "id" })
+  }
+  request.onsuccess = () => resolve(request.result)
+  request.onerror = () => reject(request.error)
+})
+await assert.rejects(
+  offline.getWorkerOfflineSnapshot(),
+  /upgrade is blocked by another tab/,
+  "a blocked upgrade must report the blocking tab",
+)
+upgradeBlocker.close()
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.equal(
+  (await offline.getWorkerOfflineSnapshot()).operations.length,
+  0,
+  "offline storage must recover without a reload after the blocking tab closes",
+)
+
 function attendanceInput(attendance = "FULL", version = null) {
   return {
     account_id: 1,

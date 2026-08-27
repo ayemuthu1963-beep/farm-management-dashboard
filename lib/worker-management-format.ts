@@ -1,4 +1,10 @@
-import type { AccountState, AccountType, AttendanceValue, WeekStatus } from "./worker-management-types"
+import type {
+  AccountState,
+  AccountType,
+  AttendanceValue,
+  FarmScheme,
+  WeekStatus,
+} from "./worker-management-types"
 
 type AccountIdentity = {
   account_code: string
@@ -239,34 +245,69 @@ export function calculateDailyWage(
 }
 
 export function normaliseWeeklyWageEntry({
-  group,
+  accountType,
+  farmScheme,
   dailyWage,
   labourers,
   baseWage,
 }: {
-  group: boolean
+  accountType: AccountType
+  farmScheme: FarmScheme | null
   dailyWage: string | number | null | undefined
   labourers: string | number | null | undefined
   baseWage: string | number | null | undefined
 }): {
-  attendance: "ABSENT" | "FULL" | null
+  attendance: AttendanceValue | null
   groupAttendeeCount: number | null
   wageRateSnapshot: number
 } {
   const enteredWage = Math.max(0, money(dailyWage))
-  const wageRateSnapshot = enteredWage > 0 ? enteredWage : Math.max(0, money(baseWage))
+  const baseRate = Math.max(0, money(baseWage))
 
-  if (group) {
+  if (accountType === "GROUP") {
     return {
       attendance: null,
       groupAttendeeCount: Math.max(0, money(labourers)),
-      wageRateSnapshot,
+      wageRateSnapshot: enteredWage > 0 ? enteredWage : baseRate,
+    }
+  }
+
+  if (enteredWage === 0) {
+    return {
+      attendance: "ABSENT",
+      groupAttendeeCount: null,
+      wageRateSnapshot: baseRate,
+    }
+  }
+
+  if (accountType === "FARM" && farmScheme === "THREE_OPTION") {
+    if (enteredWage === Math.floor((baseRate * 2) / 3)) {
+      return {
+        attendance: "TWO_THIRDS",
+        groupAttendeeCount: null,
+        wageRateSnapshot: baseRate,
+      }
+    }
+    if (enteredWage === Math.floor(baseRate / 3)) {
+      return {
+        attendance: "ONE_THIRD",
+        groupAttendeeCount: null,
+        wageRateSnapshot: baseRate,
+      }
+    }
+  }
+
+  if (accountType === "FARM" && farmScheme === "TWO_OPTION" && enteredWage === baseRate / 2) {
+    return {
+      attendance: "HALF",
+      groupAttendeeCount: null,
+      wageRateSnapshot: baseRate,
     }
   }
 
   return {
-    attendance: enteredWage > 0 ? "FULL" : "ABSENT",
+    attendance: "FULL",
     groupAttendeeCount: null,
-    wageRateSnapshot,
+    wageRateSnapshot: enteredWage,
   }
 }

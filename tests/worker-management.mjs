@@ -69,21 +69,46 @@ for (const [rate, expectedTwoThirds, expectedOneThird] of [
 }
 
 assert.deepEqual(
-  normaliseWeeklyWageEntry({ group: false, dailyWage: "", labourers: "", baseWage: 400 }),
+  normaliseWeeklyWageEntry({ accountType: "FARM", farmScheme: "THREE_OPTION", dailyWage: "", labourers: "", baseWage: 400 }),
   { attendance: "ABSENT", groupAttendeeCount: null, wageRateSnapshot: 400 },
   "A blank individual wage must save as zero attendance with a valid rate snapshot",
 )
 assert.deepEqual(
-  normaliseWeeklyWageEntry({ group: true, dailyWage: "", labourers: "", baseWage: 320 }),
+  normaliseWeeklyWageEntry({ accountType: "GROUP", farmScheme: null, dailyWage: "", labourers: "", baseWage: 320 }),
   { attendance: null, groupAttendeeCount: 0, wageRateSnapshot: 320 },
   "Blank group cells must save a numeric zero labour count",
 )
 assert.deepEqual(
-  normaliseWeeklyWageEntry({ group: true, dailyWage: 160, labourers: 3, baseWage: 320 }),
+  normaliseWeeklyWageEntry({ accountType: "GROUP", farmScheme: null, dailyWage: 160, labourers: 3, baseWage: 320 }),
   { attendance: null, groupAttendeeCount: 3, wageRateSnapshot: 160 },
   "Entered group counts and wage overrides must remain unchanged",
 )
-assertions += 3
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ accountType: "FARM", farmScheme: "THREE_OPTION", dailyWage: 266, labourers: "", baseWage: 400 }),
+  { attendance: "TWO_THIRDS", groupAttendeeCount: null, wageRateSnapshot: 400 },
+  "A supported two-thirds wage must preserve the base-rate snapshot and attendance fraction",
+)
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ accountType: "FARM", farmScheme: "THREE_OPTION", dailyWage: 133, labourers: "", baseWage: 400 }),
+  { attendance: "ONE_THIRD", groupAttendeeCount: null, wageRateSnapshot: 400 },
+  "A supported one-third wage must preserve the base-rate snapshot and attendance fraction",
+)
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ accountType: "FARM", farmScheme: "TWO_OPTION", dailyWage: 150, labourers: "", baseWage: 300 }),
+  { attendance: "HALF", groupAttendeeCount: null, wageRateSnapshot: 300 },
+  "A supported half wage must preserve the base-rate snapshot and attendance fraction",
+)
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ accountType: "FARM", farmScheme: "THREE_OPTION", dailyWage: 275, labourers: "", baseWage: 400 }),
+  { attendance: "FULL", groupAttendeeCount: null, wageRateSnapshot: 275 },
+  "A non-standard positive wage must remain an explicit full-day rate override",
+)
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ accountType: "OUTSIDE", farmScheme: null, dailyWage: 160, labourers: "", baseWage: 320 }),
+  { attendance: "FULL", groupAttendeeCount: null, wageRateSnapshot: 160 },
+  "Outside Workers must retain their full-day operator rate",
+)
+assertions += 8
 
 const naturallySortedAccounts = [
   { account_id: 10, account_code: "FW-10", display_name: "Ten" },
@@ -317,8 +342,13 @@ check(weeklyWagePreview.includes("readWholeAmountInput"), "Weekly wage inputs mu
 check(weeklyWagePreview.includes("Number.isSafeInteger(labourerCount)"), "Group counts must be validated before any database write")
 check(weeklyWagePreview.includes("Enter a whole number of labourers for"), "Invalid group counts must identify the worker and date")
 check(weeklyWagePreview.includes("normaliseWeeklyWageEntry"), "Weekly wage saves must normalise blank numeric cells to zero")
+check(weeklyWagePreview.includes("entry?.daily_wage_amount ?? baseWage"), "Reloaded partial-day rows must show the calculated wage rather than the full-rate snapshot")
 check(weeklyWagePreview.includes("group_attendee_count: entry.groupAttendeeCount"), "Blank group counts must be sent as numeric zero instead of null")
 check(weeklyWagePreview.includes("attendance: entry.attendance"), "Blank individual wages must be sent as absent instead of missing")
+check(weeklyWagePreview.includes("const [loadSucceeded, setLoadSucceeded] = useState(false)"), "Saving must remain disabled until the database load succeeds")
+check(weeklyWagePreview.includes("disabled={loading || saving || !loadSucceeded}"), "The Save action must remain disabled after a load failure")
+check(weeklyWagePreview.includes("Reload the weekly wage sheet successfully before saving"), "The save handler must reject writes after a failed load")
+check(weeklyWagePreview.includes("persistRowDatabaseState(row)"), "Created account IDs must be retained before later save steps run")
 check(!weeklyWagePreview.includes("notes: movedBlank"), "New saves must not preserve blank cells as non-zero migration placeholders")
 check(weeklyWagePreview.includes("maxLength={7}"), "Worker references must be limited to seven characters")
 check(weeklyWagePreview.includes('"Base wage"'), "Excel export must include the editable base wage")
