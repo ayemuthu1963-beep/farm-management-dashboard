@@ -8,6 +8,15 @@ import {
   pumpLitresPerHourForPlot,
 } from "../lib/water-pump-rates.ts"
 import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
+import {
+  canApplyNoRunMutationCompletion,
+  canVoidNoRunRecord,
+  createLatestNoRunRequestGuard,
+  failedNoRunDate,
+  loadedNoRunDate,
+  loadingNoRunDate,
+  visibleNoRunRecords,
+} from "../lib/motor-runtime-management-api.ts"
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const motorRoute = read("app/api/motor-runtime/dashboard/route.ts")
@@ -77,7 +86,7 @@ assert.match(motorTable, /record\.status === "Not Run" \? "0 minutes"/)
 assert.match(motorTable, /No data available for the selected period/)
 assert.match(noRunPanel, /All Motors/)
 assert.match(noRunPanel, /Date \(Asia\/Kolkata\)/)
-assert.match(noRunPanel, /type="date" required disabled=\{busy\}/)
+assert.match(noRunPanel, /type="date" required disabled=\{mutating\}/)
 assert.match(noRunPanel, /value="Not Run" readOnly/)
 assert.match(noRunPanel, /placeholder="Heavy rain"/)
 assert.match(noRunPanel, /Source: Manual Admin/)
@@ -85,6 +94,75 @@ assert.match(noRunPanel, /Entered by/)
 assert.match(noRunPanel, /Audit timestamp \(IST\)/)
 assert.match(managementApi, /createNoRunRecords/)
 assert.match(managementApi, /voidNoRunRecord/)
+
+const dateA = "2026-08-24"
+const dateB = "2026-08-25"
+const dateC = "2026-08-26"
+const adminRecord = (date, id = 1) => ({
+  id,
+  operation_date: date,
+  motor_id: "motor-1",
+  status: "Not Run",
+  reason: "Heavy rain",
+  remarks: "ADMIN_REMARKS_RETAINED",
+  source: "Manual_Admin",
+  entered_by: "ADMIN_USERNAME_RETAINED",
+  created_at: "2026-08-27T00:00:00Z",
+  voided_by: null,
+  voided_at: null,
+})
+
+const recordA = adminRecord(dateA)
+let adminLoadState = loadedNoRunDate(dateA, [recordA])
+assert.deepEqual(visibleNoRunRecords(adminLoadState, dateA), [recordA])
+assert.equal(canVoidNoRunRecord(adminLoadState, dateA, recordA, null), true)
+
+adminLoadState = loadingNoRunDate(dateB)
+assert.deepEqual(visibleNoRunRecords(adminLoadState, dateB), [])
+assert.equal(canVoidNoRunRecord(adminLoadState, dateB, recordA, null), false)
+adminLoadState = failedNoRunDate(dateB, "DATE_B_LOAD_FAILED")
+assert.deepEqual(visibleNoRunRecords(adminLoadState, dateB), [])
+assert.equal(canVoidNoRunRecord(adminLoadState, dateB, recordA, null), false)
+assert.equal(adminLoadState.error, "DATE_B_LOAD_FAILED")
+
+const latestRequest = createLatestNoRunRequestGuard()
+const requestA = latestRequest.begin(dateA)
+const requestB = latestRequest.begin(dateB)
+const requestC = latestRequest.begin(dateC)
+let raceState = loadingNoRunDate(dateC)
+const settle = (token, rows) => {
+  if (latestRequest.isCurrent(token, dateC)) raceState = loadedNoRunDate(token.date, rows)
+}
+settle(requestB, [adminRecord(dateB, 2)])
+settle(requestA, [adminRecord(dateA, 3)])
+assert.deepEqual(visibleNoRunRecords(raceState, dateC), [])
+settle(requestC, [adminRecord(dateC, 4)])
+assert.deepEqual(visibleNoRunRecords(raceState, dateC).map((record) => record.operation_date), [dateC])
+assert.deepEqual(visibleNoRunRecords(loadedNoRunDate(dateC, [adminRecord(dateA, 5)]), dateC), [])
+assert.equal(latestRequest.isCurrent(requestA, dateC), false)
+assert.equal(latestRequest.isCurrent(requestB, dateC), false)
+assert.equal(latestRequest.isCurrent(requestC, dateC), true)
+
+let mutationCompletionState = loadingNoRunDate(dateB)
+if (canApplyNoRunMutationCompletion(dateA, dateB)) {
+  mutationCompletionState = loadedNoRunDate(dateA, [recordA])
+}
+assert.equal(canApplyNoRunMutationCompletion(dateA, dateB), false)
+assert.deepEqual(mutationCompletionState, loadingNoRunDate(dateB))
+assert.equal(canVoidNoRunRecord(loadedNoRunDate(dateA, [recordA]), dateA, recordA, dateA), false)
+
+assert.match(managementApi, /signal\?: AbortSignal/)
+assert.match(managementApi, /cache: "no-store", signal/)
+assert.match(noRunPanel, /activeLoadRef\.current\?\.abort\(\)/)
+assert.match(noRunPanel, /requestGuardRef\.current\.invalidate\(\)/)
+assert.match(noRunPanel, /requestGuardRef\.current\.isCurrent\(token, selectedDateRef\.current\)/)
+assert.match(noRunPanel, /canApplyNoRunMutationCompletion\(originatingDate, selectedDateRef\.current\)/)
+assert.match(noRunPanel, /No records or Void actions are shown until this date loads successfully\./)
+assert.match(noRunPanel, /disabled=\{loading \|\| mutating\}/)
+assert.doesNotMatch(noRunPanel, /disabled=\{busy\}/)
+const immediateClear = noRunPanel.indexOf("setLoadState(loadingNoRunDate(nextDate))")
+const selectedDateChange = noRunPanel.indexOf("setOperationDate(nextDate)")
+assert.ok(immediateClear >= 0 && immediateClear < selectedDateChange)
 
 const sentinels = {
   id: "PRIVATE_DATABASE_ID_SENTINEL",
