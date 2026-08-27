@@ -216,6 +216,20 @@ assert.match(deployScript, /readonly approved_temp_mount_source="\/tmp"/)
 assert.match(deployScript, /readonly approved_temp_mount_target="\/host-tmp"/)
 assert.match(deployScript, /readonly approved_storage_mount_source="\/home\/muthu\/mfms_data\/preview\/motor-screenshot-analysis"/)
 assert.match(deployScript, /readonly approved_storage_mount_target="\/var\/lib\/mfms\/motor-screenshot-analysis"/)
+assert.match(deployScript, /readonly approved_intelligence_mount_source="\/home\/muthu\/\.local\/state\/mfms-preview-intelligence\/preview_service_key"/)
+assert.match(deployScript, /readonly approved_intelligence_mount_target="\/run\/secrets\/mfms_intelligence_preview_key"/)
+assert.match(deployScript, /readonly approved_ai_control_mount_source="\/home\/muthu\/\.local\/state\/mfms-preview-ai-control"/)
+assert.match(deployScript, /readonly approved_ai_control_mount_target="\/var\/lib\/mfms\/ai-control"/)
+assert.match(deployScript, /bind\|\$approved_ai_control_mount_source\|\$approved_ai_control_mount_target\|true/)
+assert.match(deployScript, /bind\|\$approved_intelligence_mount_source\|\$approved_intelligence_mount_target\|false/)
+assert.equal(
+  (deployScript.match(/--mount "type=bind,source=\$approved_ai_control_mount_source,target=\$approved_ai_control_mount_target"/g) || []).length,
+  3,
+)
+assert.equal(
+  (deployScript.match(/--mount "type=bind,source=\$approved_intelligence_mount_source,target=\$approved_intelligence_mount_target,readonly"/g) || []).length,
+  3,
+)
 assert.match(deployScript, /readonly approved_preview_well_odk_cutoff="2026-07-21T06:06:53\+05:30"/)
 assert.match(deployScript, /assert_approved_mount_contract/)
 assert.match(deployScript, /ensure_preview_network_attachment/)
