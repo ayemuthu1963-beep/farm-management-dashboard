@@ -171,3 +171,87 @@
     @apply bg-background text-foreground;
   }
 }
+
+.worker-surface {
+  color-scheme: light;
+  --background: oklch(0.975 0.012 105);
+  --foreground: oklch(0.23 0.03 145);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.23 0.03 145);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.23 0.03 145);
+  --primary: oklch(0.43 0.1 145);
+  --primary-foreground: oklch(0.985 0.01 105);
+  --secondary: oklch(0.94 0.025 105);
+  --secondary-foreground: oklch(0.32 0.04 145);
+  --muted: oklch(0.95 0.018 105);
+  --muted-foreground: oklch(0.51 0.03 145);
+  --accent: oklch(0.93 0.04 105);
+  --accent-foreground: oklch(0.32 0.04 145);
+  --border: oklch(0.88 0.025 105);
+  --input: oklch(0.88 0.025 105);
+  --ring: oklch(0.55 0.09 145);
+}
+
+@media print {
+  @page {
+    size: A3 landscape;
+    margin: 8mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .weekly-wage-print,
+  .weekly-wage-print * {
+    visibility: visible !important;
+  }
+
+  .weekly-wage-print {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .weekly-wage-no-print {
+    display: none !important;
+  }
+
+  .weekly-wage-table-scroll {
+    overflow: visible !important;
+  }
+
+  .weekly-wage-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    font-size: 7pt !important;
+  }
+
+  .weekly-wage-table th,
+  .weekly-wage-table td {
+    padding: 2px !important;
+  }
+
+  .weekly-wage-table .sticky {
+    position: static !important;
+  }
+
+  .weekly-wage-table [class*="min-w-"] {
+    min-width: 0 !important;
+  }
+
+  .weekly-wage-table input {
+    height: 22px !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    padding: 0 2px !important;
+    background: transparent !important;
+    color: black !important;
+    font-size: 7pt !important;
+  }
+}

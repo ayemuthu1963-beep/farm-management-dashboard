@@ -9,6 +9,55 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
+const verifiedFiles = [
+  "app/api/worker-management/[[...path]]/route.ts",
+  "app/worker-management/daily-attendance/page.tsx",
+  "app/worker-management/dashboard/page.tsx",
+  "app/worker-management/loan-register/page.tsx",
+  "app/worker-management/page.tsx",
+  "app/worker-management/query/page.tsx",
+  "app/worker-management/weekly-settlement/page.tsx",
+  "app/worker-management/workers/page.tsx",
+  "components/worker-management/daily-attendance.tsx",
+  "components/worker-management/daily-wage-entry.tsx",
+  "components/worker-management/loan-register.tsx",
+  "components/worker-management/weekly-settlement.tsx",
+  "components/worker-management/worker-dashboard.tsx",
+  "components/worker-management/worker-directory.tsx",
+  "components/worker-management/worker-module-shell.tsx",
+  "components/worker-management/worker-offline-provider.tsx",
+  "components/worker-management/worker-query.tsx",
+  "components/worker-management/worker-ui.tsx",
+  "lib/worker-management-api.ts",
+  "lib/worker-management-constants.ts",
+  "lib/worker-management-format.ts",
+  "lib/worker-management-offline.ts",
+  "lib/worker-management-signing.ts",
+  "lib/worker-management-types.ts",
+  "lib/worker-wage-excel.ts",
+  "public/worker-management-sw.js",
+  "public/worker-management.webmanifest",
+  "tests/worker-management-offline.mjs",
+  "tests/worker-management.mjs",
+  "tests/worker-wage-excel.mjs",
+]
+const productionAdaptations = [
+  "app/globals.css",
+  "app/worker-management/daily-attendance/layout.tsx",
+  "app/worker-management/dashboard/layout.tsx",
+  "app/worker-management/layout.tsx",
+  "app/worker-management/loan-register/layout.tsx",
+  "app/worker-management/query/layout.tsx",
+  "app/worker-management/weekly-settlement/layout.tsx",
+  "app/worker-management/workers/layout.tsx",
+  "components/worker-management/weekly-wage-table-preview.tsx",
+  "deploy/production-release-manifest.json",
+  "lib/mfms-navigation.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "tests/farm-calendar-production-promotion.mjs",
+]
+
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 
 assert.equal(manifest.schema_version, 1)
@@ -17,37 +66,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Include today in irrigation and water dashboard defaults, leaving missing values blank",
+  "Release Preview-verified Worker Management with blank numeric cells normalized to zero",
 )
-assert.equal(manifest.base_commit, "25937caa78a65201ba569e2a839ba8b9ca8582bd")
+assert.equal(manifest.base_commit, "104da2e13744853fc14fcc70b1df66637601fbf3")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "7cf302811f87f4db4be3248131289ac72aba54b7",
-  image_id: "sha256:b3f4a156e539fd4d867bf0e8b70a13f66f152594fb80f0e83be0243d791164ae",
-  feature_revision: "dde91ecec3ad92d5e8b4546db993e1815e5fe0f2",
-  verified_files: [
-    "app/api/irrigation-management/route.ts",
-    "app/api/motor-runtime/dashboard/route.ts",
-    "components/farm/date-range-selector.tsx",
-    "components/farm/well-chart.tsx",
-    "components/farm/well-table.tsx",
-    "components/irrigation/irrigation-charts-hybrid.tsx",
-    "components/irrigation/irrigation-map-with-details.tsx",
-    "components/motor/motor-date-range-selector.tsx",
-    "components/motor/motor-irrigation-trend.tsx",
-    "lib/irrigation-data.ts",
-    "lib/irrigation-period.ts",
-    "lib/irrigation-schedule-comparison.ts",
-    "lib/motor-data.ts",
-    "lib/well-data.ts",
-  ],
-  production_adaptations: [
-    "deploy/production-release-manifest.json",
-    "tests/farm-calendar-production-promotion.mjs",
-    "tests/irrigation-management-corrections.mjs",
-    "tests/motor-runtime-water-pumped.mjs",
-    "tests/well-water-authoritative-daily-values.mjs",
-    "tests/well-water-page-corrections.mjs",
-  ],
+  revision: "bf4eee9e0e033c3f5cf2a717650db5058b646450",
+  image_id: "sha256:9488a22ded198c33c9c82f55e0b630225edfb2015baf6c5a09a9093dae398c39",
+  feature_revision: "b4281a53975d0078f0b5313b397462d197c2926c",
+  verified_files: verifiedFiles,
+  production_adaptations: productionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -58,35 +85,31 @@ assert.deepEqual(manifest.protected_invariants, {
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
+assert.deepEqual(
+  manifest.allowed_paths,
+  [...verifiedFiles, ...productionAdaptations].sort(),
+  "The Production release allowlist must exactly match the verified files and adaptations",
+)
+
+const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")
+assert.ok(workerManagement)
+assert.equal(workerManagement.href, "/worker-management")
+assert.equal(workerManagement.status, "active")
+assert.equal(workerManagement.ctaLabel, "Open Worker Management")
+
+const workerWageTable = read("components/worker-management/weekly-wage-table-preview.tsx")
+assert.match(workerWageTable, /Weekly wage sheet saved to the Production database\./)
+assert.match(workerWageTable, /normaliseWeeklyWageEntry/)
+assert.match(workerWageTable, /function approvedAccountCode/)
+assert.match(workerWageTable, /const missingApprovedRows = createInitialRows\(\)/)
+assert.match(workerWageTable, /farmScheme: "TWO_OPTION"/)
+assert.doesNotMatch(workerWageTable, /saved to the Preview database/)
 
 assert.equal(
   sha256("public/mfms/icons/farm-map.svg"),
   "bf303b913b00660f88f45ab19838ce47b4b149971a4d7a7f0493ca72b28050a9",
   "The Farm Map SVG differs from the supplied Preview-approved icon",
 )
-
-assert.deepEqual(manifest.allowed_paths, [
-  "app/api/irrigation-management/route.ts",
-  "app/api/motor-runtime/dashboard/route.ts",
-  "components/farm/date-range-selector.tsx",
-  "components/farm/well-chart.tsx",
-  "components/farm/well-table.tsx",
-  "components/irrigation/irrigation-charts-hybrid.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "components/motor/motor-date-range-selector.tsx",
-  "components/motor/motor-irrigation-trend.tsx",
-  "deploy/production-release-manifest.json",
-  "lib/irrigation-data.ts",
-  "lib/irrigation-period.ts",
-  "lib/irrigation-schedule-comparison.ts",
-  "lib/motor-data.ts",
-  "lib/well-data.ts",
-  "tests/farm-calendar-production-promotion.mjs",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/motor-runtime-water-pumped.mjs",
-  "tests/well-water-authoritative-daily-values.mjs",
-  "tests/well-water-page-corrections.mjs",
-])
 
 const farmMap = mfmsNavigationItems.find((item) => item.id === "farm-map")
 assert.ok(farmMap)
@@ -121,4 +144,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Dashboard date defaults and preserved Production promotion contracts: PASS")
+console.log("Worker Management and preserved Production promotion contracts: PASS")

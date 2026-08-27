@@ -1,0 +1,18 @@
+{
+  "name": "Muthu Farms Worker Management",
+  "short_name": "Worker Management",
+  "description": "Offline-capable attendance, daily wage, and worker loan management for Muthu Farms.",
+  "start_url": "/worker-management",
+  "scope": "/worker-management",
+  "display": "standalone",
+  "background_color": "#f7f3e8",
+  "theme_color": "#246b35",
+  "icons": [
+    {
+      "src": "/muthu-farms-logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
