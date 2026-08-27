@@ -58,6 +58,20 @@ export type ManagedSession = {
   allocations: ManagedAllocation[]
 }
 
+export type NoRunRecord = {
+  id: number
+  operation_date: string
+  motor_id: MotorId
+  status: "Not Run"
+  reason: string
+  remarks: string | null
+  source: "Manual_Admin"
+  entered_by: string
+  created_at: string
+  voided_by: string | null
+  voided_at: string | null
+}
+
 export type ManagementConflict = {
   session_id: number
   motor_id: MotorId
@@ -139,6 +153,28 @@ export async function loadAllEvents(query: URLSearchParams): Promise<PageResult<
 
 export async function loadManagedSessions(query: URLSearchParams): Promise<PageResult<ManagedSession>> {
   return json(await fetch(`${BASE}/sessions?${query}`, { cache: "no-store" }))
+}
+
+export async function loadNoRunRecords(query = new URLSearchParams()): Promise<NoRunRecord[]> {
+  return json(await fetch(`${BASE}/no-run-records?${query}`, { cache: "no-store" }))
+}
+
+export async function createNoRunRecords(payload: {
+  operation_date: string
+  motor_ids: MotorId[]
+  status: "Not Run"
+  reason: string
+  remarks: string | null
+}): Promise<{ ok: true; inserted_count: number; records: NoRunRecord[] }> {
+  return json(await fetch(`${BASE}/no-run-records`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }))
+}
+
+export async function voidNoRunRecord(recordId: number): Promise<{ ok: true; record: NoRunRecord }> {
+  return json(await fetch(`${BASE}/no-run-records/${recordId}`, { method: "DELETE" }))
 }
 
 export async function saveManagedSession(payload: ManagedSessionPayload, sessionId?: number): Promise<ManagedSessionResult> {

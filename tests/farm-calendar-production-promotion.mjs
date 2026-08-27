@@ -57,6 +57,20 @@ const productionAdaptations = [
   "tests/farm-calendar-production-promotion.mjs",
   "tests/worker-management.mjs",
 ]
+const motorVerifiedFiles = [
+  "app/api/motor-runtime/dashboard/route.ts",
+  "app/motor-runtime/page.tsx",
+  "components/admin/motor-not-run-panel.tsx",
+  "components/admin/motor-runtime-management-client.tsx",
+  "components/motor/motor-table.tsx",
+  "lib/motor-data.ts",
+  "lib/motor-runtime-management-api.ts",
+]
+const motorProductionAdaptations = [
+  "deploy/production-release-manifest.json",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/motor-screenshot-analysis-real-workflow.mjs",
+]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 
@@ -66,13 +80,22 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Release Preview-verified Worker Management with zero-normalized blanks and hardened wage persistence",
+  "Release preserved Worker Management plus Preview-verified explicit Motor Not Run records",
 )
 assert.equal(manifest.base_commit, "104da2e13744853fc14fcc70b1df66637601fbf3")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "ac996cd91ee0e90dd805bd0172efa61d6666b22a",
-  image_id: "sha256:021989b84ccf1c1ba21224ea54156927f61ab6deb913e921d1e11e3a0ab7b4f0",
-  feature_revision: "52da897f1f4782fd285ae25ca225d7b09ca74b1a",
+  revision: "5cd080d427d22f55a2c5a0e32a819ace361b70cb",
+  image_id: "sha256:0fe5e580423969f74429b3385ee0d64d4b41220db9a4e44384d4d93a4d7e9bb3",
+  feature_revision: "297bdcbd26d7b59b68806a27f2acd6ee621e3ab4",
+  verified_files: motorVerifiedFiles,
+  production_adaptations: motorProductionAdaptations,
+})
+assert.deepEqual(manifest.preserved_worker_management, {
+  release_merge: "7e2b31287cad84b118a7b2d39ccc3edb6276d67b",
+  candidate_head: "84b8fcc7f172a3657ef487540ed2a598641eb296",
+  preview_revision: "ac996cd91ee0e90dd805bd0172efa61d6666b22a",
+  preview_image_id: "sha256:021989b84ccf1c1ba21224ea54156927f61ab6deb913e921d1e11e3a0ab7b4f0",
+  preview_feature_revision: "52da897f1f4782fd285ae25ca225d7b09ca74b1a",
   verified_files: verifiedFiles,
   production_adaptations: productionAdaptations,
 })
@@ -87,7 +110,12 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 assert.deepEqual(
   manifest.allowed_paths,
-  [...verifiedFiles, ...productionAdaptations].sort(),
+  [...new Set([
+    ...verifiedFiles,
+    ...productionAdaptations,
+    ...motorVerifiedFiles,
+    ...motorProductionAdaptations,
+  ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
 
