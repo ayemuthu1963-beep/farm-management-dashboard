@@ -1,7 +1,5 @@
 type RosterAccount = {
   account_code: string
-  account_id?: number
-  display_name?: string
 }
 
 export const approvedWorkerRoster = [
@@ -27,15 +25,5 @@ export function compareApprovedWorkerRoster(left: RosterAccount, right: RosterAc
   const leftOrder = approvedRosterOrder.get(left.account_code.trim()) ?? 1000
   const rightOrder = approvedRosterOrder.get(right.account_code.trim()) ?? 1000
   if (leftOrder !== rightOrder) return leftOrder - rightOrder
-
-  const codeOrder = accountCodeCollator.compare(left.account_code.trim(), right.account_code.trim())
-  if (codeOrder !== 0) return codeOrder
-
-  const nameOrder = accountCodeCollator.compare(
-    left.display_name?.trim() ?? "",
-    right.display_name?.trim() ?? "",
-  )
-  if (nameOrder !== 0) return nameOrder
-
-  return (left.account_id ?? 0) - (right.account_id ?? 0)
+  return accountCodeCollator.compare(left.account_code.trim(), right.account_code.trim())
 }

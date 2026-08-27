@@ -63,7 +63,15 @@ assert.deepEqual(
   expectedApprovedRoster,
   "Roster sorting must be driven by stable account codes without duplicates or omissions",
 )
-assertions += 4
+assert.deepEqual(
+  ["WG-CUSTOM-10", "WG-CUSTOM-2", "WG-CUSTOM-1"]
+    .map((account_code) => ({ account_code }))
+    .toSorted(compareApprovedWorkerRoster)
+    .map((worker) => worker.account_code),
+  ["WG-CUSTOM-1", "WG-CUSTOM-2", "WG-CUSTOM-10"],
+  "Non-roster group entries must use stable natural account-code order",
+)
+assertions += 5
 
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")

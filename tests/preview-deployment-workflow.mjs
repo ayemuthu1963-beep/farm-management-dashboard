@@ -290,7 +290,7 @@ assert.equal(
   manifest.release_note,
   "Correct the Worker Management roster display order using stable account codes",
 )
-assert.equal(manifest.base_commit, "ac996cd91ee0e90dd805bd0172efa61d6666b22a")
+assert.equal(manifest.base_commit, "739d19a7b4bdb31dcbfa3b37412429ef4fb57655")
 assert.equal(manifest.matched_backend_commit, "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,8 +302,6 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-settlement.tsx",
-  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
   "lib/worker-management-roster.ts",
   "tests/preview-deployment-workflow.mjs",
