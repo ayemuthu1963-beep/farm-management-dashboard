@@ -291,7 +291,7 @@ assert.equal(
   "Display explicit audited Motor Not Run daily records after the matched Preview backend release",
 )
 assert.equal(manifest.base_commit, "bf4eee9e0e033c3f5cf2a717650db5058b646450")
-assert.equal(manifest.matched_backend_commit, "1b05f131204060773e4270c2c286f710ff908175")
+assert.equal(manifest.matched_backend_commit, "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
