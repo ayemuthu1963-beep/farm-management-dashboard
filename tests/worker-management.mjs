@@ -20,6 +20,10 @@ import {
   workerAccountOptionLabel,
 } from "../lib/worker-management-format.ts"
 import { friendlyWorkerErrorMessage } from "../lib/worker-management-api.ts"
+import {
+  approvedWorkerRoster,
+  compareApprovedWorkerRoster,
+} from "../lib/worker-management-roster.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(join(root, path), "utf8")
@@ -29,6 +33,37 @@ const check = (condition, message) => {
   assert.ok(condition, message)
   assertions += 1
 }
+
+const expectedApprovedRoster = [
+  "Kuppan",
+  "Arunan",
+  "Sivan",
+  "Lokesh",
+  "Tiruma",
+  "Rani",
+  "Mary",
+  "Raja Mani",
+  "Chitra",
+  "Vijaya",
+  "Outside Ladies",
+]
+assert.deepEqual(
+  approvedWorkerRoster.map((worker) => worker.name),
+  expectedApprovedRoster,
+  "The approved Worker Management roster must use the requested display order",
+)
+assert.equal(new Set(approvedWorkerRoster.map((worker) => worker.accountCode)).size, expectedApprovedRoster.length)
+assert.equal(new Set(approvedWorkerRoster.map((worker) => worker.name)).size, expectedApprovedRoster.length)
+assert.deepEqual(
+  approvedWorkerRoster
+    .map((worker) => ({ account_code: worker.accountCode, display_name: worker.name }))
+    .toReversed()
+    .toSorted(compareApprovedWorkerRoster)
+    .map((worker) => worker.display_name),
+  expectedApprovedRoster,
+  "Roster sorting must be driven by stable account codes without duplicates or omissions",
+)
+assertions += 4
 
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
@@ -418,7 +453,7 @@ check(settlement.includes("To loan payment for ${row.display_name}"), "To loan p
 check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
 check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
 check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
-check(settlement.includes(".toSorted(compareSettlementRows)"), "Weekly Settlement must follow the wage-sheet roster order")
+check(settlement.includes(".toSorted(compareApprovedWorkerRoster)"), "Weekly Settlement must follow the shared account-code roster order")
 
 const query = read("components/worker-management/worker-query.tsx")
 check(query.includes("weekDate"), "Query must expose a work-week filter")
