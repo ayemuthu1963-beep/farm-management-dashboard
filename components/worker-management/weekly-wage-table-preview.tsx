@@ -20,6 +20,7 @@ import {
 import {
   buildWageWeeks,
   formatWholeINR,
+  normaliseWeeklyWageEntry,
   saturdayForDate,
   toDateInput,
   wageDaySlots,
@@ -701,25 +702,19 @@ export function WeeklyWageTablePreview() {
 
       for (const [dayIndex, day] of workDays.entries()) {
         const items = persistedRows.map((row) => {
-          const blankEntry = row.group
-            ? row.days[day.key] === "" || row.labourers[day.key] === ""
-            : row.days[day.key] === ""
-          const absentEntry = !row.group && row.days[day.key] === 0
-          const enteredRate = blankEntry || absentEntry ? amount(row.baseWage) : amount(row.days[day.key])
-          const movedBlank = selectedWeekId === "current" && blankEntry && row.dailyRowVersions[day.key] !== null
+          const entry = normaliseWeeklyWageEntry({
+            group: row.group,
+            dailyWage: row.days[day.key],
+            labourers: row.labourers[day.key],
+            baseWage: row.baseWage,
+          })
           return {
             account_id: row.accountId as number,
             client_operation_id: crypto.randomUUID(),
-            attendance: row.group ? null : movedBlank ? "FULL" : blankEntry ? null : absentEntry ? "ABSENT" : "FULL",
-            group_attendee_count: row.group
-              ? movedBlank
-                ? 0
-                : !blankEntry
-                  ? Math.max(0, Math.round(amount(row.labourers[day.key])))
-                  : null
-              : null,
-            wage_rate: String(enteredRate),
-            notes: movedBlank ? MOVED_WAGE_PLACEHOLDER_NOTE : blankEntry ? null : "Weekly wage sheet",
+            attendance: entry.attendance,
+            group_attendee_count: entry.groupAttendeeCount,
+            wage_rate: String(entry.wageRateSnapshot),
+            notes: "Weekly wage sheet",
             expected_row_version: row.dailyRowVersions[day.key],
           }
         })

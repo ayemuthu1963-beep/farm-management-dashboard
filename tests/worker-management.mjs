@@ -16,6 +16,7 @@ import {
   calculateDailyWage,
   compareAccountCodes,
   defaultSettlementDate,
+  normaliseWeeklyWageEntry,
   workerAccountOptionLabel,
 } from "../lib/worker-management-format.ts"
 import { friendlyWorkerErrorMessage } from "../lib/worker-management-api.ts"
@@ -66,6 +67,23 @@ for (const [rate, expectedTwoThirds, expectedOneThird] of [
   assert.equal(calculateDailyWage(rate, "ONE_THIRD", null, "FARM"), expectedOneThird)
   assertions += 2
 }
+
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ group: false, dailyWage: "", labourers: "", baseWage: 400 }),
+  { attendance: "ABSENT", groupAttendeeCount: null, wageRateSnapshot: 400 },
+  "A blank individual wage must save as zero attendance with a valid rate snapshot",
+)
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ group: true, dailyWage: "", labourers: "", baseWage: 320 }),
+  { attendance: null, groupAttendeeCount: 0, wageRateSnapshot: 320 },
+  "Blank group cells must save a numeric zero labour count",
+)
+assert.deepEqual(
+  normaliseWeeklyWageEntry({ group: true, dailyWage: 160, labourers: 3, baseWage: 320 }),
+  { attendance: null, groupAttendeeCount: 3, wageRateSnapshot: 160 },
+  "Entered group counts and wage overrides must remain unchanged",
+)
+assertions += 3
 
 const naturallySortedAccounts = [
   { account_id: 10, account_code: "FW-10", display_name: "Ten" },
@@ -276,8 +294,7 @@ check(weeklyWagePreview.indexOf("To loan payment") < weeklyWagePreview.indexOf("
 check(weeklyWagePreview.includes("value={row.loanPayment}"), "To loan payment must be operator editable")
 check(weeklyWagePreview.includes("combinedWeekWages(row, dependent) - amount(row.loanPayment)"), "Wage to be paid must calculate wages less loan payment")
 check(weeklyWagePreview.includes('entry?.attendance_value === "ABSENT"'), "Saved absent days must reload as zero wages")
-check(weeklyWagePreview.includes('absentEntry ? "ABSENT" : "FULL"'), "Zero individual wages must save as absent instead of reverting to the default wage")
-check(weeklyWagePreview.includes("blankEntry || absentEntry ? amount(row.baseWage)"), "Absent rows must retain a valid wage-rate snapshot")
+check(weeklyWagePreview.includes("wage_rate: String(entry.wageRateSnapshot)"), "Zero-attendance rows must retain a valid wage-rate snapshot")
 check(weeklyWagePreview.includes("earlierLoanBalance: openingSignedBalance"), "Earlier balances must retain their signed ledger value")
 check(weeklyWagePreview.includes('const openingBalanceReference = "OPEN-BAL"'), "Approved opening balance transactions must use the audited ledger reference")
 check(weeklyWagePreview.includes("const weeklySignedCash = signedCash - openingAdjustment"), "Opening balances must be excluded from editable weekly advances")
@@ -299,6 +316,10 @@ check(weeklyWagePreview.includes('pattern="[0-9]*"'), "Weekly wage inputs must r
 check(weeklyWagePreview.includes("readWholeAmountInput"), "Weekly wage inputs must reject decimal and non-numeric characters")
 check(weeklyWagePreview.includes("Number.isSafeInteger(labourerCount)"), "Group counts must be validated before any database write")
 check(weeklyWagePreview.includes("Enter a whole number of labourers for"), "Invalid group counts must identify the worker and date")
+check(weeklyWagePreview.includes("normaliseWeeklyWageEntry"), "Weekly wage saves must normalise blank numeric cells to zero")
+check(weeklyWagePreview.includes("group_attendee_count: entry.groupAttendeeCount"), "Blank group counts must be sent as numeric zero instead of null")
+check(weeklyWagePreview.includes("attendance: entry.attendance"), "Blank individual wages must be sent as absent instead of missing")
+check(!weeklyWagePreview.includes("notes: movedBlank"), "New saves must not preserve blank cells as non-zero migration placeholders")
 check(weeklyWagePreview.includes("maxLength={7}"), "Worker references must be limited to seven characters")
 check(weeklyWagePreview.includes('"Base wage"'), "Excel export must include the editable base wage")
 check(weeklyWagePreview.includes('"Reference"'), "Excel export must include the worker reference")
