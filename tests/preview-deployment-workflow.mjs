@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Advance Worker Management to the current Saturday-to-Friday week, clarify labour-count errors, and remove numeric input spinners",
+  "Treat empty Worker Management numeric cells as zero without changing the backend",
 )
-assert.equal(manifest.base_commit, "945dfa1ab1c9facf037d1786766204458cf5426e")
+assert.equal(manifest.base_commit, "c1c127df68e36c15d6e875a0c50b582c0963d2c0")
 assert.equal(manifest.matched_backend_commit, "3f2c9cbe2bb790806154ce138947d62117e9fba0")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
@@ -304,7 +304,6 @@ assert.deepEqual(manifest.protected_invariants, {
 const expectedReleasePaths = [
   "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-api.ts",
   "lib/worker-management-format.ts",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",
