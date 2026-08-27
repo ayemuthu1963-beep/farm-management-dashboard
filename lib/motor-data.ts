@@ -19,6 +19,56 @@ export interface MotorDailyRecord {
   plot?: string
   valve?: string
   source?: string
+  status?: "Not Run"
+}
+
+export interface PublicMotorNoRunRecord {
+  date: string
+  motorId: MotorId
+  motorName: string
+  status: "Not Run"
+  reason: string
+  runtime: "0 minutes"
+  water: "0 L"
+}
+
+const PUBLIC_MOTOR_NAMES: Record<MotorId, string> = {
+  M1: "Motor 1",
+  M2: "Motor 2",
+  M3: "Motor 3",
+}
+
+const PUBLIC_MOTOR_IDS: Record<string, MotorId | undefined> = {
+  "motor-1": "M1",
+  "motor-2": "M2",
+  "motor-3": "M3",
+}
+
+export function projectPublicMotorNoRunRecords(records: readonly unknown[]): PublicMotorNoRunRecord[] {
+  return records.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return []
+    const record = candidate as Record<string, unknown>
+    const motorId = typeof record.motor_id === "string" ? PUBLIC_MOTOR_IDS[record.motor_id] : undefined
+    if (
+      !motorId ||
+      typeof record.operation_date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(record.operation_date) ||
+      record.status !== "Not Run" ||
+      typeof record.reason !== "string" ||
+      !record.reason.trim() ||
+      record.voided_at != null
+    ) return []
+
+    return [{
+      date: record.operation_date,
+      motorId,
+      motorName: PUBLIC_MOTOR_NAMES[motorId],
+      status: "Not Run" as const,
+      reason: record.reason.trim(),
+      runtime: "0 minutes" as const,
+      water: "0 L" as const,
+    }]
+  })
 }
 
 export interface MotorSummaryStat {
@@ -60,6 +110,7 @@ export interface ValveGroup {
 export interface MotorDashboardData {
   summary: {
     total_entries: number
+    confirmed_no_run_count: number
     first_entry_date: string | null
     latest_entry_date: string | null
   }
@@ -69,10 +120,11 @@ export interface MotorDashboardData {
   chartData: MotorChartPoint[]
   irrigationTrend: MotorIrrigationTrendPoint[]
   valveGroups: ValveGroup[]
+  noRunRecords: PublicMotorNoRunRecord[]
 }
 
 export const emptyMotorDashboardData: MotorDashboardData = {
-  summary: { total_entries: 0, first_entry_date: null, latest_entry_date: null },
+  summary: { total_entries: 0, confirmed_no_run_count: 0, first_entry_date: null, latest_entry_date: null },
   recordsByMotor: { M1: [], M2: [], M3: [] },
   summaryStats: [
     { motor: "Motor 1", motorId: "M1", label: "Total Run Hours", value: 0, unit: "Hours", icon: "clock" },
@@ -93,6 +145,7 @@ export const emptyMotorDashboardData: MotorDashboardData = {
   chartData: [],
   irrigationTrend: [],
   valveGroups: [{ motors: "Recorded Motor Runtime Entries", valves: [] }],
+  noRunRecords: [],
 }
 
 export const motorSeriesConfig = [

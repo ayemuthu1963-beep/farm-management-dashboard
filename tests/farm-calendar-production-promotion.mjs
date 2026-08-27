@@ -9,14 +9,31 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const verifiedFiles = [
+const workerRosterVerifiedFiles = [
   "components/worker-management/weekly-settlement.tsx",
   "lib/worker-management-roster.ts",
   "tests/worker-management.mjs",
 ]
-const productionAdaptations = [
+const workerRosterProductionAdaptations = [
   "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/production-release-manifest.json",
+  "tests/farm-calendar-production-promotion.mjs",
+]
+const motorVerifiedFiles = [
+  "app/api/motor-runtime/dashboard/route.ts",
+  "app/motor-runtime/page.tsx",
+  "components/admin/motor-not-run-panel.tsx",
+  "components/admin/motor-runtime-management-client.tsx",
+  "components/motor/motor-table.tsx",
+  "lib/motor-data.ts",
+  "lib/motor-runtime-management-api.ts",
+]
+const motorProductionAdaptations = [
+  "deploy/production-release-manifest.json",
+  "tests/motor-runtime-water-pumped.mjs",
+  "tests/motor-screenshot-analysis-real-workflow.mjs",
+]
+const overlappingGovernanceFiles = [
   "tests/farm-calendar-production-promotion.mjs",
 ]
 
@@ -28,15 +45,24 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote the Preview-verified Worker roster account-code display order",
+  "Preserve the Preview-verified Worker roster account-code display order and add Preview-verified explicit Motor Not Run records",
 )
-assert.equal(manifest.base_commit, "7e2b31287cad84b118a7b2d39ccc3edb6276d67b")
+assert.equal(manifest.base_commit, "669f9fdc0db52c695a616cb84e3a701ee6602d54")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "af09ed8bea4c5949e600abcf705cd38ad7f7c09b",
-  image_id: "sha256:14cf934f6056c85d3a31dc7bc1ad57c7d8e81cee1e96a2d0be882529f510d03b",
-  feature_revision: "1074d0e7d572200497d79ac437d1babffd4ab02a",
-  verified_files: verifiedFiles,
-  production_adaptations: productionAdaptations,
+  revision: "5cd080d427d22f55a2c5a0e32a819ace361b70cb",
+  image_id: "sha256:0fe5e580423969f74429b3385ee0d64d4b41220db9a4e44384d4d93a4d7e9bb3",
+  feature_revision: "297bdcbd26d7b59b68806a27f2acd6ee621e3ab4",
+  verified_files: motorVerifiedFiles,
+  production_adaptations: motorProductionAdaptations,
+})
+assert.deepEqual(manifest.preserved_worker_roster_order, {
+  release_merge: "669f9fdc0db52c695a616cb84e3a701ee6602d54",
+  candidate_head: "a0c8bfd400b8a9c13acdd70b1fb5d2fa9b103089",
+  preview_revision: "af09ed8bea4c5949e600abcf705cd38ad7f7c09b",
+  preview_image_id: "sha256:14cf934f6056c85d3a31dc7bc1ad57c7d8e81cee1e96a2d0be882529f510d03b",
+  preview_feature_revision: "1074d0e7d572200497d79ac437d1babffd4ab02a",
+  verified_files: workerRosterVerifiedFiles,
+  production_adaptations: workerRosterProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -49,7 +75,11 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 assert.deepEqual(
   manifest.allowed_paths,
-  [...verifiedFiles, ...productionAdaptations].sort(),
+  [...new Set([
+    ...motorVerifiedFiles,
+    ...motorProductionAdaptations,
+    ...overlappingGovernanceFiles,
+  ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
 
