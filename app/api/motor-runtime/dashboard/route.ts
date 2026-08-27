@@ -26,6 +26,18 @@ type RuntimeEntry = {
   run_no?: number | null
 }
 
+type NoRunRecord = {
+  id: number
+  operation_date: string
+  motor_id: "motor-1" | "motor-2" | "motor-3"
+  status: "Not Run"
+  reason: string
+  remarks: string | null
+  source: "Manual_Admin"
+  entered_by: string
+  created_at: string
+}
+
 const motorIds: MotorId[] = ["M1", "M2", "M3"]
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const FARM_TIME_ZONE = "Asia/Kolkata"
@@ -43,9 +55,14 @@ function motorId(motorNo: number): MotorId {
 }
 
 function displayDate(value: string): string {
-  const parsed = new Date(`${value}T00:00:00`)
+  const parsed = new Date(`${value}T00:00:00+05:30`)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+  return parsed.toLocaleDateString("en-GB", { timeZone: FARM_TIME_ZONE, day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+function displayedDateSortKey(value: string): string {
+  const [day, month, year] = value.split("/")
+  return year && month && day ? `${year}-${month}-${day}` : value
 }
 
 function farmTodayIso(): string {
@@ -111,17 +128,24 @@ export async function GET(request: Request) {
       start_date: startDate ?? "",
       end_date: endDate ?? "",
     })
-    const response = await fetch(`${getApiBaseUrl()}/api/motor-runtime/entries?${backendQuery}`, {
-      headers: { Authorization: authHeader, Accept: "application/json" },
-      cache: "no-store",
-    })
+    const headers = { Authorization: authHeader, Accept: "application/json" }
+    const noRunQuery = new URLSearchParams({ start_date: startDate ?? "", end_date: endDate ?? "" })
+    const [response, noRunResponse] = await Promise.all([
+      fetch(`${getApiBaseUrl()}/api/motor-runtime/entries?${backendQuery}`, { headers, cache: "no-store" }),
+      fetch(`${getApiBaseUrl()}/api/motor-runtime/management/no-run-records?${noRunQuery}`, { headers, cache: "no-store" }),
+    ])
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))
       return NextResponse.json(payload, { status: response.status })
     }
+    if (!noRunResponse.ok && noRunResponse.status !== 404) {
+      const payload = await noRunResponse.json().catch(() => ({}))
+      return NextResponse.json(payload, { status: noRunResponse.status })
+    }
 
     const entries = (await response.json()) as RuntimeEntry[]
+    const noRunRecords = noRunResponse.ok ? (await noRunResponse.json()) as NoRunRecord[] : []
     const sortedEntries = [...entries].sort(
       (a, b) =>
         b.entry_date.localeCompare(a.entry_date) ||
@@ -139,7 +163,8 @@ export async function GET(request: Request) {
     const recordsByMotor = Object.fromEntries(
       motorIds.map((id) => [
         id,
-        (entriesByMotor.get(id) ?? []).map((entry) => {
+        [
+          ...(entriesByMotor.get(id) ?? []).map((entry) => {
           const firstAllocation = entry.session_id == null || !countedSessions.has(entry.session_id)
           if (entry.session_id != null) countedSessions.add(entry.session_id)
           return {
@@ -153,7 +178,22 @@ export async function GET(request: Request) {
             valve: `Valve${entry.valve_no}`,
             source: entry.source,
           }
-        }),
+          }),
+          ...noRunRecords.filter((record) => motorId(Number(record.motor_id.slice(-1))) === id).map((record) => ({
+            date: displayDate(record.operation_date),
+            runHours: 0,
+            starts: 0,
+            energyUnits: 0,
+            waterLifted: 0,
+            remarks: `Not run — ${record.reason}`,
+            plot: "—",
+            valve: "—",
+            source: record.source,
+            status: record.status,
+            enteredBy: record.entered_by,
+            auditTimestamp: record.created_at,
+          })),
+        ].sort((a, b) => displayedDateSortKey(b.date).localeCompare(displayedDateSortKey(a.date))),
       ]),
     )
 
@@ -208,23 +248,27 @@ export async function GET(request: Request) {
         const motorEntries = dayEntries.filter((entry) => entry.motor_no === motorNo)
         const totalMinutes = motorEntries
           .reduce((sum, entry) => sum + entry.total_minutes, 0)
-        point[id] = motorEntries.length > 0 ? runtimeHours(totalMinutes) : null
+        const confirmedNoRun = noRunRecords.some((record) => record.operation_date === date && record.motor_id === `motor-${motorNo}`)
+        point[id] = motorEntries.length > 0 ? runtimeHours(totalMinutes) : confirmedNoRun ? 0 : null
       }
       return point
     })
 
     const irrigationTrend = dateKeys.map((date) => {
       const dayEntries = entriesByDate.get(date) ?? []
+      const allMotorsConfirmedNoRun = motorIds.every((id) => noRunRecords.some(
+        (record) => record.operation_date === date && record.motor_id === `motor-${id.slice(1)}`,
+      ))
       const totalMinutes = dayEntries.reduce((sum, entry) => sum + entry.total_minutes, 0)
       return {
         date: displayDate(date),
-        totalRuntimeHours: dayEntries.length > 0 ? runtimeHours(totalMinutes) : null,
+        totalRuntimeHours: dayEntries.length > 0 ? runtimeHours(totalMinutes) : allMotorsConfirmedNoRun ? 0 : null,
         totalWaterLitres: dayEntries.length > 0
           ? dayEntries.reduce(
             (sum, entry) => sum + pumpedLitresForRuntimeMinutes(entry.total_minutes, entry.plot),
             0,
           )
-          : null,
+          : allMotorsConfirmedNoRun ? 0 : null,
       }
     })
 
@@ -245,6 +289,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       summary: {
         total_entries: sortedEntries.length,
+        confirmed_no_run_count: noRunRecords.length,
         first_entry_date: sortedEntries.at(-1)?.entry_date ?? null,
         latest_entry_date: sortedEntries[0]?.entry_date ?? null,
         selected_start_date: startDate,
@@ -257,6 +302,7 @@ export async function GET(request: Request) {
       irrigationTrend,
       valveGroups,
       entries: sortedEntries,
+      noRunRecords,
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     return NextResponse.json(

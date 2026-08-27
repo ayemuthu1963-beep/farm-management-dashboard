@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
   CalendarDays,
+  CircleSlash2,
   CheckCircle2,
   FileSpreadsheet,
   History,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { MotorNotRunPanel } from "@/components/admin/motor-not-run-panel"
 import { createExcelImports, getExcelImport, parseExcelImport } from "@/lib/motor-screenshot-analysis-api"
 import type { MotorId, ProvisionalSession, UploadDetail, WorkbookRun } from "@/lib/motor-screenshot-analysis-types"
 import {
@@ -37,7 +39,7 @@ import {
 } from "@/lib/motor-runtime-management-api"
 import { cn } from "@/lib/utils"
 
-type Tab = "import" | "events" | "review" | "history" | "summary" | "manual"
+type Tab = "import" | "events" | "review" | "history" | "summary" | "manual" | "not-run"
 type ImportFile = { file: File; motorId: MotorId; inferred: boolean }
 type EditableAllocation = {
   id: string
@@ -92,6 +94,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof Upload }> = [
   { id: "history", label: "Runtime History", icon: History },
   { id: "summary", label: "Daily Summary", icon: CalendarDays },
   { id: "manual", label: "Manual Entry", icon: PencilLine },
+  { id: "not-run", label: "Motor Not Run", icon: CircleSlash2 },
 ]
 const MOTORS: Array<{ id: MotorId; name: string }> = [
   { id: "motor-1", name: "Motor 1" },
@@ -638,6 +641,7 @@ export function MotorRuntimeManagementClient() {
         </section>
         {manualRun && <ReviewRuns runs={[manualRun]} plotOptions={plotOptions} onPatch={patchManualRun} onPatchAllocation={patchManualAllocation} onSave={(run, publish) => saveRun(run, publish, patchManualRun)} />}
       </>}
+      {tab === "not-run" && <MotorNotRunPanel />}
       {tab === "review" && <>
         {importDiscrepancyCount > 0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p className="flex items-center gap-2 font-bold"><AlertTriangle className="size-4" /> {importDiscrepancyCount} notification-event discrepancies require separate review</p><p className="mt-1">They remain visible in All Events and Motor Screenshot Analysis, but are not treated as additional workbook runs.</p></div>}
         <ReviewRuns runs={runs} plotOptions={plotOptions} onPatch={patchRun} onPatchAllocation={patchAllocation} onSave={saveRun} />
