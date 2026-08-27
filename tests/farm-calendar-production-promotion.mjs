@@ -38,7 +38,6 @@ const verifiedFiles = [
   "public/worker-management-sw.js",
   "public/worker-management.webmanifest",
   "tests/worker-management-offline.mjs",
-  "tests/worker-management.mjs",
   "tests/worker-wage-excel.mjs",
 ]
 const productionAdaptations = [
@@ -56,6 +55,7 @@ const productionAdaptations = [
   "package.json",
   "pnpm-lock.yaml",
   "tests/farm-calendar-production-promotion.mjs",
+  "tests/worker-management.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -66,13 +66,13 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Release Preview-verified Worker Management with blank numeric cells normalized to zero",
+  "Release Preview-verified Worker Management with zero-normalized blanks and hardened wage persistence",
 )
 assert.equal(manifest.base_commit, "104da2e13744853fc14fcc70b1df66637601fbf3")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "bf4eee9e0e033c3f5cf2a717650db5058b646450",
-  image_id: "sha256:9488a22ded198c33c9c82f55e0b630225edfb2015baf6c5a09a9093dae398c39",
-  feature_revision: "b4281a53975d0078f0b5313b397462d197c2926c",
+  revision: "ac996cd91ee0e90dd805bd0172efa61d6666b22a",
+  image_id: "sha256:021989b84ccf1c1ba21224ea54156927f61ab6deb913e921d1e11e3a0ab7b4f0",
+  feature_revision: "52da897f1f4782fd285ae25ca225d7b09ca74b1a",
   verified_files: verifiedFiles,
   production_adaptations: productionAdaptations,
 })
