@@ -122,7 +122,7 @@ export function MotorNotRunPanel() {
       <h2 className="font-serif text-lg font-bold text-sky-950">Daily Motor Not Run</h2>
       <p className="mt-1 text-sm text-sky-900/80">Confirm a genuine zero-runtime day without inventing start or end times. Existing or later actual runtime cannot coexist until this record is voided.</p>
       <form className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5" onSubmit={submit}>
-        <label className="text-xs font-semibold">Date (Asia/Kolkata)<input type="date" required max={farmTodayIso()} value={operationDate} onChange={(event) => setOperationDate(event.target.value)} className={`${fieldClass} mt-1`} /></label>
+        <label className="text-xs font-semibold">Date (Asia/Kolkata)<input type="date" required disabled={busy} max={farmTodayIso()} value={operationDate} onChange={(event) => setOperationDate(event.target.value)} className={`${fieldClass} mt-1`} /></label>
         <label className="text-xs font-semibold">Motor<select value={motor} onChange={(event) => setMotor(event.target.value as MotorId | "all")} className={`${fieldClass} mt-1`}>{MOTOR_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         <label className="text-xs font-semibold">Status<input value="Not Run" readOnly className={`${fieldClass} mt-1 bg-muted`} /></label>
         <label className="text-xs font-semibold">Reason<input required maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Heavy rain" className={`${fieldClass} mt-1`} /></label>
