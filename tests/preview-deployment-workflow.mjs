@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Reconcile the reviewed Motor Runtime security guards onto the authoritative Preview lineage",
+  "Show active Motor Not Run records as schedule-gated known-zero dashboard data",
 )
-assert.equal(manifest.base_commit, "af09ed8bea4c5949e600abcf705cd38ad7f7c09b")
+assert.equal(manifest.base_commit, "00287e6061118ea30593867a860f05d159e0d069")
 assert.equal(manifest.matched_backend_commit, "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,12 +302,19 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/motor-runtime/dashboard/route.ts",
-  "components/admin/motor-not-run-panel.tsx",
+  "app/api/irrigation-management/route.ts",
+  "app/api/well-water/dashboard/route.ts",
+  "app/irrigation-management/page.tsx",
+  "components/farm/well-table.tsx",
+  "components/irrigation/irrigation-map-with-details.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/motor-data.ts",
-  "lib/motor-runtime-management-api.ts",
-  "tests/motor-runtime-water-pumped.mjs",
+  "lib/irrigation-data.ts",
+  "lib/irrigation-history.ts",
+  "lib/known-zero-data.ts",
+  "lib/motor-no-run-server.ts",
+  "lib/well-data.ts",
+  "package.json",
+  "tests/known-zero-dashboard.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
