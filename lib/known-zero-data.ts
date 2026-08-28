@@ -40,7 +40,16 @@ export function knownZeroReasonsForZoneDate(
 }
 
 export function formatKnownZeroActual(reason: string): string {
-  return `0 L/tree — Not run: ${reason}`
+  return `0 L/tree — Not run: ${formatKnownZeroDisplayReason(reason)}`
+}
+
+export function formatKnownZeroDisplayReason(reason: string): string {
+  const trimmed = reason.trim()
+  const normalized = trimmed.toLowerCase()
+  if (normalized === "rains" || normalized === "heavy rains" || normalized === "heavy rain") {
+    return "Heavy rain"
+  }
+  return trimmed
 }
 
 export function applyScheduledKnownZerosToTrend(
