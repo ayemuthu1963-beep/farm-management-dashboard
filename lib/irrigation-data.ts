@@ -55,6 +55,7 @@ export interface ZoneFiveDayHistory {
   perTreeLitres: number | null
   status: "Irrigated" | "No Record" | "Data Issue"
   isCurrentIncompleteDay?: boolean
+  knownZeroReason?: string
 }
 
 export interface Zone extends ZoneConfig {
@@ -109,6 +110,7 @@ export interface TrendPoint {
   P2W: number | null
   JF: number | null
   NM: number | null
+  knownZeroReasons?: Partial<Record<ZoneId, string>>
 }
 
 export interface IrrigationSummary {

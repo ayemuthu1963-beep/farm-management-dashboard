@@ -11,6 +11,7 @@ export interface IrrigationHistoryDay {
   perTreeLitres: number | null
   status: "Irrigated" | "No Record"
   isCurrentIncompleteDay: boolean
+  knownZeroReason?: string
 }
 
 interface BuildRecentIrrigationHistoryOptions<TZone extends string> {
@@ -20,6 +21,7 @@ interface BuildRecentIrrigationHistoryOptions<TZone extends string> {
   zoneByPlot: ReadonlyMap<string, TZone>
   litresPerTreePerHourByZone: Record<TZone, number>
   today: string
+  knownZeroReasonsByZoneAndDate?: ReadonlyMap<TZone, ReadonlyMap<string, string>>
 }
 
 function formatShortDate(value: string): string {
@@ -39,6 +41,7 @@ export function buildRecentIrrigationHistory<TZone extends string>({
   zoneByPlot,
   litresPerTreePerHourByZone,
   today,
+  knownZeroReasonsByZoneAndDate,
 }: BuildRecentIrrigationHistoryOptions<TZone>): Record<TZone, IrrigationHistoryDay[]> {
   const uniqueHistoryDates = Array.from(new Set(historyDates))
   const includedDates = new Set(uniqueHistoryDates)
@@ -58,6 +61,9 @@ export function buildRecentIrrigationHistory<TZone extends string>({
     const dateMap = minutesByZoneAndDate.get(zoneId) ?? new Map<string, number>()
     const history = uniqueHistoryDates.map((date) => {
       const totalMinutes = dateMap.get(date) ?? 0
+      const knownZeroReason = totalMinutes > 0
+        ? undefined
+        : knownZeroReasonsByZoneAndDate?.get(zoneId)?.get(date)
       return {
         date,
         displayDate: formatShortDate(date),
@@ -67,6 +73,7 @@ export function buildRecentIrrigationHistory<TZone extends string>({
           : null,
         status: totalMinutes > 0 ? "Irrigated" as const : "No Record" as const,
         isCurrentIncompleteDay: date === today,
+        ...(knownZeroReason ? { knownZeroReason } : {}),
       }
     })
     return [zoneId, history]

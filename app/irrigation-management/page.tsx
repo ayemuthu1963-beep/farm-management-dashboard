@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, Database } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
@@ -17,7 +17,8 @@ import { buildIrrigationZoneCsv } from "@/lib/irrigation-export"
 import { irrigationEnvironmentCopy } from "@/lib/public-environment"
 import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
 import { irrigationPlanError, type IrrigationPlanResponse, type MotorRunScheduleRow } from "@/lib/irrigation-plan"
-import { parsePersistedMotorRunScheduleRows, type ScheduleLoadStatus } from "@/lib/irrigation-schedule-comparison"
+import { parsePersistedMotorRunScheduleRows, scheduledWaterForZoneDate, type ScheduleLoadStatus } from "@/lib/irrigation-schedule-comparison"
+import { applyScheduledKnownZerosToTrend } from "@/lib/known-zero-data"
 
 const irrigationEnvironment = irrigationEnvironmentCopy(
   process.env.NEXT_PUBLIC_MFMS_ENV,
@@ -102,6 +103,15 @@ export default function IrrigationManagementPage() {
   }
 
   const alertZones = data.zones.filter((zone) => zone.status !== "irrigated")
+  const displayedTrend = useMemo(() => applyScheduledKnownZerosToTrend(
+    data.trend,
+    (zoneId, date) => scheduledWaterForZoneDate(
+      persistedScheduleRows,
+      scheduleLoadStatus,
+      zoneId,
+      date,
+    ).kind === "scheduled",
+  ), [data.trend, persistedScheduleRows, scheduleLoadStatus])
 
   return (
     <DashboardShell>
@@ -151,7 +161,7 @@ export default function IrrigationManagementPage() {
           />
         )}
 
-        <IrrigationChartsHybrid zones={data.zones} trend={data.trend} isLoading={isLoading} errorMessage={errorMessage} />
+        <IrrigationChartsHybrid zones={data.zones} trend={displayedTrend} isLoading={isLoading} errorMessage={errorMessage} />
 
         <IrrigationPeriodSelector
           onPeriodChange={setPeriodQuery}
