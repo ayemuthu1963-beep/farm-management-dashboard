@@ -10,7 +10,13 @@ import {
 } from "../lib/known-zero-data.ts"
 import { emptyIrrigationData } from "../lib/irrigation-data.ts"
 import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
-import { buildWellDashboardData, buildWellWaterCsv, toChartData } from "../lib/well-data.ts"
+import {
+  buildWellDashboardData,
+  buildWellWaterCsv,
+  emptyWellDashboardData,
+  hasWellWaterExportData,
+  toChartData,
+} from "../lib/well-data.ts"
 
 const activeNoRuns = projectPublicMotorNoRunRecords([
   { operation_date: "2026-08-25", motor_id: "motor-1", status: "Not Run", reason: " Heavy rain ", voided_at: null },
@@ -324,9 +330,15 @@ const publicNoRunsFor = (date, motorIds) => projectPublicMotorNoRunRecords(motor
   reason: "Heavy rain",
   voided_at: null,
 })))
-const buildNorthWellDay = (date, waterPumpedOut, noRunRecords, rowOverrides = {}) => buildWellDashboardData({
+const buildNorthWellDay = (
+  date,
+  waterPumpedOut,
+  noRunRecords,
+  rowOverrides = {},
+  totalReadings = 2,
+) => buildWellDashboardData({
   summary: {
-    total_readings: 2,
+    total_readings: totalReadings,
     first_reading_date: date,
     latest_reading_date: date,
     selected_start_date: date,
@@ -375,42 +387,49 @@ const placeholderMeasuredPositiveWell = buildNorthWellDay(
   54_321,
   publicNoRunsFor("2026-09-23", ["motor-1", "motor-2"]),
   { reading_count: 0 },
+  0,
 )
 const placeholderMeasuredZeroWell = buildNorthWellDay(
   "2026-09-24",
   0,
   publicNoRunsFor("2026-09-24", ["motor-1", "motor-2"]),
   { reading_count: 0 },
+  0,
 )
 const placeholderSynthesizedZeroWell = buildNorthWellDay(
   "2026-09-25",
   null,
   publicNoRunsFor("2026-09-25", ["motor-1", "motor-2"]),
   { reading_count: 0 },
+  0,
 )
 const placeholderIncompleteWell = buildNorthWellDay(
   "2026-09-26",
   null,
   publicNoRunsFor("2026-09-26", ["motor-1"]),
   { reading_count: 0 },
+  0,
 )
 const placeholderWrongMotorWell = buildNorthWellDay(
   "2026-09-27",
   null,
   publicNoRunsFor("2026-09-27", ["motor-3"]),
   { reading_count: 0 },
+  0,
 )
 const inconsistentMetadataMeasuredWell = buildNorthWellDay(
   "2026-09-28",
   7_654,
   publicNoRunsFor("2026-09-28", ["motor-1", "motor-2"]),
   { reading_count: null },
+  0,
 )
 const nonFiniteCompleteNoRunWell = buildNorthWellDay(
   "2026-09-29",
   "not-a-number",
   publicNoRunsFor("2026-09-29", ["motor-1", "motor-2"]),
   { reading_count: 0 },
+  0,
 )
 
 const measuredPositiveRecord = measuredPositiveWell.northWellRecords[0]
@@ -455,6 +474,21 @@ assert.equal(inconsistentMetadataMeasuredWell.northWellRecords[0].waterPumpedOut
 assert.equal(inconsistentMetadataMeasuredWell.northWellRecords[0].knownZeroReason, undefined)
 assert.equal(nonFiniteCompleteNoRunWell.northWellRecords[0].waterPumpedOut, 0, "a non-finite pumped value is genuinely missing and may use complete known-zero attribution")
 assert.equal(nonFiniteCompleteNoRunWell.northWellRecords[0].knownZeroReason, "Heavy rain")
+assert.equal(hasWellWaterExportData(placeholderMeasuredPositiveWell), true, "a finite placeholder-day measurement enables export even when totalReadings is zero")
+assert.equal(hasWellWaterExportData(placeholderMeasuredZeroWell), true, "a measured numeric zero enables export")
+assert.equal(hasWellWaterExportData(placeholderSynthesizedZeroWell), true, "a valid synthesized zero enables export")
+assert.match(buildWellWaterCsv(placeholderSynthesizedZeroWell), /"0"/)
+assert.match(buildWellWaterCsv(placeholderSynthesizedZeroWell), /"Not run: Heavy rain"/)
+assert.equal(hasWellWaterExportData(placeholderIncompleteWell), false, "unknown placeholder rows do not enable export")
+assert.equal(hasWellWaterExportData(placeholderWrongMotorWell), true, "a valid South-well synthesized zero keeps the whole dashboard exportable")
+assert.equal(hasWellWaterExportData({
+  ...placeholderWrongMotorWell,
+  southWellRecords: [],
+}), false, "wrong-Motor North-well attribution alone does not enable export")
+assert.equal(hasWellWaterExportData(inconsistentMetadataMeasuredWell), true, "conflicting metadata cannot hide a finite exportable measurement")
+assert.equal(hasWellWaterExportData(nonFiniteCompleteNoRunWell), true, "complete synthesis after a non-finite value remains exportable")
+assert.equal(hasWellWaterExportData(missingWell), true, "existing real readings retain the established export behavior")
+assert.equal(hasWellWaterExportData(emptyWellDashboardData), false, "an empty dashboard keeps export disabled")
 
 const wellDashboard = buildWellDashboardData({
   summary: {
@@ -485,6 +519,7 @@ const wellRoute = readFileSync(new URL("../app/api/well-water/dashboard/route.ts
 const irrigationRoute = readFileSync(new URL("../app/api/irrigation-management/route.ts", import.meta.url), "utf8")
 const knownZeroSource = readFileSync(new URL("../lib/known-zero-data.ts", import.meta.url), "utf8")
 const wellTable = readFileSync(new URL("../components/farm/well-table.tsx", import.meta.url), "utf8")
+const wellPage = readFileSync(new URL("../app/well-water/page.tsx", import.meta.url), "utf8")
 assert.match(wellRoute, /fetchPublicMotorNoRunRecords/)
 assert.match(irrigationRoute, /fetchPublicMotorNoRunRecords/)
 assert.match(irrigationRoute, /motorNoRunRecords: \[\.\.\.noRunRecords\]/)
@@ -493,5 +528,7 @@ assert.doesNotMatch(knownZeroSource, /ZONE_SCHEDULE_MOTOR_IDS/)
 assert.doesNotMatch(knownZeroSource, /P1E:\s*"M1"|P2W:\s*"M2"|P2E:\s*"M3"/, "no fixed zone-to-Motor fallback remains")
 assert.match(wellTable, /Not run: \{formatKnownZeroDisplayReason\(record\.knownZeroReason\)\}/)
 assert.match(wellTable, /record\.knownZeroReason \?[\s\S]*: record\.isPlaceholder && record\.waterPumpedOut === null \? "" : formatLitres\(record\.waterPumpedOut\)/, "the Well Water table preserves finite placeholder-day measurements and only blanks unknown values")
+assert.match(wellPage, /disabled=\{isLoading \|\| !hasWellWaterExportData\(data\)\}/, "the Well Water export gate uses populated dashboard data")
+assert.doesNotMatch(wellPage, /data\.totalReadings === 0/, "export availability is not based only on the summary reading count")
 
 console.log("Known-zero versus missing dashboard regression passed")

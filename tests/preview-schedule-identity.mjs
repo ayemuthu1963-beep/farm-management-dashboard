@@ -246,6 +246,72 @@ assert.deepEqual(resolvePipelineActor(new Headers(), {
   environment: "local",
 })
 
+for (const [configuredRole, assertionRole] of [
+  ["owner", "admin"],
+  ["admin", "admin"],
+  ["manager", "manager"],
+]) {
+  assert.deepEqual(resolvePipelineActor(new Headers(), {
+    MFMS_ENV: "development",
+    MFMS_WORKER_LOCAL_ACTOR_ENABLED: "true",
+    MFMS_WORKER_LOCAL_ACTOR_USERNAME: `configured-local-${configuredRole}`,
+    MFMS_WORKER_LOCAL_ACTOR_ROLE: configuredRole,
+  }, "PUT"), {
+    username: `configured-local-${configuredRole}`,
+    role: assertionRole,
+    environment: "local",
+  })
+}
+
+for (const configuredRole of ["viewer", "tester"]) {
+  const localEnvironment = {
+    MFMS_ENV: "development",
+    MFMS_WORKER_LOCAL_ACTOR_ENABLED: "true",
+    MFMS_WORKER_LOCAL_ACTOR_USERNAME: `configured-local-${configuredRole}`,
+    MFMS_WORKER_LOCAL_ACTOR_ROLE: configuredRole,
+  }
+  assert.deepEqual(resolvePipelineActor(new Headers(), localEnvironment, "GET"), {
+    username: `configured-local-${configuredRole}`,
+    role: "viewer",
+    environment: "local",
+  })
+  rejectsWorkerWith(
+    () => resolvePipelineActor(new Headers(), localEnvironment, "PUT"),
+    403,
+    /viewer access is read-only/i,
+  )
+}
+
+for (const configuredEnvironment of ["preview", "uat", "test", "production", "prod"]) {
+  assert.deepEqual(resolvePipelineActor(
+    gatewayHeaders("owner", { environment: configuredEnvironment, includePermission: false }),
+    {
+      MFMS_ENV: configuredEnvironment,
+      MFMS_TRUST_PROXY_ACTOR_HEADERS: "true",
+    },
+    "GET",
+  ), {
+    username: "validated-user",
+    role: "admin",
+    environment: configuredEnvironment,
+  })
+}
+
+for (const configuredEnvironment of ["staging", "production-candidate", "vercel"]) {
+  rejectsWorkerWith(
+    () => resolvePipelineActor(
+      gatewayHeaders("owner", { environment: configuredEnvironment, includePermission: false }),
+      {
+        MFMS_ENV: configuredEnvironment,
+        MFMS_TRUST_PROXY_ACTOR_HEADERS: "true",
+      },
+      "GET",
+    ),
+    403,
+    /environment is not approved/i,
+  )
+}
+
 for (const configuredEnvironment of ["preview", "production"]) {
   rejectsWorkerWith(
     () => resolvePipelineActor(new Headers(), {

@@ -350,6 +350,12 @@ export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
     }))
 }
 
+export function hasWellWaterExportData(data: WellDashboardData): boolean {
+  return data.totalReadings > 0
+    || data.northWellRecords.some((record) => record.waterPumpedOut !== null)
+    || data.southWellRecords.some((record) => record.waterPumpedOut !== null)
+}
+
 function escapeCsv(value: string | number | null): string {
   const text = value === null ? "" : String(value)
   return `"${text.replaceAll('"', '""')}"`
