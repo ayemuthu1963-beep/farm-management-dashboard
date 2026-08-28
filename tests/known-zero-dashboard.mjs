@@ -10,7 +10,7 @@ import {
 } from "../lib/known-zero-data.ts"
 import { emptyIrrigationData } from "../lib/irrigation-data.ts"
 import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
-import { buildWellDashboardData, toChartData } from "../lib/well-data.ts"
+import { buildWellDashboardData, buildWellWaterCsv, toChartData } from "../lib/well-data.ts"
 
 const activeNoRuns = projectPublicMotorNoRunRecords([
   { operation_date: "2026-08-25", motor_id: "motor-1", status: "Not Run", reason: " Heavy rain ", voided_at: null },
@@ -317,6 +317,83 @@ const northRow = {
   morning_reading_id: 88, evening_reading_id: 90, capacity_liters: 1128270,
   liters_per_inch: 1650, calculation_method: "CAPACITY_MINUS_TAPE",
 }
+const publicNoRunsFor = (date, motorIds) => projectPublicMotorNoRunRecords(motorIds.map((motor_id) => ({
+  operation_date: date,
+  motor_id,
+  status: "Not Run",
+  reason: "Heavy rain",
+  voided_at: null,
+})))
+const buildNorthWellDay = (date, waterPumpedOut, noRunRecords) => buildWellDashboardData({
+  summary: {
+    total_readings: 2,
+    first_reading_date: date,
+    latest_reading_date: date,
+    selected_start_date: date,
+    selected_end_date: date,
+    calendar_days: 1,
+    pumped_out_totals_liters: { north: waterPumpedOut ?? 0, south: 0, both: waterPumpedOut ?? 0 },
+  },
+  daily_rows: [{ ...northRow, date, water_pumped_out_liters: waterPumpedOut }],
+  north_rows: [],
+  south_rows: [],
+  motor_no_run_records: noRunRecords,
+})
+const measuredPositiveWell = buildNorthWellDay(
+  "2026-09-16",
+  12_345,
+  publicNoRunsFor("2026-09-16", ["motor-1", "motor-2"]),
+)
+const measuredZeroWell = buildNorthWellDay(
+  "2026-09-17",
+  0,
+  publicNoRunsFor("2026-09-17", ["motor-1", "motor-2"]),
+)
+const synthesizedZeroWell = buildNorthWellDay(
+  "2026-09-18",
+  null,
+  publicNoRunsFor("2026-09-18", ["motor-1", "motor-2"]),
+)
+const parsedMissingWell = buildNorthWellDay(
+  "2026-09-22",
+  "",
+  publicNoRunsFor("2026-09-22", ["motor-1", "motor-2"]),
+)
+const incompleteNoRunWell = buildNorthWellDay(
+  "2026-09-19",
+  null,
+  publicNoRunsFor("2026-09-19", ["motor-1"]),
+)
+const wrongMotorNoRunWell = buildNorthWellDay(
+  "2026-09-20",
+  null,
+  publicNoRunsFor("2026-09-20", ["motor-3"]),
+)
+const missingWell = buildNorthWellDay("2026-09-21", null, [])
+
+const measuredPositiveRecord = measuredPositiveWell.northWellRecords[0]
+const measuredZeroRecord = measuredZeroWell.northWellRecords[0]
+const synthesizedZeroRecord = synthesizedZeroWell.northWellRecords[0]
+assert.equal(measuredPositiveRecord.waterPumpedOut, 12_345, "a matching no-run cannot overwrite positive pumped-water measurement")
+assert.equal(measuredPositiveRecord.knownZeroReason, undefined, "measured pumped water retains measured provenance")
+assert.equal(toChartData(measuredPositiveWell.northWellRecords)[0].pumpedOut, 12_345, "the Well Water trend preserves the measured value")
+assert.match(buildWellWaterCsv(measuredPositiveWell), /"12345"/)
+assert.doesNotMatch(buildWellWaterCsv(measuredPositiveWell), /Not run:/, "the Well Water table export preserves measured provenance")
+assert.equal(measuredZeroRecord.waterPumpedOut, 0, "numeric measured zero is authoritative and is not treated as missing")
+assert.equal(measuredZeroRecord.knownZeroReason, undefined)
+assert.equal(toChartData(measuredZeroWell.northWellRecords)[0].pumpedOut, 0)
+assert.equal(synthesizedZeroRecord.waterPumpedOut, 0, "a complete matching no-run basis synthesizes zero when measurement is missing")
+assert.equal(synthesizedZeroRecord.knownZeroReason, "Heavy rain")
+assert.equal(toChartData(synthesizedZeroWell.northWellRecords)[0].pumpedOut, 0)
+assert.equal(parsedMissingWell.northWellRecords[0].waterPumpedOut, 0, "an empty API value is parsed as missing before valid synthesis")
+assert.equal(parsedMissingWell.northWellRecords[0].knownZeroReason, "Heavy rain")
+assert.equal(incompleteNoRunWell.northWellRecords[0].waterPumpedOut, null, "an incomplete no-run basis remains unknown")
+assert.equal(incompleteNoRunWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(wrongMotorNoRunWell.northWellRecords[0].waterPumpedOut, null, "a wrong-Motor no-run basis remains unknown")
+assert.equal(wrongMotorNoRunWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(missingWell.northWellRecords[0].waterPumpedOut, null, "missing measurement without no-run remains unknown")
+assert.equal(toChartData(missingWell.northWellRecords)[0].pumpedOut, null, "unknown Well Water values remain chart gaps")
+
 const wellDashboard = buildWellDashboardData({
   summary: {
     total_readings: 2, first_reading_date: "2026-08-25", latest_reading_date: "2026-08-25",
@@ -353,5 +430,6 @@ assert.doesNotMatch(irrigationRoute, /knownZeroReasonsForZoneDate/)
 assert.doesNotMatch(knownZeroSource, /ZONE_SCHEDULE_MOTOR_IDS/)
 assert.doesNotMatch(knownZeroSource, /P1E:\s*"M1"|P2W:\s*"M2"|P2E:\s*"M3"/, "no fixed zone-to-Motor fallback remains")
 assert.match(wellTable, /Not run: \{formatKnownZeroDisplayReason\(record\.knownZeroReason\)\}/)
+assert.match(wellTable, /record\.knownZeroReason \?[\s\S]*: record\.isPlaceholder \? "" : formatLitres\(record\.waterPumpedOut\)/, "the Well Water table renders synthesized provenance only when the shared record has no authoritative measurement")
 
 console.log("Known-zero versus missing dashboard regression passed")

@@ -1,6 +1,6 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { projectPublicMotorNoRunRecords } from "@/lib/motor-data"
+import { noRunsWithoutMeasuredRuntime, projectPublicMotorNoRunRecords } from "@/lib/motor-data"
 import { formatKnownZeroDisplayReason } from "@/lib/known-zero-data"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
@@ -149,6 +149,10 @@ export async function GET(request: Request) {
     const entriesByMotor = new Map<MotorId, RuntimeEntry[]>()
     for (const id of motorIds) entriesByMotor.set(id, [])
     for (const entry of sortedEntries) entriesByMotor.get(motorId(entry.motor_no))?.push(entry)
+    const overlayNoRunRecords = noRunsWithoutMeasuredRuntime(noRunRecords, sortedEntries.map((entry) => ({
+      date: entry.entry_date,
+      motorId: motorId(entry.motor_no),
+    })))
 
     const countedSessions = new Set<number>()
     const recordsByMotor = Object.fromEntries(
@@ -170,7 +174,7 @@ export async function GET(request: Request) {
             source: entry.source,
           }
           }),
-          ...noRunRecords.filter((record) => record.motorId === id).map((record) => ({
+          ...overlayNoRunRecords.filter((record) => record.motorId === id).map((record) => ({
             date: displayDate(record.date),
             runHours: 0,
             starts: 0,
@@ -235,7 +239,7 @@ export async function GET(request: Request) {
         const motorEntries = dayEntries.filter((entry) => motorId(entry.motor_no) === id)
         const totalMinutes = motorEntries
           .reduce((sum, entry) => sum + entry.total_minutes, 0)
-        const confirmedNoRun = noRunRecords.some((record) => record.date === date && record.motorId === id)
+        const confirmedNoRun = overlayNoRunRecords.some((record) => record.date === date && record.motorId === id)
         point[id] = motorEntries.length > 0 ? runtimeHours(totalMinutes) : confirmedNoRun ? 0 : null
       }
       return point
@@ -243,7 +247,7 @@ export async function GET(request: Request) {
 
     const irrigationTrend = dateKeys.map((date) => {
       const dayEntries = entriesByDate.get(date) ?? []
-      const allMotorsConfirmedNoRun = motorIds.every((id) => noRunRecords.some(
+      const allMotorsConfirmedNoRun = motorIds.every((id) => overlayNoRunRecords.some(
         (record) => record.date === date && record.motorId === id,
       ))
       const totalMinutes = dayEntries.reduce((sum, entry) => sum + entry.total_minutes, 0)

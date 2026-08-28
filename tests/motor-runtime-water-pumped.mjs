@@ -7,7 +7,7 @@ import {
   pumpedLitresForRuntimeMinutes,
   pumpLitresPerHourForPlot,
 } from "../lib/water-pump-rates.ts"
-import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
+import { noRunsWithoutMeasuredRuntime, projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
 import {
   canApplyNoRunMutationCompletion,
   canVoidNoRunRecord,
@@ -49,6 +49,8 @@ assert.match(motorRoute, /const irrigationTrend = dateKeys\.map/)
 assert.match(motorRoute, /selectedDateKeys\(startDate \?\? "", endDate \?\? ""\)/)
 assert.match(motorRoute, /motorEntries\.length > 0 \? runtimeHours\(totalMinutes\) : confirmedNoRun \? 0 : null/)
 assert.match(motorRoute, /dayEntries\.length > 0 \? runtimeHours\(totalMinutes\) : allMotorsConfirmedNoRun \? 0 : null/)
+assert.match(motorRoute, /const overlayNoRunRecords = noRunsWithoutMeasuredRuntime\(noRunRecords/)
+assert.match(motorRoute, /overlayNoRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
 assert.match(motorDates, /const endDate = getFarmIsoDate\(0, now\)/)
 assert.match(motorDates, /Math\.round\(\(end - start\) \/ 86_400_000\) \+ 1/)
 assert.match(motorDates, /End Date = today\./)
@@ -216,12 +218,22 @@ assert.deepEqual(publicNoRunRecords, [{
   water: "0 L",
 }])
 assert.deepEqual(Object.keys(publicNoRunRecords[0]), ["date", "motorId", "motorName", "status", "reason", "runtime", "water"])
+assert.deepEqual(
+  noRunsWithoutMeasuredRuntime(publicNoRunRecords, [{ date: "2026-08-25", motorId: "M2" }]),
+  [],
+  "Motor Runtime suppresses a synthesized no-run row when that Motor/date has measured runtime",
+)
+assert.deepEqual(
+  noRunsWithoutMeasuredRuntime(publicNoRunRecords, [{ date: "2026-08-25", motorId: "M1" }]),
+  publicNoRunRecords,
+  "a different Motor measurement does not suppress a valid no-run row",
+)
 assert.deepEqual(logCalls, [])
 const serializedPublicResponse = JSON.stringify({ noRunRecords: publicNoRunRecords })
 for (const value of Object.values(sentinels)) assert.doesNotMatch(serializedPublicResponse, new RegExp(value))
 assert.doesNotMatch(serializedPublicResponse, /VOIDED_REASON_SENTINEL/)
 assert.match(motorRoute, /projectPublicMotorNoRunRecords\(Array\.isArray\(rawNoRunPayload\) \? rawNoRunPayload : \[\]\)/)
-assert.match(motorRoute, /noRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
+assert.match(motorRoute, /overlayNoRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
 assert.match(motorRoute, /record\.date === date && record\.motorId === id/)
 assert.doesNotMatch(motorRoute, /record\.(?:id|entered_by|created_at|updated_at|remarks|source|voided_by|voided_at|audit_timestamp)/)
 assert.match(motorRoute, /headers: \{ "Cache-Control": "no-store" \}/)

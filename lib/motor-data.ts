@@ -32,6 +32,19 @@ export interface PublicMotorNoRunRecord {
   water: "0 L"
 }
 
+export interface MeasuredMotorRuntimeDay {
+  date: string
+  motorId: MotorId
+}
+
+export function noRunsWithoutMeasuredRuntime(
+  records: readonly PublicMotorNoRunRecord[],
+  measuredDays: readonly MeasuredMotorRuntimeDay[],
+): PublicMotorNoRunRecord[] {
+  const measuredMotorDates = new Set(measuredDays.map(({ date, motorId }) => `${motorId}:${date}`))
+  return records.filter((record) => !measuredMotorDates.has(`${record.motorId}:${record.date}`))
+}
+
 const PUBLIC_MOTOR_NAMES: Record<MotorId, string> = {
   M1: "Motor 1",
   M2: "Motor 2",
