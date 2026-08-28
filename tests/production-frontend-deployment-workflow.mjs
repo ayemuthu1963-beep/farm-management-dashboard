@@ -48,7 +48,7 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.equal(helperSha256, "974cfa4038da800251358f5d0bc3a159430c9fd36633446f057027b3eb705217")
+assert.equal(helperSha256, "be296882a205550446e6c2da49c755f82cb8701e14e5b5032f9c4020a281a05f")
 assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
 assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
 
@@ -69,10 +69,16 @@ const snapshotUnrelated = helper.slice(
   helper.indexOf("snapshot_unrelated_containers()"),
   helper.indexOf("wait_for_version()"),
 )
-assert.match(snapshotUnrelated, /docker ps -aq/)
+assert.match(snapshotUnrelated, /container_ids=\$\(docker ps -q --no-trunc\)/)
+assert.match(snapshotUnrelated, /protected container enumeration failed/)
 assert.match(snapshotUnrelated, /"\$live_container"\|"\$live_container"-candidate-\*\|"\$live_container"-pre-\*/)
 assert.match(snapshotUnrelated, /continue/)
-assert.match(snapshotUnrelated, /docker inspect --format '\{\{\.Id\}\}\|\{\{\.Name\}\}\|\{\{\.Image\}\}\|\{\{\.State\.Running\}\}/)
+assert.match(snapshotUnrelated, /row=\$\(docker inspect "\$id" \| python3 -c/)
+assert.match(snapshotUnrelated, /RestartCount/)
+assert.match(snapshotUnrelated, /Healthcheck/)
+assert.match(snapshotUnrelated, /missing-health-data/)
+assert.match(snapshotUnrelated, /no-healthcheck/)
+assert.match(snapshotUnrelated, /protected unrelated container is not running/)
 const commonValidation = helper.slice(
   helper.indexOf("validate_common_live_state()"),
   helper.indexOf("validate_coordinated_backup()"),
@@ -167,50 +173,109 @@ assert.equal(runHealthAndRestartGuard().status, 0)
 assert.equal(runHealthAndRestartGuard({ unhealthy: true }).status, 71)
 assert.equal(runHealthAndRestartGuard({ restarted: true }).status, 71)
 
-const snapshotFromController = (records) => {
-  const ids = records.map(({ id }) => id)
+const toDockerInspectRecord = ({
+  id,
+  inspectedId = id,
+  name,
+  image,
+  running,
+  restartCount = 0,
+  healthMode = "configured",
+  healthTest,
+  healthStatus = "healthy",
+  omitHealthState = false,
+  network,
+  ports,
+}) => {
+  const config = {}
+  if (healthMode === "configured") config.Healthcheck = { Test: healthTest ?? ["CMD", "true"] }
+  if (healthMode === "none-explicit") config.Healthcheck = { Test: ["NONE"] }
+  if (healthMode === "malformed") config.Healthcheck = { Test: [] }
+  const state = { Running: running === "true" }
+  if (!omitHealthState) state.Health = { Status: healthStatus }
+  return [{
+    Id: inspectedId,
+    Name: `/${name}`,
+    Image: image,
+    RestartCount: restartCount,
+    Config: config,
+    State: state,
+    HostConfig: {
+      NetworkMode: network,
+      PortBindings: ports === "none" ? null : { "3000/tcp": [{ HostIp: "127.0.0.1", HostPort: ports }] },
+    },
+  }]
+}
+const runSnapshotFromController = (
+  records,
+  { enumerationFailure = false, enumeratedIds = records.map(({ id }) => id) } = {},
+) => {
+  const ids = enumeratedIds
   const recordCases = records.map((record) => `
       ${shellQuote(record.id)})
-        if [[ "\$3" == "{{.Name}}" ]]; then
-          printf '%s\\n' ${shellQuote(`/${record.name}`)}
-        else
-          printf '%s\\n' ${shellQuote(`${record.id}|/${record.name}|${record.image}|${record.running}|${record.network}|${record.ports}`)}
-        fi
+        ${record.inspectionFailure
+          ? "return 1"
+          : `printf '%s\\n' ${shellQuote(JSON.stringify(record.malformedPayload ? { invalid: true } : toDockerInspectRecord(record)))}; return 0`}
         ;;`).join("")
   const result = spawnSync(bashExecutable, ["-c", `
 set -euo pipefail
 live_container="mfms-v0-preview-web"
+blocked() { printf '%s\n' "\$*" >&2; exit 71; }
 docker() {
-  if [[ "\$1" == "ps" && "\$2" == "-aq" ]]; then
+  if [[ "\$1" == "ps" && "\$2" == "-q" ]]; then
+    [[ "\${ENUMERATION_FAILURE}" == "1" ]] && return 1
     printf '%s\\n' ${ids.map(shellQuote).join(" ")}
     return 0
   fi
-  if [[ "\$1" == "inspect" && "\$2" == "--format" ]]; then
-    case "\$4" in${recordCases}
+  if [[ "\$1" == "inspect" ]]; then
+    case "\$2" in${recordCases}
     esac
-    return 0
+    return 1
   fi
   return 1
 }
 ${snapshotUnrelated}
 snapshot_unrelated_containers
-`], { encoding: "utf8", env: process.env })
+`], {
+    encoding: "utf8",
+    env: { ...process.env, ENUMERATION_FAILURE: enumerationFailure ? "1" : "0" },
+  })
+  return result
+}
+const snapshotFromController = (records, options) => {
+  const result = runSnapshotFromController(records, options)
   assert.equal(result.status, 0, result.stderr)
   return result.stdout
 }
 const baselineContainers = [
   { id: "front-old", name: "mfms-v0-preview-web", image: "front:old", running: "true", network: "harvest-net", ports: "3014" },
-  { id: "candidate", name: "mfms-v0-preview-web-candidate-123", image: "front:new", running: "true", network: "harvest-net", ports: "3013" },
-  { id: "rollback", name: "mfms-v0-preview-web-pre-123", image: "front:old", running: "false", network: "harvest-net", ports: "3014" },
+  { id: "candidate", name: "mfms-v0-preview-web-candidate-123", image: "front:new", running: "false", healthMode: "none", omitHealthState: true, network: "harvest-net", ports: "3013" },
+  { id: "rollback", name: "mfms-v0-preview-web-pre-123", image: "front:old", running: "false", healthMode: "none", omitHealthState: true, network: "harvest-net", ports: "3014" },
   { id: "api", name: "harvest-api", image: "api:stable", running: "true", network: "harvest-net", ports: "none" },
   { id: "db", name: "harvest-db", image: "db:stable", running: "true", network: "harvest-net", ports: "none" },
-  { id: "extra", name: "new-unrelated-service", image: "extra:stable", running: "true", network: "other", ports: "none" },
+  { id: "extra", name: "new-unrelated-service", image: "extra:stable", running: "true", healthMode: "none", omitHealthState: true, network: "other", ports: "none" },
 ]
 const baselineUnrelated = snapshotFromController(baselineContainers)
 assert.doesNotMatch(baselineUnrelated, /front-old|candidate|rollback/)
 assert.match(baselineUnrelated, /harvest-api/)
 assert.match(baselineUnrelated, /harvest-db/)
 assert.match(baselineUnrelated, /new-unrelated-service/)
+assert.match(baselineUnrelated, /\|0\|healthy\|/)
+assert.match(baselineUnrelated, /\|0\|no-healthcheck\|/)
+const stoppedHistorical = {
+  id: "stopped-historical",
+  name: "historical-unrelated-container",
+  image: "historical:stable",
+  running: "false",
+  healthMode: "none",
+  omitHealthState: true,
+  network: "other",
+  ports: "none",
+}
+assert.equal(snapshotFromController(
+  [...baselineContainers, stoppedHistorical],
+  { enumeratedIds: baselineContainers.map(({ id }) => id) },
+), baselineUnrelated)
 const targetOnlySwitch = baselineContainers.map((record) => (
   record.name === "mfms-v0-preview-web"
     ? { ...record, id: "front-new", image: "front:new" }
@@ -225,13 +290,107 @@ assert.notEqual(snapshotFromController(targetOnlySwitch.filter(({ name }) => nam
 assert.notEqual(snapshotFromController(targetOnlySwitch.map((record) => (
   record.name === "harvest-api" ? { ...record, image: "api:changed" } : record
 ))), baselineUnrelated)
-assert.notEqual(snapshotFromController(targetOnlySwitch.map((record) => (
+const stoppedProtected = runSnapshotFromController(targetOnlySwitch.map((record) => (
   record.name === "harvest-api" ? { ...record, running: "false" } : record
-))), baselineUnrelated)
-assert.notEqual(snapshotFromController([
+)))
+assert.equal(stoppedProtected.status, 71)
+assert.match(stoppedProtected.stderr, /not running/)
+const duplicateProtected = runSnapshotFromController([
   ...targetOnlySwitch,
   { ...targetOnlySwitch.find(({ name }) => name === "harvest-api"), id: "api-duplicate" },
-]), baselineUnrelated)
+])
+assert.equal(duplicateProtected.status, 71)
+assert.match(duplicateProtected.stderr, /duplicate name/)
+assert.equal(snapshotFromController([...targetOnlySwitch].reverse()), baselineUnrelated)
+assert.notEqual(snapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, restartCount: 1 } : record
+))), baselineUnrelated)
+const unhealthyProtected = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, healthStatus: "unhealthy" } : record
+)))
+assert.equal(unhealthyProtected.status, 71)
+assert.match(unhealthyProtected.stderr, /not healthy/)
+const missingHealthData = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, omitHealthState: true } : record
+)))
+assert.equal(missingHealthData.status, 71)
+assert.match(missingHealthData.stderr, /missing configured health data/)
+const noHealthcheckProtected = targetOnlySwitch.map((record) => (
+  record.name === "harvest-api"
+    ? { ...record, healthMode: "none", omitHealthState: true }
+    : record
+))
+assert.equal(runSnapshotFromController(noHealthcheckProtected).status, 0)
+assert.notEqual(snapshotFromController(noHealthcheckProtected), baselineUnrelated)
+const inspectFailure = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, inspectionFailure: true } : record
+)))
+assert.equal(inspectFailure.status, 71)
+assert.match(inspectFailure.stderr, /inspection failed/)
+const enumerationFailure = runSnapshotFromController(targetOnlySwitch, { enumerationFailure: true })
+assert.equal(enumerationFailure.status, 71)
+assert.match(enumerationFailure.stderr, /enumeration failed/)
+const duplicateId = runSnapshotFromController([
+  ...targetOnlySwitch,
+  targetOnlySwitch.find(({ name }) => name === "harvest-api"),
+])
+assert.equal(duplicateId.status, 71)
+assert.match(duplicateId.stderr, /duplicate ID/)
+const explicitNoHealthcheck = targetOnlySwitch.map((record) => (
+  record.name === "harvest-api"
+    ? { ...record, healthMode: "none-explicit", omitHealthState: true }
+    : record
+))
+assert.equal(runSnapshotFromController(explicitNoHealthcheck).status, 0)
+const healthWithoutCheck = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api"
+    ? { ...record, healthMode: "none", healthStatus: "healthy" }
+    : record
+)))
+assert.equal(healthWithoutCheck.status, 71)
+assert.match(healthWithoutCheck.stderr, /not healthy/)
+const malformedHealthcheck = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, healthMode: "malformed" } : record
+)))
+assert.equal(malformedHealthcheck.status, 71)
+assert.match(malformedHealthcheck.stderr, /not healthy/)
+const validCommandShellHealthcheck = targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, healthTest: ["CMD-SHELL", "true"] } : record
+))
+assert.equal(runSnapshotFromController(validCommandShellHealthcheck).status, 0)
+for (const healthTest of [["BOGUS", "true"], ["CMD", 123], ["CMD"], ["CMD", ""]]) {
+  const invalidHealthcheckCommand = runSnapshotFromController(targetOnlySwitch.map((record) => (
+    record.name === "harvest-api" ? { ...record, healthTest } : record
+  )))
+  assert.equal(invalidHealthcheckCommand.status, 71)
+  assert.match(invalidHealthcheckCommand.stderr, /not healthy/)
+}
+const wrongInspectionId = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, inspectedId: "wrong-api-id" } : record
+)))
+assert.equal(wrongInspectionId.status, 71)
+assert.match(wrongInspectionId.stderr, /wrong ID/)
+const invalidRestartCount = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, restartCount: "invalid" } : record
+)))
+assert.equal(invalidRestartCount.status, 71)
+assert.match(invalidRestartCount.stderr, /inspection failed/)
+const malformedInspectPayload = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, malformedPayload: true } : record
+)))
+assert.equal(malformedInspectPayload.status, 71)
+assert.match(malformedInspectPayload.stderr, /inspection failed/)
+const incompleteInspectPayload = runSnapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, network: "" } : record
+)))
+assert.equal(incompleteInspectPayload.status, 71)
+assert.match(incompleteInspectPayload.stderr, /inspection failed/)
+const embeddedNearMiss = runSnapshotFromController([
+  ...targetOnlySwitch,
+  { id: "near-miss", name: "mfms-v0-preview-web-preexisting", image: "front:old", running: "false", healthMode: "none", omitHealthState: true, network: "harvest-net", ports: "none" },
+])
+assert.equal(embeddedNearMiss.status, 71)
+assert.match(embeddedNearMiss.stderr, /not running/)
 
 assert.match(commonValidation, /manifest_roles\[\"\$service_role\"\]/)
 assert.match(commonValidation, /manifest_containers\[\"\$service_container\"\]/)
@@ -243,6 +402,95 @@ const liveContract = helper.slice(helper.indexOf("assert_live_contract()"), help
 assert.match(liveContract, /snapshot_unrelated_containers > "\$after_unrelated"/)
 assert.match(liveContract, /cmp -s "\$expected_unrelated" "\$after_unrelated"/)
 assert.match(liveContract, /an? backend, Production, ODK, proxy, database, or unrelated container changed/)
+assert.match(liveContract, /RestartCount.*"\$live_container"/)
+assert.match(liveContract, /\{\{len \.Mounts\}\}.*"\$live_container"/)
+const targetRestartGuardStart = liveContract.indexOf(
+  `  [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]]`,
+)
+const targetRestartGuardMessage = liveContract.indexOf(
+  "Production frontend restarted during the guarded switch",
+  targetRestartGuardStart,
+)
+assert.ok(targetRestartGuardStart >= 0 && targetRestartGuardMessage > targetRestartGuardStart)
+const targetRestartGuardEnd = liveContract.indexOf("\n", targetRestartGuardMessage) + 1
+const targetRestartGuard = liveContract.slice(targetRestartGuardStart, targetRestartGuardEnd)
+const runTargetRestartGuard = (restartCount) => spawnSync(bashExecutable, ["-c", `
+set -euo pipefail
+live_container="mfms-v0-preview-web"
+blocked() { exit 71; }
+docker() { printf '%s\n' "\${RESTART_COUNT}"; }
+verify_target_restart() {
+${targetRestartGuard}
+}
+verify_target_restart
+`], {
+  encoding: "utf8",
+  env: { ...process.env, RESTART_COUNT: String(restartCount) },
+})
+assert.equal(runTargetRestartGuard(0).status, 0)
+assert.equal(runTargetRestartGuard(1).status, 71)
+const deployTransaction = helper.slice(helper.indexOf("deploy_production()"), helper.indexOf("rollback_production()"))
+const deployAssertions = deployTransaction.match(/assert_live_contract "\$candidate_revision" "\$new_image_id" "\$before_unrelated"/g) ?? []
+assert.equal(deployAssertions.length, 2)
+assert.match(
+  deployTransaction,
+  /assert_live_contract "\$candidate_revision" "\$new_image_id" "\$before_unrelated"[\s\S]*?sleep "\$protected_observation_seconds"[\s\S]*?assert_live_contract "\$candidate_revision" "\$new_image_id" "\$before_unrelated"[\s\S]*?transaction_active=0/,
+)
+assert.match(
+  deployTransaction,
+  /sleep "\$protected_observation_seconds"[\s\S]*?wait_for_version[\s\S]*?smoke_routes[\s\S]*?wait_for_public_production_guard[\s\S]*?assert_live_contract/,
+)
+assert.match(helper, /readonly protected_observation_seconds="600"/)
+const observationGateMatch = deployTransaction.match(
+  /  assert_live_contract "\$candidate_revision" "\$new_image_id" "\$before_unrelated"[\s\S]*?  echo "protected_container_observation=PASS"/,
+)
+assert.ok(observationGateMatch)
+const onExitContract = helper.slice(helper.indexOf("on_exit()"), helper.indexOf("trap on_error ERR"))
+const runObservedTransaction = ({ failGate = "" } = {}) => spawnSync(bashExecutable, ["-c", `
+set -Eeuo pipefail
+candidate_revision="candidate"
+coordinated_candidate_revision="coordinated"
+new_image_id="image"
+before_unrelated="before"
+live_port="3014"
+protected_observation_seconds="0"
+observation_calls=0
+transaction_active=1
+automatic_restore_result="not-required"
+restore_original_frontend() { automatic_restore_result="success"; }
+cleanup() { return 0; }
+${onExitContract}
+trap on_exit EXIT
+assert_live_contract() {
+  observation_calls=\$((observation_calls + 1))
+  if [[ "\$observation_calls" -eq 2 && "\${FAIL_GATE}" == "contract" ]]; then
+    return 71
+  fi
+}
+assert_coordinated_release_state_unchanged() { return 0; }
+wait_for_version() { [[ "\${FAIL_GATE}" != "version" ]]; }
+smoke_routes() { [[ "\${FAIL_GATE}" != "smoke" ]]; }
+wait_for_public_production_guard() { [[ "\${FAIL_GATE}" != "public" ]]; }
+run_observation_gate() {
+${observationGateMatch[0]}
+}
+run_observation_gate
+transaction_active=0
+trap - EXIT
+[[ "\$observation_calls" -eq 2 ]]
+`], {
+  encoding: "utf8",
+  env: { ...process.env, FAIL_GATE: failGate },
+})
+assert.equal(runObservedTransaction().status, 0)
+for (const failGate of ["version", "smoke", "public", "contract"]) {
+  const failedObservedTransaction = runObservedTransaction({ failGate })
+  assert.notEqual(failedObservedTransaction.status, 0)
+  assert.match(failedObservedTransaction.stderr, /AUTOMATIC_RESTORE=success/)
+}
+const rollbackTransaction = helper.slice(helper.indexOf("rollback_production()"), helper.indexOf("case \"\$operation\""))
+const rollbackAssertions = rollbackTransaction.match(/assert_live_contract "\$rollback_reported_revision" "\$replacement_id" "\$before_unrelated"/g) ?? []
+assert.equal(rollbackAssertions.length, 1)
 assert.match(helper, /readonly approved_log_driver="json-file"/)
 assert.match(helper, /readonly approved_log_max_size="20m"/)
 assert.match(helper, /readonly approved_log_max_file="5"/)

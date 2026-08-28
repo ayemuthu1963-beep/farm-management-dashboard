@@ -43,6 +43,7 @@ readonly approved_log_driver="json-file"
 readonly approved_log_max_size="20m"
 readonly approved_log_max_file="5"
 readonly network_reclaim_attempts="180"
+readonly protected_observation_seconds="600"
 readonly state_dir="/home/muthu/.local/state/mfms-production-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
@@ -263,18 +264,120 @@ environment_sha256_for_container() {
 }
 
 snapshot_unrelated_containers() {
-  local id name
-  docker ps -aq | while IFS= read -r id; do
+  local container_ids id row inspected_id inspected_name inspected_image running restart_count
+  local health_state network_mode port_bindings name
+  local -a rows=()
+  local -A seen_ids=()
+  local -A seen_names=()
+  container_ids=$(docker ps -q --no-trunc) \
+    || blocked "protected container enumeration failed"
+  while IFS= read -r id; do
     [[ -n "$id" ]] || continue
-    name=$(docker inspect --format '{{.Name}}' "$id")
-    name=${name#/}
+    row=$(docker inspect "$id" | python3 -c '
+import json
+import sys
+
+payload = json.load(sys.stdin)
+if not isinstance(payload, list) or len(payload) != 1 or not isinstance(payload[0], dict):
+    raise SystemExit("inspect payload is not one container")
+container = payload[0]
+config = container.get("Config")
+state = container.get("State")
+host = container.get("HostConfig")
+if not all(isinstance(value, dict) for value in (config, state, host)):
+    raise SystemExit("inspect payload is missing configuration, state, or host data")
+
+identity = container.get("Id")
+name = container.get("Name")
+image = container.get("Image")
+running = state.get("Running")
+restart_count = container.get("RestartCount")
+network_mode = host.get("NetworkMode")
+port_bindings = host.get("PortBindings")
+if not all(isinstance(value, str) and value for value in (identity, name, image, network_mode)):
+    raise SystemExit("inspect payload contains invalid identity or network data")
+if not isinstance(running, bool):
+    raise SystemExit("inspect payload contains invalid running state")
+if isinstance(restart_count, bool) or not isinstance(restart_count, int) or restart_count < 0:
+    raise SystemExit("inspect payload contains invalid restart count")
+if port_bindings is not None and not isinstance(port_bindings, dict):
+    raise SystemExit("inspect payload contains invalid port bindings")
+
+healthcheck = config.get("Healthcheck")
+health = state.get("Health")
+health_test = healthcheck.get("Test") if isinstance(healthcheck, dict) else None
+no_healthcheck = healthcheck is None or (
+    health_test == ["NONE"]
+)
+if no_healthcheck:
+    health_state = "no-healthcheck" if health is None else "invalid-health-state-without-check"
+elif (
+    not isinstance(health_test, list)
+    or len(health_test) < 2
+    or health_test[0] not in ("CMD", "CMD-SHELL")
+    or any(not isinstance(value, str) for value in health_test)
+    or not health_test[1]
+):
+    health_state = "invalid-healthcheck-config"
+elif not isinstance(health, dict) or not isinstance(health.get("Status"), str) or not health["Status"]:
+    health_state = "missing-health-data"
+else:
+    health_state = health["Status"]
+
+fields = [
+    identity,
+    name,
+    image,
+    str(running).lower(),
+    str(restart_count),
+    health_state,
+    network_mode,
+    json.dumps(port_bindings, separators=(",", ":"), sort_keys=True),
+]
+if any("|" in field or "\n" in field for field in fields):
+    raise SystemExit("inspect payload contains an unsupported delimiter")
+print("|".join(fields))
+') \
+      || blocked "protected container inspection failed: $id"
+    IFS='|' read -r \
+      inspected_id inspected_name inspected_image running restart_count \
+      health_state network_mode port_bindings <<<"$row"
+    name=${inspected_name#/}
     case "$name" in
       "$live_container"|"$live_container"-candidate-*|"$live_container"-pre-*)
         continue
         ;;
     esac
-    docker inspect --format '{{.Id}}|{{.Name}}|{{.Image}}|{{.State.Running}}|{{.HostConfig.NetworkMode}}|{{json .HostConfig.PortBindings}}' "$id"
-  done | LC_ALL=C sort
+    [[ "$inspected_id" == "$id" ]] \
+      || blocked "protected container inspection returned the wrong ID: expected=$id actual=$inspected_id"
+    [[ -n "$inspected_id" && -n "$name" && -n "$inspected_image" \
+      && -n "$network_mode" && -n "$port_bindings" ]] \
+      || blocked "protected container inspection returned incomplete identity data: $id"
+    [[ -z "${seen_ids[$inspected_id]+present}" ]] \
+      || blocked "protected container inspection returned a duplicate ID: $inspected_id"
+    [[ -z "${seen_names[$name]+present}" ]] \
+      || blocked "protected container inspection returned a duplicate name: $name"
+    seen_ids["$inspected_id"]=1
+    seen_names["$name"]=1
+    [[ "$running" == "true" ]] \
+      || blocked "protected unrelated container is not running: $name"
+    [[ "$restart_count" =~ ^[0-9]+$ ]] \
+      || blocked "protected unrelated container restart count is invalid: $name"
+    case "$health_state" in
+      healthy|no-healthcheck)
+        ;;
+      missing-health-data)
+        blocked "protected unrelated container is missing configured health data: $name"
+        ;;
+      *)
+        blocked "protected unrelated container is not healthy: $name state=$health_state"
+        ;;
+    esac
+    rows+=("$row")
+  done <<<"$container_ids"
+  if ((${#rows[@]} > 0)); then
+    printf '%s\n' "${rows[@]}" | LC_ALL=C sort
+  fi
 }
 
 cron_digest() {
@@ -481,6 +584,8 @@ assert_live_contract() {
     || blocked "Production frontend image is not labelled Production"
   [[ "$(docker inspect --format '{{.Image}}' "$live_container")" == "$expected_image_id" ]] \
     || blocked "Production frontend image ID does not match"
+  [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]] \
+    || blocked "Production frontend restarted during the guarded switch"
   [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$live_container")" == "unless-stopped" ]] \
     || blocked "Production frontend restart policy changed"
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$live_container")" == "$production_network" ]] \
@@ -1613,6 +1718,19 @@ deploy_production() {
   if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
     assert_coordinated_release_state_unchanged
   fi
+  echo "protected_container_observation_seconds=$protected_observation_seconds"
+  sleep "$protected_observation_seconds"
+  wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
+    || blocked "replacement /api/version failed after the observation window"
+  smoke_routes "http://127.0.0.1:$live_port" \
+    || blocked "replacement local smoke test failed after the observation window"
+  wait_for_public_production_guard \
+    || blocked "public Production authentication guard failed after the observation window"
+  assert_live_contract "$candidate_revision" "$new_image_id" "$before_unrelated"
+  if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
+    assert_coordinated_release_state_unchanged
+  fi
+  echo "protected_container_observation=PASS"
 
   trap '' HUP INT TERM
   write_state \
