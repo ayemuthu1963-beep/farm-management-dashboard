@@ -46,7 +46,7 @@ export function formatKnownZeroActual(reason: string): string {
 export function formatKnownZeroDisplayReason(reason: string): string {
   const displayTokens: string[] = []
   const seen = new Set<string>()
-  for (const sourceToken of reason.split("/")) {
+  for (const sourceToken of reason.split(" / ")) {
     const trimmed = sourceToken.trim()
     if (!trimmed) continue
     const normalized = trimmed.toLowerCase()
