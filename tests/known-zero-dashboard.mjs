@@ -3,11 +3,12 @@ import { readFileSync } from "node:fs"
 
 import {
   applyScheduledKnownZerosToTrend,
+  applyScheduledKnownZerosToZones,
   formatKnownZeroActual,
   formatKnownZeroDisplayReason,
-  knownZeroReasonsForZoneDate,
   noRunReasonForAllMotors,
 } from "../lib/known-zero-data.ts"
+import { emptyIrrigationData } from "../lib/irrigation-data.ts"
 import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
 import { buildWellDashboardData, toChartData } from "../lib/well-data.ts"
 
@@ -25,7 +26,6 @@ assert.equal(activeNoRuns.length, 6)
 assert.deepEqual(Object.keys(activeNoRuns[0]), ["date", "motorId", "motorName", "status", "reason", "runtime", "water"])
 assert.equal(noRunReasonForAllMotors(activeNoRuns, "2026-08-25", ["M1", "M2"]), "Heavy rain")
 assert.equal(noRunReasonForAllMotors(activeNoRuns, "2026-08-26", ["M1"]), "Heavy rain")
-assert.equal(knownZeroReasonsForZoneDate(activeNoRuns, "2026-08-26").P1E, "Heavy rain")
 assert.equal(formatKnownZeroActual("Heavy rain"), "0 L/tree — Not run: Heavy rain")
 assert.equal(formatKnownZeroActual("rains"), "0 L/tree — Not run: Heavy rain")
 assert.equal(formatKnownZeroActual("Heavy Rains"), "0 L/tree — Not run: Heavy rain")
@@ -72,14 +72,51 @@ const trendPoint = (date, values = {}) => ({
   displayDate: date,
   ...values,
 })
-const scheduledZonesByDate = {
-  "2026-08-25": ["P1E", "P2W"],
-  "2026-08-26": ["P1E", "P2W"],
-  "2026-08-27": ["P1E", "P2W"],
-  "2026-08-28": ["P1E", "P2W"],
-  "2026-08-29": ["P1E", "P2W"],
-  "2026-08-30": ["P1E"],
+const zoneIds = ["P1E", "P1W", "P2E", "P2W", "JF", "NM"]
+const scheduledAssignmentsByDate = new Map([
+  ["2026-08-24", {}],
+  ["2026-08-25", { P1E: "M1", P2W: "M2" }],
+  ["2026-08-26", { P1E: "M1", P2W: "M2" }],
+  ["2026-08-27", { P1E: "M1", P2W: "M2" }],
+  ["2026-08-28", { P1E: "M1", P2W: "M2" }],
+  ["2026-08-29", { P1E: "M1", P2W: "M2" }],
+  ["2026-08-30", { P1E: "M1" }],
+  ["2026-08-31", { P1E: "M1" }],
+  ["2026-09-01", { P1E: "M2" }],
+  ["2026-09-02", { P1E: "M2" }],
+  ["2026-09-03", { P1E: null }],
+  ["2026-09-04", { P1E: "M2", P2W: "M3" }],
+  ["2026-09-05", { P1E: "M2", P2W: "M3" }],
+])
+const scheduleForZoneDate = (zoneId, date) => {
+  if (date === "2026-09-06") {
+    return { kind: "unavailable", litres: null, display: "Unavailable", motorId: null }
+  }
+  const assignments = scheduledAssignmentsByDate.get(date) ?? {}
+  return Object.hasOwn(assignments, zoneId)
+    ? { kind: "scheduled", litres: 96, display: "96 L/Tree", motorId: assignments[zoneId] }
+    : { kind: "not-scheduled", litres: null, display: "Not scheduled", motorId: null }
 }
+
+const extraNoRuns = projectPublicMotorNoRunRecords([
+  ["2026-08-27", "motor-2"],
+  ["2026-08-28", "motor-1"],
+  ["2026-08-31", "motor-1"],
+  ["2026-09-01", "motor-2"],
+  ["2026-09-02", "motor-1"],
+  ["2026-09-03", "motor-1"],
+  ["2026-09-03", "motor-2"],
+  ["2026-09-04", "motor-2"],
+  ["2026-09-05", "motor-3"],
+].map(([operation_date, motor_id]) => ({
+  operation_date,
+  motor_id,
+  status: "Not Run",
+  reason: "Heavy rain",
+  voided_at: null,
+})))
+const scheduleAwareNoRuns = [...activeNoRuns, ...extraNoRuns]
+
 const trend = applyScheduledKnownZerosToTrend([
   missingPoint,
   trendPoint("2026-08-25", {
@@ -89,17 +126,13 @@ const trend = applyScheduledKnownZerosToTrend([
     P2W: 50,
   }),
   trendPoint("2026-08-26", {
-    knownZeroReasons: { P1E: "Heavy rain", P2W: "Heavy rain" },
   }),
   trendPoint("2026-08-27", {
     totalWaterLitres: 50_000,
     totalRuntimeHours: 1,
     P1E: 100,
-    knownZeroReasons: { P2W: "Heavy rain" },
   }),
-  trendPoint("2026-08-28", {
-    knownZeroReasons: { P1E: "Heavy rain" },
-  }),
+  trendPoint("2026-08-28"),
   trendPoint("2026-08-29", {
     totalWaterLitres: 50_000,
     totalRuntimeHours: 1,
@@ -110,7 +143,22 @@ const trend = applyScheduledKnownZerosToTrend([
     totalRuntimeHours: 1,
     P1E: 100,
   }),
-], (zoneId, date) => scheduledZonesByDate[date]?.includes(zoneId) ?? false)
+  trendPoint("2026-08-31"),
+  trendPoint("2026-09-01"),
+  trendPoint("2026-09-02"),
+  trendPoint("2026-09-03"),
+  trendPoint("2026-09-04"),
+  trendPoint("2026-09-05", {
+    totalWaterLitres: 50_000,
+    totalRuntimeHours: 1,
+    P1E: 100,
+  }),
+  trendPoint("2026-09-06", {
+    totalWaterLitres: 50_000,
+    totalRuntimeHours: 1,
+    P1E: 100,
+  }),
+], scheduleAwareNoRuns, scheduleForZoneDate, zoneIds)
 
 assert.deepEqual(trend[0], missingPoint, "dates without a schedule or data remain gaps")
 assert.equal(trend[1].totalWaterLitres, 75_000, "all measured scheduled zones retain the measured aggregate")
@@ -136,6 +184,41 @@ assert.equal(trend[6].P1E, 100)
 assert.equal(trend[6].P2W, null, "an unscheduled missing zone stays a zone-level gap")
 assert.equal(trend[6].totalWaterLitres, 50_000, "unscheduled missing zones do not block a complete scheduled aggregate")
 assert.equal(trend[6].totalRuntimeHours, 1)
+assert.equal(trend[7].P1E, 0, "the original Motor assignment plus its matching no-run produces a zone zero")
+assert.equal(trend[8].P1E, 0, "a reassigned zone uses the new Motor's matching no-run")
+assert.equal(trend[8].totalWaterLitres, 0)
+assert.equal(trend[9].P1E, null, "the old Motor's no-run cannot zero a reassigned zone")
+assert.equal(trend[9].totalWaterLitres, null)
+assert.equal(trend[10].P1E, null, "a missing or invalid Motor assignment remains unknown")
+assert.equal(trend[10].totalWaterLitres, null)
+assert.equal(trend[11].P1E, 0, "a correctly attributed reassigned zone remains a genuine zone-level zero")
+assert.equal(trend[11].P2W, null)
+assert.equal(trend[11].totalWaterLitres, null, "a partial aggregate after reassignment remains a gap")
+assert.equal(trend[12].P1E, 100)
+assert.equal(trend[12].P2W, 0)
+assert.equal(trend[12].totalWaterLitres, 50_000, "measurements plus correctly attributed zeros produce a complete numeric aggregate")
+assert.equal(trend[12].totalRuntimeHours, 1)
+assert.equal(trend[13].P1E, 100, "an existing measurement remains visible while schedule attribution is unavailable")
+assert.equal(trend[13].totalWaterLitres, null, "an unavailable persisted schedule cannot falsely complete a partial aggregate")
+assert.equal(trend[13].totalRuntimeHours, null)
+
+const p1eZone = emptyIrrigationData.zones.find((zone) => zone.id === "P1E")
+assert.ok(p1eZone)
+const [displayedP1e] = applyScheduledKnownZerosToZones([{
+  ...p1eZone,
+  fiveDayHistory: [
+    { date: "2026-08-31", displayDate: "31 Aug", totalMinutes: 0, perTreeLitres: null, status: "No Record" },
+    { date: "2026-09-01", displayDate: "01 Sep", totalMinutes: 0, perTreeLitres: null, status: "No Record" },
+    { date: "2026-09-02", displayDate: "02 Sep", totalMinutes: 0, perTreeLitres: null, status: "No Record" },
+    { date: "2026-09-03", displayDate: "03 Sep", totalMinutes: 0, perTreeLitres: null, status: "No Record" },
+    { date: "2026-09-05", displayDate: "05 Sep", totalMinutes: 60, perTreeLitres: 100, status: "Irrigated" },
+  ],
+}], scheduleAwareNoRuns, scheduleForZoneDate)
+assert.equal(displayedP1e.fiveDayHistory[0].knownZeroReason, "Heavy rain")
+assert.equal(displayedP1e.fiveDayHistory[1].knownZeroReason, "Heavy rain")
+assert.equal(displayedP1e.fiveDayHistory[2].knownZeroReason, undefined, "a different Motor's no-run leaves the zone display unknown")
+assert.equal(displayedP1e.fiveDayHistory[3].knownZeroReason, undefined, "invalid assignment leaves the zone display unknown")
+assert.equal(displayedP1e.fiveDayHistory[4].perTreeLitres, 100, "a measurement remains unchanged")
 
 const northRow = {
   date: "2026-08-25", well_id: "north", well_code: "well1", well_name: "North Well",
@@ -172,9 +255,14 @@ assert.equal(toChartData(wellDashboard.northWellRecords).find((point) => point.d
 
 const wellRoute = readFileSync(new URL("../app/api/well-water/dashboard/route.ts", import.meta.url), "utf8")
 const irrigationRoute = readFileSync(new URL("../app/api/irrigation-management/route.ts", import.meta.url), "utf8")
+const knownZeroSource = readFileSync(new URL("../lib/known-zero-data.ts", import.meta.url), "utf8")
 const wellTable = readFileSync(new URL("../components/farm/well-table.tsx", import.meta.url), "utf8")
 assert.match(wellRoute, /fetchPublicMotorNoRunRecords/)
 assert.match(irrigationRoute, /fetchPublicMotorNoRunRecords/)
+assert.match(irrigationRoute, /motorNoRunRecords: \[\.\.\.noRunRecords\]/)
+assert.doesNotMatch(irrigationRoute, /knownZeroReasonsForZoneDate/)
+assert.doesNotMatch(knownZeroSource, /ZONE_SCHEDULE_MOTOR_IDS/)
+assert.doesNotMatch(knownZeroSource, /P1E:\s*"M1"|P2W:\s*"M2"|P2E:\s*"M3"/, "no fixed zone-to-Motor fallback remains")
 assert.match(wellTable, /Not run: \{formatKnownZeroDisplayReason\(record\.knownZeroReason\)\}/)
 
 console.log("Known-zero versus missing dashboard regression passed")

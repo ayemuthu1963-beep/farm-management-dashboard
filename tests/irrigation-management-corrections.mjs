@@ -4,9 +4,11 @@ import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { cropLitresPerTreePerHour, emptyIrrigationData } from "../lib/irrigation-data.ts"
+import { cropLitresPerTreePerHour, emptyIrrigationData, zoneOrder } from "../lib/irrigation-data.ts"
 import { buildIrrigationZoneCsv } from "../lib/irrigation-export.ts"
 import { buildRecentIrrigationHistory } from "../lib/irrigation-history.ts"
+import { applyScheduledKnownZerosToTrend, applyScheduledKnownZerosToZones } from "../lib/known-zero-data.ts"
+import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
 import {
   buildIrrigationPeriodQuery,
   DEFAULT_IRRIGATION_LAST_N_DAYS,
@@ -91,6 +93,7 @@ const {
   formatLitresPerTree,
   parsePersistedMotorRunScheduleRows,
   scheduledWaterForZoneDate,
+  scheduledZoneAssignmentForDate,
 } = comparisonModule
 
 // The Farm Irrigation Table compares every zone against the persisted litres
@@ -148,6 +151,99 @@ assert.deepEqual(scheduledWaterForZoneDate(p1eWithDistinctMinutes, "ready", "P1E
   litres: 96,
   display: "96 L/Tree",
 })
+
+assert.equal(scheduledZoneAssignmentForDate(persistedSchedule, "ready", "P1E", "2026-08-17").motorId, "M1")
+const p1eReassignedToMotor2 = persistedSchedule.map((row) => row.scheduleId === "schedule-m1-p1e" ? {
+  ...row,
+  motor: "2",
+} : row)
+assert.equal(p1eReassignedToMotor2.find((row) => row.scheduleId === "schedule-m1-p1e").motor, "2")
+assert.equal(
+  scheduledZoneAssignmentForDate(p1eReassignedToMotor2, "ready", "P1E", "2026-08-17").motorId,
+  "M2",
+  "the stable schedule ID locates the zone row but never supplies its Motor assignment",
+)
+for (const invalidMotor of ["", "4", "M1", "Motor 1", "01", "1.0"]) {
+  const invalidAssignment = persistedSchedule.map((row) => row.scheduleId === "schedule-m1-p1e" ? {
+    ...row,
+    motor: invalidMotor,
+  } : row)
+  assert.deepEqual(scheduledZoneAssignmentForDate(invalidAssignment, "ready", "P1E", "2026-08-17"), {
+    kind: "scheduled",
+    litres: 96,
+    display: "96 L/Tree",
+    motorId: null,
+  })
+}
+assert.equal(scheduledZoneAssignmentForDate(persistedSchedule, "ready", "P1E", "2026-08-23").motorId, null)
+
+const p1eOnlyReassignedToMotor2 = p1eReassignedToMotor2.map((row) => ({
+  ...row,
+  days: {
+    ...row.days,
+    mon: row.scheduleId === "schedule-m1-p1e" ? row.days.mon : { min: "", ltrs: "" },
+  },
+}))
+const reassignedScheduleForDate = (zoneId, date) => scheduledZoneAssignmentForDate(
+  p1eOnlyReassignedToMotor2,
+  "ready",
+  zoneId,
+  date,
+)
+const missingTrendPoint = {
+  date: "2026-08-17", displayDate: "17 Aug", totalWaterLitres: null, totalRuntimeHours: null,
+  P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null,
+}
+const noRunFor = (motor_id) => projectPublicMotorNoRunRecords([{
+  operation_date: "2026-08-17",
+  motor_id,
+  status: "Not Run",
+  reason: "Heavy rain",
+  voided_at: null,
+}])
+const [reassignedNewMotorTrend] = applyScheduledKnownZerosToTrend(
+  [missingTrendPoint],
+  noRunFor("motor-2"),
+  reassignedScheduleForDate,
+  zoneOrder,
+)
+assert.equal(reassignedNewMotorTrend.P1E, 0, "the persisted reassigned Motor's no-run supplies the genuine zone zero")
+assert.equal(reassignedNewMotorTrend.totalWaterLitres, 0)
+const [reassignedOldMotorTrend] = applyScheduledKnownZerosToTrend(
+  [missingTrendPoint],
+  noRunFor("motor-1"),
+  reassignedScheduleForDate,
+  zoneOrder,
+)
+assert.equal(reassignedOldMotorTrend.P1E, null, "the prior Motor's no-run cannot zero the reassigned persisted schedule")
+assert.equal(reassignedOldMotorTrend.totalWaterLitres, null)
+
+const p1eZone = emptyIrrigationData.zones.find((zone) => zone.id === "P1E")
+assert.ok(p1eZone)
+const zoneWithMissingHistory = {
+  ...p1eZone,
+  fiveDayHistory: [{
+    date: "2026-08-17", displayDate: "17 Aug", totalMinutes: 0, perTreeLitres: null, status: "No Record",
+  }],
+}
+const [reassignedNewMotorZone] = applyScheduledKnownZerosToZones(
+  [zoneWithMissingHistory],
+  noRunFor("motor-2"),
+  reassignedScheduleForDate,
+)
+assert.equal(reassignedNewMotorZone.fiveDayHistory[0].knownZeroReason, "Heavy rain")
+const [reassignedOldMotorZone] = applyScheduledKnownZerosToZones(
+  [zoneWithMissingHistory],
+  noRunFor("motor-1"),
+  reassignedScheduleForDate,
+)
+assert.equal(reassignedOldMotorZone.fiveDayHistory[0].knownZeroReason, undefined)
+
+assert.match(page, /const displayedTrend = useMemo\(\(\) => applyScheduledKnownZerosToTrend\(\s*data\.trend,\s*data\.motorNoRunRecords,\s*\(zoneId, date\) => scheduledZoneAssignmentForDate\(\s*persistedScheduleRows,\s*scheduleLoadStatus,\s*zoneId,\s*date,\s*\),\s*zoneOrder,\s*\)/)
+assert.match(page, /const displayedZones = useMemo\(\(\) => applyScheduledKnownZerosToZones\(\s*data\.zones,\s*data\.motorNoRunRecords,\s*\(zoneId, date\) => scheduledZoneAssignmentForDate\(/)
+assert.match(page, /zones=\{displayedZones\}/)
+assert.match(page, /<IrrigationChartsHybrid\b(?=[^>]*\btrend=\{displayedTrend\})[^>]*>/)
+assert.doesNotMatch(page, /P1E\s*:\s*["']M1["']|P2W\s*:\s*["']M2["']|P2E\s*:\s*["']M3["']/)
 
 const scheduled96 = { kind: "scheduled", litres: 96, display: "96 L/Tree" }
 assert.deepEqual([null, 0, 95, 96, 123, 144, 145].map((actual) => compareActualWater(scheduled96, actual).tone), [
