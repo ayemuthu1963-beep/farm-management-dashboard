@@ -1,6 +1,11 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { projectPublicMotorNoRunRecords } from "@/lib/motor-data"
+import { fetchAllMotorRuntimeEntries, MotorRuntimeUpstreamError } from "@/lib/irrigation-upstream"
+import {
+  noRunsWithoutMeasuredRuntime,
+  positiveMeasuredMotorRuntimeDays,
+  projectPublicMotorNoRunRecords,
+} from "@/lib/motor-data"
 import { formatKnownZeroDisplayReason } from "@/lib/known-zero-data"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
@@ -113,30 +118,27 @@ export async function GET(request: Request) {
   }
 
   try {
-    const backendQuery = new URLSearchParams({
-      limit: "1000",
-      start_date: startDate ?? "",
-      end_date: endDate ?? "",
-    })
     const headers = { Authorization: authHeader, Accept: "application/json" }
     const noRunQuery = new URLSearchParams({ start_date: startDate ?? "", end_date: endDate ?? "" })
-    const [response, noRunResponse] = await Promise.all([
-      fetch(`${getApiBaseUrl()}/api/motor-runtime/entries?${backendQuery}`, { headers, cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/api/motor-runtime/management/no-run-records?${noRunQuery}`, { headers, cache: "no-store" }),
+    const baseUrl = getApiBaseUrl()
+    const [entries, noRunResponse] = await Promise.all([
+      fetchAllMotorRuntimeEntries<RuntimeEntry>({
+        baseUrl,
+        startDate: startDate ?? "",
+        endDate: endDate ?? "",
+        headers,
+        responseLabel: "Motor Runtime API",
+      }),
+      fetch(`${baseUrl}/api/motor-runtime/management/no-run-records?${noRunQuery}`, { headers, cache: "no-store" }),
     ])
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}))
-      return NextResponse.json(payload, { status: response.status })
-    }
     if (!noRunResponse.ok && noRunResponse.status !== 404) {
       const payload = await noRunResponse.json().catch(() => ({}))
       return NextResponse.json(payload, { status: noRunResponse.status })
     }
 
-    const entries = (await response.json()) as RuntimeEntry[]
     const rawNoRunPayload = noRunResponse.ok ? await noRunResponse.json() as unknown : []
-    const noRunRecords = projectPublicMotorNoRunRecords(Array.isArray(rawNoRunPayload) ? rawNoRunPayload : [])
+    const projectedNoRunRecords = projectPublicMotorNoRunRecords(Array.isArray(rawNoRunPayload) ? rawNoRunPayload : [])
     const sortedEntries = [...entries].sort(
       (a, b) =>
         b.entry_date.localeCompare(a.entry_date) ||
@@ -149,6 +151,14 @@ export async function GET(request: Request) {
     const entriesByMotor = new Map<MotorId, RuntimeEntry[]>()
     for (const id of motorIds) entriesByMotor.set(id, [])
     for (const entry of sortedEntries) entriesByMotor.get(motorId(entry.motor_no))?.push(entry)
+    const noRunRecords = noRunsWithoutMeasuredRuntime(
+      projectedNoRunRecords,
+      positiveMeasuredMotorRuntimeDays(sortedEntries),
+    )
+    const operationalDates = Array.from(new Set([
+      ...sortedEntries.map((entry) => entry.entry_date),
+      ...noRunRecords.map((record) => record.date),
+    ])).sort()
 
     const countedSessions = new Set<number>()
     const recordsByMotor = Object.fromEntries(
@@ -277,8 +287,8 @@ export async function GET(request: Request) {
       summary: {
         total_entries: sortedEntries.length,
         confirmed_no_run_count: noRunRecords.length,
-        first_entry_date: sortedEntries.at(-1)?.entry_date ?? null,
-        latest_entry_date: sortedEntries[0]?.entry_date ?? null,
+        first_entry_date: operationalDates[0] ?? null,
+        latest_entry_date: operationalDates.at(-1) ?? null,
         selected_start_date: startDate,
         selected_end_date: endDate,
       },
@@ -292,6 +302,12 @@ export async function GET(request: Request) {
       noRunRecords,
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
+    if (error instanceof MotorRuntimeUpstreamError) {
+      return NextResponse.json(error.payload, {
+        status: error.status,
+        headers: { "Cache-Control": "no-store" },
+      })
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load Motor Runtime data" },
       { status: 503, headers: { "Cache-Control": "no-store" } },

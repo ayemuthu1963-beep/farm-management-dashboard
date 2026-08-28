@@ -1,5 +1,17 @@
 export const MOTOR_RUNTIME_PAGE_SIZE = 100
 
+export class MotorRuntimeUpstreamError extends Error {
+  readonly status: number
+  readonly payload: unknown
+
+  constructor(responseLabel: string, status: number, payload: unknown) {
+    super(`${responseLabel} returned ${status}`)
+    this.name = "MotorRuntimeUpstreamError"
+    this.status = status
+    this.payload = payload
+  }
+}
+
 interface FetchAllMotorRuntimeEntriesOptions {
   baseUrl: string
   startDate: string
@@ -38,7 +50,10 @@ export async function fetchAllMotorRuntimeEntries<T>({
       `${baseUrl.replace(/\/$/, "")}/api/motor-runtime/entries?${params.toString()}`,
       { headers: requestHeaders, cache: "no-store" },
     )
-    if (!response.ok) throw new Error(`${responseLabel} returned ${response.status}`)
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as unknown
+      throw new MotorRuntimeUpstreamError(responseLabel, response.status, payload)
+    }
 
     const rows = await response.json()
     if (!Array.isArray(rows)) throw new Error(`${responseLabel} returned an invalid response`)

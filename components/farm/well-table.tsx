@@ -52,7 +52,7 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
                     <div className="font-semibold">0</div>
                     <div className="mt-0.5 text-xs text-muted-foreground">Not run: {formatKnownZeroDisplayReason(record.knownZeroReason)}</div>
                   </div>
-                ) : record.isPlaceholder ? "" : formatLitres(record.waterPumpedOut)}
+                ) : record.isPlaceholder && record.waterPumpedOut === null ? "" : formatLitres(record.waterPumpedOut)}
               </td>
             </tr>
           ))}

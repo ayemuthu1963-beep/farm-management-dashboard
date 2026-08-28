@@ -204,6 +204,11 @@ function toDailyRecord(row: WellDailyApiRow, knownZeroReason?: string): WellDail
       : undefined
   const morningWater = isPlaceholder ? null : toNullableFiniteNumber(row.morning_water_liters)
   const eveningWater = isPlaceholder ? null : toNullableFiniteNumber(row.evening_water_liters)
+  const motorRuntimeMinutes = toNullableFiniteNumber(row.motor_runtime_minutes) ?? 0
+  const measuredWaterPumpedOut = toNullableFiniteNumber(row.water_pumped_out_liters)
+  const appliedKnownZeroReason = measuredWaterPumpedOut === null && motorRuntimeMinutes <= 0
+    ? knownZeroReason
+    : undefined
 
   return {
     date: formatTableDate(row.date),
@@ -212,13 +217,13 @@ function toDailyRecord(row: WellDailyApiRow, knownZeroReason?: string): WellDail
     eveningWater,
     morningWaterDisplay: isPlaceholder ? "" : waterDisplay(morningWater),
     eveningWaterDisplay: isPlaceholder ? "" : waterDisplay(eveningWater),
-    motorRuntimeMinutes: toNullableFiniteNumber(row.motor_runtime_minutes) ?? 0,
-    waterPumpedOut: knownZeroReason ? 0 : isPlaceholder ? null : toNullableFiniteNumber(row.water_pumped_out_liters),
+    motorRuntimeMinutes,
+    waterPumpedOut: measuredWaterPumpedOut ?? (appliedKnownZeroReason ? 0 : null),
     observedStorageChange: isPlaceholder ? null : toNullableFiniteNumber(row.observed_storage_change_liters),
     differenceInMorningReadings: isPlaceholder ? null : toNullableFiniteNumber(row.difference_in_morning_readings_litres),
     remarks: isPlaceholder ? "" : row.remarks,
     configurationWarning,
-    knownZeroReason,
+    knownZeroReason: appliedKnownZeroReason,
   }
 }
 
@@ -346,6 +351,12 @@ export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
       eveningWater: record.eveningWater,
       pumpedOut: record.waterPumpedOut,
     }))
+}
+
+export function hasWellWaterExportData(data: WellDashboardData): boolean {
+  return data.totalReadings > 0
+    || data.northWellRecords.some((record) => record.waterPumpedOut !== null)
+    || data.southWellRecords.some((record) => record.waterPumpedOut !== null)
 }
 
 function escapeCsv(value: string | number | null): string {

@@ -11,9 +11,12 @@ import {
 } from "@/lib/irrigation-period"
 import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
-import { knownZeroReasonsForZoneDate } from "@/lib/known-zero-data"
 import { fetchPublicMotorNoRunRecords } from "@/lib/motor-no-run-server"
-import type { PublicMotorNoRunRecord } from "@/lib/motor-data"
+import {
+  noRunsWithoutMeasuredRuntime,
+  positiveMeasuredMotorRuntimeDays,
+  type PublicMotorNoRunRecord,
+} from "@/lib/motor-data"
 
 interface MotorRuntimeEntry {
   entry_id?: number
@@ -213,11 +216,10 @@ function buildData(
 
   const trend: TrendPoint[] = getSelectedDates(startDate, endDate).map((date) => {
     const dateMinutes = minutesByDate.get(date)
-    const knownZeroReasons = knownZeroReasonsForZoneDate(noRunRecords, date)
     if (!dateMinutes || dateMinutes.size === 0) {
-      return { date, displayDate: formatShortDate(date), totalWaterLitres: null, totalRuntimeHours: null, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null, knownZeroReasons }
+      return { date, displayDate: formatShortDate(date), totalWaterLitres: null, totalRuntimeHours: null, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null }
     }
-    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null, knownZeroReasons }
+    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null }
     for (const zoneId of zoneOrder) {
       const minutes = dateMinutes.get(zoneId)
       if (minutes === undefined) continue
@@ -233,7 +235,7 @@ function buildData(
   const averageWaterPerTree = irrigatedZones.length > 0 ? Math.round(irrigatedZones.reduce((sum, zone) => sum + zone.waterPerTree, 0) / irrigatedZones.length) : 0
   records.sort((a, b) => b.date.localeCompare(a.date) || a.zoneId.localeCompare(b.zoneId) || a.motorNo - b.motorNo)
 
-  return { selectedPeriodLabel: label, generatedAt: new Date().toISOString(), source: "live", summary: { totalWaterSupplied, totalMotorRuntime: formatRuntimeMinutes(totalMinutes), totalMotorRuntimeMinutes: totalMinutes, zonesIrrigated: irrigatedZones.length, zonesNotIrrigated: zoneOrder.length - irrigatedZones.length, averageWaterPerTree, latestIrrigation: formatDate(latestIrrigation) }, zones, records, trend }
+  return { selectedPeriodLabel: label, generatedAt: new Date().toISOString(), source: "live", summary: { totalWaterSupplied, totalMotorRuntime: formatRuntimeMinutes(totalMinutes), totalMotorRuntimeMinutes: totalMinutes, zonesIrrigated: irrigatedZones.length, zonesNotIrrigated: zoneOrder.length - irrigatedZones.length, averageWaterPerTree, latestIrrigation: formatDate(latestIrrigation) }, zones, records, trend, motorNoRunRecords: [...noRunRecords] }
 }
 
 export async function GET(request: Request) {
@@ -267,18 +269,14 @@ export async function GET(request: Request) {
       }),
       fetchPublicMotorNoRunRecords({ baseUrl, startDate: noRunStartDate, endDate: noRunEndDate, headers }),
     ])
+    const overlayNoRunRecords = noRunsWithoutMeasuredRuntime(
+      noRunRecords,
+      positiveMeasuredMotorRuntimeDays([...selectedRows, ...historyRows]),
+    )
     const litresPerTreePerHourByZone = Object.fromEntries(zoneOrder.map((zoneId) => [
       zoneId,
       cropLitresPerTreePerHour[zoneConfigs[zoneId].crop],
     ])) as Record<ZoneId, number>
-    const knownZeroReasonsByZoneAndDate = new Map<ZoneId, Map<string, string>>(
-      zoneOrder.map((zoneId) => [zoneId, new Map<string, string>()]),
-    )
-    for (const date of getSelectedDates(noRunStartDate, noRunEndDate)) {
-      for (const [zoneId, reason] of Object.entries(knownZeroReasonsForZoneDate(noRunRecords, date)) as Array<[ZoneId, string]>) {
-        knownZeroReasonsByZoneAndDate.get(zoneId)?.set(date, reason)
-      }
-    }
     const fiveDayHistory = buildRecentIrrigationHistory({
       entries: historyRows.filter((row) => isWithinRange(row.entry_date, historyStartDate, historyEndDate)),
       historyDates,
@@ -286,11 +284,10 @@ export async function GET(request: Request) {
       zoneByPlot: plotToZone,
       litresPerTreePerHourByZone,
       today: getIrrigationDateBounds("today").startDate,
-      knownZeroReasonsByZoneAndDate,
     })
     return NextResponse.json(buildData(
       selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)),
-      noRunRecords,
+      overlayNoRunRecords,
       label,
       fiveDayHistory,
       startDate,
