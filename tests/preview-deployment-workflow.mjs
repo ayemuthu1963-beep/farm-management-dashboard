@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Fix Preview irrigation schedule identity forwarding and standardize displayed rain reasons",
+  "Make Preview identity compatible and safely normalize compound no-run reasons",
 )
-assert.equal(manifest.base_commit, "910b52def44de93b57c9c8420fd095771577a773")
+assert.equal(manifest.base_commit, "565673a0348a70c8c5f5f2baecae235324f50106")
 assert.equal(manifest.matched_backend_commit, "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,18 +302,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/irrigation-pipeline/[[...path]]/route.ts",
-  "app/api/motor-runtime/dashboard/route.ts",
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "components/farm/well-table.tsx",
   "deploy/preview-release-manifest.json",
   "lib/irrigation-pipeline-identity.ts",
-  "lib/irrigation-pipeline-signing.ts",
   "lib/known-zero-data.ts",
-  "package.json",
-  "tests/irrigation-pipeline-editor.mjs",
   "tests/known-zero-dashboard.mjs",
-  "tests/motor-runtime-water-pumped.mjs",
   "tests/preview-schedule-identity.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
