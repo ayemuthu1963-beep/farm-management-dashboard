@@ -9,7 +9,11 @@ import {
   noRunReasonForAllMotors,
 } from "../lib/known-zero-data.ts"
 import { emptyIrrigationData } from "../lib/irrigation-data.ts"
-import { projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
+import {
+  noRunsWithoutMeasuredRuntime,
+  positiveMeasuredMotorRuntimeDays,
+  projectPublicMotorNoRunRecords,
+} from "../lib/motor-data.ts"
 import {
   buildWellDashboardData,
   buildWellWaterCsv,
@@ -296,6 +300,67 @@ assert.equal(precedenceTrend[8].P1E, 100, "a matching no-run never overwrites an
 assert.equal(precedenceTrend[8].totalWaterLitres, 50_000)
 assert.equal(precedenceTrend[8].totalRuntimeHours, 1)
 
+const conflictDate = "2026-10-01"
+const conflictingNoRuns = projectPublicMotorNoRunRecords([
+  [conflictDate, "motor-1", "Conflicting M1 no-run"],
+  [conflictDate, "motor-2", "Valid M2 no-run"],
+].map(([operation_date, motor_id, reason]) => ({
+  operation_date,
+  motor_id,
+  status: "Not Run",
+  reason,
+  voided_at: null,
+})))
+const conflictingNoRunsSnapshot = structuredClone(conflictingNoRuns)
+const filteredConflictNoRuns = noRunsWithoutMeasuredRuntime(
+  conflictingNoRuns,
+  positiveMeasuredMotorRuntimeDays([
+    { entry_date: conflictDate, motor_no: 1, total_minutes: 60 },
+  ]),
+)
+const conflictScheduleForZoneDate = (zoneId, date) => {
+  if (date !== conflictDate) return { kind: "not-scheduled", litres: null, display: "Not scheduled", motorId: null }
+  if (zoneId === "P1E") return { kind: "scheduled", litres: 96, display: "96 L/Tree", motorId: "M1" }
+  if (zoneId === "P2W") return { kind: "scheduled", litres: 96, display: "96 L/Tree", motorId: "M2" }
+  return { kind: "not-scheduled", litres: null, display: "Not scheduled", motorId: null }
+}
+const [mixedConflictTrend] = applyScheduledKnownZerosToTrend(
+  [trendPoint(conflictDate)],
+  filteredConflictNoRuns,
+  conflictScheduleForZoneDate,
+  zoneIds,
+)
+assert.equal(mixedConflictTrend.P1E, null, "positive M1 runtime rejects the conflicting M1 synthesized zero")
+assert.equal(mixedConflictTrend.P2W, 0, "an M1 conflict does not invalidate a valid M2 known zero")
+assert.equal(mixedConflictTrend.totalWaterLitres, null, "the unresolved scheduled M1 zone keeps the farm aggregate unknown")
+assert.equal(mixedConflictTrend.totalRuntimeHours, null)
+const [measuredConflictTrend] = applyScheduledKnownZerosToTrend(
+  [trendPoint(conflictDate, { totalWaterLitres: 50_000, totalRuntimeHours: 1, P1E: 100 })],
+  filteredConflictNoRuns,
+  conflictScheduleForZoneDate,
+  zoneIds,
+)
+assert.equal(measuredConflictTrend.P1E, 100, "an actual M1 zone measurement remains authoritative during a runtime conflict")
+assert.equal(measuredConflictTrend.P2W, 0)
+assert.equal(measuredConflictTrend.totalWaterLitres, 50_000)
+const zeroRuntimeNoRuns = noRunsWithoutMeasuredRuntime(
+  conflictingNoRuns,
+  positiveMeasuredMotorRuntimeDays([
+    { entry_date: conflictDate, motor_no: 1, total_minutes: 0 },
+    { entry_date: conflictDate, motor_no: 2, total_minutes: null },
+  ]),
+)
+const [zeroRuntimeTrend] = applyScheduledKnownZerosToTrend(
+  [trendPoint(conflictDate)],
+  zeroRuntimeNoRuns,
+  conflictScheduleForZoneDate,
+  zoneIds,
+)
+assert.equal(zeroRuntimeTrend.P1E, 0, "zero runtime does not falsely suppress a valid M1 known zero")
+assert.equal(zeroRuntimeTrend.P2W, 0, "missing runtime does not falsely suppress a valid M2 known zero")
+assert.equal(zeroRuntimeTrend.totalWaterLitres, 0)
+assert.deepEqual(conflictingNoRuns, conflictingNoRunsSnapshot, "derived irrigation conflict filtering does not mutate Admin-visible no-run records")
+
 const p1eZone = emptyIrrigationData.zones.find((zone) => zone.id === "P1E")
 assert.ok(p1eZone)
 const [displayedP1e] = applyScheduledKnownZerosToZones([{
@@ -431,6 +496,41 @@ const nonFiniteCompleteNoRunWell = buildNorthWellDay(
   { reading_count: 0 },
   0,
 )
+const positiveRuntimeConflictNoRuns = publicNoRunsFor("2026-09-30", ["motor-1", "motor-2"])
+const positiveRuntimeConflictNoRunsSnapshot = structuredClone(positiveRuntimeConflictNoRuns)
+const positiveRuntimeConflictWell = buildNorthWellDay(
+  "2026-09-30",
+  null,
+  positiveRuntimeConflictNoRuns,
+  { motor_runtime_minutes: 60, reading_count: 0 },
+  0,
+)
+const stringPositiveRuntimeConflictWell = buildNorthWellDay(
+  "2026-10-01",
+  null,
+  publicNoRunsFor("2026-10-01", ["motor-1", "motor-2"]),
+  { motor_runtime_minutes: "60", reading_count: 0 },
+  0,
+)
+const measuredWithPositiveRuntimeWell = buildNorthWellDay(
+  "2026-10-02",
+  9_876,
+  publicNoRunsFor("2026-10-02", ["motor-1", "motor-2"]),
+  { motor_runtime_minutes: 60 },
+)
+const measuredZeroWithPositiveRuntimeWell = buildNorthWellDay(
+  "2026-10-03",
+  0,
+  publicNoRunsFor("2026-10-03", ["motor-1", "motor-2"]),
+  { motor_runtime_minutes: 60 },
+)
+const missingRuntimeCompleteNoRunWell = buildNorthWellDay(
+  "2026-10-04",
+  null,
+  publicNoRunsFor("2026-10-04", ["motor-1", "motor-2"]),
+  { motor_runtime_minutes: null, reading_count: 0 },
+  0,
+)
 
 const measuredPositiveRecord = measuredPositiveWell.northWellRecords[0]
 const measuredZeroRecord = measuredZeroWell.northWellRecords[0]
@@ -474,6 +574,21 @@ assert.equal(inconsistentMetadataMeasuredWell.northWellRecords[0].waterPumpedOut
 assert.equal(inconsistentMetadataMeasuredWell.northWellRecords[0].knownZeroReason, undefined)
 assert.equal(nonFiniteCompleteNoRunWell.northWellRecords[0].waterPumpedOut, 0, "a non-finite pumped value is genuinely missing and may use complete known-zero attribution")
 assert.equal(nonFiniteCompleteNoRunWell.northWellRecords[0].knownZeroReason, "Heavy rain")
+const positiveRuntimeConflictRecord = positiveRuntimeConflictWell.northWellRecords[0]
+assert.equal(positiveRuntimeConflictRecord.motorRuntimeMinutes, 60)
+assert.equal(positiveRuntimeConflictRecord.waterPumpedOut, null, "missing pumped water plus positive relevant runtime rejects a conflicting known zero")
+assert.equal(positiveRuntimeConflictRecord.knownZeroReason, undefined, "a rejected known zero cannot display its no-run reason")
+assert.equal(toChartData(positiveRuntimeConflictWell.northWellRecords)[0].pumpedOut, null, "the Well Water chart retains a gap after conflict rejection")
+assert.doesNotMatch(buildWellWaterCsv(positiveRuntimeConflictWell), /Not run:|Conflicting/, "the Well Water CSV exposes neither a synthesized zero nor rejected no-run provenance")
+assert.doesNotMatch(buildWellWaterCsv(positiveRuntimeConflictWell), /"0"/, "the Well Water CSV does not synthesize a numeric zero after conflict rejection")
+assert.equal(stringPositiveRuntimeConflictWell.northWellRecords[0].waterPumpedOut, null, "a finite numeric-string runtime is positive conflict evidence")
+assert.equal(measuredWithPositiveRuntimeWell.northWellRecords[0].waterPumpedOut, 9_876, "a finite pumped measurement remains authoritative over runtime and no-run data")
+assert.equal(measuredWithPositiveRuntimeWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(measuredZeroWithPositiveRuntimeWell.northWellRecords[0].waterPumpedOut, 0, "measured numeric zero remains authoritative over runtime and no-run data")
+assert.equal(measuredZeroWithPositiveRuntimeWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(missingRuntimeCompleteNoRunWell.northWellRecords[0].waterPumpedOut, 0, "missing runtime is not positive conflict evidence and preserves complete known-zero synthesis")
+assert.equal(missingRuntimeCompleteNoRunWell.northWellRecords[0].knownZeroReason, "Heavy rain")
+assert.deepEqual(positiveRuntimeConflictNoRuns, positiveRuntimeConflictNoRunsSnapshot, "Well Water conflict rejection does not mutate the seven-field Admin-audit projection input")
 assert.equal(hasWellWaterExportData(placeholderMeasuredPositiveWell), true, "a finite placeholder-day measurement enables export even when totalReadings is zero")
 assert.equal(hasWellWaterExportData(placeholderMeasuredZeroWell), true, "a measured numeric zero enables export")
 assert.equal(hasWellWaterExportData(placeholderSynthesizedZeroWell), true, "a valid synthesized zero enables export")
@@ -487,6 +602,7 @@ assert.equal(hasWellWaterExportData({
 }), false, "wrong-Motor North-well attribution alone does not enable export")
 assert.equal(hasWellWaterExportData(inconsistentMetadataMeasuredWell), true, "conflicting metadata cannot hide a finite exportable measurement")
 assert.equal(hasWellWaterExportData(nonFiniteCompleteNoRunWell), true, "complete synthesis after a non-finite value remains exportable")
+assert.equal(hasWellWaterExportData(positiveRuntimeConflictWell), false, "a rejected synthesized zero does not make an otherwise placeholder dashboard exportable")
 assert.equal(hasWellWaterExportData(missingWell), true, "existing real readings retain the established export behavior")
 assert.equal(hasWellWaterExportData(emptyWellDashboardData), false, "an empty dashboard keeps export disabled")
 

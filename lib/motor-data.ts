@@ -37,6 +37,31 @@ export interface MeasuredMotorRuntimeDay {
   motorId: MotorId
 }
 
+export function positiveMeasuredMotorRuntimeDays(
+  rows: readonly unknown[],
+): MeasuredMotorRuntimeDay[] {
+  return rows.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return []
+    const row = candidate as Record<string, unknown>
+    if (
+      typeof row.entry_date !== "string"
+      || !/^\d{4}-\d{2}-\d{2}$/.test(row.entry_date)
+      || typeof row.total_minutes !== "number"
+      || !Number.isFinite(row.total_minutes)
+      || row.total_minutes <= 0
+    ) return []
+
+    const motorId = row.motor_no === 1
+      ? "M1"
+      : row.motor_no === 2
+        ? "M2"
+        : row.motor_no === 3
+          ? "M3"
+          : null
+    return motorId ? [{ date: row.entry_date, motorId }] : []
+  })
+}
+
 export function noRunsWithoutMeasuredRuntime(
   records: readonly PublicMotorNoRunRecord[],
   measuredDays: readonly MeasuredMotorRuntimeDay[],

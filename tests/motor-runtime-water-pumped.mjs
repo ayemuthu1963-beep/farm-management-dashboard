@@ -7,7 +7,11 @@ import {
   pumpedLitresForRuntimeMinutes,
   pumpLitresPerHourForPlot,
 } from "../lib/water-pump-rates.ts"
-import { noRunsWithoutMeasuredRuntime, projectPublicMotorNoRunRecords } from "../lib/motor-data.ts"
+import {
+  noRunsWithoutMeasuredRuntime,
+  positiveMeasuredMotorRuntimeDays,
+  projectPublicMotorNoRunRecords,
+} from "../lib/motor-data.ts"
 import {
   canApplyNoRunMutationCompletion,
   canVoidNoRunRecord,
@@ -27,6 +31,7 @@ const motorStatusCards = read("components/motor/motor-status-cards.tsx")
 const motorPage = read("app/motor-runtime/page.tsx")
 const operatorSettings = read("lib/operator-settings.ts")
 const irrigationRoute = read("app/api/irrigation-management/route.ts")
+const irrigationUpstream = read("lib/irrigation-upstream.ts")
 const charts = read("components/irrigation/irrigation-charts-hybrid.tsx")
 const harvestProxy = read("app/api/admin/harvest-sync/[[...path]]/route.ts")
 const noRunPanel = read("components/admin/motor-not-run-panel.tsx")
@@ -77,6 +82,10 @@ assert.match(motorStatusCards, /xl:grid-cols-2 2xl:grid-cols-3/)
 assert.match(motorStatusCards, /min-\[520px\]:grid-cols-\[minmax\(0,1\.45fr\)_minmax\(9rem,0\.75fr\)\]/)
 assert.doesNotMatch(motorStatusCards, /@min-\[30rem\]/)
 assert.match(irrigationRoute, /runtimeWater\(minutes, zoneId\)/)
+assert.match(irrigationRoute, /positiveMeasuredMotorRuntimeDays\(\[\.\.\.selectedRows, \.\.\.historyRows\]\)/)
+assert.match(irrigationRoute, /buildData\([\s\S]*overlayNoRunRecords/)
+assert.match(irrigationUpstream, /\/api\/motor-runtime\/entries/)
+assert.doesNotMatch(irrigationUpstream, /\/api\/admin\/motor-runtime|management|analysis|import/i)
 assert.match(charts, /<Legend content=\{<PerTreeLegend \/>\}/)
 assert.match(harvestProxy, /rawSuffix === "status"/)
 assert.match(harvestProxy, /NextResponse\.json/)
@@ -228,6 +237,49 @@ assert.deepEqual(
   publicNoRunRecords,
   "a different Motor measurement does not suppress a valid no-run row",
 )
+const conflictingAdminAuditRecords = [
+  { ...adminRecord("2026-08-25", 101), motor_id: "motor-1", reason: "M1 conflict" },
+  { ...adminRecord("2026-08-25", 102), motor_id: "motor-2", reason: "M2 valid" },
+]
+const conflictingAdminAuditSnapshot = structuredClone(conflictingAdminAuditRecords)
+const conflictNoRuns = projectPublicMotorNoRunRecords(conflictingAdminAuditRecords)
+const positiveRuntimeDays = positiveMeasuredMotorRuntimeDays([
+  { entry_date: "2026-08-25", motor_no: 1, total_minutes: 60 },
+  { entry_date: "2026-08-25", motor_no: 1, total_minutes: 15 },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: 0 },
+  { entry_date: "2026-08-25", motor_no: 2 },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: Number.NaN },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: "60" },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: -1 },
+  { entry_date: "25/08/2026", motor_no: 2, total_minutes: 60 },
+  { entry_date: "2026-08-25", motor_no: 4, total_minutes: 60 },
+  { entry_date: "2026-08-26", motor_no: 3, total_minutes: 30 },
+  null,
+])
+assert.deepEqual(positiveRuntimeDays, [
+  { date: "2026-08-25", motorId: "M1" },
+  { date: "2026-08-25", motorId: "M1" },
+  { date: "2026-08-26", motorId: "M3" },
+], "only positive canonical runtime rows become conflict evidence")
+assert.deepEqual(
+  noRunsWithoutMeasuredRuntime(conflictNoRuns, positiveRuntimeDays),
+  [conflictNoRuns[1]],
+  "an M1 runtime conflict suppresses only the M1/date no-run and preserves an unrelated valid M2 no-run",
+)
+assert.deepEqual(
+  noRunsWithoutMeasuredRuntime(conflictNoRuns, positiveMeasuredMotorRuntimeDays([
+    { entry_date: "2026-08-25", motor_no: 1, total_minutes: 0 },
+    { entry_date: "2026-08-25", motor_no: 2, total_minutes: null },
+  ])),
+  conflictNoRuns,
+  "zero and missing runtime are not proof that a Motor operated",
+)
+assert.deepEqual(conflictingAdminAuditRecords, conflictingAdminAuditSnapshot, "conflict filtering does not mutate authenticated Admin audit records")
+assert.deepEqual(conflictingAdminAuditRecords.map(({ id, remarks, source, entered_by, created_at, voided_by, voided_at }) => ({
+  id, remarks, source, entered_by, created_at, voided_by, voided_at,
+})), conflictingAdminAuditSnapshot.map(({ id, remarks, source, entered_by, created_at, voided_by, voided_at }) => ({
+  id, remarks, source, entered_by, created_at, voided_by, voided_at,
+})), "complete Admin-only audit fields remain byte-for-byte unchanged")
 assert.deepEqual(logCalls, [])
 const serializedPublicResponse = JSON.stringify({ noRunRecords: publicNoRunRecords })
 for (const value of Object.values(sentinels)) assert.doesNotMatch(serializedPublicResponse, new RegExp(value))
@@ -240,6 +292,7 @@ assert.match(motorRoute, /headers: \{ "Cache-Control": "no-store" \}/)
 assert.match(adminNoRunRoute, /return new NextResponse\(response\.body/)
 assert.match(adminNoRunRoute, /"Cache-Control": "private, no-store"/)
 assert.doesNotMatch(adminNoRunRoute, /projectPublicMotorNoRunRecords/)
+assert.doesNotMatch(adminNoRunRoute, /noRunsWithoutMeasuredRuntime|positiveMeasuredMotorRuntimeDays/, "the authenticated Admin audit path is not conflict-filtered")
 assert.match(managementApi, /entered_by: string/)
 assert.match(managementApi, /created_at: string/)
 assert.match(managementApi, /voided_by: string \| null/)

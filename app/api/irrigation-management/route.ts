@@ -12,7 +12,11 @@ import {
 import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 import { fetchPublicMotorNoRunRecords } from "@/lib/motor-no-run-server"
-import type { PublicMotorNoRunRecord } from "@/lib/motor-data"
+import {
+  noRunsWithoutMeasuredRuntime,
+  positiveMeasuredMotorRuntimeDays,
+  type PublicMotorNoRunRecord,
+} from "@/lib/motor-data"
 
 interface MotorRuntimeEntry {
   entry_id?: number
@@ -265,6 +269,10 @@ export async function GET(request: Request) {
       }),
       fetchPublicMotorNoRunRecords({ baseUrl, startDate: noRunStartDate, endDate: noRunEndDate, headers }),
     ])
+    const overlayNoRunRecords = noRunsWithoutMeasuredRuntime(
+      noRunRecords,
+      positiveMeasuredMotorRuntimeDays([...selectedRows, ...historyRows]),
+    )
     const litresPerTreePerHourByZone = Object.fromEntries(zoneOrder.map((zoneId) => [
       zoneId,
       cropLitresPerTreePerHour[zoneConfigs[zoneId].crop],
@@ -279,7 +287,7 @@ export async function GET(request: Request) {
     })
     return NextResponse.json(buildData(
       selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)),
-      noRunRecords,
+      overlayNoRunRecords,
       label,
       fiveDayHistory,
       startDate,
