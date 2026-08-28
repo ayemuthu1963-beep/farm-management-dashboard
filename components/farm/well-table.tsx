@@ -1,4 +1,5 @@
 import { formatNumberIN, type WellDailyRecord } from "@/lib/well-data"
+import { formatKnownZeroDisplayReason } from "@/lib/known-zero-data"
 import { cn } from "@/lib/utils"
 
 interface WellTableProps {
@@ -49,7 +50,7 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
                 {record.knownZeroReason ? (
                   <div>
                     <div className="font-semibold">0</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">Not run: {record.knownZeroReason}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">Not run: {formatKnownZeroDisplayReason(record.knownZeroReason)}</div>
                   </div>
                 ) : record.isPlaceholder ? "" : formatLitres(record.waterPumpedOut)}
               </td>

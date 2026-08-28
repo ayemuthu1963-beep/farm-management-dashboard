@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { projectPublicMotorNoRunRecords } from "@/lib/motor-data"
+import { formatKnownZeroDisplayReason } from "@/lib/known-zero-data"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
 export const dynamic = "force-dynamic"
@@ -175,7 +176,7 @@ export async function GET(request: Request) {
             starts: 0,
             energyUnits: 0,
             waterLifted: 0,
-            remarks: `Not run — ${record.reason}`,
+            remarks: `Not run — ${formatKnownZeroDisplayReason(record.reason)}`,
             plot: "—",
             valve: "—",
             status: record.status,
