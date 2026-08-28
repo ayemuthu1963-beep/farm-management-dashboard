@@ -107,6 +107,7 @@ const extraNoRuns = projectPublicMotorNoRunRecords([
   ["2026-09-03", "motor-1"],
   ["2026-09-03", "motor-2"],
   ["2026-09-04", "motor-2"],
+  ["2026-09-05", "motor-2"],
   ["2026-09-05", "motor-3"],
 ].map(([operation_date, motor_id]) => ({
   operation_date,
@@ -202,6 +203,93 @@ assert.equal(trend[13].P1E, 100, "an existing measurement remains visible while 
 assert.equal(trend[13].totalWaterLitres, null, "an unavailable persisted schedule cannot falsely complete a partial aggregate")
 assert.equal(trend[13].totalRuntimeHours, null)
 
+const fullyMeasuredValues = {
+  totalWaterLitres: 210_000,
+  totalRuntimeHours: 6,
+  P1E: 10,
+  P1W: 20,
+  P2E: 30,
+  P2W: 40,
+  JF: 50,
+  NM: 60,
+}
+const zeroMeasuredValues = {
+  totalWaterLitres: 0,
+  totalRuntimeHours: 0,
+  P1E: 0,
+  P1W: 0,
+  P2E: 0,
+  P2W: 0,
+  JF: 0,
+  NM: 0,
+}
+const precedenceNoRuns = projectPublicMotorNoRunRecords([
+  ["2026-09-11", "motor-1"],
+  ["2026-09-12", "motor-2"],
+  ["2026-09-14", "motor-1"],
+  ["2026-09-14", "motor-2"],
+  ["2026-09-15", "motor-1"],
+].map(([operation_date, motor_id]) => ({
+  operation_date,
+  motor_id,
+  status: "Not Run",
+  reason: "Heavy rain",
+  voided_at: null,
+})))
+const precedenceAssignmentsByDate = new Map([
+  ["2026-09-07", { P1E: "M1", P1W: "M2" }],
+  ["2026-09-12", { P1E: "M1", P2W: "M2" }],
+  ["2026-09-13", { P1E: "M1", P2W: "M2" }],
+  ["2026-09-14", { P1E: "M1", P2W: "M2" }],
+  ["2026-09-15", { P1E: "M1" }],
+])
+const precedenceScheduleForZoneDate = (zoneId, date) => {
+  if (["2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11"].includes(date)) {
+    return { kind: "unavailable", litres: null, display: "Unavailable", motorId: null }
+  }
+  const assignments = precedenceAssignmentsByDate.get(date) ?? {}
+  return Object.hasOwn(assignments, zoneId)
+    ? { kind: "scheduled", litres: 96, display: "96 L/Tree", motorId: assignments[zoneId] }
+    : { kind: "not-scheduled", litres: null, display: "Not scheduled", motorId: null }
+}
+const precedenceTrend = applyScheduledKnownZerosToTrend([
+  trendPoint("2026-09-07", fullyMeasuredValues),
+  trendPoint("2026-09-08", fullyMeasuredValues),
+  trendPoint("2026-09-09", zeroMeasuredValues),
+  trendPoint("2026-09-10", { totalWaterLitres: 50_000, totalRuntimeHours: 1, P1E: 100 }),
+  trendPoint("2026-09-11"),
+  trendPoint("2026-09-12", { totalWaterLitres: 50_000, totalRuntimeHours: 1, P1E: 100 }),
+  trendPoint("2026-09-13", { totalWaterLitres: 50_000, totalRuntimeHours: 1, P1E: 100 }),
+  trendPoint("2026-09-14"),
+  trendPoint("2026-09-15", { totalWaterLitres: 50_000, totalRuntimeHours: 1, P1E: 100 }),
+], precedenceNoRuns, precedenceScheduleForZoneDate, zoneIds)
+
+assert.equal(precedenceTrend[0].totalWaterLitres, 210_000, "fully measured totals remain numeric when the schedule is available")
+assert.equal(precedenceTrend[0].totalRuntimeHours, 6)
+assert.equal(precedenceTrend[1].totalWaterLitres, 210_000, "fully measured totals do not require schedule availability")
+assert.equal(precedenceTrend[1].totalRuntimeHours, 6)
+assert.equal(precedenceTrend[2].totalWaterLitres, 0, "a fully measured genuine zero survives a schedule outage")
+assert.equal(precedenceTrend[2].totalRuntimeHours, 0)
+assert.equal(precedenceTrend[3].totalWaterLitres, null, "a partial measurement remains a gap when the schedule is unavailable")
+assert.equal(precedenceTrend[3].totalRuntimeHours, null)
+assert.equal(precedenceTrend[4].totalWaterLitres, null, "a no-run record cannot complete a point without its persisted schedule")
+assert.equal(precedenceTrend[4].totalRuntimeHours, null)
+assert.equal(precedenceTrend[5].P1E, 100)
+assert.equal(precedenceTrend[5].P2W, 0)
+assert.equal(precedenceTrend[5].totalWaterLitres, 50_000, "a valid attributed zero can complete a partial measured point")
+assert.equal(precedenceTrend[5].totalRuntimeHours, 1)
+assert.equal(precedenceTrend[6].P1E, 100)
+assert.equal(precedenceTrend[6].P2W, null)
+assert.equal(precedenceTrend[6].totalWaterLitres, null, "an unaccounted scheduled zone keeps the aggregate unknown")
+assert.equal(precedenceTrend[6].totalRuntimeHours, null)
+assert.equal(precedenceTrend[7].P1E, 0)
+assert.equal(precedenceTrend[7].P2W, 0)
+assert.equal(precedenceTrend[7].totalWaterLitres, 0, "all scheduled zones correctly confirmed no-run produce a genuine zero")
+assert.equal(precedenceTrend[7].totalRuntimeHours, 0)
+assert.equal(precedenceTrend[8].P1E, 100, "a matching no-run never overwrites an actual measurement")
+assert.equal(precedenceTrend[8].totalWaterLitres, 50_000)
+assert.equal(precedenceTrend[8].totalRuntimeHours, 1)
+
 const p1eZone = emptyIrrigationData.zones.find((zone) => zone.id === "P1E")
 assert.ok(p1eZone)
 const [displayedP1e] = applyScheduledKnownZerosToZones([{
@@ -219,6 +307,7 @@ assert.equal(displayedP1e.fiveDayHistory[1].knownZeroReason, "Heavy rain")
 assert.equal(displayedP1e.fiveDayHistory[2].knownZeroReason, undefined, "a different Motor's no-run leaves the zone display unknown")
 assert.equal(displayedP1e.fiveDayHistory[3].knownZeroReason, undefined, "invalid assignment leaves the zone display unknown")
 assert.equal(displayedP1e.fiveDayHistory[4].perTreeLitres, 100, "a measurement remains unchanged")
+assert.equal(displayedP1e.fiveDayHistory[4].knownZeroReason, undefined, "a matching no-run never annotates an actual zone measurement")
 
 const northRow = {
   date: "2026-08-25", well_id: "north", well_code: "well1", well_name: "North Well",

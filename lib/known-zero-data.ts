@@ -57,6 +57,12 @@ export function applyScheduledKnownZerosToTrend(
 ): TrendPoint[] {
   return trend.map((sourcePoint) => {
     const point: TrendPoint = { ...sourcePoint }
+    const hasFullyMeasuredAggregate = zoneIds.length > 0
+      && sourcePoint.totalWaterLitres !== null
+      && sourcePoint.totalRuntimeHours !== null
+      && zoneIds.every((zoneId) => sourcePoint[zoneId] !== null)
+    if (hasFullyMeasuredAggregate) return point
+
     const assignments = new Map(zoneIds.map((zoneId) => [
       zoneId,
       scheduleForZoneDate(zoneId, point.date),
