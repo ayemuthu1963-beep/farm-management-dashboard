@@ -3,15 +3,18 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Correct the Worker Management roster display order using stable account codes",
-  "base_commit": "739d19a7b4bdb31dcbfa3b37412429ef4fb57655",
+  "release_note": "Reconcile the reviewed Motor Runtime security guards onto the authoritative Preview lineage",
+  "base_commit": "af09ed8bea4c5949e600abcf705cd38ad7f7c09b",
   "matched_backend_commit": "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c",
   "matched_private_intelligence_commit": "91bd618883082336ecebd898a56e4fb476f4b4fd",
   "allowed_paths": [
+    "app/api/motor-runtime/dashboard/route.ts",
+    "components/admin/motor-not-run-panel.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/worker-management-roster.ts",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/worker-management.mjs"
+    "lib/motor-data.ts",
+    "lib/motor-runtime-management-api.ts",
+    "tests/motor-runtime-water-pumped.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

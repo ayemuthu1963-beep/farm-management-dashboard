@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Correct the Worker Management roster display order using stable account codes",
+  "Reconcile the reviewed Motor Runtime security guards onto the authoritative Preview lineage",
 )
-assert.equal(manifest.base_commit, "739d19a7b4bdb31dcbfa3b37412429ef4fb57655")
+assert.equal(manifest.base_commit, "af09ed8bea4c5949e600abcf705cd38ad7f7c09b")
 assert.equal(manifest.matched_backend_commit, "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,10 +302,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "app/api/motor-runtime/dashboard/route.ts",
+  "components/admin/motor-not-run-panel.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-roster.ts",
+  "lib/motor-data.ts",
+  "lib/motor-runtime-management-api.ts",
+  "tests/motor-runtime-water-pumped.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

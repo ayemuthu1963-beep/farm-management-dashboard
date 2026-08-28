@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { projectPublicMotorNoRunRecords } from "@/lib/motor-data"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
 
 export const dynamic = "force-dynamic"
@@ -24,18 +25,6 @@ type RuntimeEntry = {
   motor_on_at?: string | null
   motor_off_at?: string | null
   run_no?: number | null
-}
-
-type NoRunRecord = {
-  id: number
-  operation_date: string
-  motor_id: "motor-1" | "motor-2" | "motor-3"
-  status: "Not Run"
-  reason: string
-  remarks: string | null
-  source: "Manual_Admin"
-  entered_by: string
-  created_at: string
 }
 
 const motorIds: MotorId[] = ["M1", "M2", "M3"]
@@ -145,7 +134,8 @@ export async function GET(request: Request) {
     }
 
     const entries = (await response.json()) as RuntimeEntry[]
-    const noRunRecords = noRunResponse.ok ? (await noRunResponse.json()) as NoRunRecord[] : []
+    const rawNoRunPayload = noRunResponse.ok ? await noRunResponse.json() as unknown : []
+    const noRunRecords = projectPublicMotorNoRunRecords(Array.isArray(rawNoRunPayload) ? rawNoRunPayload : [])
     const sortedEntries = [...entries].sort(
       (a, b) =>
         b.entry_date.localeCompare(a.entry_date) ||
@@ -179,8 +169,8 @@ export async function GET(request: Request) {
             source: entry.source,
           }
           }),
-          ...noRunRecords.filter((record) => motorId(Number(record.motor_id.slice(-1))) === id).map((record) => ({
-            date: displayDate(record.operation_date),
+          ...noRunRecords.filter((record) => record.motorId === id).map((record) => ({
+            date: displayDate(record.date),
             runHours: 0,
             starts: 0,
             energyUnits: 0,
@@ -188,10 +178,7 @@ export async function GET(request: Request) {
             remarks: `Not run — ${record.reason}`,
             plot: "—",
             valve: "—",
-            source: record.source,
             status: record.status,
-            enteredBy: record.entered_by,
-            auditTimestamp: record.created_at,
           })),
         ].sort((a, b) => displayedDateSortKey(b.date).localeCompare(displayedDateSortKey(a.date))),
       ]),
@@ -244,11 +231,10 @@ export async function GET(request: Request) {
       const point: Record<string, string | number | null> = { date: displayDate(date) }
       const dayEntries = entriesByDate.get(date) ?? []
       for (const id of motorIds) {
-        const motorNo = Number(id.slice(1))
-        const motorEntries = dayEntries.filter((entry) => entry.motor_no === motorNo)
+        const motorEntries = dayEntries.filter((entry) => motorId(entry.motor_no) === id)
         const totalMinutes = motorEntries
           .reduce((sum, entry) => sum + entry.total_minutes, 0)
-        const confirmedNoRun = noRunRecords.some((record) => record.operation_date === date && record.motor_id === `motor-${motorNo}`)
+        const confirmedNoRun = noRunRecords.some((record) => record.date === date && record.motorId === id)
         point[id] = motorEntries.length > 0 ? runtimeHours(totalMinutes) : confirmedNoRun ? 0 : null
       }
       return point
@@ -257,7 +243,7 @@ export async function GET(request: Request) {
     const irrigationTrend = dateKeys.map((date) => {
       const dayEntries = entriesByDate.get(date) ?? []
       const allMotorsConfirmedNoRun = motorIds.every((id) => noRunRecords.some(
-        (record) => record.operation_date === date && record.motor_id === `motor-${id.slice(1)}`,
+        (record) => record.date === date && record.motorId === id,
       ))
       const totalMinutes = dayEntries.reduce((sum, entry) => sum + entry.total_minutes, 0)
       return {
