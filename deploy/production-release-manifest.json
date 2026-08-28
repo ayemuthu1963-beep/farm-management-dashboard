@@ -6,8 +6,8 @@
   "release_note": "Preserve the Preview-verified Worker roster account-code display order and add Preview-verified explicit Motor Not Run records",
   "base_commit": "669f9fdc0db52c695a616cb84e3a701ee6602d54",
   "preview_approved": {
-    "revision": "5cd080d427d22f55a2c5a0e32a819ace361b70cb",
-    "image_id": "sha256:0fe5e580423969f74429b3385ee0d64d4b41220db9a4e44384d4d93a4d7e9bb3",
+    "revision": "00287e6061118ea30593867a860f05d159e0d069",
+    "image_id": "sha256:749ac4ed0539dbea93053164894cf46315d601d01af4ad04c21048a4959625b1",
     "feature_revision": "297bdcbd26d7b59b68806a27f2acd6ee621e3ab4",
     "verified_files": [
       "app/api/motor-runtime/dashboard/route.ts",
