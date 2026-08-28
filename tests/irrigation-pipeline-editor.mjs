@@ -13,6 +13,7 @@ const editor = readFileSync(resolve(root, "components/maps/irrigation-pipeline-e
 const farmMap = readFileSync(resolve(root, "components/maps/farm-map-client.tsx"), "utf8")
 const proxy = readFileSync(resolve(root, "app/api/irrigation-pipeline/[[...path]]/route.ts"), "utf8")
 const signing = readFileSync(resolve(root, "lib/irrigation-pipeline-signing.ts"), "utf8")
+const identity = readFileSync(resolve(root, "lib/irrigation-pipeline-identity.ts"), "utf8")
 
 assert.ok(editor.includes("Irrigation Pipeline"))
 assert.ok(farmMap.includes("<IrrigationPipelineEditor"), "pipeline editor must extend the existing Farm Map")
@@ -27,10 +28,12 @@ assert.ok(editor.includes("Split at node"))
 assert.ok(editor.includes("Warnings never change network data"))
 assert.ok(editor.includes('type="number"'), "pipe size must permit custom numeric input")
 assert.ok(proxy.includes("/api/irrigation-pipeline"))
-assert.ok(signing.includes('requestHeaders.get("x-mfms-role")'))
+assert.ok(identity.includes('requestHeaders.get("x-mfms-role")'))
+assert.ok(identity.includes('requestHeaders.get("x-mfms-permission")'))
+assert.ok(identity.includes('role === "owner"'))
 assert.ok(!signing.includes("MFMS_WORKER_PROXY_DEFAULT_ROLE"), "pipeline role must come from authenticated proxy identity")
 
-for (const source of [editor, farmMap, proxy, signing]) {
+for (const source of [editor, farmMap, proxy, signing, identity]) {
   assert.equal(/https?:\/\/[^"'`\s]+/i.test(source), false, "pipeline code must not embed external media URLs")
   assert.equal(/[A-Za-z]:\\/.test(source), false, "pipeline code must not embed Windows paths")
 }

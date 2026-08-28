@@ -25,7 +25,7 @@ async function proxyPipeline(request: Request, context: PipelineRouteContext) {
     const { path } = await context.params
     const requestUrl = new URL(request.url)
     const target = backendTarget(path, requestUrl.search)
-    const actor = resolvePipelineActor(request.headers, process.env)
+    const actor = resolvePipelineActor(request.headers, process.env, request.method)
     const body = BODY_METHODS.has(request.method) ? await request.arrayBuffer() : new ArrayBuffer(0)
     const bodySha256 = sha256Hex(body)
     const timestamp = Math.floor(Date.now() / 1000).toString()

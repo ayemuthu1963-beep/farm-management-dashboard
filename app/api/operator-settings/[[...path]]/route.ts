@@ -32,7 +32,7 @@ async function proxy(request: Request, context: RouteContext, method: "GET" | "P
 
   try {
     const target = `/api/operator-settings${suffix ? `/${suffix}` : ""}`
-    const actor = resolvePipelineActor(request.headers, process.env)
+    const actor = resolvePipelineActor(request.headers, process.env, method)
     const body = method === "PUT" ? await request.arrayBuffer() : new ArrayBuffer(0)
     const bodySha256 = sha256Hex(body)
     const timestamp = Math.floor(Date.now() / 1000).toString()

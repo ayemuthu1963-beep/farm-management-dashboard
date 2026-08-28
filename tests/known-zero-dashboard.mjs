@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs"
 import {
   applyScheduledKnownZerosToTrend,
   formatKnownZeroActual,
+  formatKnownZeroDisplayReason,
   knownZeroReasonsForZoneDate,
   noRunReasonForAllMotors,
 } from "../lib/known-zero-data.ts"
@@ -26,6 +27,15 @@ assert.equal(noRunReasonForAllMotors(activeNoRuns, "2026-08-25", ["M1", "M2"]), 
 assert.equal(noRunReasonForAllMotors(activeNoRuns, "2026-08-26", ["M1"]), "Heavy rain")
 assert.equal(knownZeroReasonsForZoneDate(activeNoRuns, "2026-08-26").P1E, "Heavy rain")
 assert.equal(formatKnownZeroActual("Heavy rain"), "0 L/tree — Not run: Heavy rain")
+assert.equal(formatKnownZeroActual("rains"), "0 L/tree — Not run: Heavy rain")
+assert.equal(formatKnownZeroActual("Heavy Rains"), "0 L/tree — Not run: Heavy rain")
+assert.equal(formatKnownZeroActual("heavy rain"), "0 L/tree — Not run: Heavy rain")
+assert.equal(formatKnownZeroDisplayReason("  Power outage  "), "Power outage")
+const preservedReason = projectPublicMotorNoRunRecords([
+  { operation_date: "2026-08-25", motor_id: "motor-1", status: "Not Run", reason: "Heavy Rains", voided_at: null },
+])[0]
+assert.equal(preservedReason.reason, "Heavy Rains", "the public projection preserves the stored reason")
+assert.equal(formatKnownZeroDisplayReason(preservedReason.reason), "Heavy rain", "only displayed text is standardized")
 
 const missingPoint = {
   date: "2026-08-24", displayDate: "24 Aug", totalWaterLitres: null, totalRuntimeHours: null,
@@ -96,6 +106,6 @@ const irrigationRoute = readFileSync(new URL("../app/api/irrigation-management/r
 const wellTable = readFileSync(new URL("../components/farm/well-table.tsx", import.meta.url), "utf8")
 assert.match(wellRoute, /fetchPublicMotorNoRunRecords/)
 assert.match(irrigationRoute, /fetchPublicMotorNoRunRecords/)
-assert.match(wellTable, /Not run: \{record\.knownZeroReason\}/)
+assert.match(wellTable, /Not run: \{formatKnownZeroDisplayReason\(record\.knownZeroReason\)\}/)
 
 console.log("Known-zero versus missing dashboard regression passed")
