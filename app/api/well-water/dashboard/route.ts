@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
+import { noRunsWithoutMeasuredRuntime, positiveMeasuredMotorRuntimeDays } from "@/lib/motor-data"
 import { fetchPublicMotorNoRunRecords } from "@/lib/motor-no-run-server"
 
 export async function GET(request: Request) {
@@ -15,7 +17,7 @@ export async function GET(request: Request) {
     const startDate = searchParams.get("start_date") ?? ""
     const endDate = searchParams.get("end_date") ?? ""
     const baseUrl = getApiBaseUrl()
-    const [response, noRunRecords] = await Promise.all([
+    const [response, projectedNoRunRecords, runtimeEntries] = await Promise.all([
       fetch(`${baseUrl}/api/well-water/dashboard?${searchParams.toString()}`, {
         headers,
         cache: "no-store",
@@ -23,7 +25,20 @@ export async function GET(request: Request) {
       startDate && endDate
         ? fetchPublicMotorNoRunRecords({ baseUrl, startDate, endDate, headers })
         : Promise.resolve([]),
+      startDate && endDate
+        ? fetchAllMotorRuntimeEntries({
+          baseUrl,
+          startDate,
+          endDate,
+          headers,
+          responseLabel: "Motor Runtime API",
+        })
+        : Promise.resolve([]),
     ])
+    const noRunRecords = noRunsWithoutMeasuredRuntime(
+      projectedNoRunRecords,
+      positiveMeasuredMotorRuntimeDays(runtimeEntries),
+    )
 
     const payload = await response.json()
 

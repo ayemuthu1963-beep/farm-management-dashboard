@@ -12,13 +12,13 @@ import { IrrigationMapWithDetails } from "@/components/irrigation/irrigation-map
 import { IrrigationChartsHybrid } from "@/components/irrigation/irrigation-charts-hybrid"
 import { IrrigationZoneTableHybrid } from "@/components/irrigation/irrigation-zone-table-hybrid"
 import { IrrigationPlanTables } from "@/components/irrigation/irrigation-plan-tables"
-import { emptyIrrigationData, statusColors, type IrrigationData, type ZoneId } from "@/lib/irrigation-data"
+import { emptyIrrigationData, statusColors, zoneOrder, type IrrigationData, type ZoneId } from "@/lib/irrigation-data"
 import { buildIrrigationZoneCsv } from "@/lib/irrigation-export"
 import { irrigationEnvironmentCopy } from "@/lib/public-environment"
 import { buildIrrigationPeriodQuery } from "@/lib/irrigation-period"
 import { irrigationPlanError, type IrrigationPlanResponse, type MotorRunScheduleRow } from "@/lib/irrigation-plan"
-import { parsePersistedMotorRunScheduleRows, scheduledWaterForZoneDate, type ScheduleLoadStatus } from "@/lib/irrigation-schedule-comparison"
-import { applyScheduledKnownZerosToTrend } from "@/lib/known-zero-data"
+import { parsePersistedMotorRunScheduleRows, scheduledWaterForZoneDate, scheduledZoneAssignmentForDate, type ScheduleLoadStatus } from "@/lib/irrigation-schedule-comparison"
+import { applyScheduledKnownZerosToTrend, applyScheduledKnownZerosToZones } from "@/lib/known-zero-data"
 
 const irrigationEnvironment = irrigationEnvironmentCopy(
   process.env.NEXT_PUBLIC_MFMS_ENV,
@@ -105,13 +105,25 @@ export default function IrrigationManagementPage() {
   const alertZones = data.zones.filter((zone) => zone.status !== "irrigated")
   const displayedTrend = useMemo(() => applyScheduledKnownZerosToTrend(
     data.trend,
-    (zoneId, date) => scheduledWaterForZoneDate(
+    data.motorNoRunRecords,
+    (zoneId, date) => scheduledZoneAssignmentForDate(
       persistedScheduleRows,
       scheduleLoadStatus,
       zoneId,
       date,
-    ).kind === "scheduled",
-  ), [data.trend, persistedScheduleRows, scheduleLoadStatus])
+    ),
+    zoneOrder,
+  ), [data.motorNoRunRecords, data.trend, persistedScheduleRows, scheduleLoadStatus])
+  const displayedZones = useMemo(() => applyScheduledKnownZerosToZones(
+    data.zones,
+    data.motorNoRunRecords,
+    (zoneId, date) => scheduledZoneAssignmentForDate(
+      persistedScheduleRows,
+      scheduleLoadStatus,
+      zoneId,
+      date,
+    ),
+  ), [data.motorNoRunRecords, data.zones, persistedScheduleRows, scheduleLoadStatus])
 
   return (
     <DashboardShell>
@@ -130,7 +142,7 @@ export default function IrrigationManagementPage() {
         {errorMessage ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{errorMessage}. Live data unavailable; no fallback data is being shown.</div> : null}
 
         <IrrigationMapWithDetails
-          zones={data.zones}
+          zones={displayedZones}
           selectedZoneId={selectedZoneId}
           onSelectZone={setSelectedZoneId}
           isLoading={isLoading}
