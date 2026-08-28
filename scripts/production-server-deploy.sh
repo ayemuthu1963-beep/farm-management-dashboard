@@ -31,7 +31,14 @@ readonly production_url="https://muthufarms.com"
 readonly central_login_url="https://auth.muthufarms.com/login"
 readonly live_port="3014"
 readonly candidate_port="3013"
-readonly expected_running_containers="21"
+readonly -a production_service_manifest=(
+  'frontend|mfms-v0-preview-web'
+  'api|harvest-api'
+  'database|harvest-db'
+  'authentication|mfms-auth'
+  'harvest-counter|mfms-harvest-counter-api'
+  'reverse-proxy|central-nginx-1'
+)
 readonly approved_log_driver="json-file"
 readonly approved_log_max_size="20m"
 readonly approved_log_max_file="5"
@@ -578,8 +585,24 @@ validate_common_live_state() {
   local failed_units running_id
   failed_units=$(systemctl --failed --no-legend --plain | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')
   [[ "$failed_units" == "0" ]] || blocked "the server has failed systemd units"
-  [[ "$(docker ps -q | wc -l | tr -d '[:space:]')" == "$expected_running_containers" ]] \
-    || blocked "the running container count is not the approved baseline"
+  local service_entry service_role service_container
+  local -A manifest_roles=()
+  local -A manifest_containers=()
+  for service_entry in "${production_service_manifest[@]}"; do
+    IFS='|' read -r service_role service_container <<<"$service_entry"
+    [[ -n "$service_role" && -n "$service_container" ]] \
+      || blocked "the Production service manifest contains an invalid entry"
+    [[ -z "${manifest_roles[$service_role]+present}" ]] \
+      || blocked "the Production service manifest contains a duplicate role: $service_role"
+    [[ -z "${manifest_containers[$service_container]+present}" ]] \
+      || blocked "the Production service manifest contains a duplicate container: $service_container"
+    manifest_roles["$service_role"]=1
+    manifest_containers["$service_container"]=1
+    container_exists "$service_container" \
+      || blocked "Production service is missing: role=$service_role container=$service_container"
+    container_running "$service_container" \
+      || blocked "Production service is not running: role=$service_role container=$service_container"
+  done
   [[ "$(docker ps --filter health=unhealthy -q | wc -l | tr -d '[:space:]')" == "0" ]] \
     || blocked "an unhealthy container exists"
   while IFS= read -r running_id; do

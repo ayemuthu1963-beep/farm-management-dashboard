@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -9,6 +10,9 @@ const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
 const deploy = readText(".github/workflows/production-frontend-deploy.yml")
 const rollback = readText(".github/workflows/production-frontend-rollback.yml")
 const helper = readText("scripts/production-server-deploy.sh")
+const helperSha256 = createHash("sha256")
+  .update(readFileSync("scripts/production-server-deploy.sh"))
+  .digest("hex")
 
 for (const workflow of [deploy, rollback]) {
   assert.match(workflow, /^\s*workflow_dispatch:/m)
@@ -44,7 +48,201 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.match(helper, /readonly expected_running_containers="21"/)
+assert.equal(helperSha256, "974cfa4038da800251358f5d0bc3a159430c9fd36633446f057027b3eb705217")
+assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
+assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
+
+const serviceManifestMatch = helper.match(/readonly -a production_service_manifest=\(\n([\s\S]*?)\n\)/)
+assert.ok(serviceManifestMatch)
+const productionServiceManifest = [...serviceManifestMatch[1].matchAll(/^  '([^|']+)\|([^']+)'$/gm)]
+  .map(([, role, container]) => ({ role, container }))
+assert.deepEqual(productionServiceManifest, [
+  { role: "frontend", container: "mfms-v0-preview-web" },
+  { role: "api", container: "harvest-api" },
+  { role: "database", container: "harvest-db" },
+  { role: "authentication", container: "mfms-auth" },
+  { role: "harvest-counter", container: "mfms-harvest-counter-api" },
+  { role: "reverse-proxy", container: "central-nginx-1" },
+])
+
+const snapshotUnrelated = helper.slice(
+  helper.indexOf("snapshot_unrelated_containers()"),
+  helper.indexOf("wait_for_version()"),
+)
+assert.match(snapshotUnrelated, /docker ps -aq/)
+assert.match(snapshotUnrelated, /"\$live_container"\|"\$live_container"-candidate-\*\|"\$live_container"-pre-\*/)
+assert.match(snapshotUnrelated, /continue/)
+assert.match(snapshotUnrelated, /docker inspect --format '\{\{\.Id\}\}\|\{\{\.Name\}\}\|\{\{\.Image\}\}\|\{\{\.State\.Running\}\}/)
+const commonValidation = helper.slice(
+  helper.indexOf("validate_common_live_state()"),
+  helper.indexOf("validate_coordinated_backup()"),
+)
+const bashExecutable = process.env.MFMS_TEST_BASH || "bash"
+const shellQuote = (value) => `'${String(value).replaceAll("'", `'"'"'`)}'`
+const renderManifest = (manifest) => `readonly -a production_service_manifest=(\n${manifest
+  .map(({ role, container }) => `  ${shellQuote(`${role}|${container}`)}`)
+  .join("\n")}\n)`
+const serviceGuardMatch = commonValidation.match(
+  /  local service_entry service_role service_container\n[\s\S]*?\n  done/,
+)
+assert.ok(serviceGuardMatch)
+const runServiceGuard = ({
+  manifest = productionServiceManifest,
+  existing = productionServiceManifest.map(({ container }) => container),
+  running = productionServiceManifest.map(({ container }) => container),
+} = {}) => spawnSync(bashExecutable, ["-c", `
+set -euo pipefail
+blocked() { printf '%s\n' "\$*" >&2; exit 71; }
+container_exists() { [[ ",\${EXISTING_CONTAINERS}," == *",\$1,"* ]]; }
+container_running() { [[ ",\${RUNNING_CONTAINERS}," == *",\$1,"* ]]; }
+${renderManifest(manifest)}
+validate_service_manifest() {
+${serviceGuardMatch[0]}
+}
+validate_service_manifest
+`], {
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    EXISTING_CONTAINERS: existing.join(","),
+    RUNNING_CONTAINERS: running.join(","),
+  },
+})
+assert.equal(runServiceGuard().status, 0)
+const missingService = runServiceGuard({ existing: productionServiceManifest.slice(1).map(({ container }) => container) })
+assert.equal(missingService.status, 71)
+assert.match(missingService.stderr, /Production service is missing/)
+const stoppedService = runServiceGuard({ running: productionServiceManifest.slice(1).map(({ container }) => container) })
+assert.equal(stoppedService.status, 71)
+assert.match(stoppedService.stderr, /Production service is not running/)
+const duplicateRole = runServiceGuard({
+  manifest: [...productionServiceManifest, { role: "frontend", container: "second-frontend" }],
+  existing: [...productionServiceManifest.map(({ container }) => container), "second-frontend"],
+  running: [...productionServiceManifest.map(({ container }) => container), "second-frontend"],
+})
+assert.equal(duplicateRole.status, 71)
+assert.match(duplicateRole.stderr, /duplicate role: frontend/)
+const duplicateContainer = runServiceGuard({
+  manifest: [...productionServiceManifest, { role: "second-frontend", container: "mfms-v0-preview-web" }],
+})
+assert.equal(duplicateContainer.status, 71)
+assert.match(duplicateContainer.stderr, /duplicate container: mfms-v0-preview-web/)
+
+const healthGuardStart = commonValidation.indexOf("  [[ \"$(docker ps --filter health=unhealthy -q")
+const healthGuardEnd = commonValidation.indexOf("  for maintenance_lock")
+assert.ok(healthGuardStart >= 0 && healthGuardEnd > healthGuardStart)
+const healthAndRestartGuard = commonValidation.slice(healthGuardStart, healthGuardEnd)
+const runHealthAndRestartGuard = ({ unhealthy = false, restarted = false } = {}) => spawnSync(
+  bashExecutable,
+  ["-c", `
+set -euo pipefail
+blocked() { exit 71; }
+docker() {
+  if [[ "\$1" == "ps" && "\$2" == "--filter" ]]; then
+    [[ "\${UNHEALTHY}" == "1" ]] && printf '%s\\n' unhealthy-container
+    return 0
+  fi
+  if [[ "\$1" == "ps" && "\$2" == "-q" ]]; then
+    printf '%s\\n' protected-a protected-b
+    return 0
+  fi
+  if [[ "\$1" == "inspect" ]]; then
+    [[ "\$4" == "protected-b" && "\${RESTARTED}" == "1" ]] && printf '1\\n' || printf '0\\n'
+    return 0
+  fi
+  return 1
+}
+validate_health_and_restarts() {
+  local running_id
+${healthAndRestartGuard}
+}
+validate_health_and_restarts
+`],
+  {
+    encoding: "utf8",
+    env: { ...process.env, UNHEALTHY: unhealthy ? "1" : "0", RESTARTED: restarted ? "1" : "0" },
+  },
+)
+assert.equal(runHealthAndRestartGuard().status, 0)
+assert.equal(runHealthAndRestartGuard({ unhealthy: true }).status, 71)
+assert.equal(runHealthAndRestartGuard({ restarted: true }).status, 71)
+
+const snapshotFromController = (records) => {
+  const ids = records.map(({ id }) => id)
+  const recordCases = records.map((record) => `
+      ${shellQuote(record.id)})
+        if [[ "\$3" == "{{.Name}}" ]]; then
+          printf '%s\\n' ${shellQuote(`/${record.name}`)}
+        else
+          printf '%s\\n' ${shellQuote(`${record.id}|/${record.name}|${record.image}|${record.running}|${record.network}|${record.ports}`)}
+        fi
+        ;;`).join("")
+  const result = spawnSync(bashExecutable, ["-c", `
+set -euo pipefail
+live_container="mfms-v0-preview-web"
+docker() {
+  if [[ "\$1" == "ps" && "\$2" == "-aq" ]]; then
+    printf '%s\\n' ${ids.map(shellQuote).join(" ")}
+    return 0
+  fi
+  if [[ "\$1" == "inspect" && "\$2" == "--format" ]]; then
+    case "\$4" in${recordCases}
+    esac
+    return 0
+  fi
+  return 1
+}
+${snapshotUnrelated}
+snapshot_unrelated_containers
+`], { encoding: "utf8", env: process.env })
+  assert.equal(result.status, 0, result.stderr)
+  return result.stdout
+}
+const baselineContainers = [
+  { id: "front-old", name: "mfms-v0-preview-web", image: "front:old", running: "true", network: "harvest-net", ports: "3014" },
+  { id: "candidate", name: "mfms-v0-preview-web-candidate-123", image: "front:new", running: "true", network: "harvest-net", ports: "3013" },
+  { id: "rollback", name: "mfms-v0-preview-web-pre-123", image: "front:old", running: "false", network: "harvest-net", ports: "3014" },
+  { id: "api", name: "harvest-api", image: "api:stable", running: "true", network: "harvest-net", ports: "none" },
+  { id: "db", name: "harvest-db", image: "db:stable", running: "true", network: "harvest-net", ports: "none" },
+  { id: "extra", name: "new-unrelated-service", image: "extra:stable", running: "true", network: "other", ports: "none" },
+]
+const baselineUnrelated = snapshotFromController(baselineContainers)
+assert.doesNotMatch(baselineUnrelated, /front-old|candidate|rollback/)
+assert.match(baselineUnrelated, /harvest-api/)
+assert.match(baselineUnrelated, /harvest-db/)
+assert.match(baselineUnrelated, /new-unrelated-service/)
+const targetOnlySwitch = baselineContainers.map((record) => (
+  record.name === "mfms-v0-preview-web"
+    ? { ...record, id: "front-new", image: "front:new" }
+    : record
+))
+assert.equal(snapshotFromController(targetOnlySwitch), baselineUnrelated)
+assert.notEqual(snapshotFromController([
+  ...targetOnlySwitch,
+  { id: "added", name: "added-service", image: "added:1", running: "true", network: "other", ports: "none" },
+]), baselineUnrelated)
+assert.notEqual(snapshotFromController(targetOnlySwitch.filter(({ name }) => name !== "harvest-db")), baselineUnrelated)
+assert.notEqual(snapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, image: "api:changed" } : record
+))), baselineUnrelated)
+assert.notEqual(snapshotFromController(targetOnlySwitch.map((record) => (
+  record.name === "harvest-api" ? { ...record, running: "false" } : record
+))), baselineUnrelated)
+assert.notEqual(snapshotFromController([
+  ...targetOnlySwitch,
+  { ...targetOnlySwitch.find(({ name }) => name === "harvest-api"), id: "api-duplicate" },
+]), baselineUnrelated)
+
+assert.match(commonValidation, /manifest_roles\[\"\$service_role\"\]/)
+assert.match(commonValidation, /manifest_containers\[\"\$service_container\"\]/)
+assert.match(commonValidation, /Production service is missing/)
+assert.match(commonValidation, /Production service is not running/)
+assert.match(commonValidation, /docker ps --filter health=unhealthy/)
+assert.match(commonValidation, /\.RestartCount/)
+const liveContract = helper.slice(helper.indexOf("assert_live_contract()"), helper.indexOf("restore_original_frontend()"))
+assert.match(liveContract, /snapshot_unrelated_containers > "\$after_unrelated"/)
+assert.match(liveContract, /cmp -s "\$expected_unrelated" "\$after_unrelated"/)
+assert.match(liveContract, /an? backend, Production, ODK, proxy, database, or unrelated container changed/)
 assert.match(helper, /readonly approved_log_driver="json-file"/)
 assert.match(helper, /readonly approved_log_max_size="20m"/)
 assert.match(helper, /readonly approved_log_max_file="5"/)
