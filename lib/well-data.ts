@@ -204,7 +204,7 @@ function toDailyRecord(row: WellDailyApiRow, knownZeroReason?: string): WellDail
       : undefined
   const morningWater = isPlaceholder ? null : toNullableFiniteNumber(row.morning_water_liters)
   const eveningWater = isPlaceholder ? null : toNullableFiniteNumber(row.evening_water_liters)
-  const measuredWaterPumpedOut = isPlaceholder ? null : toNullableFiniteNumber(row.water_pumped_out_liters)
+  const measuredWaterPumpedOut = toNullableFiniteNumber(row.water_pumped_out_liters)
   const appliedKnownZeroReason = measuredWaterPumpedOut === null ? knownZeroReason : undefined
 
   return {

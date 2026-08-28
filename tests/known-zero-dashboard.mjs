@@ -324,7 +324,7 @@ const publicNoRunsFor = (date, motorIds) => projectPublicMotorNoRunRecords(motor
   reason: "Heavy rain",
   voided_at: null,
 })))
-const buildNorthWellDay = (date, waterPumpedOut, noRunRecords) => buildWellDashboardData({
+const buildNorthWellDay = (date, waterPumpedOut, noRunRecords, rowOverrides = {}) => buildWellDashboardData({
   summary: {
     total_readings: 2,
     first_reading_date: date,
@@ -334,7 +334,7 @@ const buildNorthWellDay = (date, waterPumpedOut, noRunRecords) => buildWellDashb
     calendar_days: 1,
     pumped_out_totals_liters: { north: waterPumpedOut ?? 0, south: 0, both: waterPumpedOut ?? 0 },
   },
-  daily_rows: [{ ...northRow, date, water_pumped_out_liters: waterPumpedOut }],
+  daily_rows: [{ ...northRow, ...rowOverrides, date, water_pumped_out_liters: waterPumpedOut }],
   north_rows: [],
   south_rows: [],
   motor_no_run_records: noRunRecords,
@@ -370,6 +370,48 @@ const wrongMotorNoRunWell = buildNorthWellDay(
   publicNoRunsFor("2026-09-20", ["motor-3"]),
 )
 const missingWell = buildNorthWellDay("2026-09-21", null, [])
+const placeholderMeasuredPositiveWell = buildNorthWellDay(
+  "2026-09-23",
+  54_321,
+  publicNoRunsFor("2026-09-23", ["motor-1", "motor-2"]),
+  { reading_count: 0 },
+)
+const placeholderMeasuredZeroWell = buildNorthWellDay(
+  "2026-09-24",
+  0,
+  publicNoRunsFor("2026-09-24", ["motor-1", "motor-2"]),
+  { reading_count: 0 },
+)
+const placeholderSynthesizedZeroWell = buildNorthWellDay(
+  "2026-09-25",
+  null,
+  publicNoRunsFor("2026-09-25", ["motor-1", "motor-2"]),
+  { reading_count: 0 },
+)
+const placeholderIncompleteWell = buildNorthWellDay(
+  "2026-09-26",
+  null,
+  publicNoRunsFor("2026-09-26", ["motor-1"]),
+  { reading_count: 0 },
+)
+const placeholderWrongMotorWell = buildNorthWellDay(
+  "2026-09-27",
+  null,
+  publicNoRunsFor("2026-09-27", ["motor-3"]),
+  { reading_count: 0 },
+)
+const inconsistentMetadataMeasuredWell = buildNorthWellDay(
+  "2026-09-28",
+  7_654,
+  publicNoRunsFor("2026-09-28", ["motor-1", "motor-2"]),
+  { reading_count: null },
+)
+const nonFiniteCompleteNoRunWell = buildNorthWellDay(
+  "2026-09-29",
+  "not-a-number",
+  publicNoRunsFor("2026-09-29", ["motor-1", "motor-2"]),
+  { reading_count: 0 },
+)
 
 const measuredPositiveRecord = measuredPositiveWell.northWellRecords[0]
 const measuredZeroRecord = measuredZeroWell.northWellRecords[0]
@@ -393,6 +435,26 @@ assert.equal(wrongMotorNoRunWell.northWellRecords[0].waterPumpedOut, null, "a wr
 assert.equal(wrongMotorNoRunWell.northWellRecords[0].knownZeroReason, undefined)
 assert.equal(missingWell.northWellRecords[0].waterPumpedOut, null, "missing measurement without no-run remains unknown")
 assert.equal(toChartData(missingWell.northWellRecords)[0].pumpedOut, null, "unknown Well Water values remain chart gaps")
+assert.equal(placeholderMeasuredPositiveWell.northWellRecords[0].waterPumpedOut, 54_321, "reading_count zero cannot discard a positive pumped measurement")
+assert.equal(placeholderMeasuredPositiveWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(toChartData(placeholderMeasuredPositiveWell.northWellRecords)[0].pumpedOut, 54_321, "the chart preserves a placeholder-day measurement")
+assert.match(buildWellWaterCsv(placeholderMeasuredPositiveWell), /"54321"/)
+assert.doesNotMatch(buildWellWaterCsv(placeholderMeasuredPositiveWell), /Not run:/)
+assert.equal(placeholderMeasuredZeroWell.northWellRecords[0].waterPumpedOut, 0, "reading_count zero cannot discard a measured numeric zero")
+assert.equal(placeholderMeasuredZeroWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(toChartData(placeholderMeasuredZeroWell.northWellRecords)[0].pumpedOut, 0)
+assert.equal(placeholderSynthesizedZeroWell.northWellRecords[0].waterPumpedOut, 0, "a genuinely missing placeholder-day measurement may use a complete known-zero basis")
+assert.equal(placeholderSynthesizedZeroWell.northWellRecords[0].knownZeroReason, "Heavy rain")
+assert.equal(toChartData(placeholderSynthesizedZeroWell.northWellRecords)[0].pumpedOut, 0)
+assert.equal(placeholderIncompleteWell.northWellRecords[0].waterPumpedOut, null, "incomplete placeholder-day attribution remains unknown")
+assert.equal(placeholderIncompleteWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(toChartData(placeholderIncompleteWell.northWellRecords)[0].pumpedOut, null)
+assert.equal(placeholderWrongMotorWell.northWellRecords[0].waterPumpedOut, null, "wrong-Motor placeholder-day attribution remains unknown")
+assert.equal(placeholderWrongMotorWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(inconsistentMetadataMeasuredWell.northWellRecords[0].waterPumpedOut, 7_654, "inconsistent reading metadata cannot overwrite a finite measurement")
+assert.equal(inconsistentMetadataMeasuredWell.northWellRecords[0].knownZeroReason, undefined)
+assert.equal(nonFiniteCompleteNoRunWell.northWellRecords[0].waterPumpedOut, 0, "a non-finite pumped value is genuinely missing and may use complete known-zero attribution")
+assert.equal(nonFiniteCompleteNoRunWell.northWellRecords[0].knownZeroReason, "Heavy rain")
 
 const wellDashboard = buildWellDashboardData({
   summary: {
@@ -430,6 +492,6 @@ assert.doesNotMatch(irrigationRoute, /knownZeroReasonsForZoneDate/)
 assert.doesNotMatch(knownZeroSource, /ZONE_SCHEDULE_MOTOR_IDS/)
 assert.doesNotMatch(knownZeroSource, /P1E:\s*"M1"|P2W:\s*"M2"|P2E:\s*"M3"/, "no fixed zone-to-Motor fallback remains")
 assert.match(wellTable, /Not run: \{formatKnownZeroDisplayReason\(record\.knownZeroReason\)\}/)
-assert.match(wellTable, /record\.knownZeroReason \?[\s\S]*: record\.isPlaceholder \? "" : formatLitres\(record\.waterPumpedOut\)/, "the Well Water table renders synthesized provenance only when the shared record has no authoritative measurement")
+assert.match(wellTable, /record\.knownZeroReason \?[\s\S]*: record\.isPlaceholder && record\.waterPumpedOut === null \? "" : formatLitres\(record\.waterPumpedOut\)/, "the Well Water table preserves finite placeholder-day measurements and only blanks unknown values")
 
 console.log("Known-zero versus missing dashboard regression passed")

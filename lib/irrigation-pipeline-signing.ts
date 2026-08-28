@@ -34,11 +34,12 @@ export function resolvePipelineActor(
   const configuredEnvironment = normalise(
     environment.MFMS_ENV ?? environment.NEXT_PUBLIC_MFMS_ENV,
   )
+  const trustedServerEnvironment = normalise(environment.MFMS_ENV)
   if (!configuredEnvironment) {
     throw new WorkerBffError("MFMS_ENV is not configured.", 503)
   }
 
-  if (configuredEnvironment === "local") {
+  if (trustedServerEnvironment === "local" || trustedServerEnvironment === "development") {
     if (!enabled(environment.MFMS_WORKER_LOCAL_ACTOR_ENABLED)) {
       throw new WorkerBffError("The local MFMS actor is disabled.", 401)
     }
@@ -53,6 +54,10 @@ export function resolvePipelineActor(
     } catch (error) {
       workerIdentityError(error)
     }
+  }
+
+  if (configuredEnvironment === "local" || configuredEnvironment === "development") {
+    throw new WorkerBffError("MFMS_ENV must select the local development identity path.", 503)
   }
 
   try {
