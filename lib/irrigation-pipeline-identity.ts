@@ -45,13 +45,21 @@ export function resolveTrustedPipelineIdentity(
     throw new PipelineIdentityError("The authenticated MFMS environment does not match Preview.", 401)
   }
   const role = pipelineAssertionRole(requestHeaders.get("x-mfms-role"))
-  const permission = normalise(requestHeaders.get("x-mfms-permission"))
   const requiredPermission = method === "GET" ? "read" : "write"
-  if (permission !== requiredPermission) {
-    throw new PipelineIdentityError("The authenticated MFMS permission does not allow this request.", 403)
-  }
-  if (permission === "write" && role === "viewer") {
+  if (requiredPermission === "write" && role === "viewer") {
     throw new PipelineIdentityError("Viewer access is read-only.", 403)
   }
+
+  const assertedPermission = requestHeaders.get("x-mfms-permission")
+  if (assertedPermission !== null) {
+    const permission = normalise(assertedPermission)
+    if (permission !== "read" && permission !== "write") {
+      throw new PipelineIdentityError("The authenticated MFMS permission is unsupported.", 403)
+    }
+    if (permission !== requiredPermission) {
+      throw new PipelineIdentityError("The authenticated MFMS permission does not allow this request.", 403)
+    }
+  }
+
   return { username, role, environment: configuredEnvironment }
 }
