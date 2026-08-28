@@ -66,15 +66,23 @@ export function applyScheduledKnownZerosToTrend(
 ): TrendPoint[] {
   return trend.map((sourcePoint) => {
     const point: TrendPoint = { ...sourcePoint }
-    let hasScheduledKnownZero = false
+    const scheduledZoneIds = (Object.keys(ZONE_SCHEDULE_MOTOR_IDS) as ZoneId[])
+      .filter((zoneId) => isScheduled(zoneId, point.date))
+    const appliedKnownZeroZoneIds = new Set<ZoneId>()
     for (const [zoneId, reason] of Object.entries(sourcePoint.knownZeroReasons ?? {}) as Array<[ZoneId, string]>) {
       if (!reason || point[zoneId] !== null || !isScheduled(zoneId, point.date)) continue
       point[zoneId] = 0
-      hasScheduledKnownZero = true
+      appliedKnownZeroZoneIds.add(zoneId)
     }
-    if (hasScheduledKnownZero) {
-      if (point.totalWaterLitres === null) point.totalWaterLitres = 0
-      if (point.totalRuntimeHours === null) point.totalRuntimeHours = 0
+    if (scheduledZoneIds.length > 0) {
+      const aggregateIsComplete = scheduledZoneIds.every((zoneId) => point[zoneId] !== null)
+      if (!aggregateIsComplete) {
+        point.totalWaterLitres = null
+        point.totalRuntimeHours = null
+      } else if (appliedKnownZeroZoneIds.size === scheduledZoneIds.length) {
+        if (point.totalWaterLitres === null) point.totalWaterLitres = 0
+        if (point.totalRuntimeHours === null) point.totalRuntimeHours = 0
+      }
     }
     return point
   })

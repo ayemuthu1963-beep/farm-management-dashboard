@@ -66,32 +66,76 @@ const missingPoint = {
   date: "2026-08-24", displayDate: "24 Aug", totalWaterLitres: null, totalRuntimeHours: null,
   P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null,
 }
-const knownZeroPoint = {
+const trendPoint = (date, values = {}) => ({
   ...missingPoint,
-  date: "2026-08-25",
-  displayDate: "25 Aug",
-  knownZeroReasons: knownZeroReasonsForZoneDate(activeNoRuns, "2026-08-25"),
+  date,
+  displayDate: date,
+  ...values,
+})
+const scheduledZonesByDate = {
+  "2026-08-25": ["P1E", "P2W"],
+  "2026-08-26": ["P1E", "P2W"],
+  "2026-08-27": ["P1E", "P2W"],
+  "2026-08-28": ["P1E", "P2W"],
+  "2026-08-29": ["P1E", "P2W"],
+  "2026-08-30": ["P1E"],
 }
-const actualPoint = {
-  ...knownZeroPoint,
-  date: "2026-08-27",
-  displayDate: "27 Aug",
-  totalWaterLitres: 50_000,
-  totalRuntimeHours: 1,
-  P1E: 100,
-}
-const trend = applyScheduledKnownZerosToTrend(
-  [missingPoint, knownZeroPoint, actualPoint],
-  (zoneId, date) => date !== "2026-08-24" && ["P1E", "P2W"].includes(zoneId),
-)
-assert.deepEqual(trend[0], missingPoint, "missing dates remain gaps")
-assert.equal(trend[1].P1E, 0)
-assert.equal(trend[1].P2W, 0)
-assert.equal(trend[1].P1W, null, "an unscheduled zone remains a gap")
-assert.equal(trend[1].totalWaterLitres, 0)
-assert.equal(trend[1].totalRuntimeHours, 0)
-assert.equal(trend[2].P1E, 100, "measured runtime is never overwritten")
-assert.equal(trend[2].totalWaterLitres, 50_000)
+const trend = applyScheduledKnownZerosToTrend([
+  missingPoint,
+  trendPoint("2026-08-25", {
+    totalWaterLitres: 75_000,
+    totalRuntimeHours: 1.5,
+    P1E: 100,
+    P2W: 50,
+  }),
+  trendPoint("2026-08-26", {
+    knownZeroReasons: { P1E: "Heavy rain", P2W: "Heavy rain" },
+  }),
+  trendPoint("2026-08-27", {
+    totalWaterLitres: 50_000,
+    totalRuntimeHours: 1,
+    P1E: 100,
+    knownZeroReasons: { P2W: "Heavy rain" },
+  }),
+  trendPoint("2026-08-28", {
+    knownZeroReasons: { P1E: "Heavy rain" },
+  }),
+  trendPoint("2026-08-29", {
+    totalWaterLitres: 50_000,
+    totalRuntimeHours: 1,
+    P1E: 100,
+  }),
+  trendPoint("2026-08-30", {
+    totalWaterLitres: 50_000,
+    totalRuntimeHours: 1,
+    P1E: 100,
+  }),
+], (zoneId, date) => scheduledZonesByDate[date]?.includes(zoneId) ?? false)
+
+assert.deepEqual(trend[0], missingPoint, "dates without a schedule or data remain gaps")
+assert.equal(trend[1].totalWaterLitres, 75_000, "all measured scheduled zones retain the measured aggregate")
+assert.equal(trend[1].totalRuntimeHours, 1.5)
+assert.equal(trend[2].P1E, 0, "a scheduled active no-run remains a zone-level genuine zero")
+assert.equal(trend[2].P2W, 0)
+assert.equal(trend[2].P1W, null, "an unscheduled zone remains a gap")
+assert.equal(trend[2].totalWaterLitres, 0, "all scheduled zones confirmed no-run produce a genuine zero aggregate")
+assert.equal(trend[2].totalRuntimeHours, 0)
+assert.equal(trend[3].P1E, 100, "a measured scheduled zone is never overwritten")
+assert.equal(trend[3].P2W, 0)
+assert.equal(trend[3].totalWaterLitres, 50_000, "a complete measurement and known-zero mixture remains numeric")
+assert.equal(trend[3].totalRuntimeHours, 1)
+assert.equal(trend[4].P1E, 0, "zone-level known-zero survives an incomplete aggregate")
+assert.equal(trend[4].P2W, null)
+assert.equal(trend[4].totalWaterLitres, null, "a known zero plus a scheduled missing zone remains an aggregate gap")
+assert.equal(trend[4].totalRuntimeHours, null)
+assert.equal(trend[5].P1E, 100)
+assert.equal(trend[5].P2W, null)
+assert.equal(trend[5].totalWaterLitres, null, "a measurement plus a scheduled missing zone remains an aggregate gap")
+assert.equal(trend[5].totalRuntimeHours, null)
+assert.equal(trend[6].P1E, 100)
+assert.equal(trend[6].P2W, null, "an unscheduled missing zone stays a zone-level gap")
+assert.equal(trend[6].totalWaterLitres, 50_000, "unscheduled missing zones do not block a complete scheduled aggregate")
+assert.equal(trend[6].totalRuntimeHours, 1)
 
 const northRow = {
   date: "2026-08-25", well_id: "north", well_code: "well1", well_name: "North Well",
