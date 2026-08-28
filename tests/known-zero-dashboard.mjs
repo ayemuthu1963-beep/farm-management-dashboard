@@ -30,12 +30,37 @@ assert.equal(formatKnownZeroActual("Heavy rain"), "0 L/tree — Not run: Heavy r
 assert.equal(formatKnownZeroActual("rains"), "0 L/tree — Not run: Heavy rain")
 assert.equal(formatKnownZeroActual("Heavy Rains"), "0 L/tree — Not run: Heavy rain")
 assert.equal(formatKnownZeroActual("heavy rain"), "0 L/tree — Not run: Heavy rain")
+assert.equal(formatKnownZeroDisplayReason("rains / Heavy Rains"), "Heavy rain")
+assert.equal(formatKnownZeroDisplayReason("rains / Power failure"), "Heavy rain / Power failure")
+assert.equal(formatKnownZeroDisplayReason("rains / Pump/valve fault"), "Heavy rain / Pump/valve fault")
+assert.equal(formatKnownZeroDisplayReason("N/A"), "N/A")
+assert.equal(formatKnownZeroDisplayReason("Pump/valve fault"), "Pump/valve fault")
+assert.equal(formatKnownZeroDisplayReason("rains/Heavy Rains"), "rains/Heavy Rains")
+assert.equal(formatKnownZeroDisplayReason("Heavy Rains / Power outage"), "Heavy rain / Power outage")
+assert.equal(formatKnownZeroDisplayReason("Power failure / Generator fault"), "Power failure / Generator fault")
+assert.equal(formatKnownZeroDisplayReason("Power failure / Power failure"), "Power failure")
 assert.equal(formatKnownZeroDisplayReason("  Power outage  "), "Power outage")
 const preservedReason = projectPublicMotorNoRunRecords([
   { operation_date: "2026-08-25", motor_id: "motor-1", status: "Not Run", reason: "Heavy Rains", voided_at: null },
 ])[0]
 assert.equal(preservedReason.reason, "Heavy Rains", "the public projection preserves the stored reason")
 assert.equal(formatKnownZeroDisplayReason(preservedReason.reason), "Heavy rain", "only displayed text is standardized")
+
+const compoundReasons = projectPublicMotorNoRunRecords([
+  { operation_date: "2026-08-25", motor_id: "motor-1", status: "Not Run", reason: "rains", voided_at: null },
+  { operation_date: "2026-08-25", motor_id: "motor-2", status: "Not Run", reason: "Heavy Rains", voided_at: null },
+])
+const compoundStoredReason = noRunReasonForAllMotors(compoundReasons, "2026-08-25", ["M1", "M2"])
+assert.equal(compoundStoredReason, "rains / Heavy Rains", "joined source reasons remain unchanged")
+assert.equal(formatKnownZeroDisplayReason(compoundStoredReason), "Heavy rain")
+assert.deepEqual(
+  compoundReasons.map((record) => ({ keys: Object.keys(record), reason: record.reason })),
+  [
+    { keys: ["date", "motorId", "motorName", "status", "reason", "runtime", "water"], reason: "rains" },
+    { keys: ["date", "motorId", "motorName", "status", "reason", "runtime", "water"], reason: "Heavy Rains" },
+  ],
+  "the seven-field public projection and raw reason values remain unchanged",
+)
 
 const missingPoint = {
   date: "2026-08-24", displayDate: "24 Aug", totalWaterLitres: null, totalRuntimeHours: null,

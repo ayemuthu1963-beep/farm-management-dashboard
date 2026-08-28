@@ -44,12 +44,20 @@ export function formatKnownZeroActual(reason: string): string {
 }
 
 export function formatKnownZeroDisplayReason(reason: string): string {
-  const trimmed = reason.trim()
-  const normalized = trimmed.toLowerCase()
-  if (normalized === "rains" || normalized === "heavy rains" || normalized === "heavy rain") {
-    return "Heavy rain"
+  const displayTokens: string[] = []
+  const seen = new Set<string>()
+  for (const sourceToken of reason.split(" / ")) {
+    const trimmed = sourceToken.trim()
+    if (!trimmed) continue
+    const normalized = trimmed.toLowerCase()
+    const display = normalized === "rains" || normalized === "heavy rains" || normalized === "heavy rain"
+      ? "Heavy rain"
+      : trimmed
+    if (seen.has(display)) continue
+    seen.add(display)
+    displayTokens.push(display)
   }
-  return trimmed
+  return displayTokens.join(" / ")
 }
 
 export function applyScheduledKnownZerosToTrend(
