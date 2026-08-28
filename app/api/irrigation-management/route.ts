@@ -11,6 +11,9 @@ import {
 } from "@/lib/irrigation-period"
 import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
+import { knownZeroReasonsForZoneDate } from "@/lib/known-zero-data"
+import { fetchPublicMotorNoRunRecords } from "@/lib/motor-no-run-server"
+import type { PublicMotorNoRunRecord } from "@/lib/motor-data"
 
 interface MotorRuntimeEntry {
   entry_id?: number
@@ -167,6 +170,7 @@ function buildRecord(entry: MergedMotorRuntimeEntry, zoneId: ZoneId): Irrigation
 
 function buildData(
   entries: MotorRuntimeEntry[],
+  noRunRecords: readonly PublicMotorNoRunRecord[],
   label: string,
   fiveDayHistory: Record<ZoneId, ZoneFiveDayHistory[]>,
   startDate: string,
@@ -209,10 +213,11 @@ function buildData(
 
   const trend: TrendPoint[] = getSelectedDates(startDate, endDate).map((date) => {
     const dateMinutes = minutesByDate.get(date)
+    const knownZeroReasons = knownZeroReasonsForZoneDate(noRunRecords, date)
     if (!dateMinutes || dateMinutes.size === 0) {
-      return { date, displayDate: formatShortDate(date), totalWaterLitres: null, totalRuntimeHours: null, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null }
+      return { date, displayDate: formatShortDate(date), totalWaterLitres: null, totalRuntimeHours: null, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null, knownZeroReasons }
     }
-    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null }
+    const point: TrendPoint = { date, displayDate: formatShortDate(date), totalWaterLitres: 0, totalRuntimeHours: 0, P1E: null, P1W: null, P2E: null, P2W: null, JF: null, NM: null, knownZeroReasons }
     for (const zoneId of zoneOrder) {
       const minutes = dateMinutes.get(zoneId)
       if (minutes === undefined) continue
@@ -243,7 +248,9 @@ export async function GET(request: Request) {
     const authHeader = getBasicAuthHeader()
     if (authHeader) headers.Authorization = authHeader
     const baseUrl = getApiBaseUrl()
-    const [selectedRows, historyRows] = await Promise.all([
+    const noRunStartDate = historyStartDate < startDate ? historyStartDate : startDate
+    const noRunEndDate = historyEndDate > endDate ? historyEndDate : endDate
+    const [selectedRows, historyRows, noRunRecords] = await Promise.all([
       fetchAllMotorRuntimeEntries<MotorRuntimeEntry>({
         baseUrl,
         startDate,
@@ -258,11 +265,20 @@ export async function GET(request: Request) {
         headers,
         responseLabel: "Motor Runtime history API",
       }),
+      fetchPublicMotorNoRunRecords({ baseUrl, startDate: noRunStartDate, endDate: noRunEndDate, headers }),
     ])
     const litresPerTreePerHourByZone = Object.fromEntries(zoneOrder.map((zoneId) => [
       zoneId,
       cropLitresPerTreePerHour[zoneConfigs[zoneId].crop],
     ])) as Record<ZoneId, number>
+    const knownZeroReasonsByZoneAndDate = new Map<ZoneId, Map<string, string>>(
+      zoneOrder.map((zoneId) => [zoneId, new Map<string, string>()]),
+    )
+    for (const date of getSelectedDates(noRunStartDate, noRunEndDate)) {
+      for (const [zoneId, reason] of Object.entries(knownZeroReasonsForZoneDate(noRunRecords, date)) as Array<[ZoneId, string]>) {
+        knownZeroReasonsByZoneAndDate.get(zoneId)?.set(date, reason)
+      }
+    }
     const fiveDayHistory = buildRecentIrrigationHistory({
       entries: historyRows.filter((row) => isWithinRange(row.entry_date, historyStartDate, historyEndDate)),
       historyDates,
@@ -270,9 +286,11 @@ export async function GET(request: Request) {
       zoneByPlot: plotToZone,
       litresPerTreePerHourByZone,
       today: getIrrigationDateBounds("today").startDate,
+      knownZeroReasonsByZoneAndDate,
     })
     return NextResponse.json(buildData(
       selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)),
+      noRunRecords,
       label,
       fiveDayHistory,
       startDate,

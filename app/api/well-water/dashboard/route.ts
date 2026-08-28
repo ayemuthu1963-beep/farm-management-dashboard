@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { fetchPublicMotorNoRunRecords } from "@/lib/motor-no-run-server"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -11,10 +12,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/well-water/dashboard?${searchParams.toString()}`, {
-      headers,
-      cache: "no-store",
-    })
+    const startDate = searchParams.get("start_date") ?? ""
+    const endDate = searchParams.get("end_date") ?? ""
+    const baseUrl = getApiBaseUrl()
+    const [response, noRunRecords] = await Promise.all([
+      fetch(`${baseUrl}/api/well-water/dashboard?${searchParams.toString()}`, {
+        headers,
+        cache: "no-store",
+      }),
+      startDate && endDate
+        ? fetchPublicMotorNoRunRecords({ baseUrl, startDate, endDate, headers })
+        : Promise.resolve([]),
+    ])
 
     const payload = await response.json()
 
@@ -25,7 +34,10 @@ export async function GET(request: Request) {
       })
     }
 
-    return NextResponse.json(payload, {
+    return NextResponse.json({
+      ...payload,
+      motor_no_run_records: noRunRecords,
+    }, {
       headers: { "Cache-Control": "no-store, max-age=0" },
     })
   } catch (error) {

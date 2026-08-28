@@ -45,7 +45,14 @@ export function WellTable({ records, headerClassName }: WellTableProps) {
               <td className="whitespace-nowrap px-3 py-3 text-foreground">{record.date}</td>
               <td className="px-3 py-3 text-foreground">{record.morningWaterDisplay}</td>
               <td className="px-3 py-3 text-foreground">{record.eveningWaterDisplay}</td>
-              <td className="px-3 py-3 text-foreground">{record.isPlaceholder ? "" : formatLitres(record.waterPumpedOut)}</td>
+              <td className="px-3 py-3 text-foreground">
+                {record.knownZeroReason ? (
+                  <div>
+                    <div className="font-semibold">0</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">Not run: {record.knownZeroReason}</div>
+                  </div>
+                ) : record.isPlaceholder ? "" : formatLitres(record.waterPumpedOut)}
+              </td>
             </tr>
           ))}
         </tbody>
