@@ -1,6 +1,6 @@
 ﻿import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
-import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
+import { fetchAllMotorRuntimeEntries, MotorRuntimeUpstreamError } from "@/lib/irrigation-upstream"
 import {
   noRunsWithoutMeasuredRuntime,
   positiveMeasuredMotorRuntimeDays,
@@ -302,6 +302,12 @@ export async function GET(request: Request) {
       noRunRecords,
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
+    if (error instanceof MotorRuntimeUpstreamError) {
+      return NextResponse.json(error.payload, {
+        status: error.status,
+        headers: { "Cache-Control": "no-store" },
+      })
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load Motor Runtime data" },
       { status: 503, headers: { "Cache-Control": "no-store" } },

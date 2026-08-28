@@ -18,7 +18,7 @@ import {
   IRRIGATION_PERIOD_OPTIONS,
   resolveIrrigationDateBounds,
 } from "../lib/irrigation-period.ts"
-import { fetchAllMotorRuntimeEntries } from "../lib/irrigation-upstream.ts"
+import { fetchAllMotorRuntimeEntries, MotorRuntimeUpstreamError } from "../lib/irrigation-upstream.ts"
 import {
   IRRIGATION_PLAN_DAYS,
   SCHEDULE_IDS,
@@ -483,6 +483,18 @@ await assert.rejects(() => fetchAllMotorRuntimeEntries({
   },
 }), /pagination did not advance/)
 assert.equal(repeatedPageCalls, 2)
+await assert.rejects(() => fetchAllMotorRuntimeEntries({
+  baseUrl: "https://preview-api.example.test",
+  startDate: "2026-07-23",
+  endDate: "2026-08-01",
+  responseLabel: "Motor Runtime API",
+  fetchImpl: async () => new Response(JSON.stringify({ error: "DATE_RANGE_REJECTED" }), {
+    status: 422,
+    headers: { "Content-Type": "application/json" },
+  }),
+}), (error) => error instanceof MotorRuntimeUpstreamError
+  && error.status === 422
+  && assert.deepEqual(error.payload, { error: "DATE_RANGE_REJECTED" }) === undefined)
 
 // Map history retains the selected-period end-date anchor and expands to seven unique calendar dates.
 const historyDates = getRecentIrrigationHistoryDates("2026-07-19", afterIstMidnight)
