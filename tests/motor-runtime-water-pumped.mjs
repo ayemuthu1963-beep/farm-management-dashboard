@@ -54,8 +54,12 @@ assert.match(motorRoute, /const irrigationTrend = dateKeys\.map/)
 assert.match(motorRoute, /selectedDateKeys\(startDate \?\? "", endDate \?\? ""\)/)
 assert.match(motorRoute, /motorEntries\.length > 0 \? runtimeHours\(totalMinutes\) : confirmedNoRun \? 0 : null/)
 assert.match(motorRoute, /dayEntries\.length > 0 \? runtimeHours\(totalMinutes\) : allMotorsConfirmedNoRun \? 0 : null/)
-assert.match(motorRoute, /const overlayNoRunRecords = noRunsWithoutMeasuredRuntime\(noRunRecords/)
-assert.match(motorRoute, /overlayNoRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
+assert.match(motorRoute, /const projectedNoRunRecords = projectPublicMotorNoRunRecords/)
+assert.match(motorRoute, /fetchAllMotorRuntimeEntries<RuntimeEntry>\(/)
+assert.match(motorRoute, /responseLabel: "Motor Runtime API"/)
+assert.doesNotMatch(motorRoute, /limit: "1000"/)
+assert.match(motorRoute, /const noRunRecords = noRunsWithoutMeasuredRuntime\([\s\S]*projectedNoRunRecords,[\s\S]*positiveMeasuredMotorRuntimeDays\(sortedEntries\)/)
+assert.match(motorRoute, /noRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
 assert.match(motorDates, /const endDate = getFarmIsoDate\(0, now\)/)
 assert.match(motorDates, /Math\.round\(\(end - start\) \/ 86_400_000\) \+ 1/)
 assert.match(motorDates, /End Date = today\./)
@@ -91,7 +95,12 @@ assert.match(harvestProxy, /rawSuffix === "status"/)
 assert.match(harvestProxy, /NextResponse\.json/)
 assert.match(motorRoute, /remarks: `Not run — \$\{formatKnownZeroDisplayReason\(record\.reason\)\}`/)
 assert.match(motorRoute, /waterLifted: 0/)
-assert.match(motorRoute, /confirmed_no_run_count/)
+assert.match(motorRoute, /confirmed_no_run_count: noRunRecords\.length/)
+assert.match(motorRoute, /const operationalDates = Array\.from\(new Set\(\[/)
+assert.match(motorRoute, /\.\.\.sortedEntries\.map\(\(entry\) => entry\.entry_date\)/)
+assert.match(motorRoute, /\.\.\.noRunRecords\.map\(\(record\) => record\.date\)/)
+assert.match(motorRoute, /first_entry_date: operationalDates\[0\] \?\? null/)
+assert.match(motorRoute, /latest_entry_date: operationalDates\.at\(-1\) \?\? null/)
 assert.match(motorRoute, /noRunResponse\.status !== 404/)
 assert.match(motorTable, /record\.status === "Not Run" \? "0 minutes"/)
 assert.match(motorTable, /No data available for the selected period/)
@@ -251,6 +260,11 @@ const positiveRuntimeDays = positiveMeasuredMotorRuntimeDays([
   { entry_date: "2026-08-25", motor_no: 2, total_minutes: Number.NaN },
   { entry_date: "2026-08-25", motor_no: 2, total_minutes: "60" },
   { entry_date: "2026-08-25", motor_no: 2, total_minutes: -1 },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: 60, voided_at: "2026-08-25T10:00:00Z" },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: 60, workflow_status: "rejected" },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: 60, workflow_status: "draft" },
+  { entry_date: "2026-08-25", motor_no: 2, total_minutes: 60, workflow_status: 123 },
+  { entry_date: "2026-08-27", motor_no: 2, total_minutes: 60, workflow_status: "published" },
   { entry_date: "25/08/2026", motor_no: 2, total_minutes: 60 },
   { entry_date: "2026-08-25", motor_no: 4, total_minutes: 60 },
   { entry_date: "2026-08-26", motor_no: 3, total_minutes: 30 },
@@ -259,6 +273,7 @@ const positiveRuntimeDays = positiveMeasuredMotorRuntimeDays([
 assert.deepEqual(positiveRuntimeDays, [
   { date: "2026-08-25", motorId: "M1" },
   { date: "2026-08-25", motorId: "M1" },
+  { date: "2026-08-27", motorId: "M2" },
   { date: "2026-08-26", motorId: "M3" },
 ], "only positive canonical runtime rows become conflict evidence")
 assert.deepEqual(
@@ -285,8 +300,11 @@ const serializedPublicResponse = JSON.stringify({ noRunRecords: publicNoRunRecor
 for (const value of Object.values(sentinels)) assert.doesNotMatch(serializedPublicResponse, new RegExp(value))
 assert.doesNotMatch(serializedPublicResponse, /VOIDED_REASON_SENTINEL/)
 assert.match(motorRoute, /projectPublicMotorNoRunRecords\(Array\.isArray\(rawNoRunPayload\) \? rawNoRunPayload : \[\]\)/)
-assert.match(motorRoute, /overlayNoRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
+assert.match(motorRoute, /noRunRecords\.filter\(\(record\) => record\.motorId === id\)/)
 assert.match(motorRoute, /record\.date === date && record\.motorId === id/)
+assert.doesNotMatch(motorRoute, /confirmed_no_run_count: projectedNoRunRecords\.length/)
+assert.doesNotMatch(motorRoute, /noRunRecords: projectedNoRunRecords/)
+assert.doesNotMatch(motorRoute, /first_entry_date: sortedEntries|latest_entry_date: sortedEntries/)
 assert.doesNotMatch(motorRoute, /record\.(?:id|entered_by|created_at|updated_at|remarks|source|voided_by|voided_at|audit_timestamp)/)
 assert.match(motorRoute, /headers: \{ "Cache-Control": "no-store" \}/)
 assert.match(adminNoRunRoute, /return new NextResponse\(response\.body/)

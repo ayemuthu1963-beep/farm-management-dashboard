@@ -43,12 +43,18 @@ export function positiveMeasuredMotorRuntimeDays(
   return rows.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return []
     const row = candidate as Record<string, unknown>
+    const hasWorkflowStatus = Object.hasOwn(row, "workflow_status")
+    const workflowStatus = typeof row.workflow_status === "string"
+      ? row.workflow_status.trim().toLowerCase()
+      : null
     if (
       typeof row.entry_date !== "string"
       || !/^\d{4}-\d{2}-\d{2}$/.test(row.entry_date)
       || typeof row.total_minutes !== "number"
       || !Number.isFinite(row.total_minutes)
       || row.total_minutes <= 0
+      || row.voided_at != null
+      || (hasWorkflowStatus && workflowStatus !== "published")
     ) return []
 
     const motorId = row.motor_no === 1

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
 
 import {
   applyScheduledKnownZerosToTrend,
@@ -14,6 +15,12 @@ import {
   positiveMeasuredMotorRuntimeDays,
   projectPublicMotorNoRunRecords,
 } from "../lib/motor-data.ts"
+import {
+  pipelineAssertionRole,
+  PipelineIdentityError,
+  resolveTrustedPipelineIdentity,
+} from "../lib/irrigation-pipeline-identity.ts"
+import { WorkerBffError } from "../lib/worker-management-signing.ts"
 import {
   buildWellDashboardData,
   buildWellWaterCsv,
@@ -637,6 +644,9 @@ const knownZeroSource = readFileSync(new URL("../lib/known-zero-data.ts", import
 const wellTable = readFileSync(new URL("../components/farm/well-table.tsx", import.meta.url), "utf8")
 const wellPage = readFileSync(new URL("../app/well-water/page.tsx", import.meta.url), "utf8")
 assert.match(wellRoute, /fetchPublicMotorNoRunRecords/)
+assert.match(wellRoute, /fetchAllMotorRuntimeEntries/)
+assert.match(wellRoute, /const noRunRecords = noRunsWithoutMeasuredRuntime\([\s\S]*projectedNoRunRecords,[\s\S]*positiveMeasuredMotorRuntimeDays\(runtimeEntries\)/)
+assert.match(wellRoute, /motor_no_run_records: noRunRecords/)
 assert.match(irrigationRoute, /fetchPublicMotorNoRunRecords/)
 assert.match(irrigationRoute, /motorNoRunRecords: \[\.\.\.noRunRecords\]/)
 assert.doesNotMatch(irrigationRoute, /knownZeroReasonsForZoneDate/)
@@ -646,5 +656,181 @@ assert.match(wellTable, /Not run: \{formatKnownZeroDisplayReason\(record\.knownZ
 assert.match(wellTable, /record\.knownZeroReason \?[\s\S]*: record\.isPlaceholder && record\.waterPumpedOut === null \? "" : formatLitres\(record\.waterPumpedOut\)/, "the Well Water table preserves finite placeholder-day measurements and only blanks unknown values")
 assert.match(wellPage, /disabled=\{isLoading \|\| !hasWellWaterExportData\(data\)\}/, "the Well Water export gate uses populated dashboard data")
 assert.doesNotMatch(wellPage, /data\.totalReadings === 0/, "export availability is not based only on the summary reading count")
+
+// Consolidated cross-surface decision table for the twelve known-zero and
+// identity invariants. The focused assertions above retain detailed failure
+// messages; this table proves the same effective operational dataset is used
+// consistently at each public surface.
+const decisionNoRuns = projectPublicMotorNoRunRecords([
+  { operation_date: "2026-11-01", motor_id: "motor-1", status: "Not Run", reason: "Heavy rain", voided_at: null },
+  { operation_date: "2026-11-01", motor_id: "motor-2", status: "Not Run", reason: "Power failure", voided_at: null },
+])
+const decisionNoRunsSnapshot = structuredClone(decisionNoRuns)
+const runtimeDecisionCases = [
+  { name: "positive runtime rejects the matching no-run", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: 1 }], expected: ["M2"] },
+  { name: "zero runtime preserves no-runs", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: 0 }], expected: ["M1", "M2"] },
+  { name: "missing runtime preserves no-runs", rows: [{ entry_date: "2026-11-01", motor_no: 1 }], expected: ["M1", "M2"] },
+  { name: "invalid runtime preserves no-runs", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: "60" }], expected: ["M1", "M2"] },
+  { name: "voided runtime preserves no-runs", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: 60, voided_at: "2026-11-01T01:00:00Z" }], expected: ["M1", "M2"] },
+  { name: "rejected runtime preserves no-runs", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: 60, workflow_status: "rejected" }], expected: ["M1", "M2"] },
+  { name: "invalid managed lifecycle preserves no-runs", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: 60, workflow_status: 123 }], expected: ["M1", "M2"] },
+  { name: "published managed runtime rejects the matching no-run", rows: [{ entry_date: "2026-11-01", motor_no: 1, total_minutes: 60, workflow_status: "published" }], expected: ["M2"] },
+]
+const runtimeDecisionRowsSnapshot = structuredClone(runtimeDecisionCases.map((decision) => decision.rows))
+for (const decision of runtimeDecisionCases) {
+  assert.deepEqual(
+    noRunsWithoutMeasuredRuntime(decisionNoRuns, positiveMeasuredMotorRuntimeDays(decision.rows)).map((record) => record.motorId),
+    decision.expected,
+    decision.name,
+  )
+}
+assert.deepEqual(decisionNoRuns, decisionNoRunsSnapshot, "the decision table never mutates no-run source data")
+assert.deepEqual(runtimeDecisionCases.map((decision) => decision.rows), runtimeDecisionRowsSnapshot, "the decision table never mutates runtime source data")
+
+const aggregateDecisionCases = [
+  { name: "complete measured aggregate", point: precedenceTrend[0], water: 210_000, runtime: 6 },
+  { name: "complete measured aggregate without schedule", point: precedenceTrend[1], water: 210_000, runtime: 6 },
+  { name: "fully measured numeric zero", point: precedenceTrend[2], water: 0, runtime: 0 },
+  { name: "partial measurement without schedule", point: precedenceTrend[3], water: null, runtime: null },
+  { name: "known zero without schedule", point: precedenceTrend[4], water: null, runtime: null },
+  { name: "complete measured and known-zero mixture", point: precedenceTrend[5], water: 50_000, runtime: 1 },
+  { name: "partial scheduled aggregate", point: precedenceTrend[6], water: null, runtime: null },
+  { name: "complete all-zero aggregate", point: precedenceTrend[7], water: 0, runtime: 0 },
+]
+for (const decision of aggregateDecisionCases) {
+  assert.equal(decision.point.totalWaterLitres, decision.water, `${decision.name}: water`)
+  assert.equal(decision.point.totalRuntimeHours, decision.runtime, `${decision.name}: runtime`)
+}
+assert.equal(displayedP1e.fiveDayHistory[1].knownZeroReason, "Heavy rain", "the zone table uses the same reassigned-Motor known zero as the trend")
+assert.equal(trend[8].P1E, 0, "the trend uses the reassigned persisted Motor")
+assert.equal(displayedP1e.fiveDayHistory[2].knownZeroReason, undefined, "the zone table rejects a wrong-Motor no-run")
+assert.equal(trend[9].P1E, null, "the trend rejects the same wrong-Motor no-run")
+const conflictTableZones = ["P1E", "P2W"].map((zoneId) => {
+  const zone = emptyIrrigationData.zones.find((candidate) => candidate.id === zoneId)
+  assert.ok(zone)
+  return {
+    ...zone,
+    fiveDayHistory: [{ date: conflictDate, displayDate: "01 Oct", totalMinutes: 0, perTreeLitres: null, status: "No Record" }],
+  }
+})
+const [conflictM1Zone, conflictM2Zone] = applyScheduledKnownZerosToZones(
+  conflictTableZones,
+  filteredConflictNoRuns,
+  conflictScheduleForZoneDate,
+)
+assert.equal(conflictM1Zone.fiveDayHistory[0].knownZeroReason, undefined, "the irrigation table rejects the same positive-runtime M1 conflict as the trend")
+assert.equal(conflictM2Zone.fiveDayHistory[0].knownZeroReason, "Valid M2 no-run", "the irrigation table preserves the same independent M2 zero as the trend")
+assert.equal(mixedConflictTrend.P1E, null)
+assert.equal(mixedConflictTrend.P2W, 0)
+
+const wellDecisionCases = [
+  { name: "finite positive measurement", data: measuredPositiveWell, expected: 12_345, reason: undefined, csvReason: false },
+  { name: "finite numeric-zero measurement", data: measuredZeroWell, expected: 0, reason: undefined, csvReason: false },
+  { name: "missing measurement plus valid known zero", data: synthesizedZeroWell, expected: 0, reason: "Heavy rain", csvReason: true },
+  { name: "missing measurement plus incomplete attribution", data: incompleteNoRunWell, expected: null, reason: undefined, csvReason: false },
+  { name: "missing measurement plus positive runtime conflict", data: positiveRuntimeConflictWell, expected: null, reason: undefined, csvReason: false },
+]
+for (const decision of wellDecisionCases) {
+  const tableRecord = decision.data.northWellRecords[0]
+  const chartPoint = toChartData(decision.data.northWellRecords)[0]
+  const csv = buildWellWaterCsv(decision.data)
+  const csvRow = csv.split("\r\n").find((row) => row.includes(`"${tableRecord.date}"`))
+  assert.ok(csvRow, `${decision.name}: CSV row`)
+  const csvPumpedOut = csvRow.split(",")[4]
+  assert.equal(tableRecord.waterPumpedOut, decision.expected, `${decision.name}: table`)
+  assert.equal(chartPoint.pumpedOut, decision.expected, `${decision.name}: chart`)
+  assert.equal(csvPumpedOut, decision.expected === null ? '""' : `"${decision.expected}"`, `${decision.name}: CSV value`)
+  assert.equal(tableRecord.knownZeroReason, decision.reason, `${decision.name}: provenance`)
+  assert.equal(csv.includes("Not run: Heavy rain"), decision.csvReason, `${decision.name}: CSV provenance`)
+}
+
+const motorRoute = readFileSync(new URL("../app/api/motor-runtime/dashboard/route.ts", import.meta.url), "utf8")
+const adminNoRunRoute = readFileSync(new URL("../app/api/admin/motor-runtime/management/[...path]/route.ts", import.meta.url), "utf8")
+assert.match(motorRoute, /const noRunRecords = noRunsWithoutMeasuredRuntime\([\s\S]*positiveMeasuredMotorRuntimeDays\(sortedEntries\)/)
+assert.match(motorRoute, /fetchAllMotorRuntimeEntries<RuntimeEntry>\(/, "Motor conflict filtering uses the complete paginated canonical runtime set")
+assert.doesNotMatch(motorRoute, /limit: "1000"/)
+assert.match(motorRoute, /noRunRecords\.filter\(\(record\) => record\.motorId === id\)/, "the Motor table uses effective records")
+assert.match(motorRoute, /noRunRecords\.some\(\(record\) => record\.date === date && record\.motorId === id\)/, "Motor chart coverage uses effective records")
+assert.match(motorRoute, /motorIds\.every\(\(id\) => noRunRecords\.some\(/, "aggregate coverage uses effective records")
+assert.match(motorRoute, /confirmed_no_run_count: noRunRecords\.length/, "the public count uses effective records")
+assert.match(motorRoute, /\n\s+noRunRecords,\n/, "the public list uses effective records")
+assert.match(motorRoute, /\.\.\.noRunRecords\.map\(\(record\) => record\.date\)/, "coverage dates use effective records")
+assert.match(motorRoute, /first_entry_date: operationalDates\[0\] \?\? null/)
+assert.match(motorRoute, /latest_entry_date: operationalDates\.at\(-1\) \?\? null/)
+assert.equal((motorRoute.match(/projectedNoRunRecords/g) ?? []).length, 2, "raw projected records are used only for declaration and conflict filtering")
+assert.match(motorRoute, /headers: \{ "Cache-Control": "no-store" \}/)
+assert.match(wellRoute, /const noRunRecords = noRunsWithoutMeasuredRuntime\([\s\S]*positiveMeasuredMotorRuntimeDays\(runtimeEntries\)/, "Well public metadata uses the same exact-Motor conflict filtering as its derived surfaces")
+assert.match(wellRoute, /motor_no_run_records: noRunRecords/)
+assert.match(wellRoute, /"Cache-Control": "no-store, max-age=0"/)
+assert.doesNotMatch(adminNoRunRoute, /projectPublicMotorNoRunRecords|noRunsWithoutMeasuredRuntime|positiveMeasuredMotorRuntimeDays/, "Admin retains the complete unfiltered audit stream")
+assert.deepEqual(Object.keys(decisionNoRuns[0]), ["date", "motorId", "motorName", "status", "reason", "runtime", "water"])
+
+const require = createRequire(import.meta.url)
+const ts = require("typescript")
+const pipelineSigningSource = readFileSync(new URL("../lib/irrigation-pipeline-signing.ts", import.meta.url), "utf8")
+const pipelineSigningOutput = ts.transpileModule(pipelineSigningSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText
+const pipelineSigningModule = { exports: {} }
+Function("require", "module", "exports", pipelineSigningOutput)((specifier) => {
+  if (specifier === "@/lib/worker-management-signing") return { WorkerBffError }
+  if (specifier === "@/lib/irrigation-pipeline-identity") {
+    return { pipelineAssertionRole, PipelineIdentityError, resolveTrustedPipelineIdentity }
+  }
+  throw new Error(`Unexpected decision-table dependency: ${specifier}`)
+}, pipelineSigningModule, pipelineSigningModule.exports)
+const { resolvePipelineActor } = pipelineSigningModule.exports
+const trustedHeaders = (role, environment = "production", permission = null) => {
+  const headers = new Headers({
+    "X-MFMS-User": "validated-user",
+    "X-MFMS-Role": role,
+    "X-MFMS-Environment": environment,
+  })
+  if (permission !== null) headers.set("X-MFMS-Permission", permission)
+  return headers
+}
+const identityDecisionCases = [
+  {
+    name: "trusted development owner write",
+    run: () => resolvePipelineActor(new Headers(), {
+      MFMS_ENV: "development",
+      MFMS_WORKER_LOCAL_ACTOR_ENABLED: "true",
+      MFMS_WORKER_LOCAL_ACTOR_USERNAME: "configured-local-owner",
+      MFMS_WORKER_LOCAL_ACTOR_ROLE: "owner",
+    }, "PUT"),
+    expected: { username: "configured-local-owner", role: "admin", environment: "local" },
+  },
+  {
+    name: "production owner without optional permission",
+    run: () => resolvePipelineActor(trustedHeaders("owner"), { MFMS_ENV: "production", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" }, "PUT"),
+    expected: { username: "validated-user", role: "admin", environment: "production" },
+  },
+]
+for (const decision of identityDecisionCases) assert.deepEqual(decision.run(), decision.expected, decision.name)
+const identityRejectionCases = [
+  {
+    name: "unsupported environment",
+    status: 403,
+    run: () => resolvePipelineActor(trustedHeaders("owner", "staging"), { MFMS_ENV: "staging", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" }, "GET"),
+  },
+  {
+    name: "viewer write",
+    status: 403,
+    run: () => resolvePipelineActor(trustedHeaders("viewer"), { MFMS_ENV: "production", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" }, "PUT"),
+  },
+  {
+    name: "trusted permission restricts owner write",
+    status: 403,
+    run: () => resolvePipelineActor(trustedHeaders("owner", "production", "read"), { MFMS_ENV: "production", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" }, "PUT"),
+  },
+  {
+    name: "client cannot select development mode",
+    status: 401,
+    run: () => resolvePipelineActor(trustedHeaders("owner", "development", "write"), { MFMS_ENV: "production", MFMS_TRUST_PROXY_ACTOR_HEADERS: "true" }, "PUT"),
+  },
+]
+for (const decision of identityRejectionCases) {
+  assert.throws(decision.run, (error) => error instanceof WorkerBffError && error.status === decision.status, decision.name)
+}
 
 console.log("Known-zero versus missing dashboard regression passed")
