@@ -31,7 +31,14 @@ import {
 
 const PAGE_SIZE = 100
 const TREE_COLUMN_WIDTH = 130
-const metadataColumnWidths: Record<TreeWiseMetadata, number> = { plot: 130, classification: 145, reason: 230 }
+const metadataColumnWidths: Record<TreeWiseMetadata, number> = {
+  plot: 130,
+  classification: 145,
+  reason: 230,
+  latestTiedBunches: 150,
+  latestTyingRound: 140,
+  latestTyingDate: 130,
+}
 const cycleColumnWidths: Record<TreeWiseMeasure, number> = { bunches: 76, nuts: 84, sale: 128 }
 const totalColumnWidths: Record<TreeWiseTotal, number> = {
   totalBunches: 80,
@@ -43,7 +50,14 @@ const inputClass =
   "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
 
 const measureLabels: Record<TreeWiseMeasure, string> = { bunches: "Bun", nuts: "Nuts", sale: "Sale" }
-const metadataLabels: Record<TreeWiseMetadata, string> = { plot: "Plot", classification: "Class", reason: "Reason" }
+const metadataLabels: Record<TreeWiseMetadata, string> = {
+  plot: "Plot",
+  classification: "Class",
+  reason: "Reason",
+  latestTiedBunches: "Latest Tied Bunches",
+  latestTyingRound: "Tying Round",
+  latestTyingDate: "Tying Date",
+}
 const totalLabels: Record<TreeWiseTotal, string> = {
   totalBunches: "Total Bun",
   totalNuts: "Total Nuts",
@@ -61,7 +75,7 @@ const totalMeasure: Partial<Record<TreeWiseTotal, TreeWiseMeasure>> = {
   totalSale: "sale",
 }
 const measureOrder: TreeWiseMeasure[] = ["bunches", "nuts", "sale"]
-const metadataOrder: TreeWiseMetadata[] = ["plot", "classification", "reason"]
+const metadataOrder: TreeWiseMetadata[] = ["plot", "classification", "reason", "latestTiedBunches", "latestTyingRound", "latestTyingDate"]
 const totalOrder: TreeWiseTotal[] = ["totalBunches", "totalNuts", "totalSale", "totalMissed"]
 
 const classificationTones = {
@@ -273,8 +287,12 @@ function sortRows(rows: TreeWiseQueryRow[], sortConfig: SortConfig | null): Tree
   return [...rows].sort((left, right) => {
     const { key, direction } = sortConfig
     let comparison = 0
-    if (key === "treeNo" || key === "plot" || key === "classification" || key === "reason") {
-      comparison = treeCollator.compare(String(left[key as keyof TreeWiseQueryRow] ?? ""), String(right[key as keyof TreeWiseQueryRow] ?? ""))
+    if (key === "treeNo") {
+      comparison = treeCollator.compare(left.treeNo, right.treeNo)
+    } else if (metadataOrder.includes(key as TreeWiseMetadata)) {
+      const field = key as TreeWiseMetadata
+      if (field === "latestTiedBunches") comparison = (left.latestTiedBunches ?? -1) - (right.latestTiedBunches ?? -1)
+      else comparison = treeCollator.compare(String(left[field] ?? ""), String(right[field] ?? ""))
     } else if (key.startsWith("cycle:")) {
       const [, cycle, measure] = key.split(":") as [string, string, TreeWiseMeasure]
       comparison = (left.cycles[cycle]?.[measure] ?? 0) - (right.cycles[cycle]?.[measure] ?? 0)
@@ -389,7 +407,7 @@ function TreeWiseTable({
                 {pageRows.map((row) => (
                   <tr key={row.treeNo} className="h-[42px] border-b border-border last:border-0 hover:bg-muted/50">
                     <td className={`whitespace-nowrap border-l-4 px-3 py-2.5 font-semibold text-slate-950 ${treeNumberTone(row.classification)}`}>{row.treeNo}</td>
-                    {metadata.map((field) => <td key={field} className="whitespace-nowrap border-l border-border px-3 py-2.5 text-muted-foreground">{row[field] || "—"}</td>)}
+                    {metadata.map((field) => <td key={field} className="whitespace-nowrap border-l border-border px-3 py-2.5 text-muted-foreground">{row[field] ?? "—"}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -510,7 +528,7 @@ export default function TreeWiseQueryPage() {
   const [status, setStatus] = useState<QueryStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
   const [measures, setMeasures] = useState<TreeWiseMeasure[]>(["bunches", "nuts", "sale"])
-  const [metadata, setMetadata] = useState<TreeWiseMetadata[]>([])
+  const [metadata, setMetadata] = useState<TreeWiseMetadata[]>(["latestTiedBunches", "latestTyingRound", "latestTyingDate"])
   const [totals, setTotals] = useState<TreeWiseTotal[]>(["totalBunches", "totalNuts", "totalSale", "totalMissed"])
   const [includeNoRecord, setIncludeNoRecord] = useState(true)
   const [exporting, setExporting] = useState(false)
@@ -536,7 +554,7 @@ export default function TreeWiseQueryPage() {
 
   function selectAll() {
     setMeasures(["bunches", "nuts", "sale"])
-    setMetadata(["plot", "classification", "reason"])
+    setMetadata(metadataOrder)
     setTotals(["totalBunches", "totalNuts", "totalSale", "totalMissed"])
     setIncludeNoRecord(true)
     setSelectionError("")
@@ -551,7 +569,7 @@ export default function TreeWiseQueryPage() {
 
   function standardPreset() {
     setMeasures(["bunches", "nuts", "sale"])
-    setMetadata([])
+    setMetadata(["latestTiedBunches", "latestTyingRound", "latestTyingDate"])
     setTotals(["totalBunches", "totalNuts", "totalSale", "totalMissed"])
     setIncludeNoRecord(true)
     setSelectionError("")
@@ -633,6 +651,11 @@ export default function TreeWiseQueryPage() {
               <RangeField label="Nuts" id="nuts" />
               <RangeField label="Sale (Rs.)" id="sale" />
               <RangeField label="No. of Missed Harvests" id="missed" />
+              <RangeField label="Latest Bunches Tied" id="tied" />
+              <div className="min-w-0">
+                <label htmlFor="tying-round" className="mb-1.5 block text-xs font-medium text-muted-foreground">Tying Round</label>
+                <input id="tying-round" name="tyingRound" type="text" placeholder="Example: 2026-H2" className={inputClass} />
+              </div>
               <ClassificationField label="Tree Classification - Plot 1" id="class-plot1" name="plot1Classification" options={detailedQueryClassifications.plot1} />
               <ClassificationField label="Tree Classification - Plot 2" id="class-plot2" name="plot2Classification" options={detailedQueryClassifications.plot2} />
             </div>
