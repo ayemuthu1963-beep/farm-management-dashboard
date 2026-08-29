@@ -160,6 +160,23 @@ backend:tests/test_worker_management_migration.py
 backend:tests/test_worker_management_permissions.py
 backend:tests/test_worker_management_sync_contract.py
 
+# Coconut Bunch Tying Excel import, round history, authoritative Tree Master
+# coverage, harvest-query integration, and Preview/UAT-only schema.
+backend:api/app/analyzer/adapters.py
+backend:api/app/main.py
+backend:api/app/routers/coconut_bunch_tying.py
+backend:api/app/routers/dashboard.py
+backend:api/app/routers/exports.py
+backend:api/app/routers/trees.py
+backend:api/app/tree_performance.py
+backend:db/migrations/20260823_coconut_bunch_tying.sql
+backend:db/rollbacks/20260823_coconut_bunch_tying.sql
+backend:deploy/preview-backend-release.json
+backend:tests/test_coconut_bunch_tying.py
+backend:tests/test_coconut_harvest_adapter.py
+backend:tests/test_plot_identity_harvest_ai_contract.py
+backend:tests/test_preview_migrations.py
+
 # Admin-only Irrigation Pipeline editor inside the existing Farm Map. The
 # backend is released separately; this frontend deployment itself leaves the
 # backend and database unchanged.
