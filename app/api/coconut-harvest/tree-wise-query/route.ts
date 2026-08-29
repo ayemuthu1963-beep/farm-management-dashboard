@@ -23,6 +23,9 @@ function readFilters(request: Request): TreeWiseQueryFilters {
     missedTo: searchParams.get("missedTo") ?? undefined,
     plot1Classification: searchParams.get("plot1Classification") ?? undefined,
     plot2Classification: searchParams.get("plot2Classification") ?? undefined,
+    tiedFrom: searchParams.get("tiedFrom") ?? undefined,
+    tiedTo: searchParams.get("tiedTo") ?? undefined,
+    tyingRound: searchParams.get("tyingRound") ?? undefined,
     includeNoRecord: searchParams.get("includeNoRecord") !== "false",
   }
 }
