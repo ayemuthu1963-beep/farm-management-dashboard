@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Reconcile known-zero precedence and identity across Motor, Irrigation, and Well Water",
+  "Persisted Worker week history with read-only historical balances",
 )
-assert.equal(manifest.base_commit, "fae9bbad00aa6441bea396fae637d5d5d350808e")
-assert.equal(manifest.matched_backend_commit, "7d6288b3ae4fad0338f151e2e7e670c1e0e0447c")
+assert.equal(manifest.base_commit, "067bfda6db2fafd7978528234819c8ec61b22eb7")
+assert.equal(manifest.matched_backend_commit, "df290a9d8e6c0ccb215b30e1249b238a57d5e730")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -302,27 +302,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/irrigation-management/route.ts",
-  "app/api/motor-runtime/dashboard/route.ts",
-  "app/api/well-water/dashboard/route.ts",
-  "app/irrigation-management/page.tsx",
-  "app/well-water/page.tsx",
-  "components/farm/well-table.tsx",
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/irrigation-data.ts",
-  "lib/irrigation-pipeline-signing.ts",
-  "lib/irrigation-schedule-comparison.ts",
-  "lib/irrigation-upstream.ts",
-  "lib/known-zero-data.ts",
-  "lib/motor-data.ts",
-  "lib/well-data.ts",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/irrigation-plan.mjs",
-  "tests/known-zero-dashboard.mjs",
-  "tests/motor-runtime-water-pumped.mjs",
+  "lib/worker-management-api.ts",
+  "lib/worker-management-format.ts",
+  "lib/worker-management-types.ts",
   "tests/preview-deployment-workflow.mjs",
-  "tests/preview-schedule-identity.mjs",
-  "tests/well-water-page-corrections.mjs",
+  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

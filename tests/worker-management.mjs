@@ -12,6 +12,7 @@ import {
   WorkerBffError,
 } from "../lib/worker-management-signing.ts"
 import {
+  buildWageWeekOptions,
   buildWageWeeks,
   calculateDailyWage,
   compareAccountCodes,
@@ -95,11 +96,35 @@ assert.deepEqual(augustWeeks.current.days.map((day) => day.isoDate), [
 ])
 assert.equal(buildWageWeeks("2026-09-01").current.heading, "29 Aug – 4 Sep 2026")
 assert.equal(buildWageWeeks("2026-01-01").current.heading, "27 Dec 2025 – 2 Jan 2026")
+const savedWeekOptions = buildWageWeekOptions("2026-08-29", [
+  { week_id: 2, start_date: "2026-08-15", end_date: "2026-08-21", status: "DRAFT", version_no: 1, row_version: 1, is_read_only: true, read_only_reason: "HISTORICAL_CLOSED" },
+  { week_id: 1, start_date: "2026-08-08", end_date: "2026-08-14", status: "DRAFT", version_no: 1, row_version: 1, is_read_only: true, read_only_reason: "HISTORICAL_CLOSED" },
+])
+assert.deepEqual(savedWeekOptions.map((week) => week.startDate), [
+  "2026-08-29",
+  "2026-08-22",
+  "2026-08-15",
+  "2026-08-08",
+])
+assert.deepEqual(savedWeekOptions.map((week) => week.label), [
+  "29 Aug – 4 Sep 2026 · current week",
+  "22–28 Aug 2026 · last week",
+  "15–21 Aug 2026 · historical/closed",
+  "8–14 Aug 2026 · historical/closed",
+])
+assert.deepEqual(savedWeekOptions.map((week) => week.readOnly), [false, false, true, true])
+assert.equal(new Set(savedWeekOptions.map((week) => week.id)).size, savedWeekOptions.length)
+const rolloverOptions = buildWageWeekOptions("2026-09-05", [
+  { week_id: 3, start_date: "2026-08-22", end_date: "2026-08-28", status: "DRAFT", version_no: 1, row_version: 1 },
+])
+assert.deepEqual(rolloverOptions.map((week) => week.startDate), ["2026-09-05", "2026-08-29", "2026-08-22"])
+assert.equal(rolloverOptions[2].label, "22–28 Aug 2026 · historical/closed")
+assert.equal(rolloverOptions[2].readOnly, true)
 assert.equal(
   friendlyWorkerErrorMessage("group_attendee_count must be a whole number."),
   "Enter the number of labourers as a whole number (for example 4).",
 )
-assertions += 10
+assertions += 18
 
 for (const [rate, expectedTwoThirds, expectedOneThird] of [
   [400, 266, 133],
@@ -323,17 +348,17 @@ check(weeklyWagePreview.includes("days: blankWeek()"), "A week without saved ent
 check(weeklyWagePreview.includes("Array.from({ length: 3 }"), "Weekly wage table must include three custom-entry rows")
 check(weeklyWagePreview.includes("Daily wage · groups show labour count × editable rate"), "Weekly wage headers must explain individual and group editing")
 check(weeklyWagePreview.includes("fetchDailyWages"), "Weekly wage table must load saved daily wages")
-check(weeklyWagePreview.includes("fetchLedger"), "Weekly wage table must load ledger movements for opening balance classification")
+check(weeklyWagePreview.includes("fetchWorkWeeks"), "Weekly wage table must load every persisted Worker week")
 check(weeklyWagePreview.includes("saveDailyWageBatch"), "Weekly wage table must save daily wage rates and group counts")
 check(weeklyWagePreview.includes("updateAccount"), "Weekly wage table must persist edited worker names and references")
 check(weeklyWagePreview.includes("updateWeeklyPayment"), "Weekly wage table must persist the auto-calculated wage payment")
 check(weeklyWagePreview.includes("createLedgerTransaction"), "Weekly wage table must persist cash advances in the Worker ledger")
 check(weeklyWagePreview.includes("Save week"), "Weekly wage table must provide an operator save action")
-check(weeklyWagePreview.includes("buildWageWeeks"), "Weekly wage table must derive Saturday–Friday dates from the live India calendar date")
-check(weeklyWagePreview.includes("Object.values(wageWeeks)"), "Weekly wage table must offer the current and previous calendar weeks")
+check(weeklyWagePreview.includes("buildWageWeekOptions"), "Weekly wage table must combine calendar weeks with persisted history")
+check(weeklyWagePreview.includes("wageWeeks.map"), "Weekly wage table must render every calendar and persisted week option")
 check(weeklyWagePreview.includes("useState<string | null>(null)"), "Time-dependent week dates must wait until the client mounts")
 check(weeklyWagePreview.includes("syncCurrentWeek"), "Weekly wage table must refresh its calendar anchor after a week rollover")
-check(weeklyWagePreview.includes("if (!wageWeeks || !selectedWeek)"), "Server rendering must use a stable loading state before live dates are known")
+check(weeklyWagePreview.includes("if (!selectedWeek)"), "Server rendering must use a stable loading state before live dates are known")
 check(!weeklyWagePreview.includes("15–21 Aug 2026 · current week"), "Weekly wage table must not hard-code an expired current week")
 check(!weeklyWagePreview.includes("moveCurrentWeekToPrevious"), "The completed one-time August wage move must not remain in the live UI")
 check(weeklyWagePreview.includes("MOVED_WAGE_PLACEHOLDER_NOTE"), "Historical moved wage placeholders must remain readable as blank entries")
@@ -364,15 +389,12 @@ check(weeklyWagePreview.includes("combinedWeekWages(row, dependent) - amount(row
 check(weeklyWagePreview.includes('entry?.attendance_value === "ABSENT"'), "Saved absent days must reload as zero wages")
 check(weeklyWagePreview.includes("wage_rate: String(entry.wageRateSnapshot)"), "Zero-attendance rows must retain a valid wage-rate snapshot")
 check(weeklyWagePreview.includes("earlierLoanBalance: openingSignedBalance"), "Earlier balances must retain their signed ledger value")
-check(weeklyWagePreview.includes('const openingBalanceReference = "OPEN-BAL"'), "Approved opening balance transactions must use the audited ledger reference")
-check(weeklyWagePreview.includes("const weeklySignedCash = signedCash - openingAdjustment"), "Opening balances must be excluded from editable weekly advances")
-check(weeklyWagePreview.includes("const cashPaid = Math.max(0, -weeklySignedCash)"), "Editable weekly advances must retain a non-negative input value")
+check(weeklyWagePreview.includes("settlement?.opening_signed_balance"), "Earlier balances must come from the backend's as-of-week projection")
+check(weeklyWagePreview.includes("const cashPaid = Math.max(0, -signedCash)"), "Editable weekly advances must retain a non-negative week-scoped input value")
 check(weeklyWagePreview.includes("SignedCalculatedAmount"), "Signed balances must show positive and negative values")
-check(weeklyWagePreview.includes("carryForwardPreviousBalances"), "Current-week earlier balances must roll forward automatically")
-check(weeklyWagePreview.includes("previousBalanceByAccount"), "Balance rollover must match workers by database account")
-check(weeklyWagePreview.includes("const balance = presentBalance(row)"), "Balance rollover must use the previous week's calculated present balance")
-check(weeklyWagePreview.includes("loadedRows = carryForwardPreviousBalances(loadedRows, previousRows)"), "Current-week rows must receive the previous-week balances")
-check(weeklyWagePreview.includes('selectedWeekId === "current"'), "Previous-week balance data must be loaded only for the current week")
+check(!weeklyWagePreview.includes("carryForwardPreviousBalances"), "Frontend must not recalculate historical balances from mutable later weeks")
+check(weeklyWagePreview.includes("selectedWeek.readOnly"), "Historical options must enforce the read-only UI contract")
+check(weeklyWagePreview.includes("disabled={readOnly}"), "Historical week inputs must be disabled")
 check(weeklyWagePreview.includes('tone="green"'), "Week wages, wage payments, and loan payments must use green values")
 check(/tone="red"\s+negative/.test(weeklyWagePreview), "In-week cash must use a red negative value")
 check(weeklyWagePreview.includes('negative && value !== "" ? "−₹" : "₹"'), "Editable in-week cash must show a negative rupee prefix")
@@ -389,7 +411,7 @@ check(weeklyWagePreview.includes("entry?.daily_wage_amount ?? baseWage"), "Reloa
 check(weeklyWagePreview.includes("group_attendee_count: entry.groupAttendeeCount"), "Blank group counts must be sent as numeric zero instead of null")
 check(weeklyWagePreview.includes("attendance: entry.attendance"), "Blank individual wages must be sent as absent instead of missing")
 check(weeklyWagePreview.includes("const [loadSucceeded, setLoadSucceeded] = useState(false)"), "Saving must remain disabled until the database load succeeds")
-check(weeklyWagePreview.includes("disabled={loading || saving || !loadSucceeded}"), "The Save action must remain disabled after a load failure")
+check(weeklyWagePreview.includes("disabled={loading || saving || !loadSucceeded || readOnly}"), "Save must remain disabled after a load failure and for historical weeks")
 check(weeklyWagePreview.includes("Reload the weekly wage sheet successfully before saving"), "The save handler must reject writes after a failed load")
 check(weeklyWagePreview.includes("persistRowDatabaseState(row)"), "Created account IDs must be retained before later save steps run")
 check(!weeklyWagePreview.includes("notes: movedBlank"), "New saves must not preserve blank cells as non-zero migration placeholders")

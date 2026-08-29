@@ -188,6 +188,10 @@ export function fetchCurrentWeek(onDate?: string) {
   return requestJson<WorkWeek>(`weeks/current${queryString({ on_date: onDate })}`)
 }
 
+export function fetchWorkWeeks() {
+  return requestJson<ListResponse<WorkWeek>>("weeks?page_size=200")
+}
+
 export function fetchSettlements(weekId: number) {
   return requestJson<SettlementResponse>(`weeks/${weekId}/settlements`)
 }

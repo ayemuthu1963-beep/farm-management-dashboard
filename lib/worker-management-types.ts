@@ -74,6 +74,8 @@ export type WorkWeek = {
   status: WeekStatus
   version_no: number
   row_version: number | null
+  is_read_only?: boolean
+  read_only_reason?: string | null
 }
 
 export type DailyWageItem = {
@@ -132,6 +134,8 @@ export type SettlementRow = {
   ledger_transaction_id: number | null
   row_version: number | null
   current_signed_balance: string
+  opening_signed_balance: string
+  week_closing_signed_balance: string
   projected_signed_balance: string
 }
 
