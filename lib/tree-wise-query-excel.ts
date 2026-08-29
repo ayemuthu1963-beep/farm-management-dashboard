@@ -1,7 +1,7 @@
 import type { TreeWiseQueryCycle, TreeWiseQueryRow } from "@/lib/coconut-harvest-api"
 
 export type TreeWiseMeasure = "bunches" | "nuts" | "sale"
-export type TreeWiseMetadata = "plot" | "classification" | "reason"
+export type TreeWiseMetadata = "plot" | "classification" | "reason" | "latestTiedBunches" | "latestTyingRound" | "latestTyingDate"
 export type TreeWiseTotal = "totalBunches" | "totalNuts" | "totalSale" | "totalMissed"
 
 export interface TreeWiseWorkbookInput {
@@ -65,6 +65,9 @@ const metadataLabel: Record<TreeWiseMetadata, string> = {
   plot: "Plot",
   classification: "Class",
   reason: "Reason",
+  latestTiedBunches: "Latest Tied Bunches",
+  latestTyingRound: "Tying Round",
+  latestTyingDate: "Tying Date",
 }
 
 const totalLabel: Record<TreeWiseTotal, string> = {
@@ -83,8 +86,8 @@ function exportColumns(input: TreeWiseWorkbookInput): ExportColumn[] {
     columns.push({
       group: metadataLabel[field],
       header: metadataLabel[field],
-      width: field === "reason" ? 34 : 20,
-      value: (row) => row[field],
+      width: field === "reason" ? 34 : field === "latestTiedBunches" ? 19 : 20,
+      value: (row) => row[field] ?? "",
     })
   }
 

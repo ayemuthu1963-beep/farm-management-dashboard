@@ -68,6 +68,9 @@ type DetailedSortKey = keyof Pick<
   | "missedHarvests"
   | "plot"
   | "classification"
+  | "latestTiedBunches"
+  | "latestTyingRound"
+  | "latestTyingDate"
 >
 
 interface DetailedSortConfig {
@@ -79,12 +82,12 @@ const numericTextCollator = new Intl.Collator(undefined, { numeric: true, sensit
 const DETAILED_QUERY_PAGE_SIZE = 100
 
 function compareDetailedRows(a: DetailedQueryRow, b: DetailedQueryRow, key: DetailedSortKey) {
-  if (key === "treeNo" || key === "plot" || key === "classification") {
+  if (key === "treeNo" || key === "plot" || key === "classification" || key === "latestTyingRound") {
     return numericTextCollator.compare(String(a[key]), String(b[key]))
   }
 
-  if (key === "harvestDate") {
-    return new Date(a.harvestDate).getTime() - new Date(b.harvestDate).getTime()
+  if (key === "harvestDate" || key === "latestTyingDate") {
+    return new Date(String(a[key] ?? "")).getTime() - new Date(String(b[key] ?? "")).getTime()
   }
 
   return Number(a[key]) - Number(b[key])
@@ -172,7 +175,7 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1100px] border-collapse text-sm">
+        <table className="w-full min-w-[1420px] border-collapse text-sm">
         <thead>
           <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
             <SortableHeader label="Tree No" sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
@@ -187,6 +190,9 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
             <SortableHeader label="Missed" sortKey="missedHarvests" align="right" sortConfig={sortConfig} onSort={handleSort} />
             <SortableHeader label="Plot" sortKey="plot" sortConfig={sortConfig} onSort={handleSort} />
             <SortableHeader label="Classification" sortKey="classification" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Latest Tied Bunches" sortKey="latestTiedBunches" align="right" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Tying Round" sortKey="latestTyingRound" sortConfig={sortConfig} onSort={handleSort} />
+            <SortableHeader label="Tying Date" sortKey="latestTyingDate" sortConfig={sortConfig} onSort={handleSort} />
           </tr>
         </thead>
         <tbody>
@@ -204,6 +210,9 @@ function ResultsTable({ rows }: { rows: DetailedQueryRow[] }) {
               <td className="px-3 py-2.5 text-right text-muted-foreground">{row.missedHarvests}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.plot}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-foreground">{row.classification}</td>
+              <td className="px-3 py-2.5 text-right font-bold text-foreground">{row.latestTiedBunches ?? "—"}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.latestTyingRound ?? "—"}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.latestTyingDate ?? "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -351,6 +360,9 @@ export default function DetailedQueryPage() {
         "Missed",
         "Plot",
         "Classification",
+        "Latest Tied Bunches",
+        "Tying Round",
+        "Tying Date",
       ]
       const csvRows = rows.map((row) => [
         row.treeNo,
@@ -365,6 +377,9 @@ export default function DetailedQueryPage() {
         row.missedHarvests,
         row.plot,
         row.classification,
+        row.latestTiedBunches ?? "",
+        row.latestTyingRound ?? "",
+        row.latestTyingDate ?? "",
       ])
       const escapeCell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
       const csv = [headers, ...csvRows].map((line) => line.map(escapeCell).join(",")).join("\n")
@@ -418,6 +433,11 @@ export default function DetailedQueryPage() {
               <RangeField label="Nuts" id="nuts" />
               <RangeField label="Sale (Rs.)" id="sale" />
               <RangeField label="No. of Missed Harvests" id="missed" />
+              <RangeField label="Latest Bunches Tied" id="tied" />
+              <div className="min-w-0">
+                <label htmlFor="tying-round" className="mb-1.5 block text-xs font-medium text-muted-foreground">Tying Round</label>
+                <input id="tying-round" name="tyingRound" type="text" placeholder="Example: 2026-H2" className={inputClass} />
+              </div>
               <ClassificationField label="Tree Classification - Plot 1" id="class-plot1" name="plot1Classification" options={detailedQueryClassifications.plot1} />
               <ClassificationField label="Tree Classification - Plot 2" id="class-plot2" name="plot2Classification" options={detailedQueryClassifications.plot2} />
             </div>
