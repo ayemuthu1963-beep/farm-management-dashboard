@@ -10,15 +10,15 @@ import {
   fetchAccounts,
   fetchCurrentWeek,
   fetchDailyWages,
-  fetchLedger,
   fetchSettlements,
+  fetchWorkWeeks,
   saveDailyWageBatch,
   updateAccount,
   updateWeeklyPayment,
   WorkerApiError,
 } from "@/lib/worker-management-api"
 import {
-  buildWageWeeks,
+  buildWageWeekOptions,
   formatWholeINR,
   normaliseWeeklyWageEntry,
   saturdayForDate,
@@ -38,7 +38,7 @@ import {
   WORKER_WAGE_TOTAL_LABEL,
   type WageWorkbookCell,
 } from "@/lib/worker-wage-excel"
-import type { DailyWageResponse, FarmScheme, LedgerTransaction, SettlementRow, WorkerAccount } from "@/lib/worker-management-types"
+import type { DailyWageResponse, FarmScheme, SettlementRow, WorkerAccount, WorkWeek } from "@/lib/worker-management-types"
 import { Badge, SectionTitle, WorkerButton } from "./worker-ui"
 
 const daySlots = wageDaySlots
@@ -180,24 +180,6 @@ function presentBalance(row: WageRow): number | null {
   return amount(row.earlierLoanBalance) + amount(row.loanPayment) - amount(row.cashPaidInWeek)
 }
 
-function carryForwardPreviousBalances(currentRows: WageRow[], previousRows: WageRow[]) {
-  const previousBalanceByAccount = new Map<number, number>()
-
-  for (const row of previousRows) {
-    if (row.accountId === null || isDependentWorker(row)) continue
-    const balance = presentBalance(row)
-    if (balance !== null) previousBalanceByAccount.set(row.accountId, balance)
-  }
-
-  return currentRows.map((row) => {
-    if (row.accountId === null || isDependentWorker(row)) return row
-    const previousBalance = previousBalanceByAccount.get(row.accountId)
-    return previousBalance === undefined
-      ? row
-      : { ...row, earlierLoanBalance: previousBalance }
-  })
-}
-
 function readAmount(rawValue: string | number | null | undefined): EditableAmount {
   if (rawValue === "" || rawValue === null || rawValue === undefined) return ""
   const value = Number(rawValue)
@@ -222,6 +204,7 @@ function MoneyInput({
   compact = false,
   tone = "black",
   negative = false,
+  disabled = false,
   onChange,
 }: {
   value: EditableAmount
@@ -229,6 +212,7 @@ function MoneyInput({
   compact?: boolean
   tone?: "black" | "green" | "red"
   negative?: boolean
+  disabled?: boolean
   onChange: (value: EditableAmount) => void
 }) {
   return (
@@ -249,12 +233,13 @@ function MoneyInput({
         pattern="[0-9]*"
         autoComplete="off"
         value={value}
+        disabled={disabled}
         aria-label={label}
         placeholder="—"
         onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => updateWholeAmount(event.target.value, onChange)}
         className={cn(
-          "h-10 w-full rounded-md border border-transparent bg-transparent pr-2 text-right font-semibold tabular-nums outline-none transition hover:border-slate-300 hover:bg-white focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/15",
+          "h-10 w-full rounded-md border border-transparent bg-transparent pr-2 text-right font-semibold tabular-nums outline-none transition hover:border-slate-300 hover:bg-white focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/15 disabled:cursor-not-allowed disabled:hover:border-transparent disabled:hover:bg-transparent",
           negative ? "pl-9" : "pl-6",
           tone === "green" && "text-emerald-700",
           tone === "red" && "text-red-700",
@@ -269,10 +254,12 @@ function MoneyInput({
 function LabourCountInput({
   value,
   label,
+  disabled = false,
   onChange,
 }: {
   value: EditableAmount
   label: string
+  disabled?: boolean
   onChange: (value: EditableAmount) => void
 }) {
   return (
@@ -284,11 +271,12 @@ function LabourCountInput({
         pattern="[0-9]*"
         autoComplete="off"
         value={value}
+        disabled={disabled}
         aria-label={label}
         placeholder="0"
         onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => updateWholeAmount(event.target.value, onChange)}
-        className="mt-1 h-10 w-full rounded-md border border-violet-200 bg-white px-2 text-right text-xs font-bold tabular-nums text-slate-950 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/15"
+        className="mt-1 h-10 w-full rounded-md border border-violet-200 bg-white px-2 text-right text-xs font-bold tabular-nums text-slate-950 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/15 disabled:cursor-not-allowed disabled:bg-slate-50"
       />
     </label>
   )
@@ -345,23 +333,12 @@ function CombinedWeekWage({ value, addend }: { value: number; addend: number | n
   )
 }
 
-const openingBalanceReference = "OPEN-BAL"
-
 function databaseRows(
   accounts: WorkerAccount[],
   dailyResponses: DailyWageResponse[],
   settlements: SettlementRow[],
-  ledgerTransactions: LedgerTransaction[],
 ): WageRow[] {
   const settlementByAccount = new Map(settlements.map((row) => [row.account_id, row]))
-  const openingAdjustmentsByAccount = ledgerTransactions.reduce((balances, transaction) => {
-    if (transaction.reference !== openingBalanceReference) return balances
-    balances.set(
-      transaction.account_id,
-      (balances.get(transaction.account_id) ?? 0) + Number(transaction.signed_amount),
-    )
-    return balances
-  }, new Map<number, number>())
   const sortedAccounts = [...accounts].sort(compareApprovedWorkerRoster)
 
   const persisted = sortedAccounts.map((account): WageRow => {
@@ -381,11 +358,9 @@ function databaseRows(
     )
     const settlement = settlementByAccount.get(account.account_id)
     const signedCash = Number(settlement?.cash_paid_during_week ?? 0)
-    const openingAdjustment = openingAdjustmentsByAccount.get(account.account_id) ?? 0
-    const weeklySignedCash = signedCash - openingAdjustment
     const currentSignedBalance = Number(settlement?.current_signed_balance ?? account.signed_balance ?? 0)
-    const openingSignedBalance = currentSignedBalance - signedCash + openingAdjustment
-    const cashPaid = Math.max(0, -weeklySignedCash)
+    const openingSignedBalance = Number(settlement?.opening_signed_balance ?? currentSignedBalance - signedCash)
+    const cashPaid = Math.max(0, -signedCash)
 
     return {
       id: `account-${account.account_id}`,
@@ -483,9 +458,15 @@ export function WeeklyWageTablePreview() {
   const [weekId, setWeekId] = useState<number | null>(null)
   const [weekStatus, setWeekStatus] = useState("NOT_STARTED")
   const [weekAnchor, setWeekAnchor] = useState<string | null>(null)
-  const wageWeeks = useMemo(() => weekAnchor ? buildWageWeeks(weekAnchor) : null, [weekAnchor])
-  const selectedWeek = wageWeeks?.[selectedWeekId] ?? null
+  const [persistedWeeks, setPersistedWeeks] = useState<WorkWeek[]>([])
+  const [weekOptionsLoading, setWeekOptionsLoading] = useState(true)
+  const wageWeeks = useMemo(
+    () => weekAnchor ? buildWageWeekOptions(weekAnchor, persistedWeeks) : [],
+    [persistedWeeks, weekAnchor],
+  )
+  const selectedWeek = wageWeeks.find((week) => week.id === selectedWeekId) ?? wageWeeks[0] ?? null
   const workDays = selectedWeek?.days ?? []
+  const readOnly = selectedWeek?.readOnly === true || weekStatus === "CLOSED" || weekStatus === "PAID"
 
   useEffect(() => {
     const syncCurrentWeek = () => {
@@ -497,62 +478,50 @@ export function WeeklyWageTablePreview() {
     return () => window.removeEventListener("focus", syncCurrentWeek)
   }, [])
 
+  useEffect(() => {
+    let active = true
+    fetchWorkWeeks()
+      .then((response) => {
+        if (active) setPersistedWeeks(response.items)
+      })
+      .catch((error) => {
+        if (!active) return
+        setMessageTone("error")
+        setMessage(error instanceof Error ? error.message : "Saved Worker weeks could not be loaded.")
+      })
+      .finally(() => {
+        if (active) setWeekOptionsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [weekAnchor])
+
   const loadWeek = useCallback(async () => {
-    if (!selectedWeek || !wageWeeks) return
+    if (!selectedWeek) return
     setLoading(true)
     setLoadSucceeded(false)
     setMessageTone("info")
     setMessage("Loading the approved roster and saved wages…")
     try {
-      const previousWeek = wageWeeks.previous
-      const [accountResponse, dailyResponses, week, previousDailyResponses, previousWeekRecord] = await Promise.all([
+      const [accountResponse, dailyResponses, week] = await Promise.all([
         fetchAccounts({ isActive: true, pageSize: 200 }),
         Promise.all(selectedWeek.days.map((day) => fetchDailyWages(day.isoDate))),
         fetchCurrentWeek(selectedWeek.startDate),
-        selectedWeekId === "current"
-          ? Promise.all(previousWeek.days.map((day) => fetchDailyWages(day.isoDate)))
-          : Promise.resolve(null),
-        selectedWeekId === "current"
-          ? fetchCurrentWeek(previousWeek.startDate)
-          : Promise.resolve(null),
       ])
-      const [currentWeekDetails, previousWeekDetails] = await Promise.all([
-        week.week_id
-          ? Promise.all([
-              fetchSettlements(week.week_id),
-              fetchLedger({ weekId: week.week_id, pageSize: 200 }),
-            ])
-          : Promise.resolve([null, null] as const),
-        previousWeekRecord?.week_id
-          ? Promise.all([
-              fetchSettlements(previousWeekRecord.week_id),
-              fetchLedger({ weekId: previousWeekRecord.week_id, pageSize: 200 }),
-            ])
-          : Promise.resolve([null, null] as const),
-      ])
-      const [settlementResponse, ledgerResponse] = currentWeekDetails
-      let loadedRows = databaseRows(
+      const settlementResponse = week.week_id ? await fetchSettlements(week.week_id) : null
+      const loadedRows = databaseRows(
         accountResponse.items,
         dailyResponses,
         settlementResponse?.items ?? [],
-        ledgerResponse?.items ?? [],
       )
-      if (previousDailyResponses) {
-        const [previousSettlementResponse, previousLedgerResponse] = previousWeekDetails
-        const previousRows = databaseRows(
-          accountResponse.items,
-          previousDailyResponses,
-          previousSettlementResponse?.items ?? [],
-          previousLedgerResponse?.items ?? [],
-        )
-        loadedRows = carryForwardPreviousBalances(loadedRows, previousRows)
-      }
       setRows(loadedRows)
       setWeekId(week.week_id)
       setWeekStatus(week.status)
       setLoadSucceeded(true)
       setMessageTone("success")
-      setMessage(week.week_id ? `${selectedWeek.heading} loaded · ${week.status.toLocaleLowerCase()}` : `${selectedWeek.heading} loaded · no entries saved`)
+      const displayStatus = selectedWeek.readOnly ? "historical/closed · read-only" : week.status.toLocaleLowerCase()
+      setMessage(week.week_id ? `${selectedWeek.heading} loaded · ${displayStatus}` : `${selectedWeek.heading} loaded · no entries saved`)
     } catch (error) {
       setLoadSucceeded(false)
       setMessageTone("error")
@@ -560,7 +529,7 @@ export function WeeklyWageTablePreview() {
     } finally {
       setLoading(false)
     }
-  }, [selectedWeek, selectedWeekId, wageWeeks])
+  }, [selectedWeek])
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => void loadWeek(), 0)
@@ -623,6 +592,11 @@ export function WeeklyWageTablePreview() {
 
   async function saveWeek() {
     if (!selectedWeek) return
+    if (readOnly) {
+      setMessageTone("error")
+      setMessage("Historical and closed Worker weeks are read-only.")
+      return
+    }
     if (!loadSucceeded) {
       setMessageTone("error")
       setMessage("Reload the weekly wage sheet successfully before saving to the Production database.")
@@ -860,6 +834,7 @@ export function WeeklyWageTablePreview() {
         <input
           type="text"
           value={row.name}
+          disabled={readOnly}
           placeholder={row.custom ? row.rateNote : undefined}
           aria-label={`${row.name || row.rateNote} worker name`}
           onFocus={(event) => event.currentTarget.select()}
@@ -878,6 +853,7 @@ export function WeeklyWageTablePreview() {
               pattern="[0-9]*"
               autoComplete="off"
               value={row.baseWage}
+              disabled={readOnly}
               aria-label={`${row.name || row.rateNote} base wage`}
               placeholder="Wage"
               onFocus={(event) => event.currentTarget.select()}
@@ -888,6 +864,7 @@ export function WeeklyWageTablePreview() {
           <input
             type="text"
             value={row.reference}
+            disabled={readOnly}
             maxLength={7}
             spellCheck={false}
             aria-label={`${row.name || row.rateNote} reference, maximum 7 characters`}
@@ -925,6 +902,7 @@ export function WeeklyWageTablePreview() {
                 value={row.loanPayment}
                 label={`${row.name || row.rateNote}, to loan payment`}
                 tone="green"
+                disabled={readOnly}
                 onChange={(value) => updateRow(row.id, (current) => ({ ...current, loanPayment: value }))}
               />
             </td>
@@ -940,6 +918,7 @@ export function WeeklyWageTablePreview() {
                 label={`${row.name || row.rateNote}, cash paid in week`}
                 tone="red"
                 negative
+                disabled={readOnly}
                 onChange={(value) => updateRow(row.id, (current) => ({ ...current, cashPaidInWeek: value }))}
               />
             </td>
@@ -952,7 +931,7 @@ export function WeeklyWageTablePreview() {
     )
   }
 
-  if (!wageWeeks || !selectedWeek) {
+  if (!selectedWeek) {
     return (
       <div className="weekly-wage-print mx-auto w-full max-w-[1880px]">
         <SectionTitle
@@ -977,19 +956,19 @@ export function WeeklyWageTablePreview() {
               <select
                 aria-label="Wage week"
                 value={selectedWeekId}
-                disabled={loading || saving}
+                disabled={loading || saving || weekOptionsLoading}
                 onChange={(event) => {
                   setLoadSucceeded(false)
                   setSelectedWeekId(event.target.value as WageWeekId)
                 }}
                 className="bg-transparent pr-1 outline-none"
               >
-                {Object.values(wageWeeks).map((week) => (
+                {wageWeeks.map((week) => (
                   <option key={week.id} value={week.id}>{week.label}</option>
                 ))}
               </select>
             </label>
-            <WorkerButton onClick={() => void saveWeek()} disabled={loading || saving || !loadSucceeded}>
+            <WorkerButton onClick={() => void saveWeek()} disabled={loading || saving || !loadSucceeded || readOnly}>
               {saving ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {saving ? "Saving…" : "Save week"}
             </WorkerButton>
@@ -1154,6 +1133,7 @@ export function WeeklyWageTablePreview() {
                         <td key={workDay.key} className="border-r border-slate-200 p-1 align-top">
                           <LabourCountInput
                             value={row.labourers[workDay.key]}
+                            disabled={readOnly}
                             label={`${row.name || row.rateNote}, ${workDay.date} ${workDay.day} number of labourers`}
                             onChange={(value) => updateLabourers(row.id, workDay.key, value)}
                           />
@@ -1171,6 +1151,7 @@ export function WeeklyWageTablePreview() {
                               value={row.days[workDay.key]}
                               label={`${row.name || row.rateNote}, ${workDay.date} ${workDay.day} wage per labourer`}
                               compact
+                              disabled={readOnly}
                               onChange={(value) => updateDay(row.id, workDay.key, value)}
                             />
                             <p
@@ -1193,6 +1174,7 @@ export function WeeklyWageTablePreview() {
                       <td key={workDay.key} className="border-b border-r border-slate-200 bg-emerald-50/35 p-1">
                         <MoneyInput
                           value={row.days[workDay.key]}
+                          disabled={readOnly}
                           label={`${row.name}, ${workDay.date} ${workDay.day} wage`}
                           onChange={(value) => updateDay(row.id, workDay.key, value)}
                         />

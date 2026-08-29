@@ -3,6 +3,7 @@ import type {
   AccountType,
   AttendanceValue,
   FarmScheme,
+  WorkWeek,
   WeekStatus,
 } from "./worker-management-types"
 
@@ -127,15 +128,19 @@ export const wageDaySlots = [
 ] as const
 
 export type WageDayKey = (typeof wageDaySlots)[number]["key"]
-export type WageWeekId = "current" | "previous"
+export type WageWeekId = string
+export type WageWeekKind = "current" | "previous" | "historical"
 
 export type WageWeek = {
   id: WageWeekId
+  kind: WageWeekKind
   label: string
   heading: string
   startDate: string
   endDate: string
   exportFile: string
+  persistedWeekId: number | null
+  readOnly: boolean
   days: Array<{
     key: WageDayKey
     day: (typeof wageDaySlots)[number]["day"]
@@ -186,15 +191,28 @@ function wageExportFileName(startDate: string, endDate: string) {
   return `worker-wages-${start.day2}-${start.month}-${start.year}-to-${end.day2}-${end.month}-${end.year}.xlsx`
 }
 
-function buildWageWeek(id: WageWeekId, startDate: string): WageWeek {
+function buildWageWeek(
+  id: WageWeekId,
+  startDate: string,
+  kind: WageWeekKind,
+  persisted: WorkWeek | null = null,
+): WageWeek {
   const endDate = addDays(startDate, 6)
+  const suffix = kind === "current"
+    ? "current week"
+    : kind === "previous"
+      ? "last week"
+      : "historical/closed"
   return {
     id,
-    label: `${formatWageRange(startDate, endDate, true)} · ${id === "current" ? "current week" : "last week"}`,
+    kind,
+    label: `${formatWageRange(startDate, endDate, true)} · ${suffix}`,
     heading: formatWageRange(startDate, endDate, false),
     startDate,
     endDate,
     exportFile: wageExportFileName(startDate, endDate),
+    persistedWeekId: persisted?.week_id ?? null,
+    readOnly: kind === "historical" || persisted?.is_read_only === true || ["CLOSED", "PAID"].includes(persisted?.status ?? ""),
     days: wageDaySlots.map((slot, index) => {
       const isoDate = addDays(startDate, index)
       const parts = wageDateParts(isoDate)
@@ -207,12 +225,27 @@ function buildWageWeek(id: WageWeekId, startDate: string): WageWeek {
   }
 }
 
-export function buildWageWeeks(anchorDate = toDateInput()): Record<WageWeekId, WageWeek> {
+export function buildWageWeekOptions(
+  anchorDate = toDateInput(),
+  persistedWeeks: WorkWeek[] = [],
+): WageWeek[] {
   const currentStart = saturdayForDate(anchorDate)
-  return {
-    current: buildWageWeek("current", currentStart),
-    previous: buildWageWeek("previous", addDays(currentStart, -7)),
-  }
+  const previousStart = addDays(currentStart, -7)
+  const persistedByStart = new Map(persistedWeeks.map((week) => [week.start_date, week]))
+  const primary = [
+    buildWageWeek("current", currentStart, "current", persistedByStart.get(currentStart) ?? null),
+    buildWageWeek("previous", previousStart, "previous", persistedByStart.get(previousStart) ?? null),
+  ]
+  const historical = [...persistedWeeks]
+    .filter((week) => week.start_date !== currentStart && week.start_date !== previousStart)
+    .sort((left, right) => right.start_date.localeCompare(left.start_date) || (right.week_id ?? 0) - (left.week_id ?? 0))
+    .map((week) => buildWageWeek(`history:${week.week_id}`, week.start_date, "historical", week))
+  return [...primary, ...historical]
+}
+
+export function buildWageWeeks(anchorDate = toDateInput()): Record<"current" | "previous", WageWeek> {
+  const [current, previous] = buildWageWeekOptions(anchorDate)
+  return { current, previous }
 }
 
 export function addDays(value: string, days: number): string {
