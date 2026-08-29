@@ -19,36 +19,16 @@ const workerRosterProductionAdaptations = [
   "deploy/production-release-manifest.json",
   "tests/farm-calendar-production-promotion.mjs",
 ]
-const knownZeroVerifiedFiles = [
-  "app/api/irrigation-management/route.ts",
-  "app/api/motor-runtime/dashboard/route.ts",
-  "app/api/operator-settings/[[...path]]/route.ts",
-  "app/api/well-water/dashboard/route.ts",
-  "app/irrigation-management/page.tsx",
-  "app/well-water/page.tsx",
-  "components/farm/well-table.tsx",
-  "components/irrigation/irrigation-map-with-details.tsx",
-  "lib/irrigation-data.ts",
-  "lib/irrigation-history.ts",
-  "lib/irrigation-pipeline-identity.ts",
-  "lib/irrigation-pipeline-signing.ts",
-  "lib/irrigation-schedule-comparison.ts",
-  "lib/irrigation-upstream.ts",
-  "lib/known-zero-data.ts",
-  "lib/motor-data.ts",
-  "lib/motor-no-run-server.ts",
-  "lib/well-data.ts",
-  "tests/irrigation-management-corrections.mjs",
-  "tests/irrigation-plan.mjs",
-  "tests/known-zero-dashboard.mjs",
-  "tests/motor-runtime-water-pumped.mjs",
-  "tests/preview-schedule-identity.mjs",
+const workerHistoryVerifiedFiles = [
+  "lib/worker-management-api.ts",
+  "lib/worker-management-format.ts",
+  "lib/worker-management-types.ts",
+  "tests/worker-management.mjs",
 ]
-const knownZeroProductionAdaptations = [
+const workerHistoryProductionAdaptations = [
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/production-release-manifest.json",
-  "package.json",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/well-water-page-corrections.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -59,15 +39,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote the Preview-verified known-zero dashboards and owner identity compatibility while preserving Production Worker Management",
+  "Promote Preview-verified Worker history, closed-week protection, and frozen opening-balance projection",
 )
-assert.equal(manifest.base_commit, "fdd675ee7f16e42aa12c4be5e7ecc5c1ad1c1f85")
+assert.equal(manifest.base_commit, "949661e3a0bd26111d5be0ea6db90e17cbcffcaa")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "067bfda6db2fafd7978528234819c8ec61b22eb7",
-  image_id: "sha256:96d05b1fe2f5b9a0b04a235d739afb0aba80a4c2dc1b8e39943b3014d7b4c9aa",
-  feature_revision: "9f87cd0e52c477ba7a0034e47527675537b61cb4",
-  verified_files: knownZeroVerifiedFiles,
-  production_adaptations: knownZeroProductionAdaptations,
+  revision: "363f9d7814260db4b3f859f08fcccbbe9b34e398",
+  image_id: "sha256:4570c0565f4c122a3c23d29b0046723900c0bb31c0fd456d13ee07160706b738",
+  feature_revision: "81121da96e0908d36df2af737773cadd90379caa",
+  verified_files: workerHistoryVerifiedFiles,
+  production_adaptations: workerHistoryProductionAdaptations,
 })
 assert.deepEqual(manifest.preserved_worker_roster_order, {
   release_merge: "669f9fdc0db52c695a616cb84e3a701ee6602d54",
@@ -90,8 +70,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...knownZeroVerifiedFiles,
-    ...knownZeroProductionAdaptations,
+    ...workerHistoryVerifiedFiles,
+    ...workerHistoryProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -107,6 +87,10 @@ assert.match(workerWageTable, /Weekly wage sheet saved to the Production databas
 assert.match(workerWageTable, /normaliseWeeklyWageEntry/)
 assert.match(workerWageTable, /const workerRates = approvedWorkerRoster/)
 assert.match(workerWageTable, /sort\(compareApprovedWorkerRoster\)/)
+assert.match(workerWageTable, /fetchWorkWeeks/)
+assert.match(workerWageTable, /selectedWeek\.readOnly/)
+assert.match(workerWageTable, /settlement\?\.opening_signed_balance/)
+assert.doesNotMatch(workerWageTable, /carryForwardPreviousBalances/)
 assert.doesNotMatch(workerWageTable, /const missingApprovedRows = createInitialRows\(\)/)
 assert.doesNotMatch(workerWageTable, /saved to the Preview database/)
 
