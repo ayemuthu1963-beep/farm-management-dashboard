@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Persisted Worker week history with read-only historical balances",
+  "Activate audited Coconut Bunch Tying backend deployment scope",
 )
-assert.equal(manifest.base_commit, "067bfda6db2fafd7978528234819c8ec61b22eb7")
-assert.equal(manifest.matched_backend_commit, "df290a9d8e6c0ccb215b30e1249b238a57d5e730")
+assert.equal(manifest.base_commit, "363f9d7814260db4b3f859f08fcccbbe9b34e398")
+assert.equal(manifest.matched_backend_commit, "e6dd332179815a9058efb103f9d4f72c936517b7")
 assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -302,13 +302,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
+  "deploy/approved-change-scope.txt",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-api.ts",
-  "lib/worker-management-format.ts",
-  "lib/worker-management-types.ts",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

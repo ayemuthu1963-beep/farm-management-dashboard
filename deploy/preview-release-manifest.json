@@ -3,18 +3,14 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Persisted Worker week history with read-only historical balances",
-  "base_commit": "067bfda6db2fafd7978528234819c8ec61b22eb7",
-  "matched_backend_commit": "df290a9d8e6c0ccb215b30e1249b238a57d5e730",
+  "release_note": "Activate audited Coconut Bunch Tying backend deployment scope",
+  "base_commit": "363f9d7814260db4b3f859f08fcccbbe9b34e398",
+  "matched_backend_commit": "e6dd332179815a9058efb103f9d4f72c936517b7",
   "matched_private_intelligence_commit": "91bd618883082336ecebd898a56e4fb476f4b4fd",
   "allowed_paths": [
-    "components/worker-management/weekly-wage-table-preview.tsx",
+    "deploy/approved-change-scope.txt",
     "deploy/preview-release-manifest.json",
-    "lib/worker-management-api.ts",
-    "lib/worker-management-format.ts",
-    "lib/worker-management-types.ts",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/worker-management.mjs"
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
