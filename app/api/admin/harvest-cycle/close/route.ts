@@ -66,8 +66,9 @@ export async function POST(request: Request) {
 
   const detail = await response.json().catch(() => ({}))
   if (!response.ok) {
-    return NextResponse.json({ ok: false, errors: [typeof detail.detail === "string" ? detail.detail : `Harvest API returned ${response.status}.`], message: "Harvest cycle was not closed." }, { status: response.status })
+    const detailMessage = typeof detail.detail === "string" ? detail.detail : typeof detail.message === "string" ? detail.message : `Harvest API returned ${response.status}.`
+    return NextResponse.json({ ok: false, errors: [detailMessage], message: response.status === 409 ? "Harvest cycle changed before it could be closed." : "Harvest cycle was not closed.", status: response.status, saved: detail }, { status: response.status })
   }
 
-  return NextResponse.json({ ok: true, errors: [], message: `Cycle ${harvestCycle} closed.`, saved: detail })
+  return NextResponse.json({ ok: true, errors: [], message: detail.already_closed ? `Cycle ${harvestCycle} was already closed.` : `Cycle ${harvestCycle} closed.`, status: response.status, saved: detail })
 }
