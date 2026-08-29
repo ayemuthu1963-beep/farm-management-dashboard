@@ -2,6 +2,7 @@ const exactPageTitles: Record<string, string> = {
   "/": "MFMS-Dashboard",
   "/admin": "MFMS-Admin Console",
   "/admin/beetle-trap": "MFMS-Beetle Trap Admin",
+  "/admin/coconut-bunch-tying": "MFMS-Coconut Bunch Tying Admin",
   "/admin/harvest": "MFMS-Harvest Admin",
   "/admin/harvest-cycle": "MFMS-Harvest Cycle Admin",
   "/admin/harvest-sync": "MFMS-Harvest Sync",
