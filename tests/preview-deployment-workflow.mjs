@@ -290,8 +290,9 @@ assert.equal(
   manifest.release_note,
   "Add audited coconut bunch-tying import and data to four harvest views",
 )
-assert.equal(manifest.base_commit, "363f9d7814260db4b3f859f08fcccbbe9b34e398")
-assert.equal(manifest.matched_backend_commit, "fb52c2a89c96a878bd7472275b1882b5fa060038")
+assert.equal(manifest.base_commit, "cd4e35682abe1dca4994cb5b7ee868e37b3b5394")
+assert.equal(manifest.matched_backend_commit, "726925d617f06185219be9b0369b3a8fc51bc913")
+assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
