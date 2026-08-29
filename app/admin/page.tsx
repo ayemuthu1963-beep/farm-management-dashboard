@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, ShieldCheck, Sprout } from "lucide-react"
+import { Bug, CalendarRange, DatabaseZap, Droplets, Gauge, Link2, ShieldCheck, Sprout } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Panel } from "@/components/farm/panel"
 import { getPreviewDatabaseLabel, getPreviewEnvironmentLabel } from "@/components/admin/preview-admin-notice"
@@ -42,6 +42,12 @@ const adminTiles = [
     description: "Record replacement palms, manage early-bearing trees, and review all Future Better saplings with months since planting.",
     href: "/admin/tree-lifecycle",
     icon: Sprout,
+  },
+  {
+    title: "Coconut Bunch Tying",
+    description: "Validate and import the specialist labour workbook for six-month bunch-tying rounds, preserving the original source and tree-wise history.",
+    href: "/admin/coconut-bunch-tying",
+    icon: Link2,
   },
 ]
 
