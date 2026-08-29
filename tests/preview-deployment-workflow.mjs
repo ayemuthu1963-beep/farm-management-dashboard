@@ -288,11 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Persisted Worker week history with read-only historical balances",
+  "Add audited coconut bunch-tying import and data to four harvest views",
 )
-assert.equal(manifest.base_commit, "067bfda6db2fafd7978528234819c8ec61b22eb7")
-assert.equal(manifest.matched_backend_commit, "df290a9d8e6c0ccb215b30e1249b238a57d5e730")
-assert.equal(manifest.matched_private_intelligence_commit, "91bd618883082336ecebd898a56e4fb476f4b4fd")
+assert.equal(manifest.base_commit, "363f9d7814260db4b3f859f08fcccbbe9b34e398")
+assert.equal(manifest.matched_backend_commit, "f4c1fff6e5bf52ab8eb641bf1b1215ad72f2d6bc")
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
   backend: "unchanged",
@@ -302,13 +301,26 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
+  "app/admin/coconut-bunch-tying/page.tsx",
+  "app/admin/page.tsx",
+  "app/api/admin/coconut-bunch-tying/[[...path]]/route.ts",
+  "app/api/coconut-harvest/detailed-query/route.ts",
+  "app/api/coconut-harvest/tree-wise-query/route.ts",
+  "app/coconut-harvest/detailed-query/page.tsx",
+  "app/coconut-harvest/tree-performance/page.tsx",
+  "app/coconut-harvest/tree-view/page.tsx",
+  "app/coconut-harvest/tree-wise-query/page.tsx",
+  "components/admin/coconut-bunch-tying-admin-client.tsx",
+  "components/coconut/tree-view-client.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-management-api.ts",
-  "lib/worker-management-format.ts",
-  "lib/worker-management-types.ts",
+  "lib/coconut-harvest-api.ts",
+  "lib/coconut-harvest-data.ts",
+  "lib/page-titles.ts",
+  "lib/tree-wise-query-excel.ts",
+  "package.json",
+  "tests/coconut-bunch-tying.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
+  "tests/tree-wise-table-query.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
