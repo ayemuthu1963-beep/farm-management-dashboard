@@ -1,3 +1,5 @@
+import type { MotorId, PublicMotorNoRunRecord } from "./motor-data"
+
 // ============================================================================
 // WELL WATER DASHBOARD DATA CONTRACT
 // The backend daily rows are authoritative for water volume, motor-pumped water,
@@ -9,6 +11,23 @@
 export type WellId = "north" | "south"
 export type WellCode = "well1" | "well2"
 type NumericApiValue = number | string
+
+const WELL_MOTOR_IDS = {
+  north: ["M1", "M2"],
+  south: ["M3"],
+} as const satisfies Readonly<Record<WellId, readonly MotorId[]>>
+
+function noRunReasonForAllMotors(
+  records: readonly PublicMotorNoRunRecord[],
+  date: string,
+  motorIds: readonly MotorId[],
+): string | null {
+  const reasons = motorIds.map((motorId) =>
+    records.find((record) => record.date === date && record.motorId === motorId)?.reason,
+  )
+  if (reasons.some((reason) => !reason)) return null
+  return Array.from(new Set(reasons as string[])).join(" / ")
+}
 
 export interface WellDailyApiRow {
   date: string
@@ -43,6 +62,7 @@ export interface WellDashboardResponse {
   daily_rows?: WellDailyApiRow[]
   north_rows: WellDailyApiRow[]
   south_rows: WellDailyApiRow[]
+  motor_no_run_records?: PublicMotorNoRunRecord[]
 }
 
 export interface WellDailyRecord {
@@ -58,6 +78,7 @@ export interface WellDailyRecord {
   differenceInMorningReadings: number | null
   remarks: string
   configurationWarning?: string
+  knownZeroReason?: string
 }
 
 export interface SummaryStat {
@@ -175,7 +196,7 @@ function waterDisplay(value: number | null): string {
   return formatNumberIN(Math.round(value))
 }
 
-function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
+function toDailyRecord(row: WellDailyApiRow, knownZeroReason?: string): WellDailyRecord {
   const isPlaceholder = row.reading_count === 0
   const configurationWarning =
     !isPlaceholder && row.remarks === SOUTH_WELL_CONFIGURATION_WARNING
@@ -183,6 +204,11 @@ function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
       : undefined
   const morningWater = isPlaceholder ? null : toNullableFiniteNumber(row.morning_water_liters)
   const eveningWater = isPlaceholder ? null : toNullableFiniteNumber(row.evening_water_liters)
+  const motorRuntimeMinutes = toNullableFiniteNumber(row.motor_runtime_minutes) ?? 0
+  const measuredWaterPumpedOut = toNullableFiniteNumber(row.water_pumped_out_liters)
+  const appliedKnownZeroReason = measuredWaterPumpedOut === null && motorRuntimeMinutes <= 0
+    ? knownZeroReason
+    : undefined
 
   return {
     date: formatTableDate(row.date),
@@ -191,12 +217,13 @@ function toDailyRecord(row: WellDailyApiRow): WellDailyRecord {
     eveningWater,
     morningWaterDisplay: isPlaceholder ? "" : waterDisplay(morningWater),
     eveningWaterDisplay: isPlaceholder ? "" : waterDisplay(eveningWater),
-    motorRuntimeMinutes: toNullableFiniteNumber(row.motor_runtime_minutes) ?? 0,
-    waterPumpedOut: isPlaceholder ? null : toNullableFiniteNumber(row.water_pumped_out_liters),
+    motorRuntimeMinutes,
+    waterPumpedOut: measuredWaterPumpedOut ?? (appliedKnownZeroReason ? 0 : null),
     observedStorageChange: isPlaceholder ? null : toNullableFiniteNumber(row.observed_storage_change_liters),
     differenceInMorningReadings: isPlaceholder ? null : toNullableFiniteNumber(row.difference_in_morning_readings_litres),
     remarks: isPlaceholder ? "" : row.remarks,
     configurationWarning,
+    knownZeroReason: appliedKnownZeroReason,
   }
 }
 
@@ -205,7 +232,7 @@ function shiftIsoDate(isoDate: string, offsetDays: number): string {
   return new Date(Date.UTC(year, month - 1, day + offsetDays)).toISOString().slice(0, 10)
 }
 
-function blankDailyRecord(date: string): WellDailyRecord {
+function blankDailyRecord(date: string, knownZeroReason?: string): WellDailyRecord {
   return {
     date: formatTableDate(date),
     isPlaceholder: true,
@@ -214,24 +241,33 @@ function blankDailyRecord(date: string): WellDailyRecord {
     morningWaterDisplay: "",
     eveningWaterDisplay: "",
     motorRuntimeMinutes: 0,
-    waterPumpedOut: null,
+    waterPumpedOut: knownZeroReason ? 0 : null,
     observedStorageChange: null,
     differenceInMorningReadings: null,
     remarks: "",
+    knownZeroReason,
   }
 }
 
 function buildCalendarRecords(
   rows: WellDailyApiRow[],
+  noRunRecords: readonly PublicMotorNoRunRecord[],
+  wellId: WellId,
   startDate?: string,
   endDate?: string,
 ): WellDailyRecord[] {
-  if (!startDate || !endDate || startDate > endDate) return rows.map(toDailyRecord)
+  if (!startDate || !endDate || startDate > endDate) {
+    return rows.map((row) => toDailyRecord(
+      row,
+      noRunReasonForAllMotors(noRunRecords, row.date, WELL_MOTOR_IDS[wellId]) ?? undefined,
+    ))
+  }
   const rowsByDate = new Map(rows.map((row) => [row.date, row]))
   const records: WellDailyRecord[] = []
   for (let date = endDate; date >= startDate; date = shiftIsoDate(date, -1)) {
     const row = rowsByDate.get(date)
-    records.push(row ? toDailyRecord(row) : blankDailyRecord(date))
+    const knownZeroReason = noRunReasonForAllMotors(noRunRecords, date, WELL_MOTOR_IDS[wellId]) ?? undefined
+    records.push(row ? toDailyRecord(row, knownZeroReason) : blankDailyRecord(date, knownZeroReason))
   }
   return records
 }
@@ -279,11 +315,15 @@ export function buildWellDashboardData(payload: WellDashboardResponse): WellDash
   const southRows = dailyRows.filter((row) => row.well_id === "south" || row.well_code === "well2")
   const northWellRecords = buildCalendarRecords(
     northRows,
+    payload.motor_no_run_records ?? [],
+    "north",
     payload.summary?.selected_start_date,
     payload.summary?.selected_end_date,
   )
   const southWellRecords = buildCalendarRecords(
     southRows,
+    payload.motor_no_run_records ?? [],
+    "south",
     payload.summary?.selected_start_date,
     payload.summary?.selected_end_date,
   )
@@ -313,6 +353,12 @@ export function toChartData(records: WellDailyRecord[]): ChartPoint[] {
     }))
 }
 
+export function hasWellWaterExportData(data: WellDashboardData): boolean {
+  return data.totalReadings > 0
+    || data.northWellRecords.some((record) => record.waterPumpedOut !== null)
+    || data.southWellRecords.some((record) => record.waterPumpedOut !== null)
+}
+
 function escapeCsv(value: string | number | null): string {
   const text = value === null ? "" : String(value)
   return `"${text.replaceAll('"', '""')}"`
@@ -339,7 +385,7 @@ export function buildWellWaterCsv(data: WellDashboardData): string {
       record.eveningWater,
       record.waterPumpedOut,
       record.differenceInMorningReadings,
-      record.remarks,
+      record.knownZeroReason ? `Not run: ${record.knownZeroReason}` : record.remarks,
     ]),
   )
   return [header, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\r\n")

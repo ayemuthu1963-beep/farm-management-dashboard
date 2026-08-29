@@ -7,6 +7,7 @@ import {
   type ScheduleId,
 } from "./irrigation-plan"
 import type { ZoneFiveDayHistory, ZoneId } from "./irrigation-data"
+import type { MotorId } from "./motor-data"
 
 export const FARM_TIME_ZONE = "Asia/Kolkata"
 
@@ -36,6 +37,10 @@ export interface ScheduledWater {
   kind: ScheduledWaterKind
   litres: number | null
   display: string
+}
+
+export interface ScheduledZoneAssignment extends ScheduledWater {
+  motorId: MotorId | null
 }
 
 export interface ActualWaterComparison {
@@ -162,6 +167,25 @@ export function scheduledWaterForZoneDate(
   if (!Number.isFinite(litres) || litres < 0) return { kind: "unavailable", litres: null, display: "Unavailable" }
   if (litres === 0) return { kind: "not-scheduled", litres: null, display: "Not scheduled" }
   return { kind: "scheduled", litres, display: formatLitresPerTree(litres) }
+}
+
+function persistedMotorId(value: string): MotorId | null {
+  const motor = value.trim()
+  return motor === "1" || motor === "2" || motor === "3" ? `M${motor}` as MotorId : null
+}
+
+export function scheduledZoneAssignmentForDate(
+  rows: readonly MotorRunScheduleRow[],
+  loadStatus: ScheduleLoadStatus,
+  zoneId: ZoneId,
+  date: string,
+): ScheduledZoneAssignment {
+  const scheduled = scheduledWaterForZoneDate(rows, loadStatus, zoneId, date)
+  if (scheduled.kind !== "scheduled") return { ...scheduled, motorId: null }
+
+  const scheduleId = ZONE_SCHEDULE_IDS[zoneId]
+  const matches = rows.filter((row) => row.scheduleId === scheduleId)
+  return { ...scheduled, motorId: matches.length === 1 ? persistedMotorId(matches[0].motor) : null }
 }
 
 export function compareActualWater(

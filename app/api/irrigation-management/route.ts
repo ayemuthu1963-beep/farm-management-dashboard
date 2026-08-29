@@ -11,6 +11,12 @@ import {
 } from "@/lib/irrigation-period"
 import { fetchAllMotorRuntimeEntries } from "@/lib/irrigation-upstream"
 import { pumpedLitresForRuntimeMinutes } from "@/lib/water-pump-rates"
+import { fetchPublicMotorNoRunRecords } from "@/lib/motor-no-run-server"
+import {
+  noRunsWithoutMeasuredRuntime,
+  positiveMeasuredMotorRuntimeDays,
+  type PublicMotorNoRunRecord,
+} from "@/lib/motor-data"
 
 interface MotorRuntimeEntry {
   entry_id?: number
@@ -167,6 +173,7 @@ function buildRecord(entry: MergedMotorRuntimeEntry, zoneId: ZoneId): Irrigation
 
 function buildData(
   entries: MotorRuntimeEntry[],
+  noRunRecords: readonly PublicMotorNoRunRecord[],
   label: string,
   fiveDayHistory: Record<ZoneId, ZoneFiveDayHistory[]>,
   startDate: string,
@@ -228,7 +235,7 @@ function buildData(
   const averageWaterPerTree = irrigatedZones.length > 0 ? Math.round(irrigatedZones.reduce((sum, zone) => sum + zone.waterPerTree, 0) / irrigatedZones.length) : 0
   records.sort((a, b) => b.date.localeCompare(a.date) || a.zoneId.localeCompare(b.zoneId) || a.motorNo - b.motorNo)
 
-  return { selectedPeriodLabel: label, generatedAt: new Date().toISOString(), source: "live", summary: { totalWaterSupplied, totalMotorRuntime: formatRuntimeMinutes(totalMinutes), totalMotorRuntimeMinutes: totalMinutes, zonesIrrigated: irrigatedZones.length, zonesNotIrrigated: zoneOrder.length - irrigatedZones.length, averageWaterPerTree, latestIrrigation: formatDate(latestIrrigation) }, zones, records, trend }
+  return { selectedPeriodLabel: label, generatedAt: new Date().toISOString(), source: "live", summary: { totalWaterSupplied, totalMotorRuntime: formatRuntimeMinutes(totalMinutes), totalMotorRuntimeMinutes: totalMinutes, zonesIrrigated: irrigatedZones.length, zonesNotIrrigated: zoneOrder.length - irrigatedZones.length, averageWaterPerTree, latestIrrigation: formatDate(latestIrrigation) }, zones, records, trend, motorNoRunRecords: [...noRunRecords] }
 }
 
 export async function GET(request: Request) {
@@ -243,7 +250,9 @@ export async function GET(request: Request) {
     const authHeader = getBasicAuthHeader()
     if (authHeader) headers.Authorization = authHeader
     const baseUrl = getApiBaseUrl()
-    const [selectedRows, historyRows] = await Promise.all([
+    const noRunStartDate = historyStartDate < startDate ? historyStartDate : startDate
+    const noRunEndDate = historyEndDate > endDate ? historyEndDate : endDate
+    const [selectedRows, historyRows, noRunRecords] = await Promise.all([
       fetchAllMotorRuntimeEntries<MotorRuntimeEntry>({
         baseUrl,
         startDate,
@@ -258,7 +267,12 @@ export async function GET(request: Request) {
         headers,
         responseLabel: "Motor Runtime history API",
       }),
+      fetchPublicMotorNoRunRecords({ baseUrl, startDate: noRunStartDate, endDate: noRunEndDate, headers }),
     ])
+    const overlayNoRunRecords = noRunsWithoutMeasuredRuntime(
+      noRunRecords,
+      positiveMeasuredMotorRuntimeDays([...selectedRows, ...historyRows]),
+    )
     const litresPerTreePerHourByZone = Object.fromEntries(zoneOrder.map((zoneId) => [
       zoneId,
       cropLitresPerTreePerHour[zoneConfigs[zoneId].crop],
@@ -273,6 +287,7 @@ export async function GET(request: Request) {
     })
     return NextResponse.json(buildData(
       selectedRows.filter((row) => isWithinRange(row.entry_date, startDate, endDate)),
+      overlayNoRunRecords,
       label,
       fiveDayHistory,
       startDate,

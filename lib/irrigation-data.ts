@@ -3,6 +3,8 @@
 // Motor Runtime records are the source of truth. No standalone irrigation-entry table.
 // ============================================================================
 
+import type { PublicMotorNoRunRecord } from "./motor-data"
+
 export type ZoneId = "P1E" | "P1W" | "P2E" | "P2W" | "JF" | "NM"
 export type IrrigationStatus = "irrigated" | "no-record" | "partial" | "issue"
 export type CropType = "Coconut" | "Nutmeg" | "Jackfruit"
@@ -55,6 +57,7 @@ export interface ZoneFiveDayHistory {
   perTreeLitres: number | null
   status: "Irrigated" | "No Record" | "Data Issue"
   isCurrentIncompleteDay?: boolean
+  knownZeroReason?: string
 }
 
 export interface Zone extends ZoneConfig {
@@ -126,6 +129,7 @@ export interface IrrigationData {
   zones: Zone[]
   records: IrrigationRecord[]
   trend: TrendPoint[]
+  motorNoRunRecords: PublicMotorNoRunRecord[]
   selectedPeriodLabel: string
   source: "live" | "empty"
   generatedAt: string
@@ -150,4 +154,5 @@ export const emptyIrrigationData: IrrigationData = {
   }),
   records: [],
   trend: [],
+  motorNoRunRecords: [],
 }

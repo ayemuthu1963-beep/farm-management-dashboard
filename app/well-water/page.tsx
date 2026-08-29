@@ -11,6 +11,7 @@ import {
   buildWellDashboardData,
   buildWellWaterCsv,
   emptyWellDashboardData,
+  hasWellWaterExportData,
   type WellDashboardData,
   type WellDashboardResponse,
 } from "@/lib/well-data"
@@ -162,7 +163,7 @@ export default function WellWaterPage() {
             <button
               type="button"
               onClick={exportCsv}
-              disabled={isLoading || data.totalReadings === 0}
+              disabled={isLoading || !hasWellWaterExportData(data)}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download className="size-4" aria-hidden="true" />

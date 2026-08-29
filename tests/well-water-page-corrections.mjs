@@ -27,7 +27,7 @@ assert.match(dateRangeSelector, /const endDate = farmIsoDate\(now\)/)
 assert.match(page, /days=6/)
 assert.match(wellData, /buildCalendarRecords/)
 assert.match(wellData, /isPlaceholder: true/)
-assert.match(wellTable, /record\.isPlaceholder \? ""/)
+assert.match(wellTable, /record\.isPlaceholder && record\.waterPumpedOut === null \? ""/)
 
 // Remarks remain in the data contract and CSV, but are not rendered in either shared table.
 assert.doesNotMatch(wellTable, />Remarks</)

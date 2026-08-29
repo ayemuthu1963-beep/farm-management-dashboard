@@ -12,6 +12,7 @@ import {
   type ActualWaterComparison,
   type ScheduleLoadStatus,
 } from "@/lib/irrigation-schedule-comparison"
+import { formatKnownZeroActual } from "@/lib/known-zero-data"
 
 interface Props {
   zones: Zone[]
@@ -89,8 +90,15 @@ function AreaBox({
         </div>
         {(zone.fiveDayHistory ?? []).map((day: ZoneFiveDayHistory) => {
           const scheduled = scheduledWaterForZoneDate(persistedScheduleRows, scheduleLoadStatus, zone.id, day.date)
-          const comparison = compareActualWater(scheduled, day.perTreeLitres, day.isCurrentIncompleteDay)
-          const actualDisplay = formatActualWater(day)
+          const hasScheduledKnownZero = scheduled.kind === "scheduled" && day.perTreeLitres === null && Boolean(day.knownZeroReason)
+          const comparison = compareActualWater(
+            scheduled,
+            hasScheduledKnownZero ? 0 : day.perTreeLitres,
+            hasScheduledKnownZero ? false : day.isCurrentIncompleteDay,
+          )
+          const actualDisplay = hasScheduledKnownZero && day.knownZeroReason
+            ? formatKnownZeroActual(day.knownZeroReason)
+            : formatActualWater(day)
           return (
             <div key={`${zone.id}-${day.date}`} className="grid grid-cols-[2.3rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-md bg-muted/25 px-1 py-1 text-[9px] leading-tight tabular-nums" role="row">
               <div className="min-w-0 text-left" role="cell">
