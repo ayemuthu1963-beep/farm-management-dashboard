@@ -41,9 +41,12 @@ type CycleDecisionAction =
 
 type ConflictDecisionAction =
   | "SELECT_SUBMISSION"
+  | "REASSIGN_SUBMISSION_TREE"
   | "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
   | "DEFER_DECISION"
   | ""
+
+type ConflictResolutionMode = "RETAIN_ONE" | "REASSIGN_TREE" | ""
 
 type ErrorDecisionAction = "MAP_TO_EXISTING_TREE" | "DEFER_DECISION" | ""
 
@@ -64,6 +67,9 @@ interface ErrorDecisionDraft {
 interface ConflictDecisionDraft {
   selectedInstanceId: string
   action: ConflictDecisionAction
+  resolutionMode: ConflictResolutionMode
+  correctedTreeNo: string
+  validatedCorrectedTreeNo: string
   reason: string
   otherReason: string
 }
@@ -102,6 +108,7 @@ const SUPERVISOR_REASONS = [
 ] as const
 
 const CONFLICT_SUPERVISOR_REASONS = [
+  "Tree number entered incorrectly",
   "Supervisor confirmed correct labour entry",
   "Duplicate recording of the same harvest",
   "Quantity confirmed after field verification",
@@ -217,17 +224,33 @@ function storedConflictDecisionDraft(rows: HarvestScanItem[]): ConflictDecisionD
   const savedReason = decisionRow?.supervisor_reason ?? ""
   const allowedReasons = mixedGroup ? INVALID_ZERO_SUPERVISOR_REASONS : CONFLICT_SUPERVISOR_REASONS
   const savedReasonIsChoice = allowedReasons.some((reason) => reason === savedReason)
-  const savedAction = String(decisionRow?.supervisor_decision ?? "") as ConflictDecisionAction
+  const savedAction = String(decisionRow?.supervisor_decision ?? "")
   return {
     selectedInstanceId:
       selectedConflictInstance(decisionRow) ??
       (mixedGroup && savedAction !== "DEFER_DECISION" ? mixedGroup.valid.odk_instance_id : ""),
     action:
-      savedAction === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" || savedAction === "DEFER_DECISION"
+      savedAction === "REASSIGN_SUBMISSION_TREE" ||
+      savedAction === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" ||
+      savedAction === "DEFER_DECISION"
         ? savedAction
         : mixedGroup
           ? ""
           : "SELECT_SUBMISSION",
+    resolutionMode:
+      savedAction === "REASSIGN_SUBMISSION_TREE"
+        ? "REASSIGN_TREE"
+        : savedAction === "SELECT_SUBMISSION" || savedAction === "KEEP_LATEST"
+          ? "RETAIN_ONE"
+          : "",
+    correctedTreeNo:
+      savedAction === "REASSIGN_SUBMISSION_TREE"
+        ? String(decisionRow?.supervisor_resolved_tree_no ?? "")
+        : "",
+    validatedCorrectedTreeNo:
+      savedAction === "REASSIGN_SUBMISSION_TREE"
+        ? String(decisionRow?.supervisor_resolved_tree_no ?? "")
+        : "",
     reason: savedReason ? (savedReasonIsChoice ? savedReason : "Other") : "",
     otherReason: savedReasonIsChoice ? "" : savedReason,
   }
@@ -403,7 +426,8 @@ export function HarvestReviewSections({
 
   useEffect(() => {
     if (
-      buckets.errors.some((item) => item.classification === "UNMATCHED_TREE") &&
+      (buckets.errors.some((item) => item.classification === "UNMATCHED_TREE") ||
+        buckets.conflicts.length > 0) &&
       treeMasterOptions.length === 0 &&
       !treeMasterLoading &&
       !treeMasterLoadError
@@ -411,6 +435,7 @@ export function HarvestReviewSections({
       void loadTreeMasterOptions()
     }
   }, [
+    buckets.conflicts.length,
     buckets.errors,
     loadTreeMasterOptions,
     treeMasterLoadError,
@@ -509,7 +534,20 @@ export function HarvestReviewSections({
     const selectedRow = rows.find(
       (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
     )
-    const decision: ConflictDecisionAction = mixedGroup ? draft.action : "SELECT_SUBMISSION"
+    const correctedTreeNo = draft.correctedTreeNo.trim()
+    const validTreeReassignment =
+      !mixedGroup &&
+      draft.resolutionMode === "REASSIGN_TREE" &&
+      selectedRow !== undefined &&
+      isActiveValidConflictCandidate(selectedRow) &&
+      correctedTreeNo.length > 0 &&
+      draft.validatedCorrectedTreeNo === correctedTreeNo &&
+      correctedTreeNo !== String(selectedRow.original_tree_no ?? "").trim()
+    const decision: ConflictDecisionAction = mixedGroup
+      ? draft.action
+      : draft.resolutionMode === "REASSIGN_TREE"
+        ? "REASSIGN_SUBMISSION_TREE"
+        : "SELECT_SUBMISSION"
     const validMixedSelection =
       decision === "RETAIN_VALID_EXCLUDE_INVALID_ZERO"
         ? selectedRow?.odk_instance_id === mixedGroup?.valid.odk_instance_id
@@ -522,7 +560,10 @@ export function HarvestReviewSections({
       !selectedScanId ||
       (mixedGroup
         ? !validMixedSelection
-        : !selectedRow || !isActiveValidConflictCandidate(selectedRow)) ||
+        : !selectedRow ||
+          !isActiveValidConflictCandidate(selectedRow) ||
+          (draft.resolutionMode === "REASSIGN_TREE" && !validTreeReassignment) ||
+          !draft.resolutionMode) ||
       !reason ||
       groupStatus?.groupMatches !== true
     ) {
@@ -553,7 +594,8 @@ export function HarvestReviewSections({
             scan_id: selectedScanId,
             odk_instance_id: selectedRow?.odk_instance_id,
             issue_type: "CONFLICTING_DUPLICATE",
-            decision: "SELECT_SUBMISSION",
+            decision,
+            resolved_tree_no: validTreeReassignment ? correctedTreeNo : null,
             selected_effective_instance_id: selectedRow?.odk_instance_id,
             reason,
           }
@@ -587,7 +629,9 @@ export function HarvestReviewSections({
         [key]:
           openNextUnresolved && nextUnresolved
             ? "Supervisor decision saved. The next unresolved group is open."
-            : "Supervisor decision saved.",
+            : validTreeReassignment
+              ? `Tree Number correction saved: ${displayHarvestValue(selectedRow?.original_tree_no)} → ${correctedTreeNo}. Both valid submissions will be retained.`
+              : "Supervisor decision saved.",
       }))
     } catch (error) {
       setDecisionMessages((current) => ({
@@ -817,13 +861,26 @@ export function HarvestReviewSections({
     const selectedCandidate = rows.find(
       (row) => String(row.odk_instance_id) === String(draft.selectedInstanceId),
     )
+    const correctedTreeNo = draft.correctedTreeNo.trim()
+    const validTreeReassignment =
+      !mixedGroup &&
+      draft.resolutionMode === "REASSIGN_TREE" &&
+      Boolean(selectedCandidate && isActiveValidConflictCandidate(selectedCandidate)) &&
+      correctedTreeNo.length > 0 &&
+      draft.validatedCorrectedTreeNo === correctedTreeNo &&
+      correctedTreeNo !== String(selectedCandidate?.original_tree_no ?? "").trim()
     const canSave =
       !disabled &&
       (mixedGroup
         ? (draft.action === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" &&
             selectedCandidate?.odk_instance_id === mixedGroup.valid.odk_instance_id) ||
           draft.action === "DEFER_DECISION"
-        : Boolean(selectedCandidate && isActiveValidConflictCandidate(selectedCandidate))) &&
+        : Boolean(
+            draft.resolutionMode &&
+              selectedCandidate &&
+              isActiveValidConflictCandidate(selectedCandidate) &&
+              (draft.resolutionMode !== "REASSIGN_TREE" || validTreeReassignment),
+          )) &&
       Boolean(finalReason) &&
       groupStatus?.groupMatches === true &&
       decisionSaving !== key
@@ -865,9 +922,17 @@ export function HarvestReviewSections({
             <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-black">Saved supervisor decision: {decisionRow.supervisor_decision}</p>
               <p className="mt-1">
-                Selected:{" "}
+                {decisionRow.supervisor_decision === "REASSIGN_SUBMISSION_TREE"
+                  ? "Corrected submission: "
+                  : "Selected: "}
                 <span className="font-mono">{selectedConflictInstance(decisionRow) ?? "—"}</span>
               </p>
+              {decisionRow.supervisor_decision === "REASSIGN_SUBMISSION_TREE" ? (
+                <p className="mt-1 font-bold">
+                  Tree {displayHarvestValue(decisionRow.original_tree_no)} →{" "}
+                  {displayHarvestValue(decisionRow.supervisor_resolved_tree_no)} · both submissions retained
+                </p>
+              ) : null}
               <p className="mt-1">Reason: {decisionRow.supervisor_reason ?? "—"}</p>
               <p className="mt-1">
                 Supervisor: {displayHarvestValue(decisionRow.supervisor_admin_user)} ·{" "}
@@ -882,7 +947,9 @@ export function HarvestReviewSections({
             <table className="min-w-[1180px] text-left text-xs">
               <thead>
                 <tr className="border-b">
-                  <th className="p-2">Retain</th>
+                  <th className="p-2">
+                    {draft.resolutionMode === "REASSIGN_TREE" ? "Correct" : "Retain"}
+                  </th>
                   <th className="p-2">Tree</th>
                   <th className="p-2">Harvest Date</th>
                   <th className="p-2">ODK Time</th>
@@ -930,7 +997,7 @@ export function HarvestReviewSections({
                               }
                               aria-label={`Retain ODK instance ${row.odk_instance_id} for Tree ${displayHarvestValue(row.original_tree_no)}`}
                             />
-                            Retain
+                            {draft.resolutionMode === "REASSIGN_TREE" ? "Correct" : "Retain"}
                           </label>
                         )}
                       </td>
@@ -980,6 +1047,32 @@ export function HarvestReviewSections({
                 </select>
               </label>
             ) : null}
+            {!mixedGroup ? (
+              <label className="text-xs font-bold uppercase text-muted-foreground">
+                Resolution
+                <select
+                  aria-label={`Resolution for Tree ${displayHarvestValue(first.original_tree_no)}`}
+                  value={draft.resolutionMode}
+                  onChange={(event) =>
+                    updateConflictDecisionDraft(key, rows, {
+                      resolutionMode: event.target.value as ConflictResolutionMode,
+                      action:
+                        event.target.value === "REASSIGN_TREE"
+                          ? "REASSIGN_SUBMISSION_TREE"
+                          : "SELECT_SUBMISSION",
+                      correctedTreeNo: "",
+                      validatedCorrectedTreeNo: "",
+                    })
+                  }
+                  disabled={disabled}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm normal-case text-foreground"
+                >
+                  <option value="">Select resolution</option>
+                  <option value="RETAIN_ONE">Same tree — retain one submission</option>
+                  <option value="REASSIGN_TREE">Different trees — correct TreeNo and retain both</option>
+                </select>
+              </label>
+            ) : null}
             <label className="text-xs font-bold uppercase text-muted-foreground">
               Supervisor Reason
               <select
@@ -1025,6 +1118,66 @@ export function HarvestReviewSections({
                 required
               />
             </label>
+          ) : null}
+          {!mixedGroup && draft.resolutionMode === "REASSIGN_TREE" ? (
+            <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <p className="text-xs font-black uppercase text-muted-foreground">
+                Correct selected submission to an exact Tree Master number
+              </p>
+              <div className="mt-2">
+                <TreeNumberAutocomplete
+                  id={`conflict-tree-correction-${first.id}`}
+                  value={draft.correctedTreeNo}
+                  options={treeMasterOptions}
+                  loading={treeMasterLoading}
+                  loadError={treeMasterLoadError}
+                  disabled={disabled || !selectedCandidate}
+                  placeholder="Search the correct Tree Number"
+                  onValueChange={(value) =>
+                    updateConflictDecisionDraft(key, rows, {
+                      correctedTreeNo: value,
+                      validatedCorrectedTreeNo: "",
+                    })
+                  }
+                  onSelect={(option) =>
+                    updateConflictDecisionDraft(key, rows, {
+                      correctedTreeNo: option.treeNo,
+                      validatedCorrectedTreeNo: option.treeNo,
+                      reason: "Tree number entered incorrectly",
+                      otherReason: "",
+                    })
+                  }
+                  onInvalidCommit={(value) => {
+                    updateConflictDecisionDraft(key, rows, {
+                      correctedTreeNo: value,
+                      validatedCorrectedTreeNo: "",
+                    })
+                    setDecisionMessages((current) => ({
+                      ...current,
+                      [key]: "Select an exact Tree Number from Tree Master.",
+                    }))
+                  }}
+                  onRetry={() => void loadTreeMasterOptions()}
+                />
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <p className="rounded-lg border bg-background p-3 text-xs">
+                  <span className="block font-bold uppercase text-muted-foreground">Original ODK TreeNo</span>
+                  <span className="mt-1 block text-base font-black">
+                    {displayHarvestValue(selectedCandidate?.original_tree_no)}
+                  </span>
+                </p>
+                <p className="rounded-lg border border-primary/30 bg-background p-3 text-xs">
+                  <span className="block font-bold uppercase text-muted-foreground">Corrected effective TreeNo</span>
+                  <span className="mt-1 block text-base font-black">
+                    {validTreeReassignment ? correctedTreeNo : "—"}
+                  </span>
+                </p>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                The original ODK value and Instance ID remain unchanged in the audit. The selected submission receives the corrected effective TreeNo; the other valid submission remains on Tree {displayHarvestValue(first.original_tree_no)}.
+              </p>
+            </div>
           ) : null}
           {mixedGroup && draft.action === "RETAIN_VALID_EXCLUDE_INVALID_ZERO" ? (
             <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950">
