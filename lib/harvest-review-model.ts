@@ -67,6 +67,10 @@ export interface HarvestScanItem {
   review_state?: string | null
   submitter_name: string | null
   device_id: string | null
+  gps_latitude?: number | null
+  gps_longitude?: number | null
+  gps_accuracy_m?: number | null
+  gps_captured_at?: string | null
   tree_exists_in_master?: boolean
   supervisor_decision?: string | null
   supervisor_reason?: string | null
