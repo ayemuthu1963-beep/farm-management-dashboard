@@ -175,6 +175,7 @@ function submissionLocationLabel(row: HarvestScanItem): string {
   const latitude = Number(row.gps_latitude)
   const longitude = Number(row.gps_longitude)
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "No GPS"
+  if (row.gps_accuracy_m == null) return "GPS captured"
   const accuracy = Number(row.gps_accuracy_m)
   return Number.isFinite(accuracy) && accuracy >= 0 ? `GPS ±${Math.round(accuracy)} m` : "GPS captured"
 }

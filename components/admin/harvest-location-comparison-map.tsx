@@ -66,30 +66,34 @@ export function HarvestLocationComparisonMap({
   const [status, setStatus] = useState("Loading approved tree position…")
   const located = useMemo<LocatedSubmission[]>(
     () =>
-      rows.flatMap((row, index) => {
-        const latitude = finiteCoordinate(row.gps_latitude)
-        const longitude = finiteCoordinate(row.gps_longitude)
-        if (
-          latitude === null ||
-          longitude === null ||
-          latitude < -90 ||
-          latitude > 90 ||
-          longitude < -180 ||
-          longitude > 180
-        ) {
-          return []
-        }
-        const rawAccuracy = finiteCoordinate(row.gps_accuracy_m)
-        return [
-          {
-            row,
-            latitude,
-            longitude,
-            accuracy: rawAccuracy !== null && rawAccuracy >= 0 ? rawAccuracy : null,
-            label: String.fromCharCode(65 + index),
-          },
-        ]
-      }),
+      rows
+        .flatMap<Omit<LocatedSubmission, "label">>((row) => {
+          const latitude = finiteCoordinate(row.gps_latitude)
+          const longitude = finiteCoordinate(row.gps_longitude)
+          if (
+            latitude === null ||
+            longitude === null ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180
+          ) {
+            return []
+          }
+          const rawAccuracy = finiteCoordinate(row.gps_accuracy_m)
+          return [
+            {
+              row,
+              latitude,
+              longitude,
+              accuracy: rawAccuracy !== null && rawAccuracy >= 0 ? rawAccuracy : null,
+            },
+          ]
+        })
+        .map((item, index) => ({
+          ...item,
+          label: String.fromCharCode(65 + index),
+        })),
     [rows],
   )
   const distance = located.length >= 2 ? distanceMetres(located[0], located[1]) : null
@@ -105,7 +109,7 @@ export function HarvestLocationComparisonMap({
         const colour = accuracyColour(item.accuracy)
         fitPoints.push(point)
         if (item.accuracy !== null) {
-          leaflet.circle(point, {
+          const accuracyCircle = leaflet.circle(point, {
             radius: item.accuracy,
             color: colour,
             weight: 1.5,
@@ -113,6 +117,13 @@ export function HarvestLocationComparisonMap({
             fillOpacity: 0.12,
             interactive: false,
           }).addTo(layers)
+          const accuracyBounds = accuracyCircle.getBounds()
+          const southWest = accuracyBounds.getSouthWest()
+          const northEast = accuracyBounds.getNorthEast()
+          fitPoints.push(
+            [southWest.lat, southWest.lng],
+            [northEast.lat, northEast.lng],
+          )
         }
         leaflet
           .circleMarker(point, {
@@ -233,7 +244,9 @@ export function HarvestLocationComparisonMap({
           </div>
         ))}
         <div className="rounded-lg border p-3">
-          <p className="font-black">Distance between A and B</p>
+          <p className="font-black">
+            Distance between {located[0]?.label ?? "A"} and {located[1]?.label ?? "B"}
+          </p>
           <p>{distance === null ? "Needs two submitted locations" : `${distance.toLocaleString("en-IN")} m`}</p>
         </div>
       </div>
