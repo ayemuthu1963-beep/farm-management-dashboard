@@ -146,6 +146,7 @@ export const RESOLVED_CONFLICT_DECISIONS = new Set([
   "SELECT_SUBMISSION",
   "KEEP_LATEST",
   "RETAIN_VALID_EXCLUDE_INVALID_ZERO",
+  "REASSIGN_SUBMISSION_TREE",
 ])
 
 export const SAVED_CONFLICT_DECISIONS = new Set([
@@ -277,11 +278,18 @@ export function mixedValidInvalidZeroGroup(
 export function conflictGroupResolved(rows: HarvestScanItem[]): boolean {
   return rows.some((decisionRow) => {
     const selected = selectedConflictInstance(decisionRow)
+    const correctedTreeNo = String(decisionRow.supervisor_resolved_tree_no ?? "").trim()
+    const originalTreeNo = String(decisionRow.original_tree_no ?? "").trim()
+    const isTreeReassignment =
+      decisionRow.supervisor_decision === "REASSIGN_SUBMISSION_TREE" &&
+      correctedTreeNo.length > 0 &&
+      correctedTreeNo !== originalTreeNo
     return Boolean(
       selected &&
         rows.some(
           (row) => String(row.odk_instance_id) === selected && isActiveValidConflictCandidate(row),
-        ),
+        ) &&
+        (decisionRow.supervisor_decision !== "REASSIGN_SUBMISSION_TREE" || isTreeReassignment),
     )
   })
 }
