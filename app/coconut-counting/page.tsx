@@ -14,6 +14,7 @@ import {
 
 import { CoconutCountingPageHeader } from "@/components/coconut-counting/page-header"
 import { CoconutCountingSessionControls } from "@/components/coconut-counting/session-controls"
+import { CoconutCountingRefreshStatus } from "@/components/coconut-counting/refresh-status"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import {
@@ -381,7 +382,9 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
             sessionUuid={session.session_uuid}
             harvestDate={formatDate(session.session_date)}
             isActive={session.status === "ACTIVE"}
-            authorizedToClose={session.authorized_to_close === true}
+            pageRefreshing={false}
+            syncInProgress={session.sync_in_progress}
+            uploadInProgress={session.upload_in_progress}
           />
         </div>
       </div>
@@ -478,6 +481,7 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
   let detail: CoconutCountingSessionDetail | null = null
   let errorMessage: string | null = null
   let detailError: string | null = null
+  const refreshedAt = Date.now()
 
   if (fromDate > toDate) {
     errorMessage = "From date cannot be after To date."
@@ -503,6 +507,7 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
         <Header />
         <CoconutCountingPageHeader />
         <FilterForm filters={filters} />
+        <CoconutCountingRefreshStatus refreshedAt={refreshedAt} loadError={errorMessage} />
 
         {errorMessage ? <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"><CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{errorMessage}</div> : null}
 

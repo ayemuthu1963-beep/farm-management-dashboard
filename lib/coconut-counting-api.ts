@@ -31,8 +31,8 @@ export interface CoconutCountingSession {
   server_created_at?: string
   server_updated_at: string
   physical_nuts_counted?: CoconutNumeric
-  /** Supplied by the authoritative backend authorization decision. */
-  authorized_to_close?: boolean
+  sync_in_progress?: boolean
+  upload_in_progress?: boolean
 }
 
 export interface CoconutCountingEntry {
