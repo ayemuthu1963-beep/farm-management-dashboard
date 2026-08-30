@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add audited Harvest Sync TreeNo correction and retain both submissions",
+  "Map optional Harvest Sync submission GPS locations for duplicate review",
 )
-assert.equal(manifest.base_commit, "bc1750da2acd3fbdd8050f2a7e14bb17196bf455")
-assert.equal(manifest.matched_backend_commit, "1233f06498f7017f6f1ade0f4de95419ee1d0785")
+assert.equal(manifest.base_commit, "db5f4fb5309ee97af8919f9f95258c43131351f1")
+assert.equal(manifest.matched_backend_commit, "047d62f38cd57d8f1e69ad3c3152e95474efaa8e")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -302,6 +302,7 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/admin/harvest-location-comparison-map.tsx",
   "components/admin/harvest-review-sections.tsx",
   "deploy/preview-release-manifest.json",
   "lib/harvest-review-model.ts",
