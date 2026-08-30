@@ -10,7 +10,8 @@
     "components/admin/harvest-review-sections.tsx",
     "deploy/preview-release-manifest.json",
     "lib/harvest-review-model.ts",
-    "tests/harvest-sync-exact-duplicates.mjs"
+    "tests/harvest-sync-exact-duplicates.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
