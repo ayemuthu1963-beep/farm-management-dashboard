@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertTriangle, CheckCircle2, Download, History, Search, ShieldCheck } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Download, History, MapPinned, Search, ShieldCheck } from "lucide-react"
 import { HarvestControlledReplacement } from "@/components/admin/harvest-controlled-replacement"
+import { HarvestLocationComparisonMap } from "@/components/admin/harvest-location-comparison-map"
 import { TreeNumberAutocomplete } from "@/components/harvest/tree-number-autocomplete"
 import { formatIstDateTime } from "@/lib/format-ist-date-time"
 import {
@@ -167,6 +168,15 @@ function statusBadge(classification: string): string {
   if (classification === "DUPLICATE_REVIEW_REQUIRED") return "border-rose-200 bg-rose-50 text-rose-800"
   if (classification === "INVALID_DATA") return "border-rose-200 bg-rose-50 text-rose-800"
   return "border-amber-200 bg-amber-50 text-amber-800"
+}
+
+function submissionLocationLabel(row: HarvestScanItem): string {
+  if (row.gps_latitude == null || row.gps_longitude == null) return "No GPS"
+  const latitude = Number(row.gps_latitude)
+  const longitude = Number(row.gps_longitude)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "No GPS"
+  const accuracy = Number(row.gps_accuracy_m)
+  return Number.isFinite(accuracy) && accuracy >= 0 ? `GPS ±${Math.round(accuracy)} m` : "GPS captured"
 }
 
 function displayHarvestDateLong(value: string | null | undefined): string {
@@ -362,6 +372,7 @@ export function HarvestReviewSections({
   const [cyclePage, setCyclePage] = useState(1)
   const [appliedCorrectionPage, setAppliedCorrectionPage] = useState(1)
   const [openConflictGroupKey, setOpenConflictGroupKey] = useState<string | null>(null)
+  const [locationMapGroupKey, setLocationMapGroupKey] = useState<string | null>(null)
   const [conflictDecisionDrafts, setConflictDecisionDrafts] = useState<
     Record<string, ConflictDecisionDraft>
   >({})
@@ -943,8 +954,34 @@ export function HarvestReviewSections({
               </p>
             </div>
           ) : null}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setLocationMapGroupKey((current) => (current === key ? null : key))
+              }
+              className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-xs font-black hover:border-primary/50"
+              aria-expanded={locationMapGroupKey === key}
+            >
+              <MapPinned className="size-4" aria-hidden="true" />
+              {locationMapGroupKey === key ? "Hide location map" : "View submissions on map"}
+            </button>
+            <span className="text-xs font-semibold text-muted-foreground">
+              {rows.filter((row) => submissionLocationLabel(row) !== "No GPS").length} of {rows.length} submissions have a location
+            </span>
+          </div>
+          {locationMapGroupKey === key ? (
+            <HarvestLocationComparisonMap
+              rows={rows}
+              correctedTreeNo={
+                draft.validatedCorrectedTreeNo === draft.correctedTreeNo.trim()
+                  ? draft.correctedTreeNo.trim()
+                  : null
+              }
+            />
+          ) : null}
           <div className="overflow-x-auto">
-            <table className="min-w-[1180px] text-left text-xs">
+            <table className="min-w-[1280px] text-left text-xs">
               <thead>
                 <tr className="border-b">
                   <th className="p-2">
@@ -955,6 +992,7 @@ export function HarvestReviewSections({
                   <th className="p-2">ODK Time</th>
                   <th className="p-2">ODK Instance ID</th>
                   <th className="p-2">Submitter / Device</th>
+                  <th className="p-2">Location</th>
                   <th className="p-2">B1</th>
                   <th className="p-2">B2</th>
                   <th className="p-2">B3</th>
@@ -1008,6 +1046,7 @@ export function HarvestReviewSections({
                       <td className="p-2">
                         {displayHarvestValue(row.submitter_name)} / {displayHarvestValue(row.device_id)}
                       </td>
+                      <td className="p-2 font-semibold">{submissionLocationLabel(row)}</td>
                       <td className="p-2">{displayHarvestValue(row.b1)}</td>
                       <td className="p-2">{displayHarvestValue(row.b2)}</td>
                       <td className="p-2">{displayHarvestValue(row.b3)}</td>
