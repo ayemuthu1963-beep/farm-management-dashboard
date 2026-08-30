@@ -9,26 +9,14 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const workerRosterVerifiedFiles = [
-  "components/worker-management/weekly-settlement.tsx",
-  "lib/worker-management-roster.ts",
-  "tests/worker-management.mjs",
+const harvestCorrectionVerifiedFiles = [
+  "components/admin/harvest-review-sections.tsx",
+  "lib/harvest-review-model.ts",
 ]
-const workerRosterProductionAdaptations = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
+const harvestCorrectionProductionAdaptations = [
   "deploy/production-release-manifest.json",
   "tests/farm-calendar-production-promotion.mjs",
-]
-const workerHistoryVerifiedFiles = [
-  "lib/worker-management-api.ts",
-  "lib/worker-management-format.ts",
-  "lib/worker-management-types.ts",
-  "tests/worker-management.mjs",
-]
-const workerHistoryProductionAdaptations = [
-  "components/worker-management/weekly-wage-table-preview.tsx",
-  "deploy/production-release-manifest.json",
-  "tests/farm-calendar-production-promotion.mjs",
+  "tests/harvest-sync-exact-duplicates.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -39,24 +27,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-verified Worker history, closed-week protection, and frozen opening-balance projection",
+  "Promote Preview-verified Harvest Sync TreeNo correction and retain both submissions",
 )
-assert.equal(manifest.base_commit, "949661e3a0bd26111d5be0ea6db90e17cbcffcaa")
+assert.equal(manifest.base_commit, "d41be36736a105e4269bade8f172593bd223ae2c")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "363f9d7814260db4b3f859f08fcccbbe9b34e398",
-  image_id: "sha256:4570c0565f4c122a3c23d29b0046723900c0bb31c0fd456d13ee07160706b738",
-  feature_revision: "81121da96e0908d36df2af737773cadd90379caa",
-  verified_files: workerHistoryVerifiedFiles,
-  production_adaptations: workerHistoryProductionAdaptations,
-})
-assert.deepEqual(manifest.preserved_worker_roster_order, {
-  release_merge: "669f9fdc0db52c695a616cb84e3a701ee6602d54",
-  candidate_head: "a0c8bfd400b8a9c13acdd70b1fb5d2fa9b103089",
-  preview_revision: "af09ed8bea4c5949e600abcf705cd38ad7f7c09b",
-  preview_image_id: "sha256:14cf934f6056c85d3a31dc7bc1ad57c7d8e81cee1e96a2d0be882529f510d03b",
-  preview_feature_revision: "1074d0e7d572200497d79ac437d1babffd4ab02a",
-  verified_files: workerRosterVerifiedFiles,
-  production_adaptations: workerRosterProductionAdaptations,
+  revision: "db5f4fb5309ee97af8919f9f95258c43131351f1",
+  image_id: "sha256:40d23ab7dbc2f4ee3412001b30308a4e46104f5583390b12a60bf488fdb21406",
+  feature_revision: "a26db74ed664cb44bdec50c220c7147c14cbc192",
+  verified_files: harvestCorrectionVerifiedFiles,
+  production_adaptations: harvestCorrectionProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -70,8 +49,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...workerHistoryVerifiedFiles,
-    ...workerHistoryProductionAdaptations,
+    ...harvestCorrectionVerifiedFiles,
+    ...harvestCorrectionProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
