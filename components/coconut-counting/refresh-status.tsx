@@ -11,39 +11,63 @@ export function CoconutCountingRefreshStatus({ refreshedAt, loadError }: { refre
   const [isPending, startTransition] = useTransition()
   const [failed, setFailed] = useState(Boolean(loadError))
   const [lastSuccessful, setLastSuccessful] = useState(refreshedAt)
-  const lastStarted = useRef(refreshedAt)
+  const lastAttempt = useRef(refreshedAt)
+  const refreshInFlight = useRef(false)
+  const hiddenAt = useRef<number | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (refreshedAt !== lastStarted.current) {
-      lastStarted.current = refreshedAt
+    if (refreshedAt === lastAttempt.current) return
+    refreshInFlight.current = false
+    lastAttempt.current = refreshedAt
+    if (loadError === null) {
       setLastSuccessful(refreshedAt)
-      setFailed(Boolean(loadError))
-      window.dispatchEvent(new CustomEvent("coconut-counting-refresh", { detail: false }))
     }
+    setFailed(Boolean(loadError))
+    window.dispatchEvent(new CustomEvent("coconut-counting-refresh", { detail: false }))
   }, [refreshedAt, loadError])
 
   const refresh = useCallback(() => {
-    if (isPending) return
+    if (refreshInFlight.current || isPending) return false
+    refreshInFlight.current = true
+    lastAttempt.current = Date.now()
     setFailed(false)
-    lastStarted.current = Date.now()
     window.dispatchEvent(new CustomEvent("coconut-counting-refresh", { detail: true }))
     startTransition(() => router.refresh())
+    return true
   }, [isPending, router])
 
   useEffect(() => {
+    const clearTimer = () => {
+      if (timer.current !== null) clearTimeout(timer.current)
+      timer.current = null
+    }
     const schedule = () => {
+      clearTimer()
       if (document.visibilityState !== "visible") return
-      timer.current = setTimeout(() => { refresh(); schedule() }, REFRESH_INTERVAL_MS)
+      timer.current = setTimeout(() => {
+        timer.current = null
+        refresh()
+        schedule()
+      }, REFRESH_INTERVAL_MS)
     }
     const visibility = () => {
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = null
-      if (document.visibilityState === "visible") schedule()
+      clearTimer()
+      if (document.visibilityState === "hidden") {
+        hiddenAt.current = Date.now()
+        return
+      }
+      const hiddenFor = hiddenAt.current === null ? 0 : Date.now() - hiddenAt.current
+      hiddenAt.current = null
+      if (hiddenFor >= REFRESH_INTERVAL_MS) refresh()
+      schedule()
     }
     schedule()
     document.addEventListener("visibilitychange", visibility)
-    return () => { if (timer.current) clearTimeout(timer.current); document.removeEventListener("visibilitychange", visibility) }
+    return () => {
+      clearTimer()
+      document.removeEventListener("visibilitychange", visibility)
+    }
   }, [refresh])
 
   const error = loadError || (failed ? "The latest Coconut Counting refresh failed." : null)
