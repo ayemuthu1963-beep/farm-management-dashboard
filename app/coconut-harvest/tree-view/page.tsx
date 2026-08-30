@@ -1,5 +1,5 @@
 import { TreeViewClient } from "@/components/coconut/tree-view-client"
-import { fetchTreeNumbers, fetchTreeViewData } from "@/lib/coconut-harvest-api"
+import { fetchTreeNumbers, fetchTreeViewData, type BunchTyingHistoryRow } from "@/lib/coconut-harvest-api"
 import type { TreeHarvestRow } from "@/lib/coconut-harvest-data"
 
 interface TreeViewPageProps {
@@ -12,6 +12,7 @@ export default async function TreeViewPage({ searchParams }: TreeViewPageProps) 
   const requestedTreeNo = (await searchParams).treeNo?.trim() ?? ""
   let initialTreeOptions: string[] = []
   let initialTreeHistory: TreeHarvestRow[] = []
+  let initialBunchTyingHistory: BunchTyingHistoryRow[] = []
   let initialDataStatus: "idle" | "real" | "empty" | "error" = requestedTreeNo ? "error" : "idle"
 
   try {
@@ -26,7 +27,8 @@ export default async function TreeViewPage({ searchParams }: TreeViewPageProps) 
     try {
       const data = await fetchTreeViewData(requestedTreeNo)
       initialTreeHistory = data.treeHarvestHistory
-      initialDataStatus = data.treeHarvestHistory.length > 0 ? "real" : "empty"
+      initialBunchTyingHistory = data.bunchTyingHistory
+      initialDataStatus = data.treeHarvestHistory.length > 0 || data.bunchTyingHistory.length > 0 ? "real" : "empty"
     } catch {
       initialDataStatus = "error"
     }
@@ -37,6 +39,7 @@ export default async function TreeViewPage({ searchParams }: TreeViewPageProps) 
       initialTreeNo={requestedTreeNo}
       initialTreeOptions={initialTreeOptions}
       initialTreeHistory={initialTreeHistory}
+      initialBunchTyingHistory={initialBunchTyingHistory}
       initialDataStatus={initialDataStatus}
     />
   )

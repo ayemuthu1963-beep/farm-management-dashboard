@@ -26,6 +26,9 @@ interface TreePerformanceCategoryRow {
   missedHarvests: number
   minNuts: number
   maxNuts: number
+  latestTiedBunches: number | null
+  latestTyingRound: string | null
+  latestTyingDate: string | null
 }
 
 interface TreePerformanceCategoryData {
@@ -53,6 +56,9 @@ type CategorySortKey = keyof Pick<
   | "missedHarvests"
   | "minNuts"
   | "maxNuts"
+  | "latestTiedBunches"
+  | "latestTyingRound"
+  | "latestTyingDate"
 >
 
 interface CategorySortConfig {
@@ -93,7 +99,7 @@ function sortCategoryRows(
   return [...rows].sort((a, b) => {
     const directionMultiplier = sortConfig.direction === "asc" ? 1 : -1
 
-    if (sortConfig.key === "treeNo" || sortConfig.key === "plantationDate" || sortConfig.key === "lifecycleStatus") {
+    if (sortConfig.key === "treeNo" || sortConfig.key === "plantationDate" || sortConfig.key === "lifecycleStatus" || sortConfig.key === "latestTyingRound" || sortConfig.key === "latestTyingDate") {
       return numericTextCollator.compare(String(a[sortConfig.key] ?? ""), String(b[sortConfig.key] ?? "")) * directionMultiplier
     }
 
@@ -155,7 +161,7 @@ function PerformanceTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] border-collapse text-sm">
+      <table className="w-full min-w-[1080px] border-collapse text-sm">
         <thead>
           <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
             <th className="px-3 py-2.5">Rank</th>
@@ -165,6 +171,9 @@ function PerformanceTable({
             <th className="px-3 py-2.5 text-right">Min Nuts</th>
             <th className="px-3 py-2.5 text-right">Max Nuts</th>
             <th className="px-3 py-2.5 text-right">Average Nuts</th>
+            <th className="px-3 py-2.5 text-right">Tied Trees</th>
+            <th className="px-3 py-2.5 text-right">Tied Bunches</th>
+            <th className="px-3 py-2.5 text-right">Avg Tied</th>
           </tr>
         </thead>
         <tbody>
@@ -191,6 +200,9 @@ function PerformanceTable({
                 <td className="px-3 py-2.5 text-right text-muted-foreground">{isFutureBetter ? "—" : r.minNuts}</td>
                 <td className="px-3 py-2.5 text-right text-muted-foreground">{isFutureBetter ? "—" : r.maxNuts}</td>
                 <td className="px-3 py-2.5 text-right font-semibold text-foreground">{isFutureBetter ? "—" : r.averageNuts.toFixed(2)}</td>
+                <td className="px-3 py-2.5 text-right text-foreground">{r.tiedTreesReported.toLocaleString("en-IN")}</td>
+                <td className="px-3 py-2.5 text-right font-semibold text-foreground">{r.tiedBunchesTotal.toLocaleString("en-IN")}</td>
+                <td className="px-3 py-2.5 text-right text-foreground">{r.tiedTreesReported > 0 ? r.averageTiedBunches.toFixed(2) : "—"}</td>
               </tr>
             )
           })}
@@ -315,10 +327,13 @@ function CategoryDetailTable({
         </div>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-sm">
+          <table className="w-full min-w-[1120px] border-collapse text-sm">
             <thead>
               <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
                 <SortableHeader label="Tree No" sortKey="treeNo" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Latest Tied Bunches" sortKey="latestTiedBunches" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Tying Round" sortKey="latestTyingRound" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Tying Date" sortKey="latestTyingDate" sortConfig={sortConfig} onSort={handleSort} />
                 {isFutureBetter ? (
                   <>
                     <SortableHeader label="Plantation Date" sortKey="plantationDate" sortConfig={sortConfig} onSort={handleSort} />
@@ -341,6 +356,9 @@ function CategoryDetailTable({
               {sortedRows.map((row) => (
                 <tr key={row.treeNo} className="border-b border-border last:border-0">
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">{row.treeNo}</td>
+                  <td className="px-3 py-2.5 text-right font-bold text-foreground">{row.latestTiedBunches ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.latestTyingRound ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{formatPlantationDate(row.latestTyingDate)}</td>
                   {isFutureBetter ? (
                     <>
                       <td className="whitespace-nowrap px-3 py-2.5 text-foreground">{formatPlantationDate(row.plantationDate)}</td>
