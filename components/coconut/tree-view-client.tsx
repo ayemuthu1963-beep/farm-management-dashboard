@@ -1,7 +1,7 @@
 "use client"
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
-import { Trees, History, Eraser, BarChart3 } from "lucide-react"
+import { Trees, History, Eraser, BarChart3, Link2 } from "lucide-react"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
@@ -13,16 +13,20 @@ import {
   type TreeHarvestRow,
 } from "@/lib/coconut-harvest-data"
 import { calculateTreeHarvestTotals } from "@/lib/tree-harvest-totals"
+import type { BunchTyingHistoryRow } from "@/lib/coconut-harvest-api"
 
 interface TreeViewData {
   treeNo: string
   treeHarvestHistory: TreeHarvestRow[]
+  bunchTyingHistory: BunchTyingHistoryRow[]
+  latestBunchTying: BunchTyingHistoryRow | null
 }
 
 interface TreeViewClientProps {
   initialTreeNo: string
   initialTreeOptions: string[]
   initialTreeHistory: TreeHarvestRow[]
+  initialBunchTyingHistory: BunchTyingHistoryRow[]
   initialDataStatus: "idle" | "loading" | "real" | "empty" | "error"
 }
 
@@ -30,11 +34,13 @@ export function TreeViewClient({
   initialTreeNo,
   initialTreeOptions,
   initialTreeHistory,
+  initialBunchTyingHistory,
   initialDataStatus,
 }: TreeViewClientProps) {
   const [treeNo, setTreeNo] = useState(initialTreeNo)
   const [treeOptions, setTreeOptions] = useState<string[]>(initialTreeOptions)
   const [treeHistory, setTreeHistory] = useState<TreeHarvestRow[]>(initialTreeHistory)
+  const [bunchTyingHistory, setBunchTyingHistory] = useState<BunchTyingHistoryRow[]>(initialBunchTyingHistory)
   const [dataStatus, setDataStatus] = useState(initialDataStatus)
   const [errorMessage, setErrorMessage] = useState("")
   const [showPerformance, setShowPerformance] = useState(true)
@@ -90,6 +96,7 @@ export function TreeViewClient({
       if (response.status === 404) {
         setTreeNo(trimmedTreeNo)
         setTreeHistory([])
+        setBunchTyingHistory([])
         setDataStatus("empty")
         return
       }
@@ -99,7 +106,8 @@ export function TreeViewClient({
       const data = (await response.json()) as TreeViewData
       setTreeNo(data.treeNo)
       setTreeHistory(data.treeHarvestHistory)
-      setDataStatus(data.treeHarvestHistory.length > 0 ? "real" : "empty")
+      setBunchTyingHistory(data.bunchTyingHistory ?? [])
+      setDataStatus(data.treeHarvestHistory.length > 0 || (data.bunchTyingHistory?.length ?? 0) > 0 ? "real" : "empty")
     } catch {
       setErrorMessage("Unable to load harvest data. Please check the connection and try again.")
       setDataStatus("error")
@@ -138,6 +146,7 @@ export function TreeViewClient({
                   onChange={(e) => {
                     setTreeNo(e.target.value)
                     setTreeHistory([])
+                    setBunchTyingHistory([])
                     setDataStatus("idle")
                   }}
                   placeholder="Enter or select tree number"
@@ -162,6 +171,7 @@ export function TreeViewClient({
                 onClick={() => {
                   setTreeNo("")
                   setTreeHistory([])
+                  setBunchTyingHistory([])
                   setTreeOptions([])
                   setDataStatus("idle")
                 }}
@@ -246,7 +256,7 @@ export function TreeViewClient({
               />
             ) : null}
             {dataStatus === "empty" ? (
-              <HarvestRequestState tone="empty" message={`No harvest records found for Tree ${treeNo}.`} compact />
+              <HarvestRequestState tone="empty" message={`No harvest or bunch-tying records found for Tree ${treeNo}.`} compact />
             ) : null}
             {dataStatus === "error" ? (
               <HarvestRequestState
@@ -258,6 +268,45 @@ export function TreeViewClient({
             ) : null}
           </div>
         </Panel>
+
+        {dataStatus === "idle" ? null : (
+          <Panel title="Bunch Tying History" icon={Link2}>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Specialist labour observations recorded approximately every six months. A blank means not reported; a recorded zero remains 0.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
+                    <th className="px-3 py-2.5">Round</th>
+                    <th className="px-3 py-2.5">Work Start</th>
+                    <th className="px-3 py-2.5">Work End</th>
+                    <th className="px-3 py-2.5 text-right">Bunches Tied</th>
+                    <th className="px-3 py-2.5">Labour Team</th>
+                    <th className="px-3 py-2.5">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bunchTyingHistory.map((row, index) => (
+                    <tr key={row.observationId} className="border-b border-border last:border-0 hover:bg-muted/50">
+                      <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground">
+                        {row.roundCode}{index === 0 ? <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase text-primary">Latest</span> : null}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.workStartDate}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{row.workEndDate}</td>
+                      <td className="px-3 py-2.5 text-right text-lg font-bold text-foreground">{row.bunchesTied}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{row.labourTeam || "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{row.remarks || "—"}</td>
+                    </tr>
+                  ))}
+                  {bunchTyingHistory.length === 0 ? (
+                    <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No bunch-tying observation has been reported for Tree {treeNo}.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        )}
 
         {dataStatus === "idle" ? null : (
           <Panel title="Tree Harvest History" icon={History}>

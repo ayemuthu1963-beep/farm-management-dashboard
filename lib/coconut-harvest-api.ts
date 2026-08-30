@@ -29,6 +29,18 @@ interface ApiTreeHistoryRecord {
   total_sale: string | number | null
 }
 
+interface ApiBunchTyingHistoryRecord {
+  observation_id: number
+  round_id: number
+  round_code: string
+  work_start_date: string
+  work_end_date: string
+  bunches_tied: number
+  labour_team: string | null
+  remarks: string | null
+  imported_at: string
+}
+
 interface ApiTreePerformanceCycle {
   harvest_cycle: string
 }
@@ -42,6 +54,9 @@ interface ApiTreePerformanceRow {
   min_nuts: number | null
   max_nuts: number | null
   average_nuts: string | number | null
+  tying_trees_reported: number | null
+  tied_bunches_total: number | null
+  average_tied_bunches: string | number | null
 }
 
 interface ApiTreePerformanceDetail {
@@ -57,6 +72,9 @@ interface ApiTreePerformanceDetail {
   plantation_date: string | null
   months_since_planted: number | null
   lifecycle_status: string | null
+  latest_tied_bunches: number | null
+  latest_tying_round: string | null
+  latest_tying_date: string | null
 }
 
 interface ApiTreeLifecycleSapling {
@@ -80,6 +98,9 @@ interface ApiDetailedQueryRow {
   missed_harvests: number | null
   plot: string
   category: string
+  latest_tied_bunches: number | null
+  latest_tying_round: string | null
+  latest_tying_date: string | null
 }
 
 export interface TreePerformanceCategoryRow {
@@ -93,6 +114,9 @@ export interface TreePerformanceCategoryRow {
   missedHarvests: number
   minNuts: number
   maxNuts: number
+  latestTiedBunches: number | null
+  latestTyingRound: string | null
+  latestTyingDate: string | null
 }
 
 export interface TreePerformanceCategoryData {
@@ -124,6 +148,20 @@ export interface HarvestSummaryData {
 export interface TreeViewData {
   treeNo: string
   treeHarvestHistory: TreeHarvestRow[]
+  latestBunchTying: BunchTyingHistoryRow | null
+  bunchTyingHistory: BunchTyingHistoryRow[]
+}
+
+export interface BunchTyingHistoryRow {
+  observationId: number
+  roundId: number
+  roundCode: string
+  workStartDate: string
+  workEndDate: string
+  bunchesTied: number
+  labourTeam: string | null
+  remarks: string | null
+  importedAt: string
 }
 
 export interface FarmMapTreeHarvestSummary {
@@ -164,6 +202,9 @@ export interface DetailedQueryFilters {
   missedTo?: string
   plot1Classification?: string
   plot2Classification?: string
+  tiedFrom?: string
+  tiedTo?: string
+  tyingRound?: string
 }
 
 export interface DetailedQueryRow {
@@ -179,6 +220,9 @@ export interface DetailedQueryRow {
   missedHarvests: number
   plot: string
   classification: string
+  latestTiedBunches: number | null
+  latestTyingRound: string | null
+  latestTyingDate: string | null
 }
 
 export interface DetailedQueryData {
@@ -204,6 +248,9 @@ export interface TreeWiseQueryRow {
   plot: string
   classification: string
   reason: string
+  latestTiedBunches: number | null
+  latestTyingRound: string | null
+  latestTyingDate: string | null
   cycles: Record<string, TreeWiseQueryCycleValue>
   totalBunches: number
   totalNuts: number
@@ -237,6 +284,26 @@ function toNumber(value: string | number | null | undefined): number {
 
   const parsed = typeof value === "number" ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function toNullableNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const parsed = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function mapBunchTyingRecord(row: ApiBunchTyingHistoryRecord): BunchTyingHistoryRow {
+  return {
+    observationId: row.observation_id,
+    roundId: row.round_id,
+    roundCode: row.round_code,
+    workStartDate: row.work_start_date,
+    workEndDate: row.work_end_date,
+    bunchesTied: row.bunches_tied,
+    labourTeam: row.labour_team,
+    remarks: row.remarks,
+    importedAt: row.imported_at,
+  }
 }
 
 function toStatus(value: string): CycleStatus {
@@ -302,6 +369,9 @@ function mapPerformanceRow(row: ApiTreePerformanceRow): PerformanceRow {
     minNuts: row.min_nuts ?? 0,
     maxNuts: row.max_nuts ?? 0,
     averageNuts: toNumber(row.average_nuts),
+    tiedTreesReported: row.tying_trees_reported ?? 0,
+    tiedBunchesTotal: row.tied_bunches_total ?? 0,
+    averageTiedBunches: toNumber(row.average_tied_bunches),
   }
 }
 
@@ -322,6 +392,9 @@ function mapPerformanceCategoryDetail(
     missedHarvests: detail.missed_harvests ?? 0,
     minNuts: detail.min_nuts ?? 0,
     maxNuts: detail.max_nuts ?? 0,
+    latestTiedBunches: toNullableNumber(detail.latest_tied_bunches),
+    latestTyingRound: detail.latest_tying_round ?? null,
+    latestTyingDate: detail.latest_tying_date ?? null,
   }
 }
 
@@ -356,6 +429,9 @@ function mapLifecycleSapling(sapling: ApiTreeLifecycleSapling): TreePerformanceC
     missedHarvests: 0,
     minNuts: 0,
     maxNuts: 0,
+    latestTiedBunches: null,
+    latestTyingRound: null,
+    latestTyingDate: null,
   }
 }
 
@@ -413,6 +489,9 @@ function mergeFutureBetterPerformance(
     minNuts: 0,
     maxNuts: 0,
     averageNuts: 0,
+    tiedTreesReported: existing?.tiedTreesReported ?? 0,
+    tiedBunchesTotal: existing?.tiedBunchesTotal ?? 0,
+    averageTiedBunches: existing?.averageTiedBunches ?? 0,
   }
 
   if (futureBetterIndex >= 0) mappedRows[futureBetterIndex] = futureBetterRow
@@ -703,11 +782,19 @@ export async function fetchTreeViewData(treeNo: string): Promise<TreeViewData> {
     throw new HarvestApiError(`Harvest API returned ${response.status}`, response.status)
   }
 
-  const data = (await response.json()) as { records: ApiTreeHistoryRecord[]; tree?: { tree_no?: string } }
+  const data = (await response.json()) as {
+    records: ApiTreeHistoryRecord[]
+    tree?: { tree_no?: string }
+    latest_bunch_tying?: ApiBunchTyingHistoryRecord | null
+    bunch_tying_history?: ApiBunchTyingHistoryRecord[]
+  }
+  const bunchTyingHistory = (data.bunch_tying_history ?? []).map(mapBunchTyingRecord)
 
   return {
     treeNo: data.tree?.tree_no ?? treeNo,
     treeHarvestHistory: data.records.map(mapTreeHistoryRecord),
+    latestBunchTying: data.latest_bunch_tying ? mapBunchTyingRecord(data.latest_bunch_tying) : bunchTyingHistory[0] ?? null,
+    bunchTyingHistory,
   }
 }
 
@@ -1087,6 +1174,9 @@ const detailedQueryParameterNames: Record<keyof DetailedQueryFilters, string> = 
   missedTo: "missed_to",
   plot1Classification: "plot1_classification",
   plot2Classification: "plot2_classification",
+  tiedFrom: "tied_from",
+  tiedTo: "tied_to",
+  tyingRound: "tying_round",
 }
 
 function detailedQueryParams(filters: DetailedQueryFilters): URLSearchParams {
@@ -1130,6 +1220,9 @@ function mapDetailedQueryRow(row: ApiDetailedQueryRow): DetailedQueryRow {
     missedHarvests: row.missed_harvests ?? 0,
     plot: row.plot,
     classification: row.category,
+    latestTiedBunches: toNullableNumber(row.latest_tied_bunches),
+    latestTyingRound: row.latest_tying_round ?? null,
+    latestTyingDate: row.latest_tying_date ?? null,
   }
 }
 
@@ -1172,9 +1265,11 @@ function classificationReason(
 }
 
 function inferPlotFromTreeNumber(treeNo: string): string {
-  const numericTreeNo = Number.parseFloat(treeNo)
-  if (!Number.isFinite(numericTreeNo)) return ""
-  return numericTreeNo >= 1000 ? "Plot 2" : "Plot 1"
+  const baseTreeNo = Number.parseInt(treeNo.split(".", 1)[0] ?? "", 10)
+  if (!Number.isFinite(baseTreeNo)) return "Other"
+  if (baseTreeNo >= 1 && baseTreeNo <= 999) return "Plot 1"
+  if (baseTreeNo >= 1001) return "Plot 2"
+  return "Other"
 }
 
 function parseTreeWiseExportRows(csv: string, salePriceByCycle: Map<string, number>): ApiDetailedQueryRow[] {
@@ -1212,6 +1307,9 @@ function parseTreeWiseExportRows(csv: string, salePriceByCycle: Map<string, numb
       missed_harvests: 0,
       plot: inferPlotFromTreeNumber(treeNo),
       category: "",
+      latest_tied_bunches: null,
+      latest_tying_round: null,
+      latest_tying_date: null,
     }
   })
 }
@@ -1355,6 +1453,11 @@ export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Pro
 
     if (detail && !detailMatchesClassification(detail, filters)) continue
     if (!detail && (!isAll(filters.plot1Classification) || !isAll(filters.plot2Classification))) continue
+    const latestTiedBunches = toNullableNumber(detail?.latest_tied_bunches)
+    if (hasValueRange(filters.tiedFrom, filters.tiedTo)) {
+      if (latestTiedBunches === null || !inNumberRange(latestTiedBunches, filters.tiedFrom, filters.tiedTo)) continue
+    }
+    if (!isBlank(filters.tyingRound) && detail?.latest_tying_round !== filters.tyingRound?.trim()) continue
 
     const byCycle = recordsByTree.get(treeNo)
     if (!filters.includeNoRecord && !byCycle) continue
@@ -1381,6 +1484,9 @@ export async function fetchTreeWiseQueryData(filters: TreeWiseQueryFilters): Pro
       plot: metadata.plot,
       classification: metadata.classification,
       reason: classificationReason(metadata.plot, metadata.classification, performance.rows),
+      latestTiedBunches,
+      latestTyingRound: detail?.latest_tying_round ?? null,
+      latestTyingDate: detail?.latest_tying_date ?? null,
       cycles: cycleValues,
       totalBunches,
       totalNuts,
