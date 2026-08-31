@@ -3,21 +3,18 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote Preview-verified fertiliser purchase cost and derived unit price",
-  "base_commit": "d9ce845b4c360d989cd0dbd26761ab60d76bcd5d",
+  "release_note": "Promote Preview-verified whole-rupee fertiliser unit prices",
+  "base_commit": "722c9ea1e2657e288d7dc97381ae4e8a0f42c7dc",
   "preview_approved": {
-    "revision": "6a116fc0b9e8e04c50e589a17daa641360b07468",
-    "image_id": "sha256:f0bc8749145b0ebc1f77046fa9d0b4057d1713ebf5b042885fa554b68e6f6e96",
-    "feature_revision": "ec3e0603a7c644b4632f8aecabda89fd71fb0dc4",
+    "revision": "8dd7433d676d1ebd56498cf0249821c3ff3df785",
+    "image_id": "sha256:e56dfe9137f8b7c091553121e049501fe436251a2f8eb5910a3d4c57727b263a",
+    "feature_revision": "7a89873ab4a31ea5dfbbe5b2c4d19a8dd76e56d3",
     "verified_files": [
       "app/fertiliser-management/page.tsx",
-      "lib/fertiliser-api.ts",
-      "lib/fertiliser-data.ts",
       "tests/fertiliser-purchase-cost.mjs"
     ],
     "production_adaptations": [
       "deploy/production-release-manifest.json",
-      "package.json",
       "tests/farm-calendar-production-promotion.mjs"
     ]
   },
@@ -33,9 +30,6 @@
   "allowed_paths": [
     "app/fertiliser-management/page.tsx",
     "deploy/production-release-manifest.json",
-    "lib/fertiliser-api.ts",
-    "lib/fertiliser-data.ts",
-    "package.json",
     "tests/farm-calendar-production-promotion.mjs",
     "tests/fertiliser-purchase-cost.mjs"
   ]
