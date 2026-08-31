@@ -759,6 +759,7 @@ allowed = re.compile(
     r"db/rollbacks/[0-9][A-Za-z0-9_.-]*\.sql|"
     r"deploy/(?:production-backend-release|release-governance)\.json|"
     r"docs/MFMS_DATABASE_RELEASE_POLICY\.md|"
+    r"docs/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK\.md|"
     r"scripts/(?:apply_production_asset_register|apply_production_migrations|import_access_csv|"
     r"import_historical_clean_csv|import_manual_harvest_csv|odk_sync_placeholder|"
     r"sync_production_harvest_odk|sync_well_water_odk|validate_production_release|validate_release_governance)\.py|"
