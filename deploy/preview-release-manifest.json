@@ -3,15 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Repair Coconut Counting authenticated PC close workflow",
-  "base_commit": "8dd7433d676d1ebd56498cf0249821c3ff3df785",
+  "release_note": "Route authenticated Coconut Counting close through the frontend BFF",
+  "base_commit": "85231cf6bb8ff7a0ffcd3c564eb58326de2df509",
   "matched_backend_commit": "f4f3daa4e84642c05082a9708df827c63b7efc20",
   "allowed_paths": [
-    "app/api/coconut-counting/sessions/[sessionUuid]/close/route.ts",
-    "app/coconut-counting/page.tsx",
+    "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
     "components/coconut-counting/session-controls.tsx",
     "deploy/preview-release-manifest.json",
-    "package.json",
     "tests/coconut-counting-session-close.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],

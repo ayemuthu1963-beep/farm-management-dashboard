@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 import { getAuthenticatedUserAssertionHeaders } from "../lib/mfms-admin-identity.ts"
 
 const route = readFileSync(
-  "app/api/coconut-counting/sessions/[sessionUuid]/close/route.ts",
+  "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
   "utf8",
 )
 const page = readFileSync("app/coconut-counting/page.tsx", "utf8")
@@ -30,6 +30,10 @@ assert.match(controls, />\s*Cancel\s*</)
 assert.match(controls, /Confirm close/)
 assert.match(controls, /Later device records will be blocked after closure/)
 assert.match(
+  controls,
+  /\/api\/coconut-counting-admin\/sessions\/\$\{encodeURIComponent\(sessionUuid\)\}\/close/,
+)
+assert.doesNotMatch(
   controls,
   /\/api\/coconut-counting\/sessions\/\$\{encodeURIComponent\(sessionUuid\)\}\/close/,
 )

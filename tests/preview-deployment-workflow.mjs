@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Repair Coconut Counting authenticated PC close workflow",
+  "Route authenticated Coconut Counting close through the frontend BFF",
 )
-assert.equal(manifest.base_commit, "8dd7433d676d1ebd56498cf0249821c3ff3df785")
+assert.equal(manifest.base_commit, "85231cf6bb8ff7a0ffcd3c564eb58326de2df509")
 assert.equal(manifest.matched_backend_commit, "f4f3daa4e84642c05082a9708df827c63b7efc20")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,11 +302,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/coconut-counting/sessions/[sessionUuid]/close/route.ts",
-  "app/coconut-counting/page.tsx",
+  "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
   "components/coconut-counting/session-controls.tsx",
   "deploy/preview-release-manifest.json",
-  "package.json",
   "tests/coconut-counting-session-close.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]

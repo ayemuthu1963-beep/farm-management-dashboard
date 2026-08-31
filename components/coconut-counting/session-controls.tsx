@@ -42,7 +42,7 @@ export function CoconutCountingSessionControls({
 
     try {
       const response = await fetch(
-        `/api/coconut-counting/sessions/${encodeURIComponent(sessionUuid)}/close`,
+        `/api/coconut-counting-admin/sessions/${encodeURIComponent(sessionUuid)}/close`,
         { method: "POST", headers: { Accept: "application/json" } },
       )
       const body = (await response.json().catch(() => ({}))) as CloseResponse
