@@ -3,15 +3,12 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Record incoming fertiliser purchase cost and derived unit price",
-  "base_commit": "98e4d78922921f7a8c7abcbf1d42db68ea5b98c3",
+  "release_note": "Round fertiliser unit prices up to whole rupees",
+  "base_commit": "6a116fc0b9e8e04c50e589a17daa641360b07468",
   "matched_backend_commit": "f4f3daa4e84642c05082a9708df827c63b7efc20",
   "allowed_paths": [
     "app/fertiliser-management/page.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/fertiliser-api.ts",
-    "lib/fertiliser-data.ts",
-    "package.json",
     "tests/fertiliser-purchase-cost.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],

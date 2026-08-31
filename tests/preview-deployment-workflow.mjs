@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Record incoming fertiliser purchase cost and derived unit price",
+  "Round fertiliser unit prices up to whole rupees",
 )
-assert.equal(manifest.base_commit, "98e4d78922921f7a8c7abcbf1d42db68ea5b98c3")
+assert.equal(manifest.base_commit, "6a116fc0b9e8e04c50e589a17daa641360b07468")
 assert.equal(manifest.matched_backend_commit, "f4f3daa4e84642c05082a9708df827c63b7efc20")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -304,9 +304,6 @@ assert.deepEqual(manifest.protected_invariants, {
 const expectedReleasePaths = [
   "app/fertiliser-management/page.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/fertiliser-api.ts",
-  "lib/fertiliser-data.ts",
-  "package.json",
   "tests/fertiliser-purchase-cost.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
