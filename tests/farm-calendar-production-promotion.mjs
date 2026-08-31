@@ -9,14 +9,16 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const harvestCorrectionVerifiedFiles = [
-  "components/admin/harvest-review-sections.tsx",
-  "lib/harvest-review-model.ts",
+const fertiliserCostVerifiedFiles = [
+  "app/fertiliser-management/page.tsx",
+  "lib/fertiliser-api.ts",
+  "lib/fertiliser-data.ts",
+  "tests/fertiliser-purchase-cost.mjs",
 ]
-const harvestCorrectionProductionAdaptations = [
+const fertiliserCostProductionAdaptations = [
   "deploy/production-release-manifest.json",
+  "package.json",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/harvest-sync-exact-duplicates.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -27,15 +29,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-verified Harvest Sync TreeNo correction and retain both submissions",
+  "Promote Preview-verified fertiliser purchase cost and derived unit price",
 )
-assert.equal(manifest.base_commit, "d41be36736a105e4269bade8f172593bd223ae2c")
+assert.equal(manifest.base_commit, "d9ce845b4c360d989cd0dbd26761ab60d76bcd5d")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "db5f4fb5309ee97af8919f9f95258c43131351f1",
-  image_id: "sha256:40d23ab7dbc2f4ee3412001b30308a4e46104f5583390b12a60bf488fdb21406",
-  feature_revision: "a26db74ed664cb44bdec50c220c7147c14cbc192",
-  verified_files: harvestCorrectionVerifiedFiles,
-  production_adaptations: harvestCorrectionProductionAdaptations,
+  revision: "6a116fc0b9e8e04c50e589a17daa641360b07468",
+  image_id: "sha256:f0bc8749145b0ebc1f77046fa9d0b4057d1713ebf5b042885fa554b68e6f6e96",
+  feature_revision: "fc82f21a28c1c6967411b32b8733d99f59d9947a",
+  verified_files: fertiliserCostVerifiedFiles,
+  production_adaptations: fertiliserCostProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -49,8 +51,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...harvestCorrectionVerifiedFiles,
-    ...harvestCorrectionProductionAdaptations,
+    ...fertiliserCostVerifiedFiles,
+    ...fertiliserCostProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -104,12 +106,13 @@ assert.match(page, /Adjustment Out includes expired stock and allocates the olde
 assert.match(page, /adjustmentType !== "ADJUSTMENT_OUT".*eligible_available_quantity/)
 assert.match(adjustmentTypeHandler, /value !== "ADJUSTMENT_OUT"/)
 assert.match(adjustmentTypeHandler, /eligible_available_quantity/)
-assert.match(page, /const mfmsEnvironmentLabel = process\.env\.NEXT_PUBLIC_MFMS_ENV_BANNER/)
-assert.match(page, /const mfmsDatabaseLabel = process\.env\.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL/)
+assert.match(page, /publicEnvironmentIdentity/)
+assert.match(page, /fertiliserDatabaseDescription/)
+assert.match(page, /fertiliserLiveBadge/)
 assert.doesNotMatch(page, /source: "mfms_server_uat"/)
 assert.doesNotMatch(page, /No valid non-expired stock is available/)
 assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Worker Management and preserved Production promotion contracts: PASS")
+console.log("Fertiliser purchase cost and preserved Production promotion contracts: PASS")
