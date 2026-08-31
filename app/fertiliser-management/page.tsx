@@ -205,6 +205,13 @@ function formatInr(value: string | number | null | undefined, maximumFractionDig
   return `₹${numeric.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits })}`
 }
 
+function formatRoundedUpInr(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") return "Not entered"
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return "Not entered"
+  return `₹${Math.ceil(numeric).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
+}
+
 function calculateUnitPrice(totalCost: string, quantity: string) {
   const total = Number(totalCost)
   const units = Number(quantity)
@@ -226,7 +233,7 @@ function formatTransactionPurchaseCost(transaction: FertiliserTransactionApiRow)
 function formatTransactionUnitPrice(transaction: FertiliserTransactionApiRow) {
   if (transaction.transaction_type !== "INCOMING") return "—"
   if (transaction.unit_cost === null) return "Not entered"
-  return `${formatInr(transaction.unit_cost, 4)} / ${transaction.unit}`
+  return `${formatRoundedUpInr(transaction.unit_cost)} / ${transaction.unit}`
 }
 
 function mapStockRowsToProducts(rows: FertiliserStockApiRow[]): FertiliserProduct[] {
@@ -472,7 +479,7 @@ function ProductRegister({
                         <td className="px-3 py-2.5"><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></td>
                         <td className="px-3 py-2.5"><Badge className={stockStatusStyles[stockStatus]}>{stockStatus}</Badge></td>
                         <td className="px-3 py-2.5 font-semibold text-foreground">
-                          {product.latestPurchaseUnitCost ? `${formatInr(product.latestPurchaseUnitCost, 4)} / ${product.unit}` : "Not entered"}
+                          {product.latestPurchaseUnitCost ? `${formatRoundedUpInr(product.latestPurchaseUnitCost)} / ${product.unit}` : "Not entered"}
                         </td>
                         <td className="px-3 py-2.5 text-muted-foreground">{product.latestPurchaseDate ?? "Not entered"}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">
@@ -526,7 +533,7 @@ function ProductRegister({
                           <div><dt className="text-xs text-muted-foreground">Unit</dt><dd className="font-semibold text-foreground">{product.unit || "—"}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry</dt><dd className="font-semibold text-foreground">{formatFertiliserExpiry(product.expiryDate)}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry Status</dt><dd><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></dd></div>
-                          <div><dt className="text-xs text-muted-foreground">Latest Price / Unit</dt><dd className="font-semibold text-foreground">{product.latestPurchaseUnitCost ? `${formatInr(product.latestPurchaseUnitCost, 4)} / ${product.unit}` : "Not entered"}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Latest Price / Unit</dt><dd className="font-semibold text-foreground">{product.latestPurchaseUnitCost ? `${formatRoundedUpInr(product.latestPurchaseUnitCost)} / ${product.unit}` : "Not entered"}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Latest Purchase</dt><dd className="font-semibold text-foreground">{product.latestPurchaseDate ?? "Not entered"}</dd></div>
                         </dl>
                       </article>
@@ -1719,7 +1726,7 @@ export default function FertiliserManagementPage() {
               <InputField label="Total purchase cost (₹)" name="purchaseTotalCost" type="number" step="0.01" min="0.01" inputMode="decimal" value={incomingPurchaseTotalCost} onChange={(event) => setIncomingPurchaseTotalCost(event.target.value)} required error={incomingStockErrors.purchase_total_cost} />
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
                 <p className="font-semibold text-foreground">Calculated price per {incomingUnit || "unit"}</p>
-                <p className="mt-1 text-lg font-bold text-primary">{incomingUnitPrice === null ? "Enter quantity and total cost" : `${formatInr(incomingUnitPrice, 4)} / ${incomingUnit || "unit"}`}</p>
+                <p className="mt-1 text-lg font-bold text-primary">{incomingUnitPrice === null ? "Enter quantity and total cost" : `${formatRoundedUpInr(incomingUnitPrice)} / ${incomingUnit || "unit"}`}</p>
                 <p className="mt-1 text-xs text-muted-foreground">Use the final amount paid for this product line after discount, including applicable tax and allocated transport.</p>
               </div>
               <InputField label="Batch number" name="batchNumber" />
@@ -1997,7 +2004,7 @@ export default function FertiliserManagementPage() {
                               <InputField label="Total purchase cost (₹)" name="purchaseTotalCost" type="number" step="0.01" min="0.01" inputMode="decimal" value={requirementReceiptTotalCost} onChange={(event) => setRequirementReceiptTotalCost(event.target.value)} required error={futureRequirementErrors.purchase_total_cost} />
                               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
                                 <p className="font-semibold text-foreground">Calculated price per {item.unit}</p>
-                                <p className="mt-1 font-bold text-primary">{requirementReceiptUnitPrice === null ? "Enter quantity and total cost" : `${formatInr(requirementReceiptUnitPrice, 4)} / ${item.unit}`}</p>
+                                <p className="mt-1 font-bold text-primary">{requirementReceiptUnitPrice === null ? "Enter quantity and total cost" : `${formatRoundedUpInr(requirementReceiptUnitPrice)} / ${item.unit}`}</p>
                               </div>
                               <InputField label="Batch number" name="batchNumber" />
                               <InputField label="Expiry date" name="expiryDate" type="date" error={futureRequirementErrors.expiry_date} />
