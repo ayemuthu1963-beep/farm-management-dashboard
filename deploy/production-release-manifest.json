@@ -3,20 +3,22 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote Preview-verified Harvest Sync TreeNo correction and retain both submissions",
-  "base_commit": "d41be36736a105e4269bade8f172593bd223ae2c",
+  "release_note": "Promote Preview-verified fertiliser purchase cost and derived unit price",
+  "base_commit": "d9ce845b4c360d989cd0dbd26761ab60d76bcd5d",
   "preview_approved": {
-    "revision": "db5f4fb5309ee97af8919f9f95258c43131351f1",
-    "image_id": "sha256:40d23ab7dbc2f4ee3412001b30308a4e46104f5583390b12a60bf488fdb21406",
-    "feature_revision": "a26db74ed664cb44bdec50c220c7147c14cbc192",
+    "revision": "6a116fc0b9e8e04c50e589a17daa641360b07468",
+    "image_id": "sha256:f0bc8749145b0ebc1f77046fa9d0b4057d1713ebf5b042885fa554b68e6f6e96",
+    "feature_revision": "fc82f21a28c1c6967411b32b8733d99f59d9947a",
     "verified_files": [
-      "components/admin/harvest-review-sections.tsx",
-      "lib/harvest-review-model.ts"
+      "app/fertiliser-management/page.tsx",
+      "lib/fertiliser-api.ts",
+      "lib/fertiliser-data.ts",
+      "tests/fertiliser-purchase-cost.mjs"
     ],
     "production_adaptations": [
       "deploy/production-release-manifest.json",
-      "tests/farm-calendar-production-promotion.mjs",
-      "tests/harvest-sync-exact-duplicates.mjs"
+      "package.json",
+      "tests/farm-calendar-production-promotion.mjs"
     ]
   },
   "protected_invariants": {
@@ -29,10 +31,12 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "components/admin/harvest-review-sections.tsx",
+    "app/fertiliser-management/page.tsx",
     "deploy/production-release-manifest.json",
-    "lib/harvest-review-model.ts",
+    "lib/fertiliser-api.ts",
+    "lib/fertiliser-data.ts",
+    "package.json",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/harvest-sync-exact-duplicates.mjs"
+    "tests/fertiliser-purchase-cost.mjs"
   ]
 }
