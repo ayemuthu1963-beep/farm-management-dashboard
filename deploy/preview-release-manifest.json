@@ -3,13 +3,16 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Round fertiliser unit prices up to whole rupees",
-  "base_commit": "6a116fc0b9e8e04c50e589a17daa641360b07468",
+  "release_note": "Repair Coconut Counting authenticated PC close workflow",
+  "base_commit": "8dd7433d676d1ebd56498cf0249821c3ff3df785",
   "matched_backend_commit": "f4f3daa4e84642c05082a9708df827c63b7efc20",
   "allowed_paths": [
-    "app/fertiliser-management/page.tsx",
+    "app/api/coconut-counting/sessions/[sessionUuid]/close/route.ts",
+    "app/coconut-counting/page.tsx",
+    "components/coconut-counting/session-controls.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/fertiliser-purchase-cost.mjs",
+    "package.json",
+    "tests/coconut-counting-session-close.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
