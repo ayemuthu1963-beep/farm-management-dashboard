@@ -404,6 +404,7 @@ assert.match(gate, /if allowed\.fullmatch\(path\) or release_specific_path_appro
 const generalAllowlist = gate.match(/allowed = re\.compile\([\s\S]*?\n\)/)?.[0] ?? ""
 assert.doesNotMatch(generalAllowlist, /\\?\.env|dotfile/)
 assert.doesNotMatch(generalAllowlist, /docker-compose|verify_production_deployment_contract/)
+assert.match(generalAllowlist, /docs\/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK\\\.md/)
 
 const completeCandidatePaths = [
   ".env.example",
@@ -428,7 +429,11 @@ const completeCandidatePaths = [
   "tests/test_production_migration_runner.py",
   "tests/test_production_source_release_contract.py",
 ]
-const generalCandidatePath = /^(?:\.github\/(?:CODEOWNERS|pull_request_template\.md|workflows\/ci\.yml)|README\.md|api\/(?:Dockerfile|requirements\.txt|app\/(?:[^/]+\.py|routers\/[^/]+\.py|models\/[^/]+\.py|repositories\/[^/]+\.py|services\/[^/]+\.py))|db\/migrations\/[0-9][A-Za-z0-9_.-]*\.sql|db\/rollbacks\/[0-9][A-Za-z0-9_.-]*\.sql|deploy\/(?:production-backend-release|release-governance)\.json|docs\/MFMS_DATABASE_RELEASE_POLICY\.md|scripts\/(?:apply_production_asset_register|apply_production_migrations|import_access_csv|import_historical_clean_csv|import_manual_harvest_csv|odk_sync_placeholder|sync_production_harvest_odk|sync_well_water_odk|validate_production_release|validate_release_governance)\.py|scripts\/run_production_(?:beetle|harvest|well_water)_sync\.sh|tests\/[^/]+)$/
+const generalCandidatePath = /^(?:\.github\/(?:CODEOWNERS|pull_request_template\.md|workflows\/ci\.yml)|README\.md|api\/(?:Dockerfile|requirements\.txt|app\/(?:[^/]+\.py|routers\/[^/]+\.py|models\/[^/]+\.py|repositories\/[^/]+\.py|services\/[^/]+\.py))|db\/migrations\/[0-9][A-Za-z0-9_.-]*\.sql|db\/rollbacks\/[0-9][A-Za-z0-9_.-]*\.sql|deploy\/(?:production-backend-release|release-governance)\.json|docs\/MFMS_DATABASE_RELEASE_POLICY\.md|docs\/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK\.md|scripts\/(?:apply_production_asset_register|apply_production_migrations|import_access_csv|import_historical_clean_csv|import_manual_harvest_csv|odk_sync_placeholder|sync_production_harvest_odk|sync_well_water_odk|validate_production_release|validate_release_governance)\.py|scripts\/run_production_(?:beetle|harvest|well_water)_sync\.sh|tests\/[^/]+)$/
+assert.equal(generalCandidatePath.test("docs/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK.md"), true)
+assert.equal(generalCandidatePath.test("docs/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK.md.bak"), false)
+assert.equal(generalCandidatePath.test("docs/subdir/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK.md"), false)
+assert.equal(generalCandidatePath.test("docs/OTHER_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK.md"), false)
 const remainingUnapproved = completeCandidatePaths.filter(
   (path) => !generalCandidatePath.test(path) && exactReleaseApproval.paths[path] == null,
 )
