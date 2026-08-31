@@ -1415,8 +1415,8 @@ validate_release_manifest() {
   local manifest="$source_dir/deploy/production-release-manifest.json"
   local actual_paths="$work_dir/actual-paths.txt"
   local preview_contract="$work_dir/preview-contract.txt"
-  local preview_path
-  local -a preview_contract_lines
+  local preview_path git_fetch_stderr git_fetch_status sanitized_stderr
+  local -a preview_contract_lines provenance_refs
   [[ -f "$manifest" ]] || blocked "Production release manifest is missing"
   git -C "$source_dir" diff --name-only "$original_revision..$candidate_revision" \
     | LC_ALL=C sort -u > "$actual_paths"
@@ -1574,9 +1574,21 @@ PY_RELEASE_MANIFEST
   [[ "$(image_revision_for_container "$preview_container")" == "$preview_approved_revision" ]] \
     || blocked "live Preview revision differs from the approved artifact"
 
-  git -C "$source_dir" fetch --no-tags origin \
-    "$preview_approved_revision" "$preview_feature_revision" "$coordinated_preview_merge_base" \
-    >/dev/null 2>&1
+  provenance_refs=("$preview_approved_revision" "$preview_feature_revision")
+  if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
+    provenance_refs+=("$coordinated_preview_merge_base")
+  fi
+  git_fetch_stderr="$work_dir/git-fetch-preview-provenance.stderr"
+  git -C "$source_dir" fetch --no-tags origin "${provenance_refs[@]}" \
+    >/dev/null 2>"$git_fetch_stderr" || {
+      git_fetch_status=$?
+      sanitized_stderr=$(sed -E 's#(https?://)[^/@[:space:]]+@#\1***@#g' "$git_fetch_stderr" \
+        | tr '\r\n' ' ' \
+        | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+      [[ -n "$sanitized_stderr" ]] || sanitized_stderr="no stderr was emitted"
+      echo "GIT_COMMAND_ERROR=command=fetch-preview-provenance status=$git_fetch_status stderr=$sanitized_stderr" >&2
+      return "$git_fetch_status"
+    }
   if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
     validate_exact_coordinated_content_provenance
   else
@@ -1644,25 +1656,24 @@ prepare_production_candidate() {
 }
 
 preflight_production() {
-  [[ "$candidate_revision" == "$coordinated_candidate_revision" ]] \
-    || blocked "the coordinated frontend preflight is approved only for the exact fertiliser candidate"
+  local backend_revision
   prepare_production_candidate
+  backend_revision=$(image_revision_for_container "$backend_container")
   echo "preflight_environment=Production"
   echo "preflight_component=frontend"
-  echo "preflight_deployment_kind=coordinated-frontend-after-backend"
+  echo "preflight_deployment_kind=$preview_deployment_kind"
   echo "preflight_candidate_revision=$candidate_revision"
   echo "preflight_candidate_tree=$candidate_tree"
   echo "preflight_current_frontend_revision=$original_revision"
   echo "preflight_current_frontend_container=$original_container_id"
   echo "preflight_current_frontend_image=$original_image_id"
-  echo "preflight_backend_revision=$coordinated_backend_revision"
+  echo "preflight_backend_revision=$backend_revision"
   echo "preflight_backend_container=$backend_id_before"
   echo "preflight_backend_image=$backend_image_before"
-  echo "preflight_backup_path=$coordinated_backup_path"
-  echo "preflight_backup_bytes=$coordinated_backup_bytes"
-  echo "preflight_backup_sha256=$coordinated_backup_sha256"
-  echo "preflight_authenticated_fertiliser_operations=1"
-  echo "preflight_database_evidence_sha256=$(sha256sum "$coordinated_database_before" | awk '{print $1}')"
+  echo "preflight_preview_approved_revision=$preview_approved_revision"
+  echo "preflight_preview_approved_image_id=$preview_approved_image_id"
+  echo "preflight_preview_feature_revision=$preview_feature_revision"
+  echo "preflight_preview_verified_file_count=$preview_verified_file_count"
   echo "database_writes=none"
   echo "backend_replacement=none"
   echo "traffic_switch=not-performed"
