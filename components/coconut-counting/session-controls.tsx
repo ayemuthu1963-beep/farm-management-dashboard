@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
+import { useCoconutCountingRefresh } from "@/components/coconut-counting/auto-refresh"
+
 interface CoconutCountingSessionControlsProps {
   sessionUuid: string
   harvestDate: string
@@ -23,6 +25,7 @@ export function CoconutCountingSessionControls({
   isActive,
 }: CoconutCountingSessionControlsProps) {
   const router = useRouter()
+  const { setCloseInProgress } = useCoconutCountingRefresh()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [closeError, setCloseError] = useState<string | null>(null)
@@ -37,6 +40,7 @@ export function CoconutCountingSessionControls({
   async function confirmClose() {
     if (closing) return
     setClosing(true)
+    setCloseInProgress(true)
     setCloseError(null)
     setCloseResult(null)
 
@@ -65,6 +69,7 @@ export function CoconutCountingSessionControls({
       setCloseError(error instanceof Error ? error.message : "Unable to close this session.")
     } finally {
       setClosing(false)
+      setCloseInProgress(false)
     }
   }
 
