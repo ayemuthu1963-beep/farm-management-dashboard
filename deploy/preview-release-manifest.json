@@ -3,15 +3,16 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Map optional Harvest Sync submission GPS locations for duplicate review",
-  "base_commit": "db5f4fb5309ee97af8919f9f95258c43131351f1",
-  "matched_backend_commit": "047d62f38cd57d8f1e69ad3c3152e95474efaa8e",
+  "release_note": "Record incoming fertiliser purchase cost and derived unit price",
+  "base_commit": "98e4d78922921f7a8c7abcbf1d42db68ea5b98c3",
+  "matched_backend_commit": "f4f3daa4e84642c05082a9708df827c63b7efc20",
   "allowed_paths": [
-    "components/admin/harvest-location-comparison-map.tsx",
-    "components/admin/harvest-review-sections.tsx",
+    "app/fertiliser-management/page.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/harvest-review-model.ts",
-    "tests/harvest-sync-exact-duplicates.mjs",
+    "lib/fertiliser-api.ts",
+    "lib/fertiliser-data.ts",
+    "package.json",
+    "tests/fertiliser-purchase-cost.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
