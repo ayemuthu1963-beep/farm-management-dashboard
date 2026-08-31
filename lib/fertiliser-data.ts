@@ -21,6 +21,9 @@ export interface FertiliserProduct {
   stockStatus?: FertiliserStockStatus
   expiryStatus?: FertiliserExpiryStatus
   lastMovement?: string | null
+  latestPurchaseTotalCost?: string | null
+  latestPurchaseUnitCost?: string | null
+  latestPurchaseDate?: string | null
 }
 
 export interface FertiliserTransaction {
