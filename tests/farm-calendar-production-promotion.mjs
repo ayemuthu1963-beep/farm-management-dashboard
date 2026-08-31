@@ -9,13 +9,16 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const fertiliserCostVerifiedFiles = [
-  "app/fertiliser-management/page.tsx",
-  "tests/fertiliser-purchase-cost.mjs",
+const coconutCountingVerifiedFiles = [
+  "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
+  "app/coconut-counting/page.tsx",
+  "components/coconut-counting/session-controls.tsx",
+  "tests/coconut-counting-session-close.mjs",
 ]
-const fertiliserCostProductionAdaptations = [
+const coconutCountingProductionAdaptations = [
   "deploy/production-release-manifest.json",
   "tests/farm-calendar-production-promotion.mjs",
+  "vercel.json",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -26,15 +29,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-verified whole-rupee fertiliser unit prices",
+  "Promote Preview-accepted Coconut Counting authenticated session close",
 )
-assert.equal(manifest.base_commit, "722c9ea1e2657e288d7dc97381ae4e8a0f42c7dc")
+assert.equal(manifest.base_commit, "5cf105c0928ed673e0c1b506d8e332030c54d942")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "8dd7433d676d1ebd56498cf0249821c3ff3df785",
-  image_id: "sha256:e56dfe9137f8b7c091553121e049501fe436251a2f8eb5910a3d4c57727b263a",
-  feature_revision: "7a89873ab4a31ea5dfbbe5b2c4d19a8dd76e56d3",
-  verified_files: fertiliserCostVerifiedFiles,
-  production_adaptations: fertiliserCostProductionAdaptations,
+  revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
+  image_id: "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
+  feature_revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
+  verified_files: coconutCountingVerifiedFiles,
+  production_adaptations: coconutCountingProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -48,11 +51,16 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...fertiliserCostVerifiedFiles,
-    ...fertiliserCostProductionAdaptations,
+    ...coconutCountingVerifiedFiles,
+    ...coconutCountingProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
+
+const vercel = JSON.parse(read("vercel.json"))
+assert.deepEqual(vercel.git.deploymentEnabled, {
+  "codex/coconut-counting-production-correction-20260831": false,
+})
 
 const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")
 assert.ok(workerManagement)
@@ -112,4 +120,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Fertiliser purchase cost and preserved Production promotion contracts: PASS")
+console.log("Coconut Counting and preserved Production promotion contracts: PASS")

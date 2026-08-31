@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { CoconutCountingPageHeader } from "@/components/coconut-counting/page-header"
+import { CoconutCountingSessionControls } from "@/components/coconut-counting/session-controls"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import {
@@ -374,7 +375,14 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
           <h2 id="session-detail-heading" className="mt-1 text-xl font-black text-foreground">{formatDate(session.session_date)}</h2>
           <p className="mt-1 text-xs text-muted-foreground">Session {session.session_uuid}</p>
         </div>
-        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClass(session.status)}`}>{session.status}</span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClass(session.status)}`}>{session.status}</span>
+          <CoconutCountingSessionControls
+            sessionUuid={session.session_uuid}
+            harvestDate={formatDate(session.session_date)}
+            isActive={session.status === "ACTIVE"}
+          />
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -446,7 +454,7 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border">
-        <div className="border-b border-border bg-muted/50 px-4 py-3"><h3 className="font-bold">Session reset links</h3><p className="text-xs text-muted-foreground">Shows this session's relationship to the session before or after an APK reset.</p></div>
+        <div className="border-b border-border bg-muted/50 px-4 py-3"><h3 className="font-bold">Session reset links</h3><p className="text-xs text-muted-foreground">Shows this session&apos;s relationship to the session before or after an APK reset.</p></div>
         {detail.reset_events.length ? <ul className="divide-y divide-border">{detail.reset_events.map((event) => <li key={event.operation_uuid} className="space-y-2 px-4 py-3 text-sm"><p><strong>Prior session:</strong> {event.prior_session_uuid}</p><p><strong>New session:</strong> {event.new_session_uuid}</p><dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2"><div><dt className="inline font-bold">Operation:</dt> <dd className="inline">{event.operation_uuid}</dd></div><div><dt className="inline font-bold">Source device:</dt> <dd className="inline">{event.source_device_id}</dd></div><div><dt className="inline font-bold">APK created:</dt> <dd className="inline">{formatDateTime(event.event_created_at)}</dd></div><div><dt className="inline font-bold">Server received:</dt> <dd className="inline">{formatDateTime(event.server_received_at)}</dd></div></dl></li>)}</ul> : <p className="px-4 py-6 text-sm text-muted-foreground">No reset links for this session.</p>}
       </div>
     </section>

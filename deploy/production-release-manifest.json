@@ -3,19 +3,22 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote Preview-verified whole-rupee fertiliser unit prices",
-  "base_commit": "722c9ea1e2657e288d7dc97381ae4e8a0f42c7dc",
+  "release_note": "Promote Preview-accepted Coconut Counting authenticated session close",
+  "base_commit": "5cf105c0928ed673e0c1b506d8e332030c54d942",
   "preview_approved": {
-    "revision": "8dd7433d676d1ebd56498cf0249821c3ff3df785",
-    "image_id": "sha256:e56dfe9137f8b7c091553121e049501fe436251a2f8eb5910a3d4c57727b263a",
-    "feature_revision": "7a89873ab4a31ea5dfbbe5b2c4d19a8dd76e56d3",
+    "revision": "f0a9f5345212c52b498fd08346134d2c57156a04",
+    "image_id": "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
+    "feature_revision": "f0a9f5345212c52b498fd08346134d2c57156a04",
     "verified_files": [
-      "app/fertiliser-management/page.tsx",
-      "tests/fertiliser-purchase-cost.mjs"
+      "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
+      "app/coconut-counting/page.tsx",
+      "components/coconut-counting/session-controls.tsx",
+      "tests/coconut-counting-session-close.mjs"
     ],
     "production_adaptations": [
       "deploy/production-release-manifest.json",
-      "tests/farm-calendar-production-promotion.mjs"
+      "tests/farm-calendar-production-promotion.mjs",
+      "vercel.json"
     ]
   },
   "protected_invariants": {
@@ -28,9 +31,12 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/fertiliser-management/page.tsx",
+    "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
+    "app/coconut-counting/page.tsx",
+    "components/coconut-counting/session-controls.tsx",
     "deploy/production-release-manifest.json",
+    "tests/coconut-counting-session-close.mjs",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/fertiliser-purchase-cost.mjs"
+    "vercel.json"
   ]
 }
