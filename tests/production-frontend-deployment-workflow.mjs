@@ -48,7 +48,7 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.equal(helperSha256, "be296882a205550446e6c2da49c755f82cb8701e14e5b5032f9c4020a281a05f")
+assert.equal(helperSha256, "4f02b8392b9791cace4fa3a2db7ca55a7f0caadd7c6cd15929a5d1eb51b89950")
 assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
 assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
 
@@ -664,8 +664,14 @@ try {
     },
     allowed_paths: approvedAllowedPaths,
   }
-  const validateManifest = (payload, candidate = coordinatedState.candidate, tree = coordinatedState.tree) => {
+  const validateManifest = (
+    payload,
+    candidate = coordinatedState.candidate,
+    tree = coordinatedState.tree,
+    actualPaths = approvedAllowedPaths,
+  ) => {
     writeFileSync(manifestPath, JSON.stringify(payload), "utf8")
+    writeFileSync(actualPath, `${actualPaths.join("\n")}\n`, "utf8")
     return spawnSync("python3", [
       validatorPath,
       manifestPath,
@@ -699,6 +705,56 @@ try {
     ...manifest,
     preview_approved: { ...manifest.preview_approved, production_adaptations: approvedProductionAdaptations.slice(0, -1) },
   }).status, 0)
+
+  const coconutCountingCandidate = "db2cbecd2a71e7a328409864e121e6ee13ad291f"
+  const coconutCountingManifest = {
+    ...manifest,
+    deployment_kind: "frontend-only",
+    preview_approved: {
+      revision: "1".repeat(40),
+      image_id: `sha256:${"2".repeat(64)}`,
+      feature_revision: "3".repeat(40),
+      verified_files: ["vercel.json"],
+      production_adaptations: [],
+    },
+    protected_invariants: {
+      preview: "unchanged",
+      test: "unchanged",
+      backend: "unchanged",
+      database: "unchanged",
+      odk: "unchanged",
+      schedules: "unchanged",
+      proxy_configuration: "unchanged",
+    },
+    allowed_paths: ["vercel.json"],
+  }
+  assert.equal(validateManifest(
+    coconutCountingManifest,
+    coconutCountingCandidate,
+    "4".repeat(40),
+    ["vercel.json"],
+  ).status, 0)
+  assert.notEqual(validateManifest(
+    coconutCountingManifest,
+    "0".repeat(40),
+    "4".repeat(40),
+    ["vercel.json"],
+  ).status, 0)
+  for (const unexpectedPath of ["vercel", "vercel.json.bak", "vercel/config.json", "vercel/*.json"]) {
+    assert.notEqual(validateManifest(
+      {
+        ...coconutCountingManifest,
+        preview_approved: {
+          ...coconutCountingManifest.preview_approved,
+          verified_files: [unexpectedPath],
+        },
+        allowed_paths: [unexpectedPath],
+      },
+      coconutCountingCandidate,
+      "4".repeat(40),
+      [unexpectedPath],
+    ).status, 0)
+  }
 } finally {
   rmSync(validatorRoot, { recursive: true, force: true })
 }
