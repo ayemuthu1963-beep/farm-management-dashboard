@@ -70,6 +70,9 @@ export interface FertiliserStockApiRow {
   stock_status: FertiliserApiStockStatus
   nearest_expiry_date: string | null
   eligible_available_quantity: string
+  latest_purchase_total_cost: string | null
+  latest_unit_cost: string | null
+  latest_purchase_date: string | null
   expiry_status: FertiliserApiExpiryStatus
   active_batch_count: number
   last_movement_date: string | null
@@ -103,6 +106,8 @@ export interface FertiliserTransactionApiRow {
   category: string
   product: string
   quantity: string
+  purchase_total_cost: string | null
+  unit_cost: string | null
   unit: string
   batch_number: string | null
   expiry_date: string | null
@@ -121,6 +126,7 @@ export interface FertiliserIncomingStockPayload {
   transaction_date: string
   product_id: number
   quantity: string
+  purchase_total_cost: string
   unit: string
   batch_number?: string | null
   expiry_date?: string | null
@@ -277,6 +283,7 @@ export type FertiliserRequirementUpdatePayload = Partial<Omit<FertiliserRequirem
 export interface FertiliserRequirementReceiptPayload {
   receipt_date: string
   received_quantity: string
+  purchase_total_cost: string
   batch_number?: string | null
   expiry_date?: string | null
   supplier_name?: string | null
