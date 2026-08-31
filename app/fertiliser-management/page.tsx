@@ -27,6 +27,7 @@ import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard, StatGrid } from "@/components/farm/stat-card"
+import { publicEnvironmentIdentity } from "@/lib/public-environment"
 import { cn } from "@/lib/utils"
 import {
   duplicateConfirmationNotes,
@@ -84,9 +85,6 @@ import {
   type FertiliserTransactionFilters,
 } from "@/lib/fertiliser-api"
 
-const mfmsEnvironmentLabel = process.env.NEXT_PUBLIC_MFMS_ENV_BANNER?.trim() || "MFMS"
-const mfmsDatabaseLabel = process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL?.trim() || "configured database"
-
 type ActiveTab = "overview" | "incoming" | "outgoing" | "adjustment" | "requirements" | "history" | "master"
 type ModalName = "product" | "category" | null
 type FormErrors = Record<string, string>
@@ -100,6 +98,13 @@ type MasterActionTarget = {
 }
 
 const QUANTITY_PRECISION_ERROR = "Quantity must be greater than zero and may contain up to 3 decimal places."
+const fertiliserIdentity = publicEnvironmentIdentity(
+  process.env.NEXT_PUBLIC_MFMS_ENV,
+  process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL,
+)
+const fertiliserDatabase = fertiliserIdentity.database ?? "unconfigured database"
+const fertiliserDatabaseDescription = `${fertiliserIdentity.label} database (${fertiliserDatabase})`
+const fertiliserLiveBadge = `LIVE ${fertiliserIdentity.label} DATABASE DATA`
 
 const tabs: Array<{ id: ActiveTab; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Stock Overview", icon: Boxes },
@@ -193,6 +198,37 @@ function formatApiQuantity(value: string | null, unit: string | null) {
   return `${displayValue} ${unit}`
 }
 
+function formatInr(value: string | number | null | undefined, maximumFractionDigits = 2) {
+  if (value === null || value === undefined || value === "") return "Not entered"
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return "Not entered"
+  return `₹${numeric.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits })}`
+}
+
+function calculateUnitPrice(totalCost: string, quantity: string) {
+  const total = Number(totalCost)
+  const units = Number(quantity)
+  if (!Number.isFinite(total) || !Number.isFinite(units) || total <= 0 || units <= 0) return null
+  return total / units
+}
+
+function validatePurchaseTotalCost(value: string) {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return false
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0
+}
+
+function formatTransactionPurchaseCost(transaction: FertiliserTransactionApiRow) {
+  if (transaction.transaction_type !== "INCOMING") return "—"
+  return formatInr(transaction.purchase_total_cost)
+}
+
+function formatTransactionUnitPrice(transaction: FertiliserTransactionApiRow) {
+  if (transaction.transaction_type !== "INCOMING") return "—"
+  if (transaction.unit_cost === null) return "Not entered"
+  return `${formatInr(transaction.unit_cost, 4)} / ${transaction.unit}`
+}
+
 function mapStockRowsToProducts(rows: FertiliserStockApiRow[]): FertiliserProduct[] {
   return rows.map((row) => ({
     id: `DB-${row.product_id}`,
@@ -205,11 +241,14 @@ function mapStockRowsToProducts(rows: FertiliserStockApiRow[]): FertiliserProduc
     unit: row.unit ?? "",
     quantityText: formatApiQuantity(row.quantity, row.unit),
     expiryDate: row.nearest_expiry_date,
-    source: mfmsDatabaseLabel,
+    source: fertiliserDatabase,
     minimumStock: numberFromApi(row.minimum_stock) ?? 0,
     stockStatus: displayStockStatus(row.stock_status),
     expiryStatus: displayExpiryStatus(row.expiry_status),
     lastMovement: row.last_movement_date,
+    latestPurchaseTotalCost: row.latest_purchase_total_cost,
+    latestPurchaseUnitCost: row.latest_unit_cost,
+    latestPurchaseDate: row.latest_purchase_date,
   }))
 }
 
@@ -241,7 +280,7 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-bold uppercase tracking-wide">LOADING LIVE FERTILISER DATA</p>
-            <p className="text-primary/85">Reading Fertiliser product master, stock, transactions, and requirements from the configured MFMS database.</p>
+            <p className="text-primary/85">Reading Fertiliser product master, stock, transactions, and requirements from the {fertiliserDatabaseDescription}.</p>
           </div>
         </div>
       </div>
@@ -254,8 +293,8 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
         <div className="flex items-start gap-2">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-bold uppercase tracking-wide">LIVE {mfmsEnvironmentLabel} DATABASE DATA</p>
-            <p className="text-chart-2/85">Stock Overview, Product Master, Transaction History, and Future Requirements are read from {mfmsDatabaseLabel}. Writes remain bound to the verified environment/database target.</p>
+            <p className="font-bold uppercase tracking-wide">{fertiliserLiveBadge}</p>
+            <p className="text-chart-2/85">Stock Overview, Product Master, Transaction History, and Future Requirements are read from {fertiliserDatabase}. Writes remain bound to the verified {fertiliserIdentity.label} target.</p>
           </div>
         </div>
       </div>
@@ -268,7 +307,7 @@ function DataNotice({ mode, error, onRetry }: { mode: "loading" | "live" | "fall
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <div className="flex-1">
           <p className="font-bold uppercase tracking-wide">LIVE FERTILISER DATA UNAVAILABLE</p>
-          <p className="text-destructive/85">The live Preview Fertiliser API did not load. No mock balances are being displayed. {error ? `Reason: ${error}` : null}</p>
+          <p className="text-destructive/85">The live {fertiliserIdentity.label} Fertiliser API did not load. No mock balances are being displayed. {error ? `Reason: ${error}` : null}</p>
           {onRetry ? (
             <button type="button" onClick={onRetry} className="mt-2 rounded-lg border border-destructive/30 bg-white px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/5">
               Retry
@@ -355,7 +394,7 @@ function ProductRegister({
   return (
     <div className="space-y-4">
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[1080px] table-fixed border-collapse text-sm">
+        <table className="w-full min-w-[1320px] table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[17%]" />
             <col className="w-[22%]" />
@@ -364,6 +403,8 @@ function ProductRegister({
             <col className="w-[13%]" />
             <col className="w-[12%]" />
             <col className="w-[10%]" />
+            <col className="w-[13%]" />
+            <col className="w-[11%]" />
             <col className="w-[16%]" />
           </colgroup>
           <thead>
@@ -375,6 +416,8 @@ function ProductRegister({
               <th className="px-3 py-2.5">Expiry Date</th>
               <th className="px-3 py-2.5">Expiry Status</th>
               <th className="px-3 py-2.5">Stock Status</th>
+              <th className="px-3 py-2.5">Latest Price / Unit</th>
+              <th className="px-3 py-2.5">Latest Purchase</th>
               <th className="px-3 py-2.5">Last Movement</th>
             </tr>
           </thead>
@@ -393,7 +436,7 @@ function ProductRegister({
                         <span className="text-xs font-semibold text-muted-foreground">{group.products.length} products</span>
                       </button>
                     </td>
-                    <td colSpan={7} className="px-3 py-3 text-sm text-muted-foreground">Category collapsed</td>
+                    <td colSpan={9} className="px-3 py-3 text-sm text-muted-foreground">Category collapsed</td>
                   </tr>
                 )
               }
@@ -428,6 +471,10 @@ function ProductRegister({
                         <td className="px-3 py-2.5 text-muted-foreground">{formatFertiliserExpiry(product.expiryDate)}</td>
                         <td className="px-3 py-2.5"><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></td>
                         <td className="px-3 py-2.5"><Badge className={stockStatusStyles[stockStatus]}>{stockStatus}</Badge></td>
+                        <td className="px-3 py-2.5 font-semibold text-foreground">
+                          {product.latestPurchaseUnitCost ? `${formatInr(product.latestPurchaseUnitCost, 4)} / ${product.unit}` : "Not entered"}
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{product.latestPurchaseDate ?? "Not entered"}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">
                           {movementLabel ? (
                             <>
@@ -479,6 +526,8 @@ function ProductRegister({
                           <div><dt className="text-xs text-muted-foreground">Unit</dt><dd className="font-semibold text-foreground">{product.unit || "—"}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry</dt><dd className="font-semibold text-foreground">{formatFertiliserExpiry(product.expiryDate)}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry Status</dt><dd><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Latest Price / Unit</dt><dd className="font-semibold text-foreground">{product.latestPurchaseUnitCost ? `${formatInr(product.latestPurchaseUnitCost, 4)} / ${product.unit}` : "Not entered"}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Latest Purchase</dt><dd className="font-semibold text-foreground">{product.latestPurchaseDate ?? "Not entered"}</dd></div>
                         </dl>
                       </article>
                     )
@@ -645,7 +694,7 @@ function TransactionHistoryTableV2({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1180px] border-collapse text-sm">
+      <table className="w-full min-w-[1460px] border-collapse text-sm">
         <thead>
           <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
             <th className="px-3 py-2.5">Date</th>
@@ -653,6 +702,8 @@ function TransactionHistoryTableV2({
             <th className="px-3 py-2.5">Product</th>
             <th className="px-3 py-2.5">Category</th>
             <th className="px-3 py-2.5">Quantity</th>
+            <th className="px-3 py-2.5">Total Cost</th>
+            <th className="px-3 py-2.5">Price / Unit</th>
             <th className="px-3 py-2.5">Purpose</th>
             <th className="px-3 py-2.5">Crop</th>
             <th className="px-3 py-2.5">Plot / Location</th>
@@ -674,6 +725,8 @@ function TransactionHistoryTableV2({
                   <td className="px-3 py-2.5 font-semibold text-foreground">{txn.product}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.category}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{Number(txn.quantity).toLocaleString("en-IN", { maximumFractionDigits: 3 })} {txn.unit}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{formatTransactionPurchaseCost(txn)}</td>
+                  <td className="px-3 py-2.5 font-semibold text-foreground">{formatTransactionUnitPrice(txn)}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.purpose ?? "—"}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.crop ?? "—"}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{txn.plot_location ?? "—"}</td>
@@ -690,7 +743,7 @@ function TransactionHistoryTableV2({
                 </tr>
                 {allocations ? (
                   <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={12} className="px-3 py-2.5 text-xs text-muted-foreground">
+                    <td colSpan={14} className="px-3 py-2.5 text-xs text-muted-foreground">
                       {allocations.length === 0 ? "No allocation rows." : allocations.map((allocation) => `Batch ${allocation.batch_id}: ${Number(allocation.allocated_quantity).toLocaleString("en-IN", { maximumFractionDigits: 3 })} ${txn.unit} (${allocation.expiry_date ?? "No expiry"})`).join(" | ")}
                     </td>
                   </tr>
@@ -730,6 +783,8 @@ export default function FertiliserManagementPage() {
   const [dataError, setDataError] = useState("")
   const [incomingProductId, setIncomingProductId] = useState("")
   const [incomingUnit, setIncomingUnit] = useState("")
+  const [incomingQuantity, setIncomingQuantity] = useState("")
+  const [incomingPurchaseTotalCost, setIncomingPurchaseTotalCost] = useState("")
   const [incomingSubmitting, setIncomingSubmitting] = useState(false)
   const [outgoingProductId, setOutgoingProductId] = useState("")
   const [outgoingUnit, setOutgoingUnit] = useState("")
@@ -752,6 +807,8 @@ export default function FertiliserManagementPage() {
   const [requirementActionId, setRequirementActionId] = useState<number | null>(null)
   const [requirementEditId, setRequirementEditId] = useState<number | null>(null)
   const [requirementReceiveId, setRequirementReceiveId] = useState<number | null>(null)
+  const [requirementReceiptQuantity, setRequirementReceiptQuantity] = useState("")
+  const [requirementReceiptTotalCost, setRequirementReceiptTotalCost] = useState("")
   const [requirementResult, setRequirementResult] = useState<FertiliserRequirementResponse | FertiliserRequirementReceiptResponse | null>(null)
   const [requirementStatusFilter, setRequirementStatusFilter] = useState("all")
   const [requirementPriorityFilter, setRequirementPriorityFilter] = useState("all")
@@ -881,6 +938,9 @@ export default function FertiliserManagementPage() {
     return liveData?.products.find((product) => product.product_id === productId) ?? null
   }, [incomingProductId, liveData])
 
+  const incomingUnitPrice = calculateUnitPrice(incomingPurchaseTotalCost, incomingQuantity)
+  const requirementReceiptUnitPrice = calculateUnitPrice(requirementReceiptTotalCost, requirementReceiptQuantity)
+
   const selectedOutgoingStock = useMemo(() => {
     const productId = Number(outgoingProductId)
     if (!Number.isFinite(productId)) return null
@@ -983,6 +1043,13 @@ export default function FertiliserManagementPage() {
     setRequirementResult(null)
   }
 
+  const toggleRequirementReceipt = (requirementId: number) => {
+    setRequirementReceiveId((current) => current === requirementId ? null : requirementId)
+    setRequirementReceiptQuantity("")
+    setRequirementReceiptTotalCost("")
+    setFutureRequirementErrors({})
+  }
+
   const apiFieldErrorsToFormErrors = (fieldErrors: unknown): FormErrors => {
     const errors: FormErrors = {}
     if (fieldErrors && typeof fieldErrors === "object" && "field_errors" in fieldErrors) {
@@ -1004,7 +1071,7 @@ export default function FertiliserManagementPage() {
   const submitIncomingStock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setIncomingStockErrors({ form: "Incoming Stock saves require live Preview database data." })
+      setIncomingStockErrors({ form: `Incoming Stock saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1013,6 +1080,7 @@ export default function FertiliserManagementPage() {
     const errors: FormErrors = {}
     const productId = Number(formData.get("product"))
     const quantity = String(formData.get("quantity") ?? "").trim()
+    const purchaseTotalCost = String(formData.get("purchaseTotalCost") ?? "").trim()
     const transactionDate = String(formData.get("transactionDate") ?? "").trim()
     const expiryDate = String(formData.get("expiryDate") ?? "").trim()
     const product = liveData.products.find((item) => item.product_id === productId)
@@ -1020,6 +1088,7 @@ export default function FertiliserManagementPage() {
     if (!transactionDate) errors.transaction_date = "Date is required"
     if (!Number.isInteger(productId) || productId <= 0 || !product) errors.product_id = "Select a valid Product Master item"
     if (!validateDecimalQuantity(quantity)) errors.quantity = QUANTITY_PRECISION_ERROR
+    if (!validatePurchaseTotalCost(purchaseTotalCost)) errors.purchase_total_cost = "Enter a purchase cost greater than zero with up to 2 decimal places"
     if (!incomingUnit) errors.unit = "Unit is required"
     if (product?.default_unit && incomingUnit !== product.default_unit) errors.unit = `Unit must be ${product.default_unit}`
     if (product?.expiry_required && !expiryDate) errors.expiry_date = "Expiry date is required for this product"
@@ -1033,6 +1102,7 @@ export default function FertiliserManagementPage() {
       transaction_date: transactionDate,
       product_id: productId,
       quantity,
+      purchase_total_cost: purchaseTotalCost,
       unit: incomingUnit,
       batch_number: String(formData.get("batchNumber") ?? "").trim() || null,
       expiry_date: expiryDate || null,
@@ -1050,6 +1120,8 @@ export default function FertiliserManagementPage() {
       form.reset()
       setIncomingProductId("")
       setIncomingUnit("")
+      setIncomingQuantity("")
+      setIncomingPurchaseTotalCost("")
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
@@ -1062,7 +1134,7 @@ export default function FertiliserManagementPage() {
   const submitOutgoingStock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setOutgoingStockErrors({ form: "Outgoing Stock saves require live Preview database data." })
+      setOutgoingStockErrors({ form: `Outgoing Stock saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1129,7 +1201,7 @@ export default function FertiliserManagementPage() {
   const submitAdjustment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setStockAdjustmentErrors({ form: "Stock Adjustment saves require live Preview database data." })
+      setStockAdjustmentErrors({ form: `Stock Adjustment saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1195,7 +1267,7 @@ export default function FertiliserManagementPage() {
   const submitRequirement = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (dataMode !== "live" || !liveData) {
-      setFutureRequirementErrors({ form: "Future Requirement saves require live Preview database data." })
+      setFutureRequirementErrors({ form: `Future Requirement saves require live ${fertiliserIdentity.label} database data.` })
       return
     }
 
@@ -1347,9 +1419,11 @@ export default function FertiliserManagementPage() {
     const errors: FormErrors = {}
     const receiptDate = String(formData.get("receiptDate") ?? "").trim()
     const receivedQuantity = String(formData.get("receivedQuantity") ?? "").trim()
+    const purchaseTotalCost = String(formData.get("purchaseTotalCost") ?? "").trim()
 
     if (!receiptDate) errors.receipt_date = "Receipt date is required"
     if (!validateDecimalQuantity(receivedQuantity)) errors.received_quantity = QUANTITY_PRECISION_ERROR
+    if (!validatePurchaseTotalCost(purchaseTotalCost)) errors.purchase_total_cost = "Enter a purchase cost greater than zero with up to 2 decimal places"
     if (Number(receivedQuantity) > Number(requirement.remaining_quantity)) errors.received_quantity = `Receipt cannot exceed remaining ${formatApiQuantity(requirement.remaining_quantity, requirement.unit)}`
 
     if (Object.keys(errors).length > 0) {
@@ -1360,6 +1434,7 @@ export default function FertiliserManagementPage() {
     const payload: FertiliserRequirementReceiptPayload = {
       receipt_date: receiptDate,
       received_quantity: receivedQuantity,
+      purchase_total_cost: purchaseTotalCost,
       batch_number: String(formData.get("batchNumber") ?? "").trim() || null,
       expiry_date: String(formData.get("expiryDate") ?? "").trim() || null,
       supplier_name: String(formData.get("supplier") ?? "").trim() || null,
@@ -1376,6 +1451,8 @@ export default function FertiliserManagementPage() {
       setRequirementResult(result)
       resetMessage(`Requirement receipt saved. Transaction ${result.transaction.transaction_id}; status ${result.requirement.status}.`)
       form.reset()
+      setRequirementReceiptQuantity("")
+      setRequirementReceiptTotalCost("")
       setRequirementReceiveId(null)
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
@@ -1572,10 +1649,10 @@ export default function FertiliserManagementPage() {
             </span>
             <div>
               <h1 className="text-2xl font-extrabold uppercase tracking-tight text-foreground sm:text-3xl">Fertiliser Management</h1>
-              <p className="text-sm text-muted-foreground">Fertiliser stock and requirements connected to the MFMS Preview database</p>
+              <p className="text-sm text-muted-foreground">Fertiliser stock and requirements connected to the {fertiliserDatabaseDescription}</p>
             </div>
           </div>
-          <Badge className="border border-primary/25 bg-primary/10 text-primary">{dataMode === "live" ? "LIVE PREVIEW DATABASE DATA" : dataMode === "loading" ? "LOADING LIVE FERTILISER DATA" : "LIVE DATA UNAVAILABLE"}</Badge>
+          <Badge className="border border-primary/25 bg-primary/10 text-primary">{dataMode === "live" ? fertiliserLiveBadge : dataMode === "loading" ? "LOADING LIVE FERTILISER DATA" : "LIVE DATA UNAVAILABLE"}</Badge>
         </div>
 
         <DataNotice mode={dataMode} error={dataError} onRetry={() => void refreshLiveData().catch((error) => {
@@ -1621,7 +1698,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "incoming" ? (
           <Panel title="Incoming Stock" icon={PackagePlus}>
-            <FormIntro text="Receive stock into the MFMS Preview database only. This creates one batch/transaction after the backend confirms the save." />
+            <FormIntro text={`Receive stock into the ${fertiliserDatabaseDescription} only. This creates one batch/transaction after the backend confirms the save.`} />
             {incomingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{incomingStockErrors.form}</div> : null}
             <form onSubmit={submitIncomingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={incomingStockErrors.transaction_date} />
@@ -1633,12 +1710,18 @@ export default function FertiliserManagementPage() {
                 </select>
                 <FieldError>{incomingStockErrors.product_id}</FieldError>
               </label>
-              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={incomingStockErrors.quantity} />
+              <InputField label="Quantity" name="quantity" type="number" step="0.001" min="0.001" inputMode="decimal" value={incomingQuantity} onChange={(event) => setIncomingQuantity(event.target.value)} required error={incomingStockErrors.quantity} />
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-foreground">Unit</span>
                 <input name="unit" value={incomingUnit} readOnly className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground outline-none" placeholder="Auto-filled from Product Master" />
                 <FieldError>{incomingStockErrors.unit}</FieldError>
               </label>
+              <InputField label="Total purchase cost (₹)" name="purchaseTotalCost" type="number" step="0.01" min="0.01" inputMode="decimal" value={incomingPurchaseTotalCost} onChange={(event) => setIncomingPurchaseTotalCost(event.target.value)} required error={incomingStockErrors.purchase_total_cost} />
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                <p className="font-semibold text-foreground">Calculated price per {incomingUnit || "unit"}</p>
+                <p className="mt-1 text-lg font-bold text-primary">{incomingUnitPrice === null ? "Enter quantity and total cost" : `${formatInr(incomingUnitPrice, 4)} / ${incomingUnit || "unit"}`}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Use the final amount paid for this product line after discount, including applicable tax and allocated transport.</p>
+              </div>
               <InputField label="Batch number" name="batchNumber" />
               <InputField label={selectedIncomingProduct?.expiry_required ? "Expiry date (required)" : "Expiry date"} name="expiryDate" type="date" error={incomingStockErrors.expiry_date} />
               <InputField label="Supplier" name="supplier" />
@@ -1656,7 +1739,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "outgoing" ? (
           <Panel title="Outgoing Stock with FEFO Allocation" icon={Send}>
-            <FormIntro text={`Issue stock from the ${mfmsEnvironmentLabel} database only. FEFO allocation is automatic: earliest expiry first, including expired batches; null-expiry batches last.`} />
+            <FormIntro text={`Issue stock from the ${fertiliserDatabaseDescription} only. FEFO allocation is automatic: earliest expiry first, including expired batches; null-expiry batches last.`} />
             {outgoingStockErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{outgoingStockErrors.form}</div> : null}
             <form onSubmit={submitOutgoingStock} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={outgoingStockErrors.transaction_date} />
@@ -1714,7 +1797,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "adjustment" ? (
           <Panel title="Stock Adjustment" icon={ClipboardList}>
-            <FormIntro text={`Record ${mfmsEnvironmentLabel} stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation, including expired stock.`} />
+            <FormIntro text="Record stock corrections without editing history. Adjustment In adds stock; Adjustment Out uses automatic FEFO allocation, including expired stock." />
             {stockAdjustmentErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{stockAdjustmentErrors.form}</div> : null}
             <form onSubmit={submitAdjustment} className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <InputField label="Date" name="transactionDate" type="date" error={stockAdjustmentErrors.transaction_date} />
@@ -1779,7 +1862,7 @@ export default function FertiliserManagementPage() {
 
         {activeTab === "requirements" ? (
           <Panel title="Future Requirements" icon={ClipboardList}>
-            <FormIntro text="Create Preview planned requirements, move them through approval/order/receipt workflow, and receive stock against a linked requirement. Product and category writes remain disabled." />
+            <FormIntro text="Create planned requirements, move them through approval/order/receipt workflow, and receive stock against a linked requirement. Product and category writes remain disabled." />
             {futureRequirementErrors.form ? <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{futureRequirementErrors.form}</div> : null}
             <div className="mt-5">
               <StatGrid>
@@ -1878,7 +1961,7 @@ export default function FertiliserManagementPage() {
                             {item.status === "PLANNED" ? <button type="button" disabled={requirementActionId === item.requirement_id} onClick={() => setRequirementEditId(requirementEditId === item.requirement_id ? null : item.requirement_id)} className="rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted">{requirementEditId === item.requirement_id ? "Close Edit" : "Edit planned"}</button> : null}
                             {item.status === "APPROVED" ? <button type="button" disabled={requirementActionId === item.requirement_id} onClick={() => runRequirementAction(item, "ordered")} className="rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted">Mark Ordered</button> : null}
                             {item.status === "PLANNED" || item.status === "APPROVED" || (item.status === "ORDERED" && Number(item.received_quantity) === 0) ? <button type="button" disabled={requirementActionId === item.requirement_id} onClick={() => runRequirementAction(item, "cancel")} className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10">Cancel</button> : null}
-                            {item.status === "ORDERED" || item.status === "PARTIALLY_RECEIVED" ? <button type="button" onClick={() => setRequirementReceiveId(requirementReceiveId === item.requirement_id ? null : item.requirement_id)} className="rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90">{item.status === "ORDERED" ? "Receive Stock" : "Receive Remaining"}</button> : null}
+                            {item.status === "ORDERED" || item.status === "PARTIALLY_RECEIVED" ? <button type="button" onClick={() => toggleRequirementReceipt(item.requirement_id)} className="rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90">{item.status === "ORDERED" ? "Receive Stock" : "Receive Remaining"}</button> : null}
                             {item.status === "RECEIVED" || item.status === "CANCELLED" ? <span className="text-xs text-muted-foreground">View only</span> : null}
                           </div>
                         </td>
@@ -1910,7 +1993,12 @@ export default function FertiliserManagementPage() {
                           <td colSpan={12} className="px-3 py-3">
                             <form onSubmit={(event) => submitRequirementReceipt(event, item)} className="grid grid-cols-1 gap-3 md:grid-cols-4">
                               <InputField label="Receipt date" name="receiptDate" type="date" error={futureRequirementErrors.receipt_date} />
-                              <InputField label="Received quantity" name="receivedQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" error={futureRequirementErrors.received_quantity} />
+                              <InputField label="Received quantity" name="receivedQuantity" type="number" step="0.001" min="0.001" inputMode="decimal" value={requirementReceiptQuantity} onChange={(event) => setRequirementReceiptQuantity(event.target.value)} required error={futureRequirementErrors.received_quantity} />
+                              <InputField label="Total purchase cost (₹)" name="purchaseTotalCost" type="number" step="0.01" min="0.01" inputMode="decimal" value={requirementReceiptTotalCost} onChange={(event) => setRequirementReceiptTotalCost(event.target.value)} required error={futureRequirementErrors.purchase_total_cost} />
+                              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                                <p className="font-semibold text-foreground">Calculated price per {item.unit}</p>
+                                <p className="mt-1 font-bold text-primary">{requirementReceiptUnitPrice === null ? "Enter quantity and total cost" : `${formatInr(requirementReceiptUnitPrice, 4)} / ${item.unit}`}</p>
+                              </div>
                               <InputField label="Batch number" name="batchNumber" />
                               <InputField label="Expiry date" name="expiryDate" type="date" error={futureRequirementErrors.expiry_date} />
                               <InputField label="Supplier" name="supplier" />
@@ -2014,7 +2102,7 @@ export default function FertiliserManagementPage() {
                   </>
                 )}
                 {masterFormErrors.form ? <div className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{masterFormErrors.form}</div> : null}
-                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the guarded {mfmsEnvironmentLabel} database and will appear in the master tables immediately.</div>
+                <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the configured {fertiliserDatabaseDescription} and will appear in the master tables immediately.</div>
                 <SubmitRow label={activeModal === "product" ? "Save Product" : "Save Category"} submitting={masterSubmitting} />
               </form>
             </div>
@@ -2061,6 +2149,9 @@ function InputField({
   min,
   inputMode,
   defaultValue,
+  value,
+  onChange,
+  required,
   error,
 }: {
   label: string
@@ -2070,12 +2161,15 @@ function InputField({
   min?: string
   inputMode?: DecimalInputMode
   defaultValue?: string
+  value?: string
+  onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void
+  required?: boolean
   error?: string
 }) {
   return (
     <label className="block text-sm">
       <span className="mb-1 block font-semibold text-foreground">{label}</span>
-      <input name={name} type={type} step={step} min={min} inputMode={inputMode} defaultValue={defaultValue} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary" />
+      <input name={name} type={type} step={step} min={min} inputMode={inputMode} defaultValue={defaultValue} value={value} onChange={onChange} required={required} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary" />
       <FieldError>{error}</FieldError>
     </label>
   )
