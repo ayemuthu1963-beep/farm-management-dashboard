@@ -35,7 +35,7 @@ assert.equal(manifest.base_commit, "d9ce845b4c360d989cd0dbd26761ab60d76bcd5d")
 assert.deepEqual(manifest.preview_approved, {
   revision: "6a116fc0b9e8e04c50e589a17daa641360b07468",
   image_id: "sha256:f0bc8749145b0ebc1f77046fa9d0b4057d1713ebf5b042885fa554b68e6f6e96",
-  feature_revision: "fc82f21a28c1c6967411b32b8733d99f59d9947a",
+  feature_revision: "ec3e0603a7c644b4632f8aecabda89fd71fb0dc4",
   verified_files: fertiliserCostVerifiedFiles,
   production_adaptations: fertiliserCostProductionAdaptations,
 })
