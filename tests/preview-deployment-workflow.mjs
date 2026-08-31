@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Round fertiliser unit prices up to whole rupees",
+  "Repair Coconut Counting authenticated PC close workflow",
 )
-assert.equal(manifest.base_commit, "6a116fc0b9e8e04c50e589a17daa641360b07468")
+assert.equal(manifest.base_commit, "8dd7433d676d1ebd56498cf0249821c3ff3df785")
 assert.equal(manifest.matched_backend_commit, "f4f3daa4e84642c05082a9708df827c63b7efc20")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,9 +302,12 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/fertiliser-management/page.tsx",
+  "app/api/coconut-counting/sessions/[sessionUuid]/close/route.ts",
+  "app/coconut-counting/page.tsx",
+  "components/coconut-counting/session-controls.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/fertiliser-purchase-cost.mjs",
+  "package.json",
+  "tests/coconut-counting-session-close.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
