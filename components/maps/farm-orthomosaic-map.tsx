@@ -32,6 +32,14 @@ export type LeafletCircleMarker = {
   getElement?: () => SVGElement | undefined
 }
 
+export type LeafletCircle = {
+  addTo: (target: LeafletMap | LeafletLayerGroup) => LeafletCircle
+  getBounds: () => {
+    getSouthWest: () => { lat: number; lng: number }
+    getNorthEast: () => { lat: number; lng: number }
+  }
+}
+
 export type LeafletDivIcon = Record<string, unknown>
 
 export type LeafletMarker = {
@@ -46,7 +54,7 @@ export type LeafletMarker = {
 
 export type LeafletLayerGroup = {
   addTo: (map: LeafletMap) => LeafletLayerGroup
-  addLayer: (layer: LeafletCircleMarker | LeafletMarker) => LeafletLayerGroup
+  addLayer: (layer: LeafletCircleMarker | LeafletCircle | LeafletMarker) => LeafletLayerGroup
   clearLayers: () => void
   remove: () => void
 }
@@ -55,6 +63,8 @@ export type LeafletApi = {
   map: (element: HTMLElement, options: Record<string, unknown>) => LeafletMap
   tileLayer: (url: string, options: Record<string, unknown>) => LeafletTileLayer
   circleMarker: (latlng: Coordinate, options: Record<string, unknown>) => LeafletCircleMarker
+  circle: (latlng: Coordinate, options: Record<string, unknown>) => LeafletCircle
+  latLngBounds: (latlngs: Coordinate[]) => Coordinate[]
   divIcon: (options: Record<string, unknown>) => LeafletDivIcon
   marker: (latlng: Coordinate, options: Record<string, unknown>) => LeafletMarker
   layerGroup: () => LeafletLayerGroup

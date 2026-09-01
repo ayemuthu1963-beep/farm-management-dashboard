@@ -4,6 +4,7 @@ export interface FarmCombinedLayer {
   id: "farm-combined"
   name: string
   tileUrl: string
+  coordinatesUrl: string
   bounds: Coordinate[]
   center: Coordinate
   minZoom: number
@@ -47,6 +48,8 @@ export const farmCombinedLayer: FarmCombinedLayer = {
   id: "farm-combined",
   name: "Farm Combined Orthomosaic",
   tileUrl: "/map-tiles/farm-combined-png/{z}/{x}/{y}.png",
+  coordinatesUrl:
+    "/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
   bounds: [...plotBounds.plot1, ...plotBounds.plot2],
   center: [10.4812, 77.077],
   minZoom: 16,
