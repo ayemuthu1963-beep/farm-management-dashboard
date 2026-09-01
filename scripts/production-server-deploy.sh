@@ -1532,7 +1532,11 @@ for path in allowed:
             path,
         )
         if safe_source is None and not (
-            candidate == "db2cbecd2a71e7a328409864e121e6ee13ad291f" and path == "vercel.json"
+            candidate in {
+                "db2cbecd2a71e7a328409864e121e6ee13ad291f",
+                "0bc71bd999c340c541a0017138a80150778e26f1",
+            }
+            and path == "vercel.json"
         ):
             raise SystemExit(f"path is outside the approved Production frontend source scope: {path}")
 

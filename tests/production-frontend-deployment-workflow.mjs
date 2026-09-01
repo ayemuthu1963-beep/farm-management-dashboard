@@ -48,7 +48,7 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.equal(helperSha256, "547a7293d007407b9f5a0c7dabc9f11ccb00946a01094639f397737c20e21e8d")
+assert.equal(helperSha256, "749675b8aff7eb241b5e528bbcffa684b5ae2c2b242ced9148c0779055c46648")
 assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
 assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
 
@@ -744,6 +744,13 @@ try {
   assert.equal(validateManifest(
     coconutCountingManifest,
     coconutCountingCandidate,
+    "4".repeat(40),
+    ["vercel.json"],
+  ).status, 0)
+  const harvestGpsCandidate = "0bc71bd999c340c541a0017138a80150778e26f1"
+  assert.equal(validateManifest(
+    coconutCountingManifest,
+    harvestGpsCandidate,
     "4".repeat(40),
     ["vercel.json"],
   ).status, 0)
