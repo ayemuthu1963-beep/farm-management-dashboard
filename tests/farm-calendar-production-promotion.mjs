@@ -9,15 +9,18 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const coconutCountingVerifiedFiles = [
-  "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
-  "app/coconut-counting/page.tsx",
-  "components/coconut-counting/session-controls.tsx",
-  "tests/coconut-counting-session-close.mjs",
+const harvestGpsVerifiedFiles = [
+  "components/admin/harvest-review-sections.tsx",
+  "lib/harvest-review-model.ts",
+  "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
 ]
-const coconutCountingProductionAdaptations = [
+const harvestGpsProductionAdaptations = [
+  "components/admin/harvest-location-comparison-map.tsx",
+  "components/maps/farm-orthomosaic-map.tsx",
   "deploy/production-release-manifest.json",
+  "lib/farm-map-data.ts",
   "tests/farm-calendar-production-promotion.mjs",
+  "tests/harvest-sync-exact-duplicates.mjs",
   "vercel.json",
 ]
 
@@ -29,15 +32,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-accepted Coconut Counting authenticated session close",
+  "Promote Preview-accepted Harvest GPS duplicate-comparison map",
 )
-assert.equal(manifest.base_commit, "5cf105c0928ed673e0c1b506d8e332030c54d942")
+assert.equal(manifest.base_commit, "db2cbecd2a71e7a328409864e121e6ee13ad291f")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
-  image_id: "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
-  feature_revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
-  verified_files: coconutCountingVerifiedFiles,
-  production_adaptations: coconutCountingProductionAdaptations,
+  revision: "98e4d78922921f7a8c7abcbf1d42db68ea5b98c3",
+  image_id: "sha256:56b3eeabfd6a34ce2a7a07a44f7052be6b49171f104c1e7826f2e0e5e5f0df1a",
+  feature_revision: "c38df99538b24cb96108c33fb00049505b3f8b62",
+  verified_files: harvestGpsVerifiedFiles,
+  production_adaptations: harvestGpsProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -51,15 +54,15 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...coconutCountingVerifiedFiles,
-    ...coconutCountingProductionAdaptations,
+    ...harvestGpsVerifiedFiles,
+    ...harvestGpsProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
 
 const vercel = JSON.parse(read("vercel.json"))
 assert.deepEqual(vercel.git.deploymentEnabled, {
-  "codex/coconut-counting-production-correction-20260831": false,
+  "codex/harvest-gps-production-20260901": false,
 })
 
 const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")
@@ -120,4 +123,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Coconut Counting and preserved Production promotion contracts: PASS")
+console.log("Harvest GPS and preserved Production promotion contracts: PASS")

@@ -3,21 +3,24 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote Preview-accepted Coconut Counting authenticated session close",
-  "base_commit": "5cf105c0928ed673e0c1b506d8e332030c54d942",
+  "release_note": "Promote Preview-accepted Harvest GPS duplicate-comparison map",
+  "base_commit": "db2cbecd2a71e7a328409864e121e6ee13ad291f",
   "preview_approved": {
-    "revision": "f0a9f5345212c52b498fd08346134d2c57156a04",
-    "image_id": "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
-    "feature_revision": "f0a9f5345212c52b498fd08346134d2c57156a04",
+    "revision": "98e4d78922921f7a8c7abcbf1d42db68ea5b98c3",
+    "image_id": "sha256:56b3eeabfd6a34ce2a7a07a44f7052be6b49171f104c1e7826f2e0e5e5f0df1a",
+    "feature_revision": "c38df99538b24cb96108c33fb00049505b3f8b62",
     "verified_files": [
-      "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
-      "app/coconut-counting/page.tsx",
-      "components/coconut-counting/session-controls.tsx",
-      "tests/coconut-counting-session-close.mjs"
+      "components/admin/harvest-review-sections.tsx",
+      "lib/harvest-review-model.ts",
+      "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson"
     ],
     "production_adaptations": [
+      "components/admin/harvest-location-comparison-map.tsx",
+      "components/maps/farm-orthomosaic-map.tsx",
       "deploy/production-release-manifest.json",
+      "lib/farm-map-data.ts",
       "tests/farm-calendar-production-promotion.mjs",
+      "tests/harvest-sync-exact-duplicates.mjs",
       "vercel.json"
     ]
   },
@@ -31,12 +34,15 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
-    "app/coconut-counting/page.tsx",
-    "components/coconut-counting/session-controls.tsx",
+    "components/admin/harvest-location-comparison-map.tsx",
+    "components/admin/harvest-review-sections.tsx",
+    "components/maps/farm-orthomosaic-map.tsx",
     "deploy/production-release-manifest.json",
-    "tests/coconut-counting-session-close.mjs",
+    "lib/farm-map-data.ts",
+    "lib/harvest-review-model.ts",
+    "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
     "tests/farm-calendar-production-promotion.mjs",
+    "tests/harvest-sync-exact-duplicates.mjs",
     "vercel.json"
   ]
 }
