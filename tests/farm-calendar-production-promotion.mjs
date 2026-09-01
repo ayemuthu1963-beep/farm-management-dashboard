@@ -35,8 +35,8 @@ assert.equal(
 )
 assert.equal(manifest.base_commit, "db2cbecd2a71e7a328409864e121e6ee13ad291f")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "98e4d78922921f7a8c7abcbf1d42db68ea5b98c3",
-  image_id: "sha256:56b3eeabfd6a34ce2a7a07a44f7052be6b49171f104c1e7826f2e0e5e5f0df1a",
+  revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
+  image_id: "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
   feature_revision: "c38df99538b24cb96108c33fb00049505b3f8b62",
   verified_files: harvestGpsVerifiedFiles,
   production_adaptations: harvestGpsProductionAdaptations,
