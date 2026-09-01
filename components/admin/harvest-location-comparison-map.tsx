@@ -234,6 +234,7 @@ export function HarvestLocationComparisonMap({
   return (
     <div className="mt-3 rounded-xl border bg-card p-3">
       <FarmOrthomosaicMap
+        key={correctedTreeNo ?? "submitted-tree"}
         mapTitle="Duplicate submission location comparison"
         note={status}
         className="border-0 shadow-none"
