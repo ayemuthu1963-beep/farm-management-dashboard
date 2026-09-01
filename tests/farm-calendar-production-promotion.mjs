@@ -21,7 +21,6 @@ const harvestGpsProductionAdaptations = [
   "lib/farm-map-data.ts",
   "tests/farm-calendar-production-promotion.mjs",
   "tests/harvest-sync-exact-duplicates.mjs",
-  "vercel.json",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -62,7 +61,7 @@ assert.deepEqual(
 
 const vercel = JSON.parse(read("vercel.json"))
 assert.deepEqual(vercel.git.deploymentEnabled, {
-  "codex/harvest-gps-production-20260901": false,
+  "codex/coconut-counting-production-correction-20260831": false,
 })
 
 const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")
