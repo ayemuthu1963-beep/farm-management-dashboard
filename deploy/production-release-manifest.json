@@ -20,8 +20,7 @@
       "deploy/production-release-manifest.json",
       "lib/farm-map-data.ts",
       "tests/farm-calendar-production-promotion.mjs",
-      "tests/harvest-sync-exact-duplicates.mjs",
-      "vercel.json"
+      "tests/harvest-sync-exact-duplicates.mjs"
     ]
   },
   "protected_invariants": {
@@ -42,7 +41,6 @@
     "lib/harvest-review-model.ts",
     "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/harvest-sync-exact-duplicates.mjs",
-    "vercel.json"
+    "tests/harvest-sync-exact-duplicates.mjs"
   ]
 }
