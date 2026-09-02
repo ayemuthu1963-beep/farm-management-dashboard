@@ -138,6 +138,42 @@ await writeFile(workbookPath, defaultWorkbook)
 const reopenedWorkbook = new Uint8Array(await readFile(workbookPath))
 assertWorkbookMatches({ workbookBytes: reopenedWorkbook, expectedDetailCount: detailRows.length, expectedTotals: defaultTotals })
 
+const authoritativeCurrentRows = [
+  [-17480, 0, -17480],
+  [-3834, 4050, -7884],
+  [-18, 0, -18],
+  [-1000, 0, -1000],
+  [-24050, 500, -24550],
+  [-13300, 0, -13300],
+  [-3500, 0, -3500],
+].map(([earlierLoanBalance, cashPaidInWeek, presentBalance]) => ({
+  dailyWages: [0, 0, 0, 0, 0, 0, 0],
+  weekWages: 0,
+  loanPayment: 0,
+  wageToPay: 0,
+  earlierLoanBalance,
+  cashPaidInWeek,
+  presentBalance,
+  includeFinancials: true,
+}))
+const blankDependentRows = ["Rani", "Chitra"].map(() => ({
+  dailyWages: [0, 0, 0, 0, 0, 0, 0],
+  weekWages: 0,
+  loanPayment: null,
+  wageToPay: null,
+  earlierLoanBalance: null,
+  cashPaidInWeek: null,
+  presentBalance: null,
+  includeFinancials: false,
+}))
+const authoritativeCurrentTotals = calculateWageSheetTotals([
+  ...authoritativeCurrentRows,
+  ...blankDependentRows,
+])
+assert.equal(authoritativeCurrentTotals.earlierLoanBalance, -63182, "Excel and UI must share the authoritative current opening total")
+assert.equal(authoritativeCurrentTotals.advances, 4550, "Excel and UI must deduct current advances exactly once")
+assert.equal(authoritativeCurrentTotals.presentBalance, -67732, "Excel and UI must share the authoritative current present total")
+
 const filteredTotals = calculateWageSheetTotals([aggregateRows[0]])
 assert.deepEqual(filteredTotals.dailyWages, aggregateRows[0].dailyWages)
 assert.equal(filteredTotals.wages, 2500, "a filtered export must total only its exported records")
