@@ -8,13 +8,16 @@ overrides:
   '@typescript-eslint/eslint-plugin': 8.66.0
   '@typescript-eslint/parser': 8.66.0
   body-parser: 2.3.0
+  browserslist@<=4.28.6: 4.28.8
   electron-to-chromium: 1.5.403
-  fast-uri: 3.1.5
+  fast-uri: 3.1.6
   hono: 4.12.34
   ip-address: 10.3.1
   js-yaml: 4.3.1
-  nanoid: 3.3.17
+  nanoid: 3.3.18
   postcss: 8.5.23
+  postcss-selector-parser@>=7.1.0 <7.1.3: 7.1.3
+  qs@>=2.2.5 <6.16.0: 6.16.0
   sharp: 0.35.0
   typescript-eslint: 8.66.0
   update-browserslist-db: 1.3.0
@@ -1845,8 +1848,8 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  nanoid@3.3.17:
-    resolution: {integrity: sha512-xQLf0A3HOMlgHq0n247/LRuAOYmB7dXJ/DvAxGvsSBij45XtBSmQycu+F8ODbHwns/XyFZagyL1+J0Offw1E0g==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -2265,7 +2268,7 @@ packages:
     resolution: {integrity: sha512-x/M6q3w4Ybp91CNaS4S69UnliqR3BzRpOT6LWbksjth0S/+jhfaPJsWjt/TewpT8j9eLIojUf5jr29WextHroA==}
     hasBin: true
     peerDependencies:
-      browserslist: '>= 4.21.0'
+      browserslist: 4.28.8
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
@@ -4082,7 +4085,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  nanoid@3.3.17: {}
+  nanoid@3.3.18: {}
 
   napi-postinstall@0.3.4: {}
 
@@ -4211,7 +4214,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.17
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
