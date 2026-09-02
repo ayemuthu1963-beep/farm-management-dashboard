@@ -3,44 +3,42 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote Preview-accepted Harvest GPS duplicate-comparison map",
-  "base_commit": "db2cbecd2a71e7a328409864e121e6ee13ad291f",
+  "release_note": "Promote Preview-accepted Worker balance carry-forward and historical read-only enforcement",
+  "base_commit": "11228336667da252daf489f9ca4b20f2102bd9eb",
   "preview_approved": {
-    "revision": "f0a9f5345212c52b498fd08346134d2c57156a04",
-    "image_id": "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
-    "feature_revision": "c38df99538b24cb96108c33fb00049505b3f8b62",
+    "revision": "1d944e272d078899ef4b0c42a3e05cffd6a0c1c9",
+    "image_id": "sha256:da232fe4aab13452fd60a4648468ffb74ed5d3cdfd666de8736498dc7401c0c6",
+    "feature_revision": "3a7461860939288e183323688811bb50e1959a1e",
+    "prerequisite_feature_revision": "692f6a47fa65e998037db0ae6daff3107446e09d",
+    "matched_backend_revision": "28b180eb714d0526f69b3a37a58f615d8ba3d00c",
     "verified_files": [
-      "components/admin/harvest-review-sections.tsx",
-      "lib/harvest-review-model.ts",
-      "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson"
+      "components/worker-management/weekly-settlement.tsx",
+      "lib/worker-balance-relationships.ts",
+      "tests/worker-management.mjs",
+      "tests/worker-wage-excel.mjs"
     ],
     "production_adaptations": [
-      "components/admin/harvest-location-comparison-map.tsx",
-      "components/maps/farm-orthomosaic-map.tsx",
+      "components/worker-management/weekly-wage-table-preview.tsx",
       "deploy/production-release-manifest.json",
-      "lib/farm-map-data.ts",
-      "tests/farm-calendar-production-promotion.mjs",
-      "tests/harvest-sync-exact-duplicates.mjs"
+      "tests/farm-calendar-production-promotion.mjs"
     ]
   },
   "protected_invariants": {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "unchanged",
+    "backend": "paired-release-only",
     "database": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "components/admin/harvest-location-comparison-map.tsx",
-    "components/admin/harvest-review-sections.tsx",
-    "components/maps/farm-orthomosaic-map.tsx",
+    "components/worker-management/weekly-settlement.tsx",
+    "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/production-release-manifest.json",
-    "lib/farm-map-data.ts",
-    "lib/harvest-review-model.ts",
-    "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
+    "lib/worker-balance-relationships.ts",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/harvest-sync-exact-duplicates.mjs"
+    "tests/worker-management.mjs",
+    "tests/worker-wage-excel.mjs"
   ]
 }
