@@ -184,7 +184,8 @@ export function WeeklySettlement() {
     { wages: 0, loanPayment: 0, wageToBePaid: 0, earlierBalance: 0, cashPaid: 0, presentBalance: 0 },
   )
 
-  const editable = data?.week.status === "DRAFT" || data?.week.status === "REOPENED"
+  const editable = data?.week.is_read_only !== true
+    && (data?.week.status === "DRAFT" || data?.week.status === "REOPENED")
 
   const persistLoanPayments = async () => {
     if (!data?.week.week_id || !dirtyIds.size) return 0
