@@ -3,17 +3,14 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Carry Worker weekly loan balances forward by account code",
-  "base_commit": "f0a9f5345212c52b498fd08346134d2c57156a04",
+  "release_note": "Preserve historical Worker settlement read-only enforcement",
+  "base_commit": "df53c79bf512fb66cb164107d310844068b6f821",
   "matched_backend_commit": "28b180eb714d0526f69b3a37a58f615d8ba3d00c",
   "allowed_paths": [
     "components/worker-management/weekly-settlement.tsx",
-    "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/worker-balance-relationships.ts",
     "tests/preview-deployment-workflow.mjs",
-    "tests/worker-management.mjs",
-    "tests/worker-wage-excel.mjs"
+    "tests/worker-management.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

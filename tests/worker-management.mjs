@@ -494,6 +494,7 @@ check(settlement.includes("To loan payment for ${row.display_name}"), "To loan p
 check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
 check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
 check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
+check(settlement.includes("data?.week.is_read_only !== true"), "Historical settlement controls must honor the backend read-only flag")
 check(settlement.includes(".toSorted(compareApprovedWorkerRoster)"), "Weekly Settlement must follow the shared account-code roster order")
 
 const query = read("components/worker-management/worker-query.tsx")
