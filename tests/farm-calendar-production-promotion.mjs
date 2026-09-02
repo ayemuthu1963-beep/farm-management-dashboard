@@ -48,7 +48,7 @@ assert.deepEqual(manifest.preview_approved, {
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
   test: "unchanged",
-  backend: "paired-release-only",
+  backend: "unchanged",
   database: "unchanged",
   odk: "unchanged",
   schedules: "unchanged",

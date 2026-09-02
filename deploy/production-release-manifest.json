@@ -26,7 +26,7 @@
   "protected_invariants": {
     "preview": "unchanged",
     "test": "unchanged",
-    "backend": "paired-release-only",
+    "backend": "unchanged",
     "database": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
