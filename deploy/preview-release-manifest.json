@@ -3,14 +3,13 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Preserve historical Worker settlement read-only enforcement",
-  "base_commit": "df53c79bf512fb66cb164107d310844068b6f821",
+  "release_note": "Apply targeted dependency security fixes to the Preview-approved Worker frontend",
+  "base_commit": "1d944e272d078899ef4b0c42a3e05cffd6a0c1c9",
   "matched_backend_commit": "28b180eb714d0526f69b3a37a58f615d8ba3d00c",
   "allowed_paths": [
-    "components/worker-management/weekly-settlement.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/preview-deployment-workflow.mjs",
-    "tests/worker-management.mjs"
+    "package.json",
+    "pnpm-lock.yaml"
   ],
   "protected_invariants": {
     "production": "unchanged",
