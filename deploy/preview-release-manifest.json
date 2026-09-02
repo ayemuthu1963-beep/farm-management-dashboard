@@ -3,15 +3,17 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Route authenticated Coconut Counting close through the frontend BFF",
-  "base_commit": "85231cf6bb8ff7a0ffcd3c564eb58326de2df509",
-  "matched_backend_commit": "f4f3daa4e84642c05082a9708df827c63b7efc20",
+  "release_note": "Carry Worker weekly loan balances forward by account code",
+  "base_commit": "f0a9f5345212c52b498fd08346134d2c57156a04",
+  "matched_backend_commit": "28b180eb714d0526f69b3a37a58f615d8ba3d00c",
   "allowed_paths": [
-    "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
-    "components/coconut-counting/session-controls.tsx",
+    "components/worker-management/weekly-settlement.tsx",
+    "components/worker-management/weekly-wage-table-preview.tsx",
     "deploy/preview-release-manifest.json",
-    "tests/coconut-counting-session-close.mjs",
-    "tests/preview-deployment-workflow.mjs"
+    "lib/worker-balance-relationships.ts",
+    "tests/preview-deployment-workflow.mjs",
+    "tests/worker-management.mjs",
+    "tests/worker-wage-excel.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",

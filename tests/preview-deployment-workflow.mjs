@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Route authenticated Coconut Counting close through the frontend BFF",
+  "Carry Worker weekly loan balances forward by account code",
 )
-assert.equal(manifest.base_commit, "85231cf6bb8ff7a0ffcd3c564eb58326de2df509")
-assert.equal(manifest.matched_backend_commit, "f4f3daa4e84642c05082a9708df827c63b7efc20")
+assert.equal(manifest.base_commit, "f0a9f5345212c52b498fd08346134d2c57156a04")
+assert.equal(manifest.matched_backend_commit, "28b180eb714d0526f69b3a37a58f615d8ba3d00c")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -302,11 +302,13 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/api/coconut-counting-admin/sessions/[sessionUuid]/close/route.ts",
-  "components/coconut-counting/session-controls.tsx",
+  "components/worker-management/weekly-settlement.tsx",
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "tests/coconut-counting-session-close.mjs",
+  "lib/worker-balance-relationships.ts",
   "tests/preview-deployment-workflow.mjs",
+  "tests/worker-management.mjs",
+  "tests/worker-wage-excel.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
