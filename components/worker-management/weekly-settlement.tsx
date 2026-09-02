@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import {
   closeWeek,
   fetchCurrentWeek,
-  fetchLedger,
   fetchSettlements,
   markWeekPaid,
   reopenWeek,
@@ -21,8 +20,12 @@ import {
   money,
   weekStatusLabel,
 } from "@/lib/worker-management-format"
-import type { LedgerTransaction, SettlementResponse, SettlementRow } from "@/lib/worker-management-types"
+import type { SettlementResponse, SettlementRow } from "@/lib/worker-management-types"
 import { compareApprovedWorkerRoster } from "@/lib/worker-management-roster"
+import {
+  isDependentWorkerAccount,
+  pairedDependentAccountCode,
+} from "@/lib/worker-balance-relationships"
 import {
   Badge,
   EmptyState,
@@ -33,15 +36,13 @@ import {
   WorkerInput,
 } from "./worker-ui"
 
-const openingBalanceReference = "OPEN-BAL"
-const dependentWorkerNames = new Set(["Rani", "Chitra"])
-function isDependentWorker(row: Pick<SettlementRow, "display_name">) {
-  return dependentWorkerNames.has(row.display_name)
+function isDependentWorker(row: Pick<SettlementRow, "account_code">) {
+  return isDependentWorkerAccount(row.account_code)
 }
 
 function pairedDependent(rows: SettlementRow[], row: SettlementRow) {
-  const dependentName = row.display_name === "Tiruma" ? "Rani" : row.display_name === "Sivan" ? "Chitra" : null
-  return dependentName ? rows.find((candidate) => candidate.display_name === dependentName) ?? null : null
+  const dependentCode = pairedDependentAccountCode(row.account_code)
+  return dependentCode ? rows.find((candidate) => candidate.account_code === dependentCode) ?? null : null
 }
 
 function combinedWeekWages(rows: SettlementRow[], row: SettlementRow) {
@@ -84,7 +85,6 @@ function WeekWageAmount({ value, addend }: { value: number; addend: number | nul
 export function WeeklySettlement() {
   const [selectedDate, setSelectedDate] = useState(defaultSettlementDate)
   const [data, setData] = useState<SettlementResponse | null>(null)
-  const [ledgerTransactions, setLedgerTransactions] = useState<LedgerTransaction[]>([])
   const [loanPayments, setLoanPayments] = useState<Record<number, string>>({})
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -101,16 +101,11 @@ export function WeeklySettlement() {
       const week = await fetchCurrentWeek(selectedDate)
       if (week.week_id === null) {
         setData({ week, items: [] })
-        setLedgerTransactions([])
         setLoanPayments({})
         return
       }
-      const [result, ledger] = await Promise.all([
-        fetchSettlements(week.week_id),
-        fetchLedger({ weekId: week.week_id, pageSize: 200 }),
-      ])
+      const result = await fetchSettlements(week.week_id)
       setData(result)
-      setLedgerTransactions(ledger.items)
       setLoanPayments(Object.fromEntries(
         result.items
           .filter((item) => !isDependentWorker(item))
@@ -125,7 +120,6 @@ export function WeeklySettlement() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load weekly settlement.")
       setData(null)
-      setLedgerTransactions([])
     } finally {
       setLoading(false)
     }
@@ -137,15 +131,6 @@ export function WeeklySettlement() {
   }, [load])
 
   const rows = useMemo(() => {
-    const openingAdjustmentsByAccount = ledgerTransactions.reduce((balances, transaction) => {
-      if (transaction.reference !== openingBalanceReference) return balances
-      balances.set(
-        transaction.account_id,
-        (balances.get(transaction.account_id) ?? 0) + money(transaction.signed_amount),
-      )
-      return balances
-    }, new Map<number, number>())
-
     return (data?.items ?? []).toSorted(compareApprovedWorkerRoster).map((item) => {
       const dependent = isDependentWorker(item)
       const pairedWorker = pairedDependent(data?.items ?? [], item)
@@ -169,10 +154,8 @@ export function WeeklySettlement() {
 
       const toLoanPayment = Math.max(0, money(loanPayments[item.account_id]))
       const signedCash = money(item.cash_paid_during_week)
-      const openingAdjustment = openingAdjustmentsByAccount.get(item.account_id) ?? 0
-      const weeklySignedCash = signedCash - openingAdjustment
-      const cashPaidInWeek = Math.max(0, -weeklySignedCash)
-      const earlierLoanBalance = money(item.current_signed_balance) - signedCash + openingAdjustment
+      const cashPaidInWeek = Math.max(0, -signedCash)
+      const earlierLoanBalance = money(item.opening_signed_balance)
 
       return {
         ...item,
@@ -187,7 +170,7 @@ export function WeeklySettlement() {
         presentBalance: earlierLoanBalance + toLoanPayment - cashPaidInWeek,
       }
     })
-  }, [data, ledgerTransactions, loanPayments])
+  }, [data, loanPayments])
 
   const totals = rows.reduce(
     (current, row) => ({
@@ -201,7 +184,8 @@ export function WeeklySettlement() {
     { wages: 0, loanPayment: 0, wageToBePaid: 0, earlierBalance: 0, cashPaid: 0, presentBalance: 0 },
   )
 
-  const editable = data?.week.status === "DRAFT" || data?.week.status === "REOPENED"
+  const editable = data?.week.is_read_only !== true
+    && (data?.week.status === "DRAFT" || data?.week.status === "REOPENED")
 
   const persistLoanPayments = async () => {
     if (!data?.week.week_id || !dirtyIds.size) return 0

@@ -25,6 +25,10 @@ import {
   approvedWorkerRoster,
   compareApprovedWorkerRoster,
 } from "../lib/worker-management-roster.ts"
+import {
+  isDependentWorkerAccount,
+  pairedDependentAccountCode,
+} from "../lib/worker-balance-relationships.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const read = (path) => readFileSync(join(root, path), "utf8")
@@ -73,6 +77,14 @@ assert.deepEqual(
   "Non-roster group entries must use stable natural account-code order",
 )
 assertions += 5
+
+assert.equal(isDependentWorkerAccount("6"), true)
+assert.equal(isDependentWorkerAccount("10"), true)
+assert.equal(isDependentWorkerAccount("5"), false)
+assert.equal(pairedDependentAccountCode("5"), "6")
+assert.equal(pairedDependentAccountCode("3"), "10")
+assert.equal(pairedDependentAccountCode("8"), null)
+assertions += 6
 
 assert.equal(defaultSettlementDate(new Date("2026-08-08T06:00:00Z")), "2026-08-07")
 assert.equal(defaultSettlementDate(new Date("2026-08-10T06:00:00Z")), "2026-08-10")
@@ -378,9 +390,9 @@ check(weeklyWagePreview.includes("selectedWeek.exportFile"), "Excel export filen
 check(weeklyWagePreview.includes("buildWorkerWageWorkbook"), "Excel export must generate a typed XLSX workbook")
 check(weeklyWagePreview.includes("calculateWageSheetTotals"), "UI and Excel export must share one Sheet Total aggregation")
 check(weeklyWagePreview.includes("CombinedWeekWage"), "Selected worker week wages must support a three-line combined total")
-check(weeklyWagePreview.includes('row.loadedName === "Tiruma" ? "Rani"'), "Tiruma's week wage must include Rani")
-check(weeklyWagePreview.includes('row.loadedName === "Sivan" ? "Chitra"'), "Sivan's week wage must include Chitra")
-check(weeklyWagePreview.includes('const dependentWorkerNames = new Set(["Rani", "Chitra"])'), "Rani and Chitra must be marked as dependent workers")
+check(weeklyWagePreview.includes("pairedDependentAccountCode(row.accountCode)"), "Guardian/dependent wages must match exclusively by account code")
+check(weeklyWagePreview.includes("isDependentWorkerAccount(row.accountCode)"), "Dependent financial blanks must match exclusively by account code")
+check(!weeklyWagePreview.includes("dependentWorkerNames"), "Balance relationships must not match workers by mutable names")
 check(weeklyWagePreview.includes("to loan payment blank"), "Dependent worker financial columns must render blank")
 check(weeklyWagePreview.includes("wageToBePaid(row, pairedWorker)"), "Guardian wage payment must use combined wages")
 check(weeklyWagePreview.indexOf("To loan payment") < weeklyWagePreview.indexOf("Wage to be paid"), "Editable loan payment must appear before calculated wage payment")
@@ -470,19 +482,19 @@ const settlement = read("components/worker-management/weekly-settlement.tsx")
 for (const heading of ["Week wages", "To loan payment", "Wage to be paid", "Earlier loan balance", "Cash paid in week", "Present balance"]) {
   check(settlement.includes(heading), `Settlement is missing ${heading}`)
 }
-check(settlement.includes("fetchLedger"), "Weekly Settlement must classify opening balances from the same ledger data as the wage sheet")
-check(settlement.includes('const openingBalanceReference = "OPEN-BAL"'), "Weekly Settlement must use the approved opening-balance reference")
-check(settlement.includes('row.display_name === "Tiruma" ? "Rani"'), "Weekly Settlement must add Rani's wages to Tiruma")
-check(settlement.includes('row.display_name === "Sivan" ? "Chitra"'), "Weekly Settlement must add Chitra's wages to Sivan")
-check(settlement.includes('const dependentWorkerNames = new Set(["Rani", "Chitra"])'), "Weekly Settlement must leave dependent financial columns blank")
+check(settlement.includes("money(item.opening_signed_balance)"), "Weekly Settlement must use the backend's carry-forward opening projection")
+check(settlement.includes("pairedDependentAccountCode(row.account_code)"), "Weekly Settlement guardian/dependent matching must use account codes")
+check(settlement.includes("isDependentWorkerAccount(row.account_code)"), "Weekly Settlement dependent blanks must use account codes")
+check(!settlement.includes("current_signed_balance) - signedCash"), "Current mutable account balance must not reconstruct the opening")
 check(settlement.includes("totalWeekWages - toLoanPayment"), "Wage to be paid must equal combined week wages less loan payment")
 check(settlement.includes("earlierLoanBalance + toLoanPayment - cashPaidInWeek"), "Present balance must match the wage sheet formula")
-check(settlement.includes("signedCash - openingAdjustment"), "Opening balances must not appear as cash paid in the week")
+check(settlement.includes("Math.max(0, -signedCash)"), "Current-week advances must be deducted exactly once")
 check(settlement.includes("row.wageToBePaid ?? 0"), "Saving loan payments must persist the calculated wage to be paid")
 check(settlement.includes("To loan payment for ${row.display_name}"), "To loan payment must be editable under the matching wage-sheet heading")
 check(settlement.includes("defaultSettlementDate"), "Settlement must default Saturday to the week that ended Friday")
 check(settlement.includes('label="Week containing"'), "Settlement must allow an operator to select another work week")
 check(settlement.includes("addDays(current, -7)"), "Settlement must support previous-week navigation")
+check(settlement.includes("data?.week.is_read_only !== true"), "Historical settlement controls must honor the backend read-only flag")
 check(settlement.includes(".toSorted(compareApprovedWorkerRoster)"), "Weekly Settlement must follow the shared account-code roster order")
 
 const query = read("components/worker-management/worker-query.tsx")

@@ -29,6 +29,10 @@ import {
 } from "@/lib/worker-management-format"
 import { MOVED_WAGE_PLACEHOLDER_NOTE } from "@/lib/worker-management-constants"
 import {
+  isDependentWorkerAccount,
+  pairedDependentAccountCode,
+} from "@/lib/worker-balance-relationships"
+import {
   approvedWorkerRoster,
   compareApprovedWorkerRoster,
 } from "@/lib/worker-management-roster"
@@ -156,15 +160,13 @@ function weekWages(row: WageRow) {
   return daySlots.reduce((total, day) => total + dailyWage(row, day.key), 0)
 }
 
-const dependentWorkerNames = new Set(["Rani", "Chitra"])
-
 function isDependentWorker(row: WageRow) {
-  return dependentWorkerNames.has(row.loadedName)
+  return isDependentWorkerAccount(row.accountCode)
 }
 
 function pairedDependent(rows: WageRow[], row: WageRow): WageRow | null {
-  const dependentName = row.loadedName === "Tiruma" ? "Rani" : row.loadedName === "Sivan" ? "Chitra" : null
-  return dependentName ? rows.find((candidate) => candidate.loadedName === dependentName) ?? null : null
+  const dependentCode = pairedDependentAccountCode(row.accountCode)
+  return dependentCode ? rows.find((candidate) => candidate.accountCode === dependentCode) ?? null : null
 }
 
 function combinedWeekWages(row: WageRow, dependent: WageRow | null = null) {
