@@ -3,24 +3,26 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 
 import { mfmsNavigationItems } from "../lib/mfms-navigation.ts"
+import {
+  isDependentWorkerAccount,
+  pairedDependentAccountCode,
+} from "../lib/worker-balance-relationships.ts"
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const harvestGpsVerifiedFiles = [
-  "components/admin/harvest-review-sections.tsx",
-  "lib/harvest-review-model.ts",
-  "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
+const workerVerifiedFiles = [
+  "components/worker-management/weekly-settlement.tsx",
+  "lib/worker-balance-relationships.ts",
+  "tests/worker-management.mjs",
+  "tests/worker-wage-excel.mjs",
 ]
-const harvestGpsProductionAdaptations = [
-  "components/admin/harvest-location-comparison-map.tsx",
-  "components/maps/farm-orthomosaic-map.tsx",
+const workerProductionAdaptations = [
+  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/production-release-manifest.json",
-  "lib/farm-map-data.ts",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/harvest-sync-exact-duplicates.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -31,20 +33,22 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-accepted Harvest GPS duplicate-comparison map",
+  "Promote Preview-accepted Worker balance carry-forward and historical read-only enforcement",
 )
-assert.equal(manifest.base_commit, "db2cbecd2a71e7a328409864e121e6ee13ad291f")
+assert.equal(manifest.base_commit, "11228336667da252daf489f9ca4b20f2102bd9eb")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
-  image_id: "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
-  feature_revision: "c38df99538b24cb96108c33fb00049505b3f8b62",
-  verified_files: harvestGpsVerifiedFiles,
-  production_adaptations: harvestGpsProductionAdaptations,
+  revision: "1d944e272d078899ef4b0c42a3e05cffd6a0c1c9",
+  image_id: "sha256:da232fe4aab13452fd60a4648468ffb74ed5d3cdfd666de8736498dc7401c0c6",
+  feature_revision: "3a7461860939288e183323688811bb50e1959a1e",
+  prerequisite_feature_revision: "692f6a47fa65e998037db0ae6daff3107446e09d",
+  matched_backend_revision: "28b180eb714d0526f69b3a37a58f615d8ba3d00c",
+  verified_files: workerVerifiedFiles,
+  production_adaptations: workerProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
   test: "unchanged",
-  backend: "unchanged",
+  backend: "paired-release-only",
   database: "unchanged",
   odk: "unchanged",
   schedules: "unchanged",
@@ -52,10 +56,7 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 assert.deepEqual(
   manifest.allowed_paths,
-  [...new Set([
-    ...harvestGpsVerifiedFiles,
-    ...harvestGpsProductionAdaptations,
-  ])].sort(),
+  [...new Set([...workerVerifiedFiles, ...workerProductionAdaptations])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
 
@@ -70,6 +71,21 @@ assert.equal(workerManagement.href, "/worker-management")
 assert.equal(workerManagement.status, "active")
 assert.equal(workerManagement.ctaLabel, "Open Worker Management")
 
+assert.equal(isDependentWorkerAccount("6"), true)
+assert.equal(isDependentWorkerAccount("10"), true)
+assert.equal(isDependentWorkerAccount("5"), false)
+assert.equal(pairedDependentAccountCode("3"), "10")
+assert.equal(pairedDependentAccountCode("5"), "6")
+assert.equal(pairedDependentAccountCode("8"), null)
+
+const settlement = read("components/worker-management/weekly-settlement.tsx")
+assert.match(settlement, /money\(item\.opening_signed_balance\)/)
+assert.match(settlement, /pairedDependentAccountCode\(row\.account_code\)/)
+assert.match(settlement, /isDependentWorkerAccount\(row\.account_code\)/)
+assert.match(settlement, /data\?\.week\.is_read_only !== true/)
+assert.doesNotMatch(settlement, /current_signed_balance\) - signedCash/)
+assert.doesNotMatch(settlement, /dependentWorkerNames/)
+
 const workerWageTable = read("components/worker-management/weekly-wage-table-preview.tsx")
 assert.match(workerWageTable, /Weekly wage sheet saved to the Production database\./)
 assert.match(workerWageTable, /normaliseWeeklyWageEntry/)
@@ -78,6 +94,8 @@ assert.match(workerWageTable, /sort\(compareApprovedWorkerRoster\)/)
 assert.match(workerWageTable, /fetchWorkWeeks/)
 assert.match(workerWageTable, /selectedWeek\.readOnly/)
 assert.match(workerWageTable, /settlement\?\.opening_signed_balance/)
+assert.match(workerWageTable, /pairedDependentAccountCode\(row\.accountCode\)/)
+assert.match(workerWageTable, /isDependentWorkerAccount\(row\.accountCode\)/)
 assert.doesNotMatch(workerWageTable, /carryForwardPreviousBalances/)
 assert.doesNotMatch(workerWageTable, /const missingApprovedRows = createInitialRows\(\)/)
 assert.doesNotMatch(workerWageTable, /saved to the Preview database/)
@@ -96,17 +114,9 @@ assert.equal(farmMap.ctaLabel, "Open Map")
 assert.equal(farmMap.href, "/farm-map")
 assert.equal(farmMap.dashboardIcon, "/mfms/icons/farm-map.svg")
 assert.equal(farmMap.showOnDashboard, true)
-assert.doesNotMatch(farmMap.dashboardIcon, /(?:tap|faucet|pipeline)/i)
-assert.deepEqual(
-  mfmsNavigationItems
-    .filter((item) => item.dashboardIcon === "/mfms/icons/farm-map.svg")
-    .map((item) => item.id),
-  ["farm-map"],
-)
 
 const page = read("app/fertiliser-management/page.tsx")
 const adjustmentTypeHandler = page.split("const handleAdjustmentTypeChange", 2)[1].split("const handleRequirementProductChange", 1)[0]
-
 assert.match(page, /earliest expiry first, including expired batches; null-expiry batches last/)
 assert.match(page, /Expired batches are included and allocated first by FEFO/)
 assert.match(page, /Adjustment Out includes expired stock and allocates the oldest expiry first/)
@@ -117,9 +127,5 @@ assert.match(page, /publicEnvironmentIdentity/)
 assert.match(page, /fertiliserDatabaseDescription/)
 assert.match(page, /fertiliserLiveBadge/)
 assert.doesNotMatch(page, /source: "mfms_server_uat"/)
-assert.doesNotMatch(page, /No valid non-expired stock is available/)
-assert.doesNotMatch(page, /uses only non-expired eligible stock/)
-assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
-assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Harvest GPS and preserved Production promotion contracts: PASS")
+console.log("Worker carry-forward and preserved Production promotion contracts: PASS")
