@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Carry Worker weekly loan balances forward by account code",
+  "Preserve historical Worker settlement read-only enforcement",
 )
-assert.equal(manifest.base_commit, "f0a9f5345212c52b498fd08346134d2c57156a04")
+assert.equal(manifest.base_commit, "df53c79bf512fb66cb164107d310844068b6f821")
 assert.equal(manifest.matched_backend_commit, "28b180eb714d0526f69b3a37a58f615d8ba3d00c")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -303,12 +303,9 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 const expectedReleasePaths = [
   "components/worker-management/weekly-settlement.tsx",
-  "components/worker-management/weekly-wage-table-preview.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-balance-relationships.ts",
   "tests/preview-deployment-workflow.mjs",
   "tests/worker-management.mjs",
-  "tests/worker-wage-excel.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
