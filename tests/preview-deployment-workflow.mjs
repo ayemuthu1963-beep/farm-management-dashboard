@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Preserve historical Worker settlement read-only enforcement",
+  "Apply targeted dependency security fixes to the Preview-approved Worker frontend",
 )
-assert.equal(manifest.base_commit, "df53c79bf512fb66cb164107d310844068b6f821")
+assert.equal(manifest.base_commit, "1d944e272d078899ef4b0c42a3e05cffd6a0c1c9")
 assert.equal(manifest.matched_backend_commit, "28b180eb714d0526f69b3a37a58f615d8ba3d00c")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,10 +302,10 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/worker-management/weekly-settlement.tsx",
   "deploy/preview-release-manifest.json",
+  "package.json",
+  "pnpm-lock.yaml",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-management.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 

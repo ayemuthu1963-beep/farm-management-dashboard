@@ -9,7 +9,8 @@
   "allowed_paths": [
     "deploy/preview-release-manifest.json",
     "package.json",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
