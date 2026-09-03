@@ -108,13 +108,25 @@ export function buildWorkerV2Workbook(
     ...moneyCells(total.v2),
     total.matches ? "YES" : "NO",
   ]
+  const boundaryRow: Cell[] = [
+    "Migration boundary",
+    response.migration_boundary.boundary_date,
+    response.migration_boundary.mode,
+    "Strict opening",
+    moneyCell(response.migration_boundary.strict_opening_total),
+    "Classified V1 variance",
+    moneyCell(response.migration_boundary.classified_variance),
+    "Legacy through",
+    response.migration_boundary.legacy_history_through,
+  ]
   const rowXml = [
     sheetRow([...WORKER_V2_EXCEL_HEADERS], 1, "header"),
     ...details.map((row, index) => sheetRow(row, index + 2, "detail")),
     sheetRow(totalRow, details.length + 2, "total"),
+    sheetRow(boundaryRow, details.length + 3, "total"),
   ].join("")
   const lastColumn = columnName(WORKER_V2_EXCEL_HEADERS.length - 1)
-  const lastRow = details.length + 2
+  const lastRow = details.length + 3
   const worksheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="A1:${lastColumn}${lastRow}"/>

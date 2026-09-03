@@ -99,7 +99,7 @@ export function WorkerV2Comparison() {
             </div>
             <h1 className="text-2xl font-bold">Worker Management V2 reconciliation</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Synthetic authorised V1-classified fixture values and API-authoritative V2 values are shown side by side. This page has no Save or financial write control.
+              Sanitized Production distribution patterns and API-authoritative strict-continuity V2 values are shown side by side. This page has no Save or financial write control.
             </p>
           </div>
           <div className="flex gap-2">
@@ -129,6 +129,15 @@ export function WorkerV2Comparison() {
                 <div className={`mt-1 text-xl font-bold ${value === "PASS" ? "text-emerald-700" : "text-slate-900"}`}>{value}</div>
               </div>
             ))}
+          </section>
+
+          <section aria-label="Worker V2 migration boundary" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm">
+            <div className="font-bold">Explicit V2 migration boundary: {data.migration_boundary.boundary_date}</div>
+            <div className="mt-1">
+              Strict previous-closing opening {money(data.migration_boundary.strict_opening_total)}.
+              Legacy V1 display difference {money(data.migration_boundary.classified_variance)} is fully classified and is not used as the V2 opening authority.
+              Earlier V1 history through {data.migration_boundary.legacy_history_through} remains frozen legacy evidence.
+            </div>
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">

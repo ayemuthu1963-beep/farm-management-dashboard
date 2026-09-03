@@ -29,6 +29,16 @@ export type WorkerV2WeekTotal = {
 
 export type WorkerV2ComparisonResponse = {
   source: "SYNTHETIC_AUTHORISED_VALUES"
+  classification_model: "PRODUCTION_DISTRIBUTION_PATTERN_STRICT_CONTINUITY"
+  migration_boundary: {
+    boundary_date: string
+    mode: "STRICT_PREVIOUS_CLOSING"
+    legacy_history_through: string
+    strict_opening_total: string
+    defective_v1_display_total: string
+    classified_variance: string
+    variance_explained: boolean
+  }
   v1_row_count: number
   v2_classified_event_count: number
   unresolved_count: number
