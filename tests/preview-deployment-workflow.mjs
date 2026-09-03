@@ -288,7 +288,7 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the isolated read-only Worker V2 Preview comparison over the approved Worker and security baseline",
+  "Enable isolated Worker V2 fresh-start owner testing while retaining the normal V1 Worker page",
 )
 assert.equal(manifest.base_commit, "8c3ce11c752b3f500b213a905d4dfecb88aefc89")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")

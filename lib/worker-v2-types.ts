@@ -7,48 +7,99 @@ export type WorkerV2MoneyFields = {
 
 export type WorkerV2FinancialRow = WorkerV2MoneyFields & {
   week_start: string
+  week_end: string
+  week_status: "PLANNED" | "OPEN" | "CLOSED"
   account_code: string
   display_name: string
+  account_type: "FARM" | "GROUP" | "TEMPLATE"
   financial_applicable: boolean
+  own_earnings: string
+  has_repayment: boolean
+  has_advance: boolean
 }
 
-export type WorkerV2ComparisonRow = {
+export type WorkerV2WeekTotal = WorkerV2MoneyFields & {
+  week_start: string
+  own_earnings: string
+}
+
+export type WorkerV2AttendanceEntry = {
+  attendance_id: string
   week_start: string
   account_code: string
-  v1_classified_fixture: WorkerV2FinancialRow | null
-  v2: WorkerV2FinancialRow | null
-  matches: boolean
+  work_date: string
+  attendance_value: "ABSENT" | "ONE_THIRD" | "HALF" | "TWO_THIRDS" | "FULL" | null
+  group_attendee_count: number | null
+  wage_rate_snapshot: string
+  scheme_snapshot: "TWO_OPTION" | "THREE_OPTION" | null
+  daily_wage_amount: string
+  row_version: number
 }
 
-export type WorkerV2WeekTotal = {
-  week_start: string
-  v1_classified_fixture: WorkerV2MoneyFields
-  v2: WorkerV2MoneyFields
-  matches: boolean
-}
-
-export type WorkerV2ComparisonResponse = {
-  source: "SYNTHETIC_AUTHORISED_VALUES"
-  classification_model: "PRODUCTION_DISTRIBUTION_PATTERN_STRICT_CONTINUITY"
-  migration_boundary: {
-    boundary_date: string
-    mode: "STRICT_PREVIOUS_CLOSING"
-    legacy_history_through: string
-    strict_opening_total: string
-    defective_v1_display_total: string
-    classified_variance: string
-    variance_explained: boolean
+export type WorkerV2StateResponse = {
+  source: "V2_FRESH_START"
+  start_week: "2026-08-29"
+  historical_records_imported: 0
+  initialization: {
+    initialized: boolean
+    initialization_id: string | null
+    week_start: string | null
+    opening_total: string | null
+    initialized_at: string | null
+    initialized_by: string | null
   }
-  v1_row_count: number
-  v2_classified_event_count: number
+  duplicate_count: number
+  missing_opening_count: number
   unresolved_count: number
   unresolved_balance_records: number
-  duplicate_count: number
-  missing_count: number
-  extra_count: number
-  balance_differences: number
   canonical_sha256: string
   passed: boolean
   totals: WorkerV2WeekTotal[]
-  rows: WorkerV2ComparisonRow[]
+  rows: WorkerV2FinancialRow[]
+  attendance_entries: WorkerV2AttendanceEntry[]
+}
+
+export type WorkerV2OpeningInput = {
+  account_code: string
+  opening_balance: string | null
+}
+
+export type WorkerV2InitializeRequest = {
+  initialization_id: string
+  idempotency_key: string
+  week_start: string
+  opening_balances: WorkerV2OpeningInput[]
+  reason: string
+}
+
+export type WorkerV2FinancialEventRequest = {
+  event_id: string
+  idempotency_key: string
+  business_key: string
+  account_code: string
+  week_start: string
+  event_date: string
+  event_type: "ADVANCE" | "REPAYMENT"
+  amount: string
+  effect_sign: 1
+  reason: string
+}
+
+export type WorkerV2AttendanceRequest = {
+  attendance_id: string
+  idempotency_key: string
+  account_code: string
+  work_date: string
+  attendance_value: WorkerV2AttendanceEntry["attendance_value"]
+  group_attendee_count: number
+  wage_rate_snapshot: string
+  scheme_snapshot: WorkerV2AttendanceEntry["scheme_snapshot"]
+  daily_wage_amount: string
+  expected_row_version: number | null
+}
+
+export type WorkerV2CloseRequest = {
+  idempotency_key: string
+  close_event_id: string
+  reason: string
 }
