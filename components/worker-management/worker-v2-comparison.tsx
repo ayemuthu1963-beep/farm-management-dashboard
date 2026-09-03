@@ -68,7 +68,22 @@ export function WorkerV2Comparison() {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    let active = true
+    void fetchWorkerV2State()
+      .then((response) => {
+        if (!active) return
+        setData(response)
+        setSelectedWeek(response.totals.at(-1)?.week_start || "")
+      })
+      .catch((caught: unknown) => {
+        if (active) setError(caught instanceof Error ? caught.message : "Worker V2 could not be loaded.")
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => { active = false }
+  }, [])
 
   const rows = useMemo(() => data?.rows.filter((row) => row.week_start === selectedWeek) ?? [], [data, selectedWeek])
   const total = data?.totals.find((item) => item.week_start === selectedWeek) ?? null
