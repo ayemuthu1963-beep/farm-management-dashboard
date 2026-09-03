@@ -675,7 +675,7 @@ read_state_value() {
 }
 
 deploy_preview() {
-  local remote_release new_image new_image_id
+  local remote_release new_image new_image_id matched_backend_revision
   remote_release=$(git ls-remote "$repo_url" "$release_ref" | awk 'NR == 1 {print $1}')
   [[ "$remote_release" == "$candidate_revision" ]] \
     || blocked "candidate is not the exact preview-release head"
@@ -693,6 +693,13 @@ deploy_preview() {
   cmp -s "$installed_deploy_script" "$source_dir/scripts/preview-server-deploy.sh" \
     || blocked "installed Preview deploy script does not match the approved candidate"
   validate_release_manifest
+  matched_backend_revision=$(python3 -c \
+    'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["matched_backend_commit"])' \
+    "$source_dir/deploy/preview-release-manifest.json")
+  [[ "$matched_backend_revision" =~ ^[0-9a-f]{40}$ ]] \
+    || blocked "manifest matched backend revision is invalid"
+  [[ "$(image_revision_for_container "$backend_container")" == "$matched_backend_revision" ]] \
+    || blocked "live Preview backend does not match the frontend release manifest"
 
   new_image="mfms-v0-preview:github-${candidate_revision:0:7}-$timestamp"
   docker build \

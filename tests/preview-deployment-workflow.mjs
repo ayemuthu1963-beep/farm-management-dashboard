@@ -321,6 +321,8 @@ assert.match(
   /--build-arg "NEXT_PUBLIC_MFMS_WORKER_V2_ENABLED=true"/,
   "the guarded Preview build must explicitly enable the otherwise-off V2 comparison",
 )
+assert.match(deployScript, /\["matched_backend_commit"\]/)
+assert.match(deployScript, /image_revision_for_container "\$backend_container"/)
 
 // Exercise the exact Python validator embedded in the governed deployment
 // script. This prevents manifest and runtime guard contracts from drifting

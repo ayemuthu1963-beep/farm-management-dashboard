@@ -37,7 +37,11 @@ export function WorkerV2Comparison() {
     try {
       const response = await fetchWorkerV2Comparison()
       setData(response)
-      setSelectedWeek((current) => current || response.totals.at(-1)?.week_start || "")
+      setSelectedWeek((current) => (
+        response.totals.some((item) => item.week_start === current)
+          ? current
+          : response.totals.at(-1)?.week_start || ""
+      ))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Worker V2 comparison could not be loaded.")
     } finally {
@@ -72,7 +76,7 @@ export function WorkerV2Comparison() {
   const total = data?.totals.find((item) => item.week_start === selectedWeek) ?? null
 
   const download = useCallback(() => {
-    if (!data || !selectedWeek) return
+    if (!data || !selectedWeek || !total) return
     const bytes = buildWorkerV2Workbook(data, selectedWeek)
     const blob = new Blob([bytes as BlobPart], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -83,7 +87,7 @@ export function WorkerV2Comparison() {
     anchor.download = `worker-v2-comparison-${selectedWeek}.xlsx`
     anchor.click()
     URL.revokeObjectURL(url)
-  }, [data, selectedWeek])
+  }, [data, selectedWeek, total])
 
   return (
     <main className="mx-auto min-h-screen max-w-[1500px] space-y-5 bg-slate-50 p-4 text-slate-950 md:p-7">
@@ -102,7 +106,7 @@ export function WorkerV2Comparison() {
             <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold" disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Reload read-only
             </button>
-            <button type="button" onClick={download} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white" disabled={!data || !selectedWeek}>
+            <button type="button" onClick={download} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white" disabled={!data || !selectedWeek || !total}>
               <Download className="h-4 w-4" /> Excel from API values
             </button>
           </div>
