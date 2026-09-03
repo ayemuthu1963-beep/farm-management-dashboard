@@ -8,7 +8,7 @@ export default function WorkerV2ComparisonPage() {
     return (
       <main className="mx-auto max-w-3xl p-8">
         <h1 className="text-2xl font-bold">Worker Management V2 is disabled</h1>
-        <p className="mt-3 text-slate-600">This isolated comparison is available only in the approved Preview/UAT environment.</p>
+        <p className="mt-3 text-slate-600">This isolated owner-testing page is available only in the approved Preview/UAT environment.</p>
       </main>
     )
   }
