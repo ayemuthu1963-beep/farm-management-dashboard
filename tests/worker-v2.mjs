@@ -67,6 +67,7 @@ const api = await readFile(new URL("../lib/worker-v2-api.ts", import.meta.url), 
 const normalPage = await readFile(new URL("../app/worker-management/page.tsx", import.meta.url), "utf8")
 const v2Page = await readFile(new URL("../app/worker-management/v2-comparison/page.tsx", import.meta.url), "utf8")
 const previewDockerfile = await readFile(new URL("../Dockerfile.preview", import.meta.url), "utf8")
+const previewDeploy = await readFile(new URL("../scripts/preview-server-deploy.sh", import.meta.url), "utf8")
 
 assert.match(api, /method: "GET"/)
 assert.doesNotMatch(api, /method: "(?:POST|PUT|PATCH|DELETE)"/)
@@ -78,5 +79,6 @@ assert.match(normalPage, /WeeklyWageTablePreview/, "the normal Worker page must 
 assert.doesNotMatch(normalPage, /WorkerV2Comparison/, "V2 must not replace the normal Worker page")
 assert.match(v2Page, /NEXT_PUBLIC_MFMS_WORKER_V2_ENABLED === "true"/)
 assert.match(previewDockerfile, /ARG NEXT_PUBLIC_MFMS_WORKER_V2_ENABLED=false/)
+assert.match(previewDeploy, /NEXT_PUBLIC_MFMS_WORKER_V2_ENABLED=true/)
 
 console.log("worker-v2: read-only comparison and API-authoritative Excel checks passed")

@@ -703,6 +703,7 @@ deploy_preview() {
     --build-arg "MFMS_BUILD_ENVIRONMENT=Preview" \
     --build-arg "NEXT_PUBLIC_MFMS_ENV=preview" \
     --build-arg "NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat" \
+    --build-arg "NEXT_PUBLIC_MFMS_WORKER_V2_ENABLED=true" \
     --tag "$new_image" \
     "$source_dir" >/dev/null
   new_image_id=$(docker image inspect --format '{{.Id}}' "$new_image")
