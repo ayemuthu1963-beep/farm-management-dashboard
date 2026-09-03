@@ -15,6 +15,7 @@
     "lib/worker-v2-excel.ts",
     "lib/worker-v2-types.ts",
     "package.json",
+    "pnpm-workspace.yaml",
     "scripts/preview-server-deploy.sh",
     "tests/preview-deployment-workflow.mjs",
     "tests/worker-v2.mjs"
