@@ -491,6 +491,33 @@ withContentCase((testCase) => {
   assert.match(result.stdout, new RegExp(`content_addressed_path_approved=${loaderPath}`))
 })
 
+withContentCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "content-mode-to-executable", testCase.candidate)
+  git(testCase.repository, "update-index", "--chmod=+x", loaderPath)
+  git(testCase.repository, "commit", "-m", "make approved content executable")
+  testCase.candidate = git(testCase.repository, "rev-parse", "HEAD")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "100644 to 100755 content mode change must fail")
+  assert.match(result.stderr, /Git file mode changed/)
+})
+
+withContentCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "executable-content-source", testCase.sourceRevision)
+  git(testCase.repository, "update-index", "--chmod=+x", loaderPath)
+  git(testCase.repository, "commit", "-m", "approve executable content")
+  testCase.descriptor.content_addressed_path_approvals[0].source_revision = git(
+    testCase.repository,
+    "rev-parse",
+    "HEAD",
+  )
+  git(testCase.repository, "update-index", "--chmod=-x", loaderPath)
+  git(testCase.repository, "commit", "-m", "remove approved executable mode")
+  testCase.candidate = git(testCase.repository, "rev-parse", "HEAD")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "100755 to 100644 content mode change must fail")
+  assert.match(result.stderr, /Git file mode changed/)
+})
+
 for (const [field, value, expected] of [
   ["source_revision", "0".repeat(40), /Git verification failed/],
   ["git_blob", "0".repeat(40), /Git blob changed/],

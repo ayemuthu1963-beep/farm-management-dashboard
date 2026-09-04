@@ -625,7 +625,7 @@ def tree_entry(revision, path):
     mode, object_type, object_id = metadata.decode("ascii").split()
     if mode not in {"100644", "100755"} or object_type != "blob" or full_blob.fullmatch(object_id) is None:
         raise SystemExit(f"approved deletion base path is not a regular Git file: {path}")
-    return object_id
+    return mode, object_id
 
 
 def path_is_absent(revision, path):
@@ -694,8 +694,10 @@ if content_approvals:
             raise SystemExit("approved Git blob must be 40 lowercase hexadecimal characters")
         if not isinstance(raw["sha256"], str) or full_sha256.fullmatch(raw["sha256"]) is None:
             raise SystemExit("approved SHA-256 must be 64 lowercase hexadecimal characters")
-        source_blob = tree_entry(source_revision, path)
-        candidate_blob = tree_entry(resolved_candidate, path)
+        source_mode, source_blob = tree_entry(source_revision, path)
+        candidate_mode, candidate_blob = tree_entry(resolved_candidate, path)
+        if source_mode != candidate_mode:
+            raise SystemExit(f"approved Git file mode changed for path: {path}")
         if source_blob != raw["git_blob"] or candidate_blob != raw["git_blob"]:
             raise SystemExit(f"approved Git blob changed for path: {path}")
         if hashlib.sha256(git_bytes("cat-file", "blob", candidate_blob)).hexdigest() != raw["sha256"]:
@@ -735,7 +737,7 @@ if deletion_approvals:
         raise SystemExit("base Git blob must be 40 lowercase hexadecimal characters")
     if not isinstance(raw["base_sha256"], str) or full_sha256.fullmatch(raw["base_sha256"]) is None:
         raise SystemExit("base SHA-256 must be 64 lowercase hexadecimal characters")
-    base_blob = tree_entry(base, path)
+    _base_mode, base_blob = tree_entry(base, path)
     if base_blob != raw["base_git_blob"]:
         raise SystemExit(f"approved base Git blob changed for path: {path}")
     if hashlib.sha256(git_bytes("cat-file", "blob", base_blob)).hexdigest() != raw["base_sha256"]:
