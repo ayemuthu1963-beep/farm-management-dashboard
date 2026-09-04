@@ -451,6 +451,8 @@ prepare_backend_source() {
   esac
   git -C "$backend_repo_dir" fetch --quiet --no-tags origin \
     "+$backend_release_ref:refs/remotes/origin/preview-release"
+  [[ "$(git -C "$backend_repo_dir" rev-parse --is-shallow-repository)" == "false" ]] \
+    || blocked "authoritative backend checkout does not contain complete Git history"
   local remote_revision
   remote_revision=$(git -C "$backend_repo_dir" rev-parse refs/remotes/origin/preview-release)
   [[ "$remote_revision" == "$candidate_revision" ]] \
@@ -475,6 +477,7 @@ import hashlib
 import json
 import pathlib
 import re
+import subprocess
 import sys
 
 descriptor_path, source_text, current, candidate, migrations_output, openapi_output = sys.argv[1:]
@@ -538,10 +541,229 @@ for path in required_paths:
 
 # The candidate may alter application code and explicitly listed migration
 # files, but never deployment, environment, scheduler, proxy, or ODK plumbing.
-import subprocess
 changed = subprocess.check_output(
     ["git", "-C", str(source), "diff", "--name-only", f"{current}..{candidate}"], text=True
 ).splitlines()
+
+deletion_approval_field = "content_addressed_deletion_approvals"
+content_approval_field = "content_addressed_path_approvals"
+content_approval_keys = {"repository", "source_revision", "path", "git_blob", "sha256"}
+deletion_approval_keys = {
+    "operation",
+    "path",
+    "base_revision",
+    "base_git_blob",
+    "base_sha256",
+    "removal_revision",
+}
+safe_approval_path = re.compile(
+    r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)*"
+)
+full_commit = re.compile(r"[0-9a-f]{40}")
+full_blob = re.compile(r"[0-9a-f]{40}")
+full_sha256 = re.compile(r"[0-9a-f]{64}")
+approved_repository = "ayemuthu1963-beep/muthu-harvest-dashboard"
+
+
+def git_bytes(*arguments, check=True):
+    result = subprocess.run(
+        ["git", "-C", str(source), *arguments],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if check and result.returncode != 0:
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise SystemExit(f"content-addressed deletion Git verification failed: {message}")
+    return result.stdout
+
+
+def resolve_commit(revision, label):
+    if not isinstance(revision, str) or full_commit.fullmatch(revision) is None:
+        raise SystemExit(f"{label} must be a full lowercase 40-character commit SHA")
+    resolved = git_bytes("rev-parse", "--verify", f"{revision}^{{commit}}").decode("ascii").strip()
+    if resolved != revision:
+        raise SystemExit(f"{label} must resolve exactly to the supplied commit SHA")
+    return resolved
+
+
+def require_ancestor(ancestor, descendant, message):
+    result = subprocess.run(
+        ["git", "-C", str(source), "merge-base", "--is-ancestor", ancestor, descendant],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        raise SystemExit(message)
+
+
+def validate_approval_path(value):
+    if not isinstance(value, str) or not value:
+        raise SystemExit("content-addressed deletion path must be a non-empty string")
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise SystemExit("content-addressed deletion path must contain ASCII characters only") from exc
+    if safe_approval_path.fullmatch(value) is None:
+        raise SystemExit(f"invalid content-addressed deletion path: {value!r}")
+    if value.startswith("/") or value.endswith("/") or "//" in value or "\\" in value:
+        raise SystemExit(f"invalid content-addressed deletion path: {value!r}")
+    if any(component in {"", ".", ".."} for component in value.split("/")):
+        raise SystemExit(f"invalid content-addressed deletion path: {value!r}")
+    return value
+
+
+def tree_entry(revision, path):
+    payload = git_bytes("ls-tree", "-z", revision, "--", path)
+    entries = [entry for entry in payload.split(b"\0") if entry]
+    if len(entries) != 1:
+        raise SystemExit(f"approved deletion base path is absent or ambiguous: {path}")
+    metadata, separator, encoded_path = entries[0].partition(b"\t")
+    if not separator or encoded_path.decode("utf-8", errors="strict") != path:
+        raise SystemExit(f"approved deletion path did not resolve exactly: {path}")
+    mode, object_type, object_id = metadata.decode("ascii").split()
+    if mode not in {"100644", "100755"} or object_type != "blob" or full_blob.fullmatch(object_id) is None:
+        raise SystemExit(f"approved deletion base path is not a regular Git file: {path}")
+    return object_id
+
+
+def path_is_absent(revision, path):
+    return not bool(git_bytes("ls-tree", "-z", revision, "--", path))
+
+
+def reject_case_variant(revision, path):
+    folded = path.casefold()
+    for encoded_path in git_bytes("ls-tree", "-r", "-z", "--name-only", revision).split(b"\0"):
+        if not encoded_path:
+            continue
+        candidate_path = encoded_path.decode("utf-8", errors="strict")
+        if candidate_path.casefold() == folded and candidate_path != path:
+            raise SystemExit(f"deleted path has a case-variant replacement: {candidate_path}")
+
+
+def reject_renamed_blob(revision, path, base_blob):
+    for encoded_entry in git_bytes("ls-tree", "-r", "-z", revision).split(b"\0"):
+        if not encoded_entry:
+            continue
+        metadata, separator, encoded_path = encoded_entry.partition(b"\t")
+        if not separator:
+            continue
+        mode, object_type, object_id = metadata.decode("ascii").split()
+        candidate_path = encoded_path.decode("utf-8", errors="strict")
+        if (
+            candidate_path != path
+            and mode in {"100644", "100755"}
+            and object_type == "blob"
+            and object_id == base_blob
+        ):
+            raise SystemExit(f"deleted path content was renamed in the candidate: {candidate_path}")
+
+
+content_approvals = data.get(content_approval_field, [])
+if not isinstance(content_approvals, list):
+    raise SystemExit(f"{content_approval_field} must be an array")
+if len(content_approvals) > 10:
+    raise SystemExit(f"{content_approval_field} may contain at most 10 entries")
+approved_content = set()
+if content_approvals:
+    if (
+        data.get("environment") != "Preview"
+        or data.get("target_database") != "mfms_server_uat"
+        or data.get("release_branch") != "preview-release"
+    ):
+        raise SystemExit("content-addressed path approvals are Preview-only")
+    resolved_candidate = resolve_commit(candidate, "candidate revision")
+    for index, raw in enumerate(content_approvals):
+        if not isinstance(raw, dict) or set(raw) != content_approval_keys:
+            raise SystemExit(f"content-addressed path approval {index} has invalid fields")
+        if raw["repository"] != approved_repository:
+            raise SystemExit(f"content-addressed path approval {index} repository is invalid")
+        path = validate_approval_path(raw["path"])
+        if path in approved_content:
+            raise SystemExit(f"duplicate content-addressed path approval: {path}")
+        if path not in changed:
+            raise SystemExit(f"approved content path is not changed in the candidate: {path}")
+        source_revision = resolve_commit(raw["source_revision"], "source revision")
+        require_ancestor(
+            source_revision,
+            resolved_candidate,
+            "candidate is not a descendant of the approved source revision",
+        )
+        if not isinstance(raw["git_blob"], str) or full_blob.fullmatch(raw["git_blob"]) is None:
+            raise SystemExit("approved Git blob must be 40 lowercase hexadecimal characters")
+        if not isinstance(raw["sha256"], str) or full_sha256.fullmatch(raw["sha256"]) is None:
+            raise SystemExit("approved SHA-256 must be 64 lowercase hexadecimal characters")
+        source_blob = tree_entry(source_revision, path)
+        candidate_blob = tree_entry(resolved_candidate, path)
+        if source_blob != raw["git_blob"] or candidate_blob != raw["git_blob"]:
+            raise SystemExit(f"approved Git blob changed for path: {path}")
+        if hashlib.sha256(git_bytes("cat-file", "blob", candidate_blob)).hexdigest() != raw["sha256"]:
+            raise SystemExit(f"approved SHA-256 changed for path: {path}")
+        approved_content.add(path)
+
+
+deletion_approvals = data.get(deletion_approval_field, [])
+if not isinstance(deletion_approvals, list):
+    raise SystemExit(f"{deletion_approval_field} must be an array")
+if len(deletion_approvals) > 1:
+    raise SystemExit(f"{deletion_approval_field} may contain at most 1 entry")
+approved_deletions = set()
+if deletion_approvals:
+    if (
+        data.get("environment") != "Preview"
+        or data.get("target_database") != "mfms_server_uat"
+        or data.get("release_branch") != "preview-release"
+    ):
+        raise SystemExit("content-addressed deletion approvals are Preview-only")
+    raw = deletion_approvals[0]
+    if not isinstance(raw, dict) or set(raw) != deletion_approval_keys:
+        raise SystemExit("content-addressed deletion approval has invalid fields")
+    if raw["operation"] != "delete":
+        raise SystemExit("content-addressed deletion approval operation must be delete")
+    path = validate_approval_path(raw["path"])
+    if path not in changed:
+        raise SystemExit(f"approved deletion is not changed in the candidate: {path}")
+    base = resolve_commit(raw["base_revision"], "base revision")
+    removal = resolve_commit(raw["removal_revision"], "removal revision")
+    resolved_candidate = resolve_commit(candidate, "candidate revision")
+    if current != base:
+        raise SystemExit("content-addressed deletion approval does not match the deployed base revision")
+    require_ancestor(base, removal, "removal revision is not a descendant of the approved base revision")
+    require_ancestor(removal, resolved_candidate, "candidate is not a descendant of the approved removal revision")
+    if not isinstance(raw["base_git_blob"], str) or full_blob.fullmatch(raw["base_git_blob"]) is None:
+        raise SystemExit("base Git blob must be 40 lowercase hexadecimal characters")
+    if not isinstance(raw["base_sha256"], str) or full_sha256.fullmatch(raw["base_sha256"]) is None:
+        raise SystemExit("base SHA-256 must be 64 lowercase hexadecimal characters")
+    base_blob = tree_entry(base, path)
+    if base_blob != raw["base_git_blob"]:
+        raise SystemExit(f"approved base Git blob changed for path: {path}")
+    if hashlib.sha256(git_bytes("cat-file", "blob", base_blob)).hexdigest() != raw["base_sha256"]:
+        raise SystemExit(f"approved base SHA-256 changed for path: {path}")
+    deletion = git_bytes("diff", "--name-status", "--no-renames", "-z", base, removal, "--", path)
+    if deletion != b"D\0" + path.encode("utf-8") + b"\0":
+        raise SystemExit(f"approved path is not an exact net deletion from base to removal revision: {path}")
+    if not path_is_absent(removal, path) or not path_is_absent(resolved_candidate, path):
+        raise SystemExit(f"approved deletion path still exists: {path}")
+    revisions = [removal]
+    revisions.extend(
+        revision
+        for revision in git_bytes(
+            "rev-list", "--reverse", "--ancestry-path", f"{removal}..{resolved_candidate}"
+        ).decode("ascii").splitlines()
+        if revision
+    )
+    for revision in revisions:
+        if not path_is_absent(revision, path):
+            raise SystemExit(f"deleted path was reintroduced after the approved removal revision: {path}")
+        reject_case_variant(revision, path)
+        reject_renamed_blob(revision, path, base_blob)
+    approved_deletions.add(path)
+
+overlap = approved_content.intersection(approved_deletions)
+if overlap:
+    raise SystemExit(f"path cannot have both content and deletion approvals: {sorted(overlap)[0]}")
+
 allowed = re.compile(
     r"^(?:\.env\.example|docker-compose\.yml|"
     r"\.github/(?:CODEOWNERS|pull_request_template\.md|workflows/ci\.yml)|"
@@ -561,8 +783,13 @@ allowed = re.compile(
 if not changed:
     raise SystemExit("backend candidate contains no changes from the live revision")
 for path in changed:
-    if not allowed.fullmatch(path):
+    if not allowed.fullmatch(path) and path not in approved_content and path not in approved_deletions:
         raise SystemExit(f"backend candidate contains an unapproved path: {path}")
+
+for path in sorted(approved_content):
+    print(f"content_addressed_path_approved={path}")
+for path in sorted(approved_deletions):
+    print(f"content_addressed_deletion_approved={path}")
 
 # Preview environment-source edits are normally blocked. This one-time,
 # content-addressed exception permits only the reviewed stale-variable removal
