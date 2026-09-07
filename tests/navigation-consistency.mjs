@@ -12,10 +12,10 @@ import {
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
-assert.equal(homepageNavigationItems.length, 15, "Homepage must contain exactly 15 tiles")
+assert.equal(homepageNavigationItems.length, 16, "Homepage must contain exactly 16 tiles")
 assert.equal(
   new Set(homepageNavigationItems.map((item) => item.id)).size,
-  15,
+  16,
   "Homepage tile IDs must be unique",
 )
 
@@ -40,6 +40,9 @@ assert.ok(motorRuntime)
 assert.ok(liveHarvestCounter)
 assert.equal(liveHarvestCounter.label, "Live Harvest Counter")
 assert.equal(liveHarvestCounter.href, "/live-harvest-counter")
+assert.equal(liveHarvestCounter.showOnDashboard, true)
+assert.equal(liveHarvestCounter.dashboardIcon, "/mfms/icons/coconut-harvest.png")
+assert.equal(liveHarvestCounter.ctaLabel, "Open Counter")
 assert.deepEqual(liveHarvestCounter.activeHrefs, [
   "/coconut-harvest/live-counter",
   "/coconut-counting",
