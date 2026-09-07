@@ -9,18 +9,21 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const harvestGpsVerifiedFiles = [
-  "components/admin/harvest-review-sections.tsx",
-  "lib/harvest-review-model.ts",
-  "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",
+const beetleMatrixVerifiedFiles = [
+  "components/beetle/beetle-trap-daily-matrix.tsx",
+  "lib/beetle-trap-matrix.ts",
 ]
-const harvestGpsProductionAdaptations = [
-  "components/admin/harvest-location-comparison-map.tsx",
-  "components/maps/farm-orthomosaic-map.tsx",
+const beetleMatrixProductionAdaptations = [
+  "app/beetle-trap/page.tsx",
   "deploy/production-release-manifest.json",
-  "lib/farm-map-data.ts",
+  "lib/mfms-navigation.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tests/beetle-trap-daywise-matrix.mjs",
+  "tests/farm-calendar-homepage.mjs",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/harvest-sync-exact-duplicates.mjs",
+  "tests/navigation-consistency.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -31,15 +34,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-accepted Harvest GPS duplicate-comparison map",
+  "Promote Preview-accepted Live Harvest Counter Home tile and day-wise Beetle Trap matrix",
 )
-assert.equal(manifest.base_commit, "db2cbecd2a71e7a328409864e121e6ee13ad291f")
+assert.equal(manifest.base_commit, "11228336667da252daf489f9ca4b20f2102bd9eb")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "f0a9f5345212c52b498fd08346134d2c57156a04",
-  image_id: "sha256:a0dcd949f0bdfbe21f4b7cc9cd72a6e1ebb2f33584c6c61fd1b45a2f23dde7bc",
-  feature_revision: "c38df99538b24cb96108c33fb00049505b3f8b62",
-  verified_files: harvestGpsVerifiedFiles,
-  production_adaptations: harvestGpsProductionAdaptations,
+  revision: "77a9c8502df14beed7db6ed1fd7464f1e5718229",
+  image_id: "sha256:2b1654d0918c0b5cb4a79d621692b9903fbeba19ca6a99f9daa8281a59dda256",
+  feature_revision: "8af60913265a3835956d4b0115502f1fea77a3f9",
+  verified_files: beetleMatrixVerifiedFiles,
+  production_adaptations: beetleMatrixProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -53,8 +56,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...harvestGpsVerifiedFiles,
-    ...harvestGpsProductionAdaptations,
+    ...beetleMatrixVerifiedFiles,
+    ...beetleMatrixProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -122,4 +125,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Harvest GPS and preserved Production promotion contracts: PASS")
+console.log("Beetle matrix and preserved Production promotion contracts: PASS")

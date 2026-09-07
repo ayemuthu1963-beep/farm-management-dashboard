@@ -4,11 +4,13 @@ import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { BeetleTrapMapArea } from "@/components/beetle/beetle-trap-map-area"
+import { BeetleTrapDailyMatrix } from "@/components/beetle/beetle-trap-daily-matrix"
 import { BeetleTrapHeaderActions } from "@/components/beetle/beetle-trap-header-actions"
 import { BeetleDailyChart, type BeetleDailyCountRow } from "@/components/beetle/beetle-daily-chart"
 import { BeetleDailyExcelExport } from "@/components/beetle/beetle-daily-excel-export"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
+import type { BeetleTrapLocationRecord } from "@/lib/beetle-trap-matrix"
 
 export const dynamic = "force-dynamic"
 
@@ -148,6 +150,21 @@ async function getBeetleDashboardData(searchParams: PageSearchParams): Promise<B
   if (initial.current_end_date) activePeriodQuery.set("end_date", initial.current_end_date)
 
   return (await fetchBeetleDashboardData(activePeriodQuery)) ?? initial
+}
+
+async function getBeetleTrapLocations(): Promise<BeetleTrapLocationRecord[] | null> {
+  const authHeader = getBasicAuthHeader()
+  if (!authHeader) return null
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/beetle-trap/locations`, {
+      headers: { Authorization: authHeader, Accept: "application/json" },
+      cache: "no-store",
+    })
+    if (!response.ok) return null
+    return (await response.json()) as BeetleTrapLocationRecord[]
+  } catch {
+    return null
+  }
 }
 
 function parseDate(value: string | null | undefined): Date | null {
@@ -368,7 +385,10 @@ function BeetleStatusTiles({
 
 export default async function BeetleTrapPage({ searchParams }: { searchParams?: Promise<PageSearchParams> }) {
   const resolvedSearchParams = searchParams ? await searchParams : {}
-  const data = await getBeetleDashboardData(resolvedSearchParams)
+  const [data, trapLocations] = await Promise.all([
+    getBeetleDashboardData(resolvedSearchParams),
+    getBeetleTrapLocations(),
+  ])
   const cards = summaryCards(data)
   const rows = dailyRows(data)
   const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
@@ -456,7 +476,16 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
                   </tr>
                 ) : (
                   <tr key={`count-${entry.sourceDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
-                    <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{entry.row.date}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">
+                      <a
+                        href={`#beetle-traps-${entry.sourceDate}`}
+                        className="font-bold text-primary underline decoration-dotted underline-offset-4 hover:text-primary/75"
+                        title={`View trap-wise counts for ${entry.row.date}`}
+                        aria-label={`View trap-wise counts for ${entry.row.date}`}
+                      >
+                        {entry.row.date}
+                      </a>
+                    </td>
                     <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot1Rhinoceros}</td>
                     <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot1RedPalmWeevil}</td>
                     <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot2Rhinoceros}</td>
@@ -472,6 +501,11 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
             </table>
           </div>
         </Panel>
+
+        <BeetleTrapDailyMatrix
+          locations={trapLocations}
+          dashboardDates={rows.map((row) => row.sourceDate ?? "").filter(Boolean)}
+        />
 
         {data && false ? <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Panel title="Beetle Infection by Area" icon={MapPin}>
