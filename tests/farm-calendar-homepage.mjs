@@ -42,6 +42,7 @@ assert.deepEqual(
     .map((item) => item.id),
   [
     "coconut-harvest",
+    "live-harvest-counter",
     "jackfruit-monitoring",
     "well-water-level",
     "motor-runtime",
@@ -56,7 +57,7 @@ assert.deepEqual(
     "inventory-management",
     "admin-console",
   ],
-  "Existing module ordering must not change",
+  "Approved module ordering must include the Live Harvest Counter tile",
 )
 
 const calendarSource = `${homePage}\n${calendarCard}\n${calendarConfig}`

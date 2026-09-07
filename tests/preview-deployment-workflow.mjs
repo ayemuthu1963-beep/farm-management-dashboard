@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the isolated read-only Worker V2 Preview comparison over the approved Worker and security baseline",
+  "Add the Live Harvest Counter Home tile and day-wise Beetle Trap matrix",
 )
-assert.equal(manifest.base_commit, "8c3ce11c752b3f500b213a905d4dfecb88aefc89")
+assert.equal(manifest.base_commit, "6edef028b2617cde4f6ae3573fabde819d25ca53")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,17 +302,16 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "Dockerfile.preview",
-  "app/worker-management/v2-comparison/page.tsx",
-  "components/worker-management/worker-v2-comparison.tsx",
+  "app/beetle-trap/page.tsx",
+  "components/beetle/beetle-trap-daily-matrix.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/worker-v2-api.ts",
-  "lib/worker-v2-excel.ts",
-  "lib/worker-v2-types.ts",
+  "lib/beetle-trap-matrix.ts",
+  "lib/mfms-navigation.ts",
   "package.json",
-  "scripts/preview-server-deploy.sh",
+  "tests/beetle-trap-daywise-matrix.mjs",
+  "tests/farm-calendar-homepage.mjs",
+  "tests/navigation-consistency.mjs",
   "tests/preview-deployment-workflow.mjs",
-  "tests/worker-v2.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
