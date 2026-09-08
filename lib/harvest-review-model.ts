@@ -87,6 +87,8 @@ export interface HarvestScanItem {
   existing_record_source?: string | null
   is_invalid_zero_submission?: boolean
   effective_classification?: string | null
+  import_exclusion_id?: number | null
+  import_exclusion_status?: string | null
   [key: string]: unknown
 }
 
@@ -136,6 +138,7 @@ export interface ReviewBuckets {
   errors: HarvestScanItem[]
   cycleCollisions: CycleCollisionGroup[]
   appliedCorrections: AppliedCorrectionAuditItem[]
+  deletedFromImport: HarvestScanItem[]
 }
 
 export interface ReviewUnresolvedCounts {
@@ -343,10 +346,19 @@ export function cycleCollisionResolved(
 }
 
 export function dataErrorGroupResolved(item: HarvestScanItem): boolean {
+  if (isDeletedFromImport(item)) return true
   return Boolean(
     item.classification === "UNMATCHED_TREE" &&
       item.supervisor_decision === "MAP_TO_EXISTING_TREE" &&
       String(item.supervisor_resolved_tree_no ?? "").trim(),
+  )
+}
+
+export function isDeletedFromImport(item: HarvestScanItem): boolean {
+  return (
+    item.supervisor_decision === "DELETE_FROM_IMPORT" ||
+    item.classification === "DELETED_FROM_IMPORT" ||
+    item.effective_classification === "DELETED_FROM_IMPORT"
   )
 }
 
@@ -456,8 +468,9 @@ export function buildReviewBuckets(
       (entry, index, entries) =>
         entries.findIndex((candidate) => candidate.runId === entry.runId) === index,
     )
+  const deletedFromImport = submissions.filter(isDeletedFromImport)
   const operationalSubmissions = submissions.filter(
-    (item) => !isAppliedControlledCorrection(item),
+    (item) => !isAppliedControlledCorrection(item) && !isDeletedFromImport(item),
   )
   const grouped = new Map<string, HarvestScanItem[]>()
   for (const item of operationalSubmissions) {
@@ -487,6 +500,7 @@ export function buildReviewBuckets(
     const allPendingCandidates = allItems.filter(
       (candidate) =>
         !isAppliedControlledCorrection(candidate) &&
+        !isDeletedFromImport(candidate) &&
         isCycleCollision(candidate) &&
         String(candidate.original_tree_no ?? "").trim() === treeNo,
     )
@@ -502,6 +516,7 @@ export function buildReviewBuckets(
         .filter(
           (item) =>
             !isAppliedControlledCorrection(item) &&
+            !isDeletedFromImport(item) &&
             item.original_tree_no === pending.original_tree_no &&
             (
               item.classification === "ALREADY_IMPORTED" ||
@@ -578,5 +593,6 @@ export function buildReviewBuckets(
     errors,
     cycleCollisions,
     appliedCorrections,
+    deletedFromImport,
   }
 }
