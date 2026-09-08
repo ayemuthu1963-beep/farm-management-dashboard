@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add the Live Harvest Counter Home tile and day-wise Beetle Trap matrix",
+  "Show Beetle Trap totals first, leave zero and null cells blank, and add trap-matrix Excel export",
 )
-assert.equal(manifest.base_commit, "6edef028b2617cde4f6ae3573fabde819d25ca53")
+assert.equal(manifest.base_commit, "77a9c8502df14beed7db6ed1fd7464f1e5718229")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,15 +302,11 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/beetle-trap/page.tsx",
   "components/beetle/beetle-trap-daily-matrix.tsx",
+  "components/beetle/beetle-trap-matrix-excel-export.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/beetle-trap-matrix.ts",
-  "lib/mfms-navigation.ts",
-  "package.json",
+  "lib/beetle-trap-matrix-excel.ts",
   "tests/beetle-trap-daywise-matrix.mjs",
-  "tests/farm-calendar-homepage.mjs",
-  "tests/navigation-consistency.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
