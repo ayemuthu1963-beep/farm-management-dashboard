@@ -43,6 +43,9 @@ importers:
       next:
         specifier: 16.2.11
         version: 16.2.11(@babel/core@7.29.7)(@types/node@24.10.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      pmtiles:
+        specifier: 4.5.0
+        version: 4.5.0
       react:
         specifier: ^19
         version: 19.2.4
@@ -1648,6 +1651,9 @@ packages:
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
+
+  pmtiles@4.5.0:
+    resolution: {integrity: sha512-CBeD4SoUluFziGdy/8k7FOjQxQy486n+929W/tWophauvMICpkZ26vGBWhDt/6b1FZQWNaf4jFdT/5+q0Wii5w==}
 
   postcss-selector-parser@7.1.1:
     resolution: {integrity: sha512-orRsuYpJVw8LdAwqqLykBj9ecS5/cRHlI5+nvTo8LcCKmzDmqVORXtOIYEEQuL9D4BxtA1lm5isAqzQZCoQ6Eg==}
@@ -3391,6 +3397,10 @@ snapshots:
   picomatch@4.0.4: {}
 
   pkce-challenge@5.0.1: {}
+
+  pmtiles@4.5.0:
+    dependencies:
+      fflate: 0.8.3
 
   postcss-selector-parser@7.1.1:
     dependencies:

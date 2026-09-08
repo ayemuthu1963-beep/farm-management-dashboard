@@ -60,14 +60,8 @@ for (const requiredContract of [
 
 const mapClient = await readFile("components/maps/farm-map-client.tsx", "utf8")
 assert.match(mapClient, /treesByKey/)
-assert.match(mapClient, /treesByNumber/)
-assert.match(mapClient, /treeNumberOptionKey/)
-assert.match(mapClient, /treeMasterNumbers\.has/)
+assert.match(mapClient, /FarmMapTreeSearch/)
 assert.match(mapClient, /Select a valid Tree Number from the available list\./)
-assert.match(
-  mapClient,
-  /Tree found in \$\{treePlot\}\. Select \$\{treePlot\} or Plot 1 & Plot 2\./,
-)
 assert.doesNotMatch(mapClient, /type="number"/)
 assert.doesNotMatch(mapClient, /parseFloat|parseInt/)
 
