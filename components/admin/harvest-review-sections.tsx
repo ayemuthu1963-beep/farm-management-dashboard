@@ -49,7 +49,7 @@ type ConflictDecisionAction =
 
 type ConflictResolutionMode = "RETAIN_ONE" | "REASSIGN_TREE" | ""
 
-type ErrorDecisionAction = "MAP_TO_EXISTING_TREE" | "DEFER_DECISION" | ""
+type ErrorDecisionAction = "MAP_TO_EXISTING_TREE" | "DEFER_DECISION" | "DELETE_FROM_IMPORT" | ""
 
 interface DecisionDraft {
   action: CycleDecisionAction
@@ -97,6 +97,7 @@ interface Props {
   scanData: HarvestScanResponse | null
   targetDate: string
   disabled?: boolean
+  deleteFromImportAvailable?: boolean
   onDecisionSaved: () => Promise<void>
 }
 
@@ -361,6 +362,7 @@ export function HarvestReviewSections({
   scanData,
   targetDate,
   disabled = false,
+  deleteFromImportAvailable = false,
   onDecisionSaved,
 }: Props) {
   const [treeSearch, setTreeSearch] = useState("")
@@ -372,6 +374,7 @@ export function HarvestReviewSections({
   const [errorPage, setErrorPage] = useState(1)
   const [cyclePage, setCyclePage] = useState(1)
   const [appliedCorrectionPage, setAppliedCorrectionPage] = useState(1)
+  const [deletedFromImportPage, setDeletedFromImportPage] = useState(1)
   const [openConflictGroupKey, setOpenConflictGroupKey] = useState<string | null>(null)
   const [locationMapGroupKey, setLocationMapGroupKey] = useState<string | null>(null)
   const [conflictDecisionDrafts, setConflictDecisionDrafts] = useState<
@@ -488,6 +491,7 @@ export function HarvestReviewSections({
     setErrorPage(1)
     setCyclePage(1)
     setAppliedCorrectionPage(1)
+    setDeletedFromImportPage(1)
     setOpenConflictGroupKey(null)
   }, [selectedScanId, sortDirection, targetDate, treeSearch])
 
@@ -810,12 +814,21 @@ export function HarvestReviewSections({
       target &&
       draft.validatedTreeNo === target
     const deferIsValid = draft.action === "DEFER_DECISION"
+    const deleteIsValid = deleteFromImportAvailable && draft.action === "DELETE_FROM_IMPORT"
     if (
       disabled ||
       !selectedScanId ||
       !reason ||
-      (!mapIsValid && !deferIsValid) ||
-      groupStatus?.groupMatches !== true
+      (!mapIsValid && !deferIsValid && !deleteIsValid) ||
+      (!deleteIsValid && groupStatus?.groupMatches !== true)
+    ) {
+      return
+    }
+    if (
+      deleteIsValid &&
+      !window.confirm(
+        `Delete from import permanently?\n\nODK submission: ${row.odk_instance_id}\nOriginal Tree Number: ${displayHarvestValue(row.original_tree_no)}\nSupervisor reason: ${reason}\n\nThis record will be permanently excluded from the current and all future harvest imports and marked resolved. The original ODK submission and complete audit record will be preserved. Nothing will be deleted from ODK Central, and already-imported valid harvest data will remain unchanged.\n\nConfirm to save this permanent exclusion.`,
+      )
     ) {
       return
     }
@@ -833,6 +846,7 @@ export function HarvestReviewSections({
           resolved_tree_no: mapIsValid ? target : null,
           selected_effective_instance_id: null,
           reason,
+          ...(deleteIsValid ? { confirmation_phrase: "DELETE FROM IMPORT" } : {}),
         }),
       })
       const result = (await response.json()) as { detail?: string; error?: string }
@@ -843,9 +857,11 @@ export function HarvestReviewSections({
       setDecisionMessages((current) => ({
         ...current,
         [row.odk_instance_id]:
-          mapIsValid
-            ? `Mapping decision saved. Original submitted value ${displayHarvestValue(row.original_tree_no)} remains in the audit.`
-            : "Deferred decision saved. This record remains blocked.",
+          deleteIsValid
+            ? "Deleted from import. This permanent exclusion is resolved and preserved in the audit."
+            : mapIsValid
+              ? `Mapping decision saved. Original submitted value ${displayHarvestValue(row.original_tree_no)} remains in the audit.`
+              : "Deferred decision saved. This record remains blocked.",
       }))
     } catch (error) {
       setDecisionMessages((current) => ({
@@ -1291,6 +1307,15 @@ export function HarvestReviewSections({
     (appliedCorrectionPage - 1) * REVIEW_ROW_PAGE_SIZE,
     appliedCorrectionPage * REVIEW_ROW_PAGE_SIZE,
   )
+  const deletedFromImportPageCount = Math.max(
+    1,
+    Math.ceil(buckets.deletedFromImport.length / REVIEW_ROW_PAGE_SIZE),
+  )
+  const currentDeletedFromImportPage = Math.min(deletedFromImportPage, deletedFromImportPageCount)
+  const visibleDeletedFromImport = buckets.deletedFromImport.slice(
+    (currentDeletedFromImportPage - 1) * REVIEW_ROW_PAGE_SIZE,
+    currentDeletedFromImportPage * REVIEW_ROW_PAGE_SIZE,
+  )
 
   if (!scanData || !targetDate) {
     return (
@@ -1338,6 +1363,55 @@ export function HarvestReviewSections({
         <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.errors.length}</span> data errors</p>
         <p className="rounded-lg border p-2 text-xs"><span className="block font-black">{buckets.cycleCollisions.length}</span> cycle-safety groups</p>
       </div>
+
+      {buckets.deletedFromImport.length > 0 ? (
+        <ReviewSection
+          id="review-deleted-from-import"
+          title="Deleted from import — resolved audit"
+          icon={History}
+          count={buckets.deletedFromImport.length}
+        >
+          <p className="mb-3 text-sm font-semibold text-muted-foreground">
+            These records are permanently excluded from the current and all future harvest imports.
+            Original ODK submissions and audit history are preserved. Already-imported valid harvest data is unchanged.
+          </p>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="min-w-[1000px] text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th className="p-2">Original Tree Number</th>
+                  <th className="p-2">Harvest Date</th>
+                  <th className="p-2">ODK Instance</th>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">Supervisor</th>
+                  <th className="p-2">Supervisor Reason</th>
+                  <th className="p-2">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleDeletedFromImport.map((row) => (
+                  <tr key={row.odk_instance_id} className="border-b bg-background">
+                    <td className="p-2 font-black">{displayHarvestValue(row.original_tree_no)}</td>
+                    <td className="p-2">{displayHarvestDate(row.harvest_date)}</td>
+                    <td className="p-2 font-mono">{row.odk_instance_id}</td>
+                    <td className="p-2 font-black text-emerald-700">Deleted from import</td>
+                    <td className="p-2">{displayHarvestValue(row.supervisor_admin_user)}</td>
+                    <td className="max-w-md whitespace-pre-wrap break-words p-2">{displayHarvestValue(row.supervisor_reason)}</td>
+                    <td className="p-2">{formatIstDateTime(row.supervisor_decision_at ?? row.supervisor_decision_updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            page={currentDeletedFromImportPage}
+            pageCount={deletedFromImportPageCount}
+            total={buckets.deletedFromImport.length}
+            unit="records"
+            onPageChange={setDeletedFromImportPage}
+          />
+        </ReviewSection>
+      ) : null}
 
       {buckets.appliedCorrections.length > 0 ? (
         <ReviewSection
@@ -1485,7 +1559,10 @@ export function HarvestReviewSections({
 
       <ReviewSection id="review-data-errors" title="Tree number and data errors — correction required" icon={AlertTriangle} count={buckets.errors.length}>
         <p className="mb-3 text-sm font-semibold text-muted-foreground">
-          An unmatched submitted Tree Number may be mapped only to an exact Tree Master value. The original submitted value is always preserved. Other error classes can only be deferred and remain blocked.
+          An unmatched submitted Tree Number may be mapped only to an exact Tree Master value. The original submitted value is always preserved.{" "}
+          {deleteFromImportAvailable
+            ? "Erroneous records may be deferred and remain blocked, or permanently deleted from import with a supervisor reason and confirmation."
+            : "Other error classes may be deferred and remain blocked."}
         </p>
         <div className="space-y-3">
           {visibleErrors.map((row) => {
@@ -1500,11 +1577,12 @@ export function HarvestReviewSections({
               target.length > 0 &&
               draft.validatedTreeNo === target
             const deferIsValid = draft.action === "DEFER_DECISION"
+            const deleteIsValid = deleteFromImportAvailable && draft.action === "DELETE_FROM_IMPORT"
             const canSave =
               !disabled &&
               Boolean(draft.reason.trim()) &&
-              (mapIsValid || deferIsValid) &&
-              groupStatus?.groupMatches === true &&
+              (mapIsValid || deferIsValid || deleteIsValid) &&
+              (deleteIsValid || groupStatus?.groupMatches === true) &&
               decisionSaving !== row.odk_instance_id
             return (
               <details
@@ -1624,6 +1702,9 @@ export function HarvestReviewSections({
                           <option value="MAP_TO_EXISTING_TREE">Map to exact existing Tree Number</option>
                         ) : null}
                         <option value="DEFER_DECISION">Defer and keep blocked</option>
+                        {deleteFromImportAvailable ? (
+                          <option value="DELETE_FROM_IMPORT">Delete from import</option>
+                        ) : null}
                       </select>
                     </label>
                     <label className="text-xs font-bold uppercase text-muted-foreground">
@@ -1715,6 +1796,13 @@ export function HarvestReviewSections({
                       This record remains unresolved and excluded from the final import set.
                     </p>
                   ) : null}
+                  {deleteIsValid ? (
+                    <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-950">
+                      Delete from import permanently excludes this record from the current and all future harvest imports and marks it resolved.
+                      The original ODK submission and complete audit record are preserved. Nothing is deleted from ODK Central or from already-imported valid harvest data.
+                      Saving requires confirmation of this permanent exclusion.
+                    </p>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <button
                       type="button"
@@ -1729,11 +1817,13 @@ export function HarvestReviewSections({
                           : "Save Supervisor Decision"}
                     </button>
                     <span className="text-xs font-bold text-muted-foreground">
-                      {groupStatus?.groupMatches === true
-                        ? "Group fingerprint unchanged."
-                        : groupStatus?.groupMatches === false
-                          ? "Group fingerprint changed; run Scan ODK again."
-                          : "Open this row to verify its group fingerprint."}
+                      {deleteIsValid
+                        ? "The selected source submission will be revalidated before the permanent exclusion is saved."
+                        : groupStatus?.groupMatches === true
+                          ? "Group fingerprint unchanged."
+                          : groupStatus?.groupMatches === false
+                            ? "Group fingerprint changed; run Scan ODK again."
+                            : "Open this row to verify its group fingerprint."}
                     </span>
                     {decisionMessages[row.odk_instance_id] ? (
                       <span

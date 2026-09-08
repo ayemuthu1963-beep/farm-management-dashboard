@@ -6,6 +6,8 @@ import { formatIstDateTime } from "../lib/format-ist-date-time.ts"
 import {
   buildReviewBuckets,
   cycleCollisionResolved,
+  dataErrorGroupResolved,
+  isDeletedFromImport,
   pendingCycleDispositionForTarget,
   reviewUnresolvedCounts,
 } from "../lib/harvest-review-model.ts"
@@ -152,6 +154,80 @@ assert.deepEqual(scan10Unresolved, {
   cycleSafetyGroupsRemaining: 2,
   totalUnresolvedGroupsRemaining: 8,
 })
+
+// Permanent import exclusions resolve errors without removing the source/audit row.
+const excludedError = scanItem({
+  odk_instance_id: "uuid:permanently-excluded",
+  original_tree_no: "1663",
+  classification: "DELETED_FROM_IMPORT",
+  supervisor_decision: "DELETE_FROM_IMPORT",
+  supervisor_reason: "Wrong tree recorded by mistake",
+  supervisor_admin_user: "supervisor-one",
+  supervisor_decision_at: "2026-09-08T04:30:00Z",
+  import_exclusion_id: 42,
+})
+const deferredError = scanItem({
+  odk_instance_id: "uuid:deferred",
+  original_tree_no: "1664",
+  classification: "INVALID_DATA",
+  supervisor_decision: "DEFER_DECISION",
+  supervisor_reason: "Awaiting field verification",
+})
+const validSibling = scanItem({
+  odk_instance_id: "uuid:valid-sibling",
+  original_tree_no: "1663",
+})
+const exclusionInput = [excludedError, deferredError, validSibling]
+const originalExclusionInput = JSON.stringify(exclusionInput)
+const exclusionBuckets = buildReviewBuckets(exclusionInput, "2026-07-30", "19")
+assert.deepEqual(exclusionBuckets.deletedFromImport, [excludedError])
+assert.deepEqual(exclusionBuckets.errors, [deferredError])
+assert.deepEqual(exclusionBuckets.cleanSingles, [validSibling])
+assert.equal(exclusionBuckets.submissions.length, 3, "Original source rows stay visible and exportable")
+assert.equal(exclusionBuckets.conflicts.length, 0, "Excluded source must not manufacture a duplicate group")
+assert.equal(reviewUnresolvedCounts(exclusionBuckets).dataErrorGroupsRemaining, 1)
+assert.equal(reviewUnresolvedCounts(exclusionBuckets).totalUnresolvedGroupsRemaining, 1)
+assert.equal(dataErrorGroupResolved(excludedError), true)
+assert.equal(dataErrorGroupResolved(deferredError), false, "Defer must remain blocked")
+assert.equal(JSON.stringify(exclusionInput), originalExclusionInput, "Review categorization must not mutate source or audit evidence")
+for (const marker of [
+  { supervisor_decision: "DELETE_FROM_IMPORT" },
+  { classification: "DELETED_FROM_IMPORT" },
+  { effective_classification: "DELETED_FROM_IMPORT" },
+]) {
+  const reloaded = scanItem({ classification: "INVALID_DATA", ...marker })
+  assert.equal(isDeletedFromImport(reloaded), true)
+  const reloadedBuckets = buildReviewBuckets([reloaded], "2026-07-30", "19")
+  assert.equal(reloadedBuckets.errors.length, 0)
+  assert.equal(reloadedBuckets.deletedFromImport.length, 1)
+  assert.equal(reviewUnresolvedCounts(reloadedBuckets).totalUnresolvedGroupsRemaining, 0)
+}
+assert.equal(isDeletedFromImport(deferredError), false)
+assert.equal(isDeletedFromImport(scanItem({ classification: "ODK_DELETED" })), false,
+  "An ODK source deletion is distinct from a supervisor import exclusion")
+assert.equal(isDeletedFromImport(scanItem({ classification: "ALREADY_IMPORTED" })), false)
+assert.equal(buildReviewBuckets(exclusionInput, "2026-07-31", "19").deletedFromImport.length, 0)
+assert.deepEqual(buildReviewBuckets(exclusionInput, "2026-07-30", "19", "1663").deletedFromImport, [excludedError])
+assert.equal(buildReviewBuckets(exclusionInput, "2026-07-30", "19", "1664").deletedFromImport.length, 0)
+
+const cycleExclusionItems = [
+  scanItem({
+    odk_instance_id: "uuid:cycle-active",
+    classification: "DUPLICATE_REVIEW_REQUIRED",
+    issue_type: "PENDING_CROSS_DATE_CYCLE_COLLISION",
+  }),
+  scanItem({
+    odk_instance_id: "uuid:cycle-excluded-other-date",
+    harvest_date: "2026-07-31",
+    classification: "DUPLICATE_REVIEW_REQUIRED",
+    issue_type: "PENDING_CROSS_DATE_CYCLE_COLLISION",
+    supervisor_decision: "DELETE_FROM_IMPORT",
+  }),
+]
+const cycleExclusionBuckets = buildReviewBuckets(cycleExclusionItems, "2026-07-30", "19")
+assert.ok(cycleExclusionBuckets.cycleCollisions.every((group) =>
+  [...group.pendingCandidates, ...group.records].every((row) => row.odk_instance_id !== "uuid:cycle-excluded-other-date")),
+  "Excluded rows from another date cannot become cycle correction candidates")
 
 // Scan 11-style applied corrections leave the operational queues and remain audit-only.
 const scan11Items = scan10Items.map((item) =>
@@ -567,7 +643,13 @@ for (const field of [
 ]) {
   assert.match(review, new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 }
-assert.match(review, /Other error classes can only be deferred and remain blocked/)
+assert.match(review, /Erroneous records may be deferred and remain blocked, or permanently deleted from import with a supervisor reason and confirmation/)
+assert.match(review, /<option value="DEFER_DECISION">Defer and keep blocked<\/option>/)
+assert.match(review, /<option value="DELETE_FROM_IMPORT">Delete from import<\/option>/)
+assert.match(review, /review-deleted-from-import/)
+assert.match(review, /confirmation_phrase: "DELETE FROM IMPORT"/)
+assert.match(review, /deleteFromImportAvailable/)
+assert.match(workspace, /deleteFromImportAvailable=\{status\?\.deleteFromImportAvailable === true\}/)
 assert.match(review, /DEFER_DECISION/)
 assert.match(review, /fingerprint-status/)
 assert.match(review, /Multiple pending submissions for the same Tree Number occur on different dates in the same open Harvest Cycle/)

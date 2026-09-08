@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Preserve recorded daily irrigation totals when scheduled zones have missing readings",
+  "Add audited permanent harvest import exclusions with backend capability gating",
 )
-assert.equal(manifest.base_commit, "bd10ad8d1eb93062bfa268c223abf48fe4e44a2c")
+assert.equal(manifest.base_commit, "d9a9321e6818c899bd7db9cde19f3a8b2f0c71f8")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,9 +302,11 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
+  "components/admin/harvest-manual-review-workspace.tsx",
+  "components/admin/harvest-review-sections.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/known-zero-data.ts",
-  "tests/known-zero-dashboard.mjs",
+  "lib/harvest-review-model.ts",
+  "tests/harvest-sync-exact-duplicates.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
