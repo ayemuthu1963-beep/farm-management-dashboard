@@ -1,4 +1,4 @@
-import { Analytics } from '@vercel/analytics/next'
+import { Analytics } from '@/components/maps/farm-map-analytics'
 import type { Metadata, Viewport } from 'next'
 import '@fontsource-variable/inter'
 import '@fontsource/merriweather/latin-700.css'

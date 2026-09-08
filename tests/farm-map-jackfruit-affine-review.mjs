@@ -66,24 +66,10 @@ assert.doesNotMatch(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Audit_2026/
 assert.doesNotMatch(mapData, /Muthu_Farms_Jackfruit_Tree_Coordinates_Translated_Proposal_2026/)
 assert.match(nextConfig, new RegExp(approvedName.replaceAll(".", "\\.")))
 
-assert.match(mapClient, /type JackfruitCoordinateVariant = "affine"/)
-assert.match(mapClient, /Panel title="Jackfruit Trees"/)
-assert.match(mapClient, /<span>Jackfruit Trees<\/span>/)
-assert.match(mapClient, /approved Jackfruit coordinates loaded/)
-assert.doesNotMatch(mapClient, /Approved Preview\/UAT coordinates/)
-assert.match(mapClient, /formatJackfruitTreeNo/)
-assert.match(mapClient, /parseJackfruitTreeSearch/)
-assert.match(mapClient, /Jackfruit Tree Number search/)
-assert.match(mapClient, /Coordinate-only Jackfruit layer/)
-assert.match(mapClient, /Provisional Revision 04 – Physical Field Audit/)
-assert.match(mapClient, /#dfff00/)
-assert.match(mapClient, /applyJackfruitMapState\("affine"\)/)
-assert.match(mapClient, /farmCombinedLayer\.jackfruitCoordinatesUrl/)
-assert.match(mapClient, /map\.getZoom\(\) >= MARKER_ZOOM/)
-assert.match(mapClient, /map\.getZoom\(\) >= LABEL_ZOOM/)
-assert.doesNotMatch(mapClient, /Original Jackfruit points|Previous translation|review only|approval revoked|No Jackfruit coordinate layer is approved/)
-assert.doesNotMatch(mapClient, /#ff00ff|#00e5ff/)
-assert.doesNotMatch(mapClient, /jackfruitOriginalCoordinatesUrl|jackfruitTranslatedCoordinatesUrl/)
+// Historical reviewed assets stay immutable; the active Farm Map uses the latest consolidated 623-tree asset.
+assert.match(mapClient, /FARM_TREE_SOURCES/)
+assert.doesNotMatch(mapClient, /jackfruitCoordinatesUrl|JackfruitCoordinateVariant/)
+await import("./farm-map-three-crops.mjs")
 
 const coconutBytes = await readFile(
   "public/map-data/coordinates/Muthu_Farms_Coconut_Tree_Coordinates_Approved_2026.geojson",

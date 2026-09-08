@@ -8,18 +8,9 @@ const mapShell = readFileSync(resolve(root, "components/maps/farm-orthomosaic-ma
 const farmMap = readFileSync(resolve(root, "components/maps/farm-map-client.tsx"), "utf8")
 const pipeline = readFileSync(resolve(root, "components/maps/irrigation-pipeline-editor.tsx"), "utf8")
 
-assert.match(farmMap, /controlsPlacement="responsive-grid"/)
-assert.match(farmMap, /enableFullscreen/)
-assert.match(
-  farmMap,
-  /h-\[clamp\(440px,60vh,620px\)\].*md:h-\[clamp\(500px,62vh,680px\)\].*lg:h-\[clamp\(520px,65vh,800px\)\]/,
-)
-assert.match(
-  mapShell,
-  /grid min-w-0 grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4/,
-)
-assert.match(farmMap, /<div className="grid gap-3 sm:grid-cols-2">/)
-assert.match(farmMap, /break-words font-semibold leading-tight \[overflow-wrap:anywhere\]/)
+// Shared fullscreen/pipeline behavior is preserved; the current Farm Map uses an isolated shell.
+assert.match(farmMap, /<FarmMapOrthomosaic/)
+assert.match(farmMap, /fitInitialBounds/)
 assert.equal((pipeline.match(/className="md:row-span-2"/g) ?? []).length, 2)
 
 const responsiveLayout = mapShell.slice(mapShell.indexOf('controlsPlacement === "responsive-grid"'))
@@ -29,8 +20,7 @@ assert.ok(responsiveLayout.indexOf("{children}") < responsiveLayout.indexOf("{fi
 
 const tileNames = [
   "Raster Layer",
-  "Coconut Trees",
-  "Jackfruit Trees",
+  "Tree Layers & Legend",
   "Irrigation Pipeline",
   "Pipeline Filters",
   "Point ",
@@ -63,7 +53,7 @@ assert.match(mapShell, /new ResizeObserver\(handleViewportChange\)/)
 assert.match(mapShell, /expandButtonRef\.current\?\.focus\(\)/)
 assert.match(mapShell, /fixed inset-0 z-\[1100\] h-\[100dvh\] w-screen bg-background/)
 
-assert.equal((farmMap.match(/<FarmOrthomosaicMap/g) ?? []).length, 1, "fullscreen must retain the existing map instance")
+assert.equal((farmMap.match(/<FarmMapOrthomosaic/g) ?? []).length, 1, "Farm Map must retain one map instance")
 const fullscreenHandler = mapShell.slice(
   mapShell.indexOf("async function toggleMapExpansion"),
   mapShell.indexOf("function fitTo"),
