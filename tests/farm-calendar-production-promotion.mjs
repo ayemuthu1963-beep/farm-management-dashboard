@@ -9,14 +9,12 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const beetleMatrixVerifiedFiles = [
-  "components/beetle/beetle-trap-daily-matrix.tsx",
-  "components/beetle/beetle-trap-matrix-excel-export.tsx",
-  "lib/beetle-trap-matrix-excel.ts",
+const irrigationTrendVerifiedFiles = [
+  "lib/known-zero-data.ts",
+  "tests/known-zero-dashboard.mjs",
 ]
-const beetleMatrixProductionAdaptations = [
+const irrigationTrendProductionAdaptations = [
   "deploy/production-release-manifest.json",
-  "tests/beetle-trap-daywise-matrix.mjs",
   "tests/farm-calendar-production-promotion.mjs",
 ]
 
@@ -28,15 +26,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-accepted Beetle Trap totals-first matrix, blank zero/null cells, and Excel export",
+  "Promote the Preview-accepted fix that preserves recorded daily irrigation trend totals",
 )
-assert.equal(manifest.base_commit, "5972966d4cc8f35d07d7728c7c56fe6e2c775d88")
+assert.equal(manifest.base_commit, "8d905388c46ed98ccf160ed4896a9a95b6fa7f1b")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "bd10ad8d1eb93062bfa268c223abf48fe4e44a2c",
-  image_id: "sha256:58355b871c02b67d53c79dcbb9c6be1cdaa65e3d0e1b2ecd963bfa4b037e7699",
-  feature_revision: "251dbe912e1ca2d4ad80eb2f552d7248656c6040",
-  verified_files: beetleMatrixVerifiedFiles,
-  production_adaptations: beetleMatrixProductionAdaptations,
+  revision: "d9a9321e6818c899bd7db9cde19f3a8b2f0c71f8",
+  image_id: "sha256:c84ae86d2cafc470bfb330ee0f0d5ceeff915f3c7c861116821eb2f6380fb6dc",
+  feature_revision: "77020a4910f0bcdb8959c7fb330b93d51a292fa2",
+  verified_files: irrigationTrendVerifiedFiles,
+  production_adaptations: irrigationTrendProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -50,8 +48,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...beetleMatrixVerifiedFiles,
-    ...beetleMatrixProductionAdaptations,
+    ...irrigationTrendVerifiedFiles,
+    ...irrigationTrendProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -119,4 +117,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Beetle matrix and preserved Production promotion contracts: PASS")
+console.log("Irrigation trend and preserved Production promotion contracts: PASS")

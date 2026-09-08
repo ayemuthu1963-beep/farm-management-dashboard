@@ -196,8 +196,8 @@ assert.equal(trend[4].totalWaterLitres, null, "a known zero plus a scheduled mis
 assert.equal(trend[4].totalRuntimeHours, null)
 assert.equal(trend[5].P1E, 100)
 assert.equal(trend[5].P2W, null)
-assert.equal(trend[5].totalWaterLitres, null, "a measurement plus a scheduled missing zone remains an aggregate gap")
-assert.equal(trend[5].totalRuntimeHours, null)
+assert.equal(trend[5].totalWaterLitres, 50_000, "a recorded daily aggregate survives a scheduled zone gap")
+assert.equal(trend[5].totalRuntimeHours, 1)
 assert.equal(trend[6].P1E, 100)
 assert.equal(trend[6].P2W, null, "an unscheduled missing zone stays a zone-level gap")
 assert.equal(trend[6].totalWaterLitres, 50_000, "unscheduled missing zones do not block a complete scheduled aggregate")
@@ -217,8 +217,8 @@ assert.equal(trend[12].P2W, 0)
 assert.equal(trend[12].totalWaterLitres, 50_000, "measurements plus correctly attributed zeros produce a complete numeric aggregate")
 assert.equal(trend[12].totalRuntimeHours, 1)
 assert.equal(trend[13].P1E, 100, "an existing measurement remains visible while schedule attribution is unavailable")
-assert.equal(trend[13].totalWaterLitres, null, "an unavailable persisted schedule cannot falsely complete a partial aggregate")
-assert.equal(trend[13].totalRuntimeHours, null)
+assert.equal(trend[13].totalWaterLitres, 50_000, "an unavailable persisted schedule cannot erase a recorded daily aggregate")
+assert.equal(trend[13].totalRuntimeHours, 1)
 
 const fullyMeasuredValues = {
   totalWaterLitres: 210_000,
@@ -287,8 +287,8 @@ assert.equal(precedenceTrend[1].totalWaterLitres, 210_000, "fully measured total
 assert.equal(precedenceTrend[1].totalRuntimeHours, 6)
 assert.equal(precedenceTrend[2].totalWaterLitres, 0, "a fully measured genuine zero survives a schedule outage")
 assert.equal(precedenceTrend[2].totalRuntimeHours, 0)
-assert.equal(precedenceTrend[3].totalWaterLitres, null, "a partial measurement remains a gap when the schedule is unavailable")
-assert.equal(precedenceTrend[3].totalRuntimeHours, null)
+assert.equal(precedenceTrend[3].totalWaterLitres, 50_000, "a recorded daily aggregate survives when the schedule is unavailable")
+assert.equal(precedenceTrend[3].totalRuntimeHours, 1)
 assert.equal(precedenceTrend[4].totalWaterLitres, null, "a no-run record cannot complete a point without its persisted schedule")
 assert.equal(precedenceTrend[4].totalRuntimeHours, null)
 assert.equal(precedenceTrend[5].P1E, 100)
@@ -297,8 +297,8 @@ assert.equal(precedenceTrend[5].totalWaterLitres, 50_000, "a valid attributed ze
 assert.equal(precedenceTrend[5].totalRuntimeHours, 1)
 assert.equal(precedenceTrend[6].P1E, 100)
 assert.equal(precedenceTrend[6].P2W, null)
-assert.equal(precedenceTrend[6].totalWaterLitres, null, "an unaccounted scheduled zone keeps the aggregate unknown")
-assert.equal(precedenceTrend[6].totalRuntimeHours, null)
+assert.equal(precedenceTrend[6].totalWaterLitres, 50_000, "an unaccounted scheduled zone does not erase a recorded daily aggregate")
+assert.equal(precedenceTrend[6].totalRuntimeHours, 1)
 assert.equal(precedenceTrend[7].P1E, 0)
 assert.equal(precedenceTrend[7].P2W, 0)
 assert.equal(precedenceTrend[7].totalWaterLitres, 0, "all scheduled zones correctly confirmed no-run produce a genuine zero")
@@ -691,10 +691,10 @@ const aggregateDecisionCases = [
   { name: "complete measured aggregate", point: precedenceTrend[0], water: 210_000, runtime: 6 },
   { name: "complete measured aggregate without schedule", point: precedenceTrend[1], water: 210_000, runtime: 6 },
   { name: "fully measured numeric zero", point: precedenceTrend[2], water: 0, runtime: 0 },
-  { name: "partial measurement without schedule", point: precedenceTrend[3], water: null, runtime: null },
+  { name: "recorded aggregate without schedule", point: precedenceTrend[3], water: 50_000, runtime: 1 },
   { name: "known zero without schedule", point: precedenceTrend[4], water: null, runtime: null },
   { name: "complete measured and known-zero mixture", point: precedenceTrend[5], water: 50_000, runtime: 1 },
-  { name: "partial scheduled aggregate", point: precedenceTrend[6], water: null, runtime: null },
+  { name: "recorded aggregate with a scheduled zone gap", point: precedenceTrend[6], water: 50_000, runtime: 1 },
   { name: "complete all-zero aggregate", point: precedenceTrend[7], water: 0, runtime: 0 },
 ]
 for (const decision of aggregateDecisionCases) {
