@@ -3,20 +3,15 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Add the Live Harvest Counter Home tile and day-wise Beetle Trap matrix",
-  "base_commit": "6edef028b2617cde4f6ae3573fabde819d25ca53",
+  "release_note": "Show Beetle Trap totals first, leave zero and null cells blank, and add trap-matrix Excel export",
+  "base_commit": "77a9c8502df14beed7db6ed1fd7464f1e5718229",
   "matched_backend_commit": "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99",
   "allowed_paths": [
-    "app/beetle-trap/page.tsx",
     "components/beetle/beetle-trap-daily-matrix.tsx",
+    "components/beetle/beetle-trap-matrix-excel-export.tsx",
     "deploy/preview-release-manifest.json",
-    "lib/beetle-trap-matrix.ts",
-    "lib/mfms-navigation.ts",
-    "package.json",
-    "tests/beetle-trap-daywise-matrix.mjs",
-    "tests/farm-calendar-homepage.mjs",
-    "tests/navigation-consistency.mjs",
-    "tests/preview-deployment-workflow.mjs"
+    "lib/beetle-trap-matrix-excel.ts",
+    "tests/beetle-trap-daywise-matrix.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
