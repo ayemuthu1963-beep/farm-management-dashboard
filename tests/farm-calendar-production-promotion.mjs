@@ -9,13 +9,15 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const irrigationTrendVerifiedFiles = [
-  "lib/known-zero-data.ts",
-  "tests/known-zero-dashboard.mjs",
+const harvestExclusionVerifiedFiles = [
+  "components/admin/harvest-review-sections.tsx",
+  "lib/harvest-review-model.ts",
 ]
-const irrigationTrendProductionAdaptations = [
+const harvestExclusionProductionAdaptations = [
+  "components/admin/harvest-manual-review-workspace.tsx",
   "deploy/production-release-manifest.json",
   "tests/farm-calendar-production-promotion.mjs",
+  "tests/harvest-sync-exact-duplicates.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -26,15 +28,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote the Preview-accepted fix that preserves recorded daily irrigation trend totals",
+  "Promote audited permanent Delete from import with supervisor confirmation and resolved audit",
 )
-assert.equal(manifest.base_commit, "8d905388c46ed98ccf160ed4896a9a95b6fa7f1b")
+assert.equal(manifest.base_commit, "cccaa04074656d2df1af39b18a88d344e5b0f612")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "d9a9321e6818c899bd7db9cde19f3a8b2f0c71f8",
-  image_id: "sha256:c84ae86d2cafc470bfb330ee0f0d5ceeff915f3c7c861116821eb2f6380fb6dc",
-  feature_revision: "77020a4910f0bcdb8959c7fb330b93d51a292fa2",
-  verified_files: irrigationTrendVerifiedFiles,
-  production_adaptations: irrigationTrendProductionAdaptations,
+  revision: "4b13d324ebcfb8026e67d4a02e1eb3b87321cde6",
+  image_id: "sha256:8bb3437133bdc47c9008ea9dfabbff77777f9afe8e0d54e6f2515f62eae87d7d",
+  feature_revision: "cc4147e96576b5401179eb0e906e3d154d0daa86",
+  verified_files: harvestExclusionVerifiedFiles,
+  production_adaptations: harvestExclusionProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -48,8 +50,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...irrigationTrendVerifiedFiles,
-    ...irrigationTrendProductionAdaptations,
+    ...harvestExclusionVerifiedFiles,
+    ...harvestExclusionProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -117,4 +119,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Irrigation trend and preserved Production promotion contracts: PASS")
+console.log("Harvest import exclusion and preserved Production promotion contracts: PASS")
