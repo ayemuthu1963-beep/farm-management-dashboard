@@ -11,19 +11,13 @@ const sha256 = (path) => createHash("sha256")
 
 const beetleMatrixVerifiedFiles = [
   "components/beetle/beetle-trap-daily-matrix.tsx",
-  "lib/beetle-trap-matrix.ts",
+  "components/beetle/beetle-trap-matrix-excel-export.tsx",
+  "lib/beetle-trap-matrix-excel.ts",
 ]
 const beetleMatrixProductionAdaptations = [
-  "app/beetle-trap/page.tsx",
   "deploy/production-release-manifest.json",
-  "lib/mfms-navigation.ts",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
   "tests/beetle-trap-daywise-matrix.mjs",
-  "tests/farm-calendar-homepage.mjs",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/navigation-consistency.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -34,13 +28,13 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Promote Preview-accepted Live Harvest Counter Home tile and day-wise Beetle Trap matrix",
+  "Promote Preview-accepted Beetle Trap totals-first matrix, blank zero/null cells, and Excel export",
 )
-assert.equal(manifest.base_commit, "11228336667da252daf489f9ca4b20f2102bd9eb")
+assert.equal(manifest.base_commit, "5972966d4cc8f35d07d7728c7c56fe6e2c775d88")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "77a9c8502df14beed7db6ed1fd7464f1e5718229",
-  image_id: "sha256:2b1654d0918c0b5cb4a79d621692b9903fbeba19ca6a99f9daa8281a59dda256",
-  feature_revision: "8af60913265a3835956d4b0115502f1fea77a3f9",
+  revision: "bd10ad8d1eb93062bfa268c223abf48fe4e44a2c",
+  image_id: "sha256:58355b871c02b67d53c79dcbb9c6be1cdaa65e3d0e1b2ecd963bfa4b037e7699",
+  feature_revision: "251dbe912e1ca2d4ad80eb2f552d7248656c6040",
   verified_files: beetleMatrixVerifiedFiles,
   production_adaptations: beetleMatrixProductionAdaptations,
 })
