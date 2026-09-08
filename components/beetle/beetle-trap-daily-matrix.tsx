@@ -1,4 +1,5 @@
 import { TableProperties } from "lucide-react"
+import { BeetleTrapMatrixExcelExport } from "@/components/beetle/beetle-trap-matrix-excel-export"
 import { Panel } from "@/components/farm/panel"
 import {
   buildBeetleTrapMatrix,
@@ -36,11 +37,12 @@ export function BeetleTrapDailyMatrix({ locations, dashboardDates }: BeetleTrapD
     <Panel
       title="Beetle in Traps"
       icon={TableProperties}
+      headerRight={locations !== null && matrix.traps.length > 0 ? <BeetleTrapMatrixExcelExport matrix={matrix} /> : null}
       className="border-primary/30 bg-primary/5"
       bodyClassName="p-0 sm:p-0"
     >
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border px-4 py-3 text-sm sm:px-5">
-        <span className="font-medium text-muted-foreground">Click a date above to locate its trap-wise counts.</span>
+        <span className="font-medium text-muted-foreground">Blank cells indicate zero or no recorded count. Click a date above to locate its trap-wise counts.</span>
         <span className="inline-flex items-center gap-1.5 font-semibold text-red-700">
           <span className="size-2.5 rounded-full bg-red-700" aria-hidden="true" />
           Red Palm Weevil
@@ -67,11 +69,11 @@ export function BeetleTrapDailyMatrix({ locations, dashboardDates }: BeetleTrapD
           aria-label="Trap-wise daily Beetle Count table"
         >
           <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
-            <caption className="sr-only">Beetle count by inspection date and trap number</caption>
+            <caption className="sr-only">Beetle count totals and inspection dates by trap number</caption>
             <thead>
               <tr className="bg-primary/10 text-xs font-semibold uppercase tracking-wide text-primary">
                 <th scope="col" className="sticky left-0 z-20 min-w-32 border-b border-r border-primary/20 bg-[#e8f3e9] px-3 py-2.5 text-left">
-                  Date / Trap No.
+                  Trap No.
                 </th>
                 {matrix.traps.map((trap) => (
                   <th
@@ -81,10 +83,26 @@ export function BeetleTrapDailyMatrix({ locations, dashboardDates }: BeetleTrapD
                       "min-w-14 border-b border-r border-primary/20 bg-[#e8f3e9] px-2 py-2.5 text-center",
                       trapTextClass(trap.trapType),
                     )}
-                    title={`Trap ${trap.trapNo} — ${trap.trapType}`}
+                    title={`Trap ${trap.trapNo}: ${trap.trapType}`}
                   >
                     {trap.trapNo}
                   </th>
+                ))}
+              </tr>
+              <tr className="bg-primary/5 font-extrabold">
+                <th scope="row" className="sticky left-0 z-20 border-b border-r border-primary/20 bg-[#f0f9f1] px-3 py-2.5 text-left text-foreground">
+                  Total
+                </th>
+                {matrix.traps.map((trap) => (
+                  <td
+                    key={`total-${trap.trapNo}`}
+                    className={cn(
+                      "border-b border-r border-primary/20 px-2 py-2.5 text-center",
+                      trapTextClass(trap.trapType),
+                    )}
+                  >
+                    {trap.total === 0 ? null : trap.total}
+                  </td>
                 ))}
               </tr>
             </thead>
@@ -103,10 +121,10 @@ export function BeetleTrapDailyMatrix({ locations, dashboardDates }: BeetleTrapD
                       key={`${row.sourceDate}-${matrix.traps[index].trapNo}`}
                       className={cn(
                         "border-b border-r border-border px-2 py-2.5 text-center font-semibold",
-                        count === null ? "text-muted-foreground" : trapTextClass(matrix.traps[index].trapType),
+                        trapTextClass(matrix.traps[index].trapType),
                       )}
                     >
-                      {count ?? "—"}
+                      {count === null || count === 0 ? null : count}
                     </td>
                   ))}
                 </tr>
@@ -119,24 +137,6 @@ export function BeetleTrapDailyMatrix({ locations, dashboardDates }: BeetleTrapD
                 </tr>
               ) : null}
             </tbody>
-            <tfoot>
-              <tr className="bg-primary/10 font-extrabold">
-                <th scope="row" className="sticky left-0 z-10 border-r border-t border-primary/20 bg-[#e8f3e9] px-3 py-2.5 text-left text-foreground">
-                  Total
-                </th>
-                {matrix.traps.map((trap) => (
-                  <td
-                    key={`total-${trap.trapNo}`}
-                    className={cn(
-                      "border-r border-t border-primary/20 px-2 py-2.5 text-center",
-                      trapTextClass(trap.trapType),
-                    )}
-                  >
-                    {trap.total}
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
           </table>
         </div>
       )}

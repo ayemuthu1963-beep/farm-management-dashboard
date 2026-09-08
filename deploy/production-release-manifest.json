@@ -3,27 +3,21 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote Preview-accepted Live Harvest Counter Home tile and day-wise Beetle Trap matrix",
-  "base_commit": "11228336667da252daf489f9ca4b20f2102bd9eb",
+  "release_note": "Promote Preview-accepted Beetle Trap totals-first matrix, blank zero/null cells, and Excel export",
+  "base_commit": "5972966d4cc8f35d07d7728c7c56fe6e2c775d88",
   "preview_approved": {
-    "revision": "77a9c8502df14beed7db6ed1fd7464f1e5718229",
-    "image_id": "sha256:2b1654d0918c0b5cb4a79d621692b9903fbeba19ca6a99f9daa8281a59dda256",
-    "feature_revision": "8af60913265a3835956d4b0115502f1fea77a3f9",
+    "revision": "bd10ad8d1eb93062bfa268c223abf48fe4e44a2c",
+    "image_id": "sha256:58355b871c02b67d53c79dcbb9c6be1cdaa65e3d0e1b2ecd963bfa4b037e7699",
+    "feature_revision": "251dbe912e1ca2d4ad80eb2f552d7248656c6040",
     "verified_files": [
       "components/beetle/beetle-trap-daily-matrix.tsx",
-      "lib/beetle-trap-matrix.ts"
+      "components/beetle/beetle-trap-matrix-excel-export.tsx",
+      "lib/beetle-trap-matrix-excel.ts"
     ],
     "production_adaptations": [
-      "app/beetle-trap/page.tsx",
       "deploy/production-release-manifest.json",
-      "lib/mfms-navigation.ts",
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
       "tests/beetle-trap-daywise-matrix.mjs",
-      "tests/farm-calendar-homepage.mjs",
-      "tests/farm-calendar-production-promotion.mjs",
-      "tests/navigation-consistency.mjs"
+      "tests/farm-calendar-production-promotion.mjs"
     ]
   },
   "protected_invariants": {
@@ -36,17 +30,11 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/beetle-trap/page.tsx",
     "components/beetle/beetle-trap-daily-matrix.tsx",
+    "components/beetle/beetle-trap-matrix-excel-export.tsx",
     "deploy/production-release-manifest.json",
-    "lib/beetle-trap-matrix.ts",
-    "lib/mfms-navigation.ts",
-    "package.json",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
+    "lib/beetle-trap-matrix-excel.ts",
     "tests/beetle-trap-daywise-matrix.mjs",
-    "tests/farm-calendar-homepage.mjs",
-    "tests/farm-calendar-production-promotion.mjs",
-    "tests/navigation-consistency.mjs"
+    "tests/farm-calendar-production-promotion.mjs"
   ]
 }
