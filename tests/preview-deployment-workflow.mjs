@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Show Beetle Trap totals first, leave zero and null cells blank, and add trap-matrix Excel export",
+  "Preserve recorded daily irrigation totals when scheduled zones have missing readings",
 )
-assert.equal(manifest.base_commit, "77a9c8502df14beed7db6ed1fd7464f1e5718229")
+assert.equal(manifest.base_commit, "bd10ad8d1eb93062bfa268c223abf48fe4e44a2c")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,11 +302,9 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "components/beetle/beetle-trap-daily-matrix.tsx",
-  "components/beetle/beetle-trap-matrix-excel-export.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/beetle-trap-matrix-excel.ts",
-  "tests/beetle-trap-daywise-matrix.mjs",
+  "lib/known-zero-data.ts",
+  "tests/known-zero-dashboard.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
