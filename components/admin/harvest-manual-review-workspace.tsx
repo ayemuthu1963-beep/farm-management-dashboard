@@ -33,6 +33,7 @@ interface SyncStatus {
   projectId: number
   formId: string
   manualImportEnabled?: boolean
+  deleteFromImportAvailable?: boolean
   importEnabled?: boolean
   openCycle: {
     harvest_cycle: string
@@ -1414,6 +1415,7 @@ export function HarvestManualReviewWorkspace() {
           scanData={scanData}
           targetDate={targetDate}
           disabled={busy !== null}
+          deleteFromImportAvailable={status?.deleteFromImportAvailable === true}
           onDecisionSaved={reloadSelectedScan}
         />
       </Panel>

@@ -3,19 +3,21 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Promote the Preview-accepted fix that preserves recorded daily irrigation trend totals",
-  "base_commit": "8d905388c46ed98ccf160ed4896a9a95b6fa7f1b",
+  "release_note": "Promote audited permanent Delete from import with supervisor confirmation and resolved audit",
+  "base_commit": "cccaa04074656d2df1af39b18a88d344e5b0f612",
   "preview_approved": {
-    "revision": "d9a9321e6818c899bd7db9cde19f3a8b2f0c71f8",
-    "image_id": "sha256:c84ae86d2cafc470bfb330ee0f0d5ceeff915f3c7c861116821eb2f6380fb6dc",
-    "feature_revision": "77020a4910f0bcdb8959c7fb330b93d51a292fa2",
+    "revision": "4b13d324ebcfb8026e67d4a02e1eb3b87321cde6",
+    "image_id": "sha256:8bb3437133bdc47c9008ea9dfabbff77777f9afe8e0d54e6f2515f62eae87d7d",
+    "feature_revision": "cc4147e96576b5401179eb0e906e3d154d0daa86",
     "verified_files": [
-      "lib/known-zero-data.ts",
-      "tests/known-zero-dashboard.mjs"
+      "components/admin/harvest-review-sections.tsx",
+      "lib/harvest-review-model.ts"
     ],
     "production_adaptations": [
+      "components/admin/harvest-manual-review-workspace.tsx",
       "deploy/production-release-manifest.json",
-      "tests/farm-calendar-production-promotion.mjs"
+      "tests/farm-calendar-production-promotion.mjs",
+      "tests/harvest-sync-exact-duplicates.mjs"
     ]
   },
   "protected_invariants": {
@@ -28,9 +30,11 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
+    "components/admin/harvest-manual-review-workspace.tsx",
+    "components/admin/harvest-review-sections.tsx",
     "deploy/production-release-manifest.json",
-    "lib/known-zero-data.ts",
+    "lib/harvest-review-model.ts",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/known-zero-dashboard.mjs"
+    "tests/harvest-sync-exact-duplicates.mjs"
   ]
 }
