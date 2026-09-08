@@ -81,15 +81,13 @@ export function applyScheduledKnownZerosToTrend(
       point[zoneId] = 0
       appliedKnownZeroZoneIds.add(zoneId)
     }
-    if (scheduleIsUnavailable) {
-      point.totalWaterLitres = null
-      point.totalRuntimeHours = null
-    } else if (scheduledZoneIds.length > 0) {
+    // API aggregates are recorded measurements. Schedule gaps may leave
+    // individual zones unknown, but must never erase those measured totals.
+    // The schedule overlay may only synthesize an aggregate when every
+    // scheduled zone has been confirmed as a known zero.
+    if (!scheduleIsUnavailable && scheduledZoneIds.length > 0) {
       const aggregateIsComplete = scheduledZoneIds.every((zoneId) => point[zoneId] !== null)
-      if (!aggregateIsComplete) {
-        point.totalWaterLitres = null
-        point.totalRuntimeHours = null
-      } else if (appliedKnownZeroZoneIds.size === scheduledZoneIds.length) {
+      if (aggregateIsComplete && appliedKnownZeroZoneIds.size === scheduledZoneIds.length) {
         if (point.totalWaterLitres === null) point.totalWaterLitres = 0
         if (point.totalRuntimeHours === null) point.totalRuntimeHours = 0
       }
