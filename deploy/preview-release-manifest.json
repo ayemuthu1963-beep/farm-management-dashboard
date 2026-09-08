@@ -11,7 +11,8 @@
     "components/beetle/beetle-trap-matrix-excel-export.tsx",
     "deploy/preview-release-manifest.json",
     "lib/beetle-trap-matrix-excel.ts",
-    "tests/beetle-trap-daywise-matrix.mjs"
+    "tests/beetle-trap-daywise-matrix.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
