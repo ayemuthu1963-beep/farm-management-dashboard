@@ -253,7 +253,10 @@ def health(port, revision):
 
 def protected(exclude):
     entries = docker("GET", "/containers/json?all=1")
-    return {c["Id"]: digest(canonical({k: c[k] for k in ("Id", "Names", "ImageID", "State", "Ports")})) for c in entries if c["Id"] not in exclude}
+    return {c["Id"]: digest(canonical({
+        "Id": c["Id"], "Names": sorted(c["Names"]), "ImageID": c["ImageID"], "State": c["State"],
+        "Ports": sorted(c["Ports"], key=canonical),
+    })) for c in entries if c["Id"] not in exclude}
 
 
 def create_payload(live, image, revision, shadow=False, timestamp=None):
