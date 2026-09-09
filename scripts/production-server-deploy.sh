@@ -45,6 +45,8 @@ readonly approved_log_max_file="5"
 readonly network_reclaim_attempts="180"
 readonly protected_observation_seconds="600"
 readonly state_dir="/home/muthu/.local/state/mfms-production-github"
+readonly rollback_record_helper="/home/muthu/.local/libexec/mfms-production-frontend-rollback-record.py"
+readonly approved_frontend_ipv4="172.19.128.7"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
@@ -79,10 +81,16 @@ exec 9>"$lock_file"
 flock -n 9 || blocked "another Production deployment or rollback is already running"
 
 operation=""
+rollback_source_allowed=0
+rollback_status=""
+rollback_requested_revision=""
+deployment_id=""
 candidate_revision=""
 expected_current_revision=""
 run_id=""
 readonly deploy_command_pattern='^deploy-production-frontend ([0-9a-f]{40}) ([0-9a-f]{40}) ([0-9]+)$'
+readonly rollback_dry_run_command_pattern='^dry-run-production-frontend-rollback ([0-9a-f]{40}) ([0-9]+)$'
+readonly enroll_command_pattern='^enroll-production-frontend-rollback ([0-9a-f]{40}) ([0-9a-f]{64}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-production-frontend ([0-9a-f]{40}) ([0-9]+)$'
 readonly preflight_command_pattern='^preflight-production-frontend ([0-9a-f]{40}) ([0-9a-f]{40}) ([0-9]+)$'
 
@@ -96,6 +104,15 @@ elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
   operation="rollback"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $rollback_dry_run_command_pattern ]]; then
+  operation="rollback-dry-run"
+  expected_current_revision=${BASH_REMATCH[1]}
+  run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $enroll_command_pattern ]]; then
+  operation="rollback-enroll"
+  expected_current_revision=${BASH_REMATCH[1]}
+  enrollment_state_sha256=${BASH_REMATCH[2]}
+  run_id=${BASH_REMATCH[3]}
 elif [[ "$original_command" =~ $preflight_command_pattern ]]; then
   operation="preflight"
   candidate_revision=${BASH_REMATCH[1]}
@@ -111,6 +128,7 @@ source_dir="$work_dir/source"
 environment_file="$work_dir/frontend.env"
 before_unrelated="$work_dir/unrelated.before"
 after_unrelated="$work_dir/unrelated.after"
+rollback_plan="$work_dir/frontend-rollback-plan.json"
 
 candidate_container=""
 transaction_backup=""
@@ -168,32 +186,54 @@ print(network.get("IPAddress") or ipam.get("IPv4Address") or "")
 ' "$production_network"
 }
 
+network_attached_for_container() {
+  docker inspect --format \
+    "{{if index .NetworkSettings.Networks \"$production_network\"}}true{{else}}false{{end}}" "$1"
+}
+
+network_static_ip_for_container() {
+  docker inspect --format \
+    "{{with index .NetworkSettings.Networks \"$production_network\"}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}" "$1"
+}
+
 disconnect_production_network() {
-  local container=$1
-  docker network disconnect -f "$production_network" "$container" >/dev/null 2>&1 || true
+  local container=$1 attached
+  attached=$(network_attached_for_container "$container") || return 1
+  [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+  if [[ "$attached" == "true" ]]; then
+    # A stopped container can have a blank runtime IP while its endpoint still
+    # reserves the static address. Remove that exact endpoint before reclaiming it.
+    docker network disconnect --force "$production_network" "$container" || return 1
+    attached=$(network_attached_for_container "$container") || return 1
+    [[ "$attached" == "false" ]] || return 1
+  fi
 }
 
 ensure_production_network_ip() {
-  local container=$1 expected_ip=$2 current_ip attempt
-  # Docker's bridge IPAM can retain a just-disconnected static address for
-  # longer than 30 seconds. Keep the transaction locked and retry for up to
-  # three minutes so rollback and automatic restoration do not fail during
-  # that eventual-consistency window.
+  local container=$1 expected_ip=$2 current_ip configured_ip attached running attempt
   for attempt in $(seq 1 "$network_reclaim_attempts"); do
-    current_ip=$(network_ip_for_container "$container")
-    [[ "$current_ip" == "$expected_ip" ]] && return 0
-    # Historical containers can retain a stale endpoint record even when
-    # Docker reports no active IP. Clear it before reclaiming the established
-    # address used by the shared nginx upstream.
-    docker network disconnect -f "$production_network" "$container" >/dev/null 2>&1 || true
+    attached=$(network_attached_for_container "$container") || return 1
+    [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+    current_ip=$(network_ip_for_container "$container") || return 1
+    configured_ip=$(network_static_ip_for_container "$container") || return 1
+    if [[ "$attached" == "true" ]]; then
+      if [[ "$current_ip" == "$expected_ip" && ( -z "$configured_ip" || "$configured_ip" == "$expected_ip" ) ]]; then
+        return 0
+      fi
+      running=$(docker inspect --format '{{.State.Running}}' "$container") || return 1
+      # Connecting a stopped target reserves the correct address but does not
+      # necessarily populate IPAddress until docker start. Do not connect twice.
+      if [[ "$running" == "false" && -z "$current_ip" && "$configured_ip" == "$expected_ip" ]]; then
+        return 0
+      fi
+      [[ "$running" == "true" || "$running" == "false" ]] || return 1
+      disconnect_production_network "$container" || return 1
+    fi
     docker network connect --ip "$expected_ip" "$production_network" "$container" \
       >/dev/null 2>&1 || {
         sleep 1
         continue
       }
-    current_ip=$(network_ip_for_container "$container")
-    [[ "$current_ip" == "$expected_ip" ]] && return 0
-    sleep 1
   done
   return 1
 }
@@ -265,15 +305,16 @@ environment_sha256_for_container() {
 
 snapshot_unrelated_containers() {
   local container_ids id row inspected_id inspected_name inspected_image running restart_count
-  local health_state network_mode port_bindings name
+  local health_state network_mode port_bindings name configuration_sha256
   local -a rows=()
   local -A seen_ids=()
   local -A seen_names=()
   container_ids=$(docker ps -q --no-trunc) \
-    || blocked "protected container enumeration failed"
+    || { blocked "protected container enumeration failed"; return 1; }
   while IFS= read -r id; do
     [[ -n "$id" ]] || continue
     row=$(docker inspect "$id" | python3 -c '
+import hashlib
 import json
 import sys
 
@@ -324,6 +365,17 @@ elif not isinstance(health, dict) or not isinstance(health.get("Status"), str) o
 else:
     health_state = health["Status"]
 
+canonical = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"))
+networks = json.loads(canonical(container.get("NetworkSettings", {}).get("Networks", {})))
+for endpoint in networks.values():
+    for key in ("Aliases", "DNSNames", "Links"):
+        if endpoint.get(key) is not None:
+            endpoint[key] = sorted(endpoint[key])
+protected = {"host": host, "networks": networks,
+             "mounts": sorted(container.get("Mounts", []), key=canonical),
+             "environment": sorted(config.get("Env") or []),
+             "started_at": state.get("StartedAt"), "status": state.get("Status")}
+configuration_sha256 = hashlib.sha256(canonical(protected).encode()).hexdigest()
 fields = [
     identity,
     name,
@@ -333,15 +385,16 @@ fields = [
     health_state,
     network_mode,
     json.dumps(port_bindings, separators=(",", ":"), sort_keys=True),
+    configuration_sha256,
 ]
 if any("|" in field or "\n" in field for field in fields):
     raise SystemExit("inspect payload contains an unsupported delimiter")
 print("|".join(fields))
 ') \
-      || blocked "protected container inspection failed: $id"
+      || { blocked "protected container inspection failed: $id"; return 1; }
     IFS='|' read -r \
       inspected_id inspected_name inspected_image running restart_count \
-      health_state network_mode port_bindings <<<"$row"
+      health_state network_mode port_bindings configuration_sha256 <<<"$row"
     name=${inspected_name#/}
     case "$name" in
       "$live_container"|"$live_container"-candidate-*|"$live_container"-pre-*)
@@ -349,28 +402,30 @@ print("|".join(fields))
         ;;
     esac
     [[ "$inspected_id" == "$id" ]] \
-      || blocked "protected container inspection returned the wrong ID: expected=$id actual=$inspected_id"
+      || { blocked "protected container inspection returned the wrong ID: expected=$id actual=$inspected_id"; return 1; }
     [[ -n "$inspected_id" && -n "$name" && -n "$inspected_image" \
       && -n "$network_mode" && -n "$port_bindings" ]] \
-      || blocked "protected container inspection returned incomplete identity data: $id"
+      || { blocked "protected container inspection returned incomplete identity data: $id"; return 1; }
     [[ -z "${seen_ids[$inspected_id]+present}" ]] \
-      || blocked "protected container inspection returned a duplicate ID: $inspected_id"
+      || { blocked "protected container inspection returned a duplicate ID: $inspected_id"; return 1; }
     [[ -z "${seen_names[$name]+present}" ]] \
-      || blocked "protected container inspection returned a duplicate name: $name"
+      || { blocked "protected container inspection returned a duplicate name: $name"; return 1; }
     seen_ids["$inspected_id"]=1
     seen_names["$name"]=1
     [[ "$running" == "true" ]] \
-      || blocked "protected unrelated container is not running: $name"
+      || { blocked "protected unrelated container is not running: $name"; return 1; }
     [[ "$restart_count" =~ ^[0-9]+$ ]] \
-      || blocked "protected unrelated container restart count is invalid: $name"
+      || { blocked "protected unrelated container restart count is invalid: $name"; return 1; }
     case "$health_state" in
       healthy|no-healthcheck)
         ;;
       missing-health-data)
         blocked "protected unrelated container is missing configured health data: $name"
+        return 1
         ;;
       *)
         blocked "protected unrelated container is not healthy: $name state=$health_state"
+        return 1
         ;;
     esac
     rows+=("$row")
@@ -575,46 +630,46 @@ remove_candidate() {
 }
 
 assert_live_contract() {
-  local expected_revision=$1 expected_image_id=$2 expected_unrelated=$3
-  container_exists "$live_container" || blocked "Production frontend container is missing"
-  container_running "$live_container" || blocked "Production frontend container is not running"
+  local expected_revision=$1 expected_image_id=$2 expected_unrelated=$3 allow_source_restarts=${4:-false}
+  container_exists "$live_container" || { blocked "Production frontend container is missing"; return 1; }
+  container_running "$live_container" || { blocked "Production frontend container is not running"; return 1; }
   [[ "$(image_revision_for_container "$live_container")" == "$expected_revision" ]] \
-    || blocked "Production frontend revision does not match"
+    || { blocked "Production frontend revision does not match"; return 1; }
   [[ "$(image_environment_for_container "$live_container")" == "Production" ]] \
-    || blocked "Production frontend image is not labelled Production"
+    || { blocked "Production frontend image is not labelled Production"; return 1; }
   [[ "$(docker inspect --format '{{.Image}}' "$live_container")" == "$expected_image_id" ]] \
-    || blocked "Production frontend image ID does not match"
-  [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]] \
-    || blocked "Production frontend restarted during the guarded switch"
+    || { blocked "Production frontend image ID does not match"; return 1; }
+  [[ "$allow_source_restarts" == "true" && "$operation" == "rollback" ]] || [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]] \
+    || { blocked "Production frontend restarted during the guarded switch"; return 1; }
   [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$live_container")" == "unless-stopped" ]] \
-    || blocked "Production frontend restart policy changed"
+    || { blocked "Production frontend restart policy changed"; return 1; }
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$live_container")" == "$production_network" ]] \
-    || blocked "Production frontend network changed"
+    || { blocked "Production frontend network changed"; return 1; }
   [[ "$(network_ip_for_container "$live_container")" == "$original_network_ip" ]] \
-    || blocked "Production frontend network address changed"
+    || { blocked "Production frontend network address changed"; return 1; }
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$live_container")" == \
       '{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3014"}]}' ]] \
-    || blocked "Production frontend host port changed"
+    || { blocked "Production frontend host port changed"; return 1; }
   [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "0" ]] \
-    || blocked "Production frontend mounts changed"
+    || { blocked "Production frontend mounts changed"; return 1; }
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$live_container" \
     | grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_prod' \
-    || blocked "Production frontend no longer targets the Production database"
+    || { blocked "Production frontend no longer targets the Production database"; return 1; }
   [[ "$(docker inspect --format '{{.Id}}' "$backend_container")" == "$backend_id_before" ]] \
-    || blocked "Production backend container changed"
+    || { blocked "Production backend container changed"; return 1; }
   [[ "$(docker inspect --format '{{.Image}}' "$backend_container")" == "$backend_image_before" ]] \
-    || blocked "Production backend image changed"
-  container_running "$backend_container" || blocked "Production backend stopped"
+    || { blocked "Production backend image changed"; return 1; }
+  container_running "$backend_container" || { blocked "Production backend stopped"; return 1; }
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$backend_container" \
     | grep -Fqx 'POSTGRES_DB=mfms_server_prod' \
-    || blocked "Production backend no longer targets the Production database"
-  [[ "$(cron_digest)" == "$cron_digest_before" ]] || blocked "Production schedules changed"
-  [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || blocked "proxy configuration changed"
+    || { blocked "Production backend no longer targets the Production database"; return 1; }
+  [[ "$(cron_digest)" == "$cron_digest_before" ]] || { blocked "Production schedules changed"; return 1; }
+  [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || { blocked "proxy configuration changed"; return 1; }
   [[ "$(proxy_target_count)" == "$proxy_target_count_before" ]] \
-    || blocked "Production proxy target count changed"
-  snapshot_unrelated_containers > "$after_unrelated"
+    || { blocked "Production proxy target count changed"; return 1; }
+  snapshot_unrelated_containers > "$after_unrelated" || return 1
   cmp -s "$expected_unrelated" "$after_unrelated" \
-    || blocked "a backend, Production, ODK, proxy, database, or unrelated container changed"
+    || { blocked "a backend, Production, ODK, proxy, database, or unrelated container changed"; return 1; }
 }
 
 restore_original_frontend() {
@@ -626,12 +681,9 @@ restore_original_frontend() {
       docker stop --time 30 "$live_container" >/dev/null 2>&1 || true
       disconnect_production_network "$live_container" >/dev/null 2>&1 || true
       if [[ -n "$replacement_origin" ]]; then
-        if ! docker rename "$live_container" "$replacement_origin" >/dev/null 2>&1; then
-          recovery_name="$replacement_origin-recovery-$timestamp"
-          docker rename "$live_container" "$recovery_name" >/dev/null 2>&1 \
-            || docker rm -f "$live_container" >/dev/null 2>&1 \
-            || true
-        fi
+        # The failed retained target is an immutable signed artifact. Preserve it
+        # and refuse a namespace collision; deleting it would destroy rollback.
+        docker rename "$live_container" "$replacement_origin" >/dev/null 2>&1 || return 1
       else
         docker rm -f "$live_container" >/dev/null 2>&1 || true
       fi
@@ -645,11 +697,12 @@ restore_original_frontend() {
       >/dev/null 2>&1 || return 1
     docker start "$live_container" >/dev/null 2>&1 || return 1
     announce_production_network_identity >/dev/null 2>&1 || return 1
-    if wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" \
-      && smoke_routes "http://127.0.0.1:$live_port" \
-      && wait_for_public_production_guard; then
-      automatic_restore_result="pass"
-    fi
+    wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" || return 1
+    smoke_routes "http://127.0.0.1:$live_port" || return 1
+    wait_for_public_production_guard || return 1
+    assert_live_contract "$original_reported_revision" "$original_image_id" "$before_unrelated" true || return 1
+    frontend_record restored "$deployment_id" "$operation" || return 1
+    automatic_restore_result="pass"
   fi
 }
 
@@ -687,7 +740,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 validate_common_live_state() {
-  local failed_units running_id
+  local failed_units running_id unhealthy_ids running_ids
   failed_units=$(systemctl --failed --no-legend --plain | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')
   [[ "$failed_units" == "0" ]] || blocked "the server has failed systemd units"
   local service_entry service_role service_container
@@ -705,16 +758,22 @@ validate_common_live_state() {
     manifest_containers["$service_container"]=1
     container_exists "$service_container" \
       || blocked "Production service is missing: role=$service_role container=$service_container"
-    container_running "$service_container" \
+    [[ "$rollback_source_allowed" -eq 1 && "$service_container" == "$live_container" ]] || container_running "$service_container" \
       || blocked "Production service is not running: role=$service_role container=$service_container"
   done
-  [[ "$(docker ps --filter health=unhealthy -q | wc -l | tr -d '[:space:]')" == "0" ]] \
-    || blocked "an unhealthy container exists"
+  unhealthy_ids=$(docker ps --filter health=unhealthy -q) || blocked "unhealthy container enumeration failed"
   while IFS= read -r running_id; do
     [[ -n "$running_id" ]] || continue
+    if [[ "$rollback_source_allowed" -eq 1 && "$(docker inspect --format '{{.Name}}' "$running_id")" == "/$live_container" ]]; then continue; fi
+    blocked "an unrelated unhealthy container exists"
+  done <<<"$unhealthy_ids"
+  running_ids=$(docker ps -q) || blocked "running container enumeration failed"
+  while IFS= read -r running_id; do
+    [[ -n "$running_id" ]] || continue
+    if [[ "$rollback_source_allowed" -eq 1 && "$(docker inspect --format '{{.Name}}' "$running_id")" == "/$live_container" ]]; then continue; fi
     [[ "$(docker inspect --format '{{.RestartCount}}' "$running_id")" == "0" ]] \
-      || blocked "a running container has a nonzero restart count"
-  done < <(docker ps -q)
+      || blocked "a running unrelated container has a nonzero restart count"
+  done <<<"$running_ids"
   for maintenance_lock in \
     /home/muthu/.local/state/mfms-preview-github/deployment.lock \
     /home/muthu/.local/state/mfms-test-github/deployment.lock
@@ -723,7 +782,7 @@ validate_common_live_state() {
       || blocked "another MFMS deployment or rollback is active"
   done
   container_exists "$live_container" || blocked "Production frontend container is missing"
-  container_running "$live_container" || blocked "Production frontend container is not running"
+  [[ "$rollback_source_allowed" -eq 1 ]] || container_running "$live_container" || blocked "Production frontend container is not running"
   container_exists "$backend_container" || blocked "Production backend container is missing"
   container_running "$backend_container" || blocked "Production backend container is not running"
   container_exists "$proxy_container" || blocked "Production proxy container is missing"
@@ -808,6 +867,10 @@ raise SystemExit(0 if valid else 1)
   original_reported_revision=$(image_revision_for_container "$live_container")
   original_revision=$original_reported_revision
   original_network_ip=$(network_ip_for_container "$live_container")
+  if [[ "$rollback_source_allowed" -eq 1 ]]; then
+    [[ -z "$original_network_ip" || "$original_network_ip" == "$approved_frontend_ipv4" ]] || blocked "signed frontend source address changed"
+    original_network_ip="$approved_frontend_ipv4"
+  fi
   if [[ "$original_revision" =~ ^([0-9a-f]{7,39})-project22$ ]]; then
     original_revision=${BASH_REMATCH[1]}
   fi
@@ -837,8 +900,10 @@ PY
   [[ "$proxy_target_count_before" =~ ^[1-9][0-9]*$ ]] \
     || blocked "Production proxy has no approved frontend target"
   snapshot_unrelated_containers > "$before_unrelated"
-  wait_for_public_production_guard \
-    || blocked "public Production authentication guard is unavailable"
+  if [[ "$rollback_source_allowed" -ne 1 ]]; then
+    wait_for_public_production_guard \
+      || blocked "public Production authentication guard is unavailable"
+  fi
 }
 
 validate_coordinated_backup() {
@@ -1609,24 +1674,53 @@ PY_RELEASE_MANIFEST
   fi
 }
 
-write_state() {
-  local deployed_revision=$1 deployed_image_id=$2 deployed_image_tag=$3
-  local rollback_container=$4 rollback_revision=$5 rollback_image_id=$6 rollback_image_tag=$7
-  local temporary_state
-  temporary_state=$(mktemp "$state_dir/state.XXXXXX")
-  cat > "$temporary_state" <<EOF
-deployed_revision=$deployed_revision
-deployed_image_id=$deployed_image_id
-deployed_image_tag=$deployed_image_tag
-rollback_container=$rollback_container
-rollback_revision=$rollback_revision
-rollback_image_id=$rollback_image_id
-rollback_image_tag=$rollback_image_tag
-run_id=$run_id
-updated_at=$timestamp
-EOF
-  chmod 600 "$temporary_state"
-  mv "$temporary_state" "$state_file"
+frontend_record() {
+  [[ -f "$rollback_record_helper" && ! -L "$rollback_record_helper" ]] \
+    || { blocked "trusted frontend rollback record helper is missing"; return 1; }
+  python3 "$rollback_record_helper" --state-dir "$state_dir" "$@"
+}
+
+new_deployment_id() {
+  printf '%s-%s-%s\n' "$run_id" "$timestamp" "$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+}
+
+verify_frontend_rollback() {
+  rollback_requested_revision=$expected_current_revision
+  frontend_record verify "$expected_current_revision" > "$rollback_plan" || return 1
+  deployment_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["deployment_id"])' "$rollback_plan") || return 1
+  rollback_status=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$rollback_plan") || return 1
+  rollback_source_allowed=1
+  if [[ "$rollback_status" == "already-complete" ]]; then
+    rollback_source_allowed=0
+    expected_current_revision=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["revision"])' "$rollback_plan") || return 1
+  fi
+}
+
+enroll_frontend_rollback() {
+  validate_common_live_state
+  [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$enrollment_state_sha256" ]] \
+    || blocked "frontend release state changed before enrollment"
+  frontend_record initialize
+  deployment_id=$(new_deployment_id)
+  frontend_record stage "$deployment_id" "$original_revision" "$original_image_id" "$(read_state_value rollback_container)" "$run_id" "$timestamp" "$enrollment_state_sha256"
+  frontend_record finalize "$deployment_id" "$original_image_tag" "$(read_state_value rollback_image_tag)"
+  frontend_record activate "$deployment_id"
+  frontend_record verify "$expected_current_revision" > "$rollback_plan"
+  echo "rollback_deployment_id=$deployment_id"
+  echo "traffic_switch=not-performed"
+  echo "PRODUCTION_FRONTEND_ROLLBACK_ENROLLMENT=PASS"
+}
+
+dry_run_frontend_rollback() {
+  verify_frontend_rollback
+  validate_common_live_state
+  snapshot_unrelated_containers > "$after_unrelated"
+  cmp -s "$before_unrelated" "$after_unrelated" || blocked "protected state changed during rollback proof"
+  echo "rollback_deployment_id=$deployment_id"
+  echo "rollback_status=$rollback_status"
+  echo "traffic_switch=not-performed"
+  echo "database_writes=none"
+  echo "PRODUCTION_FRONTEND_ROLLBACK_DRY_RUN=PASS"
 }
 
 read_state_value() {
@@ -1703,6 +1797,9 @@ deploy_production() {
   [[ "$(docker image inspect --format '{{index .Config.Labels "com.muthufarms.mfms.environment"}}' "$new_image")" == "Production" ]] \
     || blocked "built image is not labelled Production"
 
+  transaction_backup="$live_container-pre-github-$run_id-$timestamp"
+  deployment_id=$(new_deployment_id)
+  frontend_record stage "$deployment_id" "$candidate_revision" "$new_image_id" "$transaction_backup" "$run_id" "$timestamp"
   write_environment_file "$live_container" "$candidate_revision" "$timestamp"
   start_candidate "$new_image" "$candidate_revision"
   remove_candidate
@@ -1712,7 +1809,7 @@ deploy_production() {
   docker stop --time 30 "$live_container" >/dev/null
   disconnect_production_network "$live_container"
   docker rename "$live_container" "$transaction_backup"
-  docker run -d \
+  docker create \
     --name "$live_container" \
     --network "$production_network" \
     --ip "$original_network_ip" \
@@ -1723,6 +1820,8 @@ deploy_production() {
     -p "127.0.0.1:$live_port:3000" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
+  frontend_record finalize "$deployment_id" "$new_image" "$original_image_tag"
+  docker start "$live_container" >/dev/null
 
   announce_production_network_identity \
     || blocked "replacement could not announce the Production network identity"
@@ -1750,9 +1849,7 @@ deploy_production() {
   echo "protected_container_observation=PASS"
 
   trap '' HUP INT TERM
-  write_state \
-    "$candidate_revision" "$new_image_id" "$new_image" \
-    "$transaction_backup" "$original_revision" "$original_image_id" "$original_image_tag"
+  frontend_record activate "$deployment_id"
   transaction_active=0
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -1797,7 +1894,26 @@ rollback_production() {
   local rollback_container rollback_revision rollback_image_id rollback_image_tag
   local replacement_id rollback_reported_revision rollback_revision_for_match
   [[ -f "$state_file" ]] || blocked "no successful GitHub Production deployment is recorded"
+  verify_frontend_rollback
   validate_common_live_state
+  if [[ "$rollback_status" == "already-complete" ]]; then
+    echo "rollback_environment=Production"
+    echo "rollback_url=$production_url"
+    echo "previous_revision=$rollback_requested_revision"
+    echo "restored_revision=$original_revision"
+    echo "backend_unchanged=true"
+    echo "database_unchanged=true"
+    echo "odk_unchanged=true"
+    echo "schedules_unchanged=true"
+    echo "proxy_configuration_unchanged=true"
+    echo "preview_touched=0"
+    echo "test_touched=0"
+    echo "production_frontend_touched=0"
+    echo "PRODUCTION_ROLLBACK=PASS"
+    echo "rollback_status=already-complete"
+    echo "traffic_switch=not-performed"
+    return
+  fi
 
   deployed_revision=$(read_state_value deployed_revision)
   deployed_image_id=$(read_state_value deployed_image_id)
@@ -1836,14 +1952,15 @@ rollback_production() {
     blocked "rollback container revision is invalid"
   fi
 
-  write_environment_file "$rollback_container"
+  docker inspect --format '{{json .Config.Env}}' "$rollback_container" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)))' > "$environment_file"
+  chmod 600 "$environment_file"
   start_candidate "$rollback_image_id" "$rollback_reported_revision"
   remove_candidate
 
   transaction_backup="$live_container-pre-rollback-$run_id-$timestamp"
   replacement_origin="$rollback_container"
   transaction_active=1
-  docker stop --time 30 "$live_container" >/dev/null
+  if container_running "$live_container"; then docker stop --time 30 "$live_container" >/dev/null; fi
   disconnect_production_network "$live_container"
   docker rename "$live_container" "$transaction_backup"
   docker rename "$rollback_container" "$live_container"
@@ -1861,14 +1978,13 @@ rollback_production() {
   assert_live_contract "$rollback_reported_revision" "$replacement_id" "$before_unrelated"
 
   trap '' HUP INT TERM
-  write_state \
-    "$rollback_revision" "$replacement_id" "$rollback_image_tag" \
-    "$transaction_backup" "$deployed_revision" "$deployed_image_id" "$deployed_image_tag"
+  frontend_record receipt "$deployment_id" "$(new_deployment_id)" "$transaction_backup" "$run_id" "$timestamp"
   transaction_active=0
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
 
+  echo "rollback_status=restored"
   echo "rollback_environment=Production"
   echo "rollback_url=$production_url"
   echo "public_production_guard=$public_guard_result"
@@ -1892,6 +2008,12 @@ case "$operation" in
     ;;
   preflight)
     preflight_production
+    ;;
+  rollback-dry-run)
+    dry_run_frontend_rollback
+    ;;
+  rollback-enroll)
+    enroll_frontend_rollback
     ;;
   rollback)
     rollback_production
