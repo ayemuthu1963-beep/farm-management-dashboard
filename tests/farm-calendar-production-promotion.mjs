@@ -27,6 +27,7 @@ const farmMapProductionAdaptations = [
   "deploy/production-release-manifest.json",
   "package.json",
   "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
   "tests/farm-calendar-production-promotion.mjs",
   "tests/farm-map-coconut-trees.mjs",
   "tests/tree-number-autocomplete.mjs"
@@ -40,13 +41,13 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Display 3433 Coconut, Jackfruit and Nutmeg trees on the Preview-accepted full-farm orthomosaic",
+  "Display 3433 Coconut, Jackfruit and Nutmeg trees on the Preview-accepted full-farm orthomosaic with compatible shared frontend security updates",
 )
 assert.equal(manifest.base_commit, "9b63ab23165786495a38241f455f868f56043bec")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "4f3780d564a4490dcee9841d9fa145fec6e5afe1",
-  image_id: "sha256:01c20e14535b3937c6c0f62eb2ae682bab608194aff635d016687525f4b6b1f6",
-  feature_revision: "b5b3ad81ae97bc75e7d8d426e7324c006fad71fe",
+  revision: "8f6d08cf306c0161ced355d3da2359fb55183657",
+  image_id: "sha256:44ad25e4e28a6a1edcba6c8044cceeab118c6bbd2db2b9b401c70b2abad85e12",
+  feature_revision: "3a9fbf850bf846fb81726b3997eb381818be0013",
   verified_files: farmMapVerifiedFiles,
   production_adaptations: farmMapProductionAdaptations,
 })
