@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
+from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, quote
 from urllib.request import urlopen
 
 BASE = "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99"
@@ -272,7 +272,7 @@ def create_payload(live, image, revision, shadow=False, timestamp=None):
         parts = urlsplit(env["DATABASE_URL"])
         query = dict(parse_qsl(parts.query))
         query["options"] = "-c default_transaction_read_only=on"
-        env["DATABASE_URL"] = urlunsplit(parts._replace(query=urlencode(query)))
+        env["DATABASE_URL"] = urlunsplit(parts._replace(query=urlencode(query, quote_via=quote)))
         for mount in host["Mounts"]:
             mount["ReadOnly"] = True
         host["PortBindings"]["8000/tcp"][0]["HostPort"] = "8016"
