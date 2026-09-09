@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Display 3433 Coconut, Jackfruit and Nutmeg trees on verified full-farm imagery; replace the Preview-only Farm Map editor integration with the identical Production-bound map view",
+  "Patch shared frontend dependencies for current security advisories while preserving the accepted 3433-tree Farm Map and tile assets",
 )
-assert.equal(manifest.base_commit, "4b13d324ebcfb8026e67d4a02e1eb3b87321cde6")
+assert.equal(manifest.base_commit, "4f3780d564a4490dcee9841d9fa145fec6e5afe1")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -302,28 +302,11 @@ assert.deepEqual(manifest.protected_invariants, {
   proxy_configuration: "unchanged",
 })
 const expectedReleasePaths = [
-  "app/farm-map/page.tsx",
-  "app/layout.tsx",
-  "components/maps/farm-map-analytics.tsx",
-  "components/maps/farm-map-client.tsx",
-  "components/maps/farm-map-orthomosaic.tsx",
-  "components/maps/farm-map-tree-search.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/farm-map-analytics.ts",
-  "lib/farm-map-layer.ts",
-  "lib/farm-map-trees.ts",
   "package.json",
-  "public/map-data/vector/jackfruit-trees-ffbcd4efe04a955b.geojson",
-  "public/map-data/vector/nutmeg-trees-92968dc1573b3b2e.geojson",
-  "tests/farm-map-coconut-trees.mjs",
-  "tests/farm-map-fullscreen-layout.mjs",
-  "tests/farm-map-jackfruit-affine-review.mjs",
-  "tests/farm-map-jackfruit-prefix.mjs",
-  "tests/farm-map-three-crops.mjs",
-  "tests/farm-map-tree-click.mjs",
-  "tests/irrigation-pipeline-editor.mjs",
-  "tests/preview-deployment-workflow.mjs",
-  "tests/tree-number-autocomplete.mjs"
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
