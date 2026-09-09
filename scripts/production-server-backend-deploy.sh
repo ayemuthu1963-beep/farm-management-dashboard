@@ -509,7 +509,7 @@ validate_common_live_state() {
 
 rollback_record() {
   [[ -f "$rollback_record_helper" && ! -L "$rollback_record_helper" ]] \
-    || blocked "the reviewed rollback record helper is unavailable"
+    || { blocked "the reviewed rollback record helper is unavailable"; return 1; }
   python3 "$rollback_record_helper" --state-dir "$state_dir" "$@"
 }
 

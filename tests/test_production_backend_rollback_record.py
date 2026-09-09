@@ -277,6 +277,19 @@ backend_live_container=harvest-api
         self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
         self.assertNotIn("UNSAFE_PASS", result.stdout)
 
+    def test_unavailable_record_helper_cannot_execute_under_error_suppression(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
+            helper = Path(directory) / "missing-helper.py"
+            harness = f'''set +e
+rollback_record_helper='{helper.as_posix()}'
+state_dir='{Path(directory).as_posix()}'
+blocked() {{ return 1; }}
+python3() {{ echo UNSAFE_EXECUTION; return 0; }}
+'''
+            result = self.bash(harness + shell_function("rollback_record") + '\nrollback_record restored || exit 7\necho UNSAFE_PASS\n')
+            self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+            self.assertNotIn("UNSAFE", result.stdout)
+
     def test_controller_actual_rollback_and_repeat_execute_only_exact_adjacent_pair(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
             folder = Path(directory).as_posix()
