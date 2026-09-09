@@ -9,28 +9,21 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const farmMapVerifiedFiles = [
-  "app/farm-map/page.tsx",
-  "components/maps/farm-map-analytics.tsx",
-  "components/maps/farm-map-client.tsx",
-  "components/maps/farm-map-orthomosaic.tsx",
-  "components/maps/farm-map-tree-search.tsx",
-  "lib/farm-map-analytics.ts",
-  "lib/farm-map-layer.ts",
-  "lib/farm-map-trees.ts",
-  "public/map-data/vector/jackfruit-trees-ffbcd4efe04a955b.geojson",
-  "public/map-data/vector/nutmeg-trees-92968dc1573b3b2e.geojson",
-  "tests/farm-map-three-crops.mjs"
+const intelligenceVerifiedFiles = [
+  "app/intelligence/page.tsx",
+  "components/intelligence/intelligence-client.tsx",
+  "lib/mfms-intelligence-excel.ts"
 ]
-const farmMapProductionAdaptations = [
-  "app/layout.tsx",
+const intelligenceProductionAdaptations = [
+  "app/api/intelligence/ask/route.ts",
+  "app/intelligence/layout.tsx",
   "deploy/production-release-manifest.json",
+  "lib/mfms-navigation.ts",
   "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/farm-map-coconut-trees.mjs",
-  "tests/tree-number-autocomplete.mjs"
+  "tests/mfms-intelligence-contract.mjs",
+  "tests/mfms-intelligence-excel.mjs",
+  "tests/mfms-intelligence-route.mjs"
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -41,15 +34,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Display 3433 Coconut, Jackfruit and Nutmeg trees on the Preview-accepted full-farm orthomosaic with compatible shared frontend security updates",
+  "Promote governed MFMS Intelligence from the verified live Preview interface with isolated Production authentication and analytics configuration",
 )
-assert.equal(manifest.base_commit, "9b63ab23165786495a38241f455f868f56043bec")
+assert.equal(manifest.base_commit, "de98369d1c8e4e0b4cfe8bf7006d30df2c3cb8f6")
 assert.deepEqual(manifest.preview_approved, {
   revision: "8f6d08cf306c0161ced355d3da2359fb55183657",
   image_id: "sha256:44ad25e4e28a6a1edcba6c8044cceeab118c6bbd2db2b9b401c70b2abad85e12",
-  feature_revision: "3a9fbf850bf846fb81726b3997eb381818be0013",
-  verified_files: farmMapVerifiedFiles,
-  production_adaptations: farmMapProductionAdaptations,
+  feature_revision: "8f6d08cf306c0161ced355d3da2359fb55183657",
+  verified_files: intelligenceVerifiedFiles,
+  production_adaptations: intelligenceProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -63,8 +56,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...farmMapVerifiedFiles,
-    ...farmMapProductionAdaptations,
+    ...intelligenceVerifiedFiles,
+    ...intelligenceProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -132,4 +125,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Farm Map release and preserved Production promotion contracts: PASS")
+console.log("Intelligence release and preserved Production promotion contracts: PASS")

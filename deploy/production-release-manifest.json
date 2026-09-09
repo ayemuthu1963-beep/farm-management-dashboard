@@ -3,34 +3,27 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Display 3433 Coconut, Jackfruit and Nutmeg trees on the Preview-accepted full-farm orthomosaic with compatible shared frontend security updates",
-  "base_commit": "9b63ab23165786495a38241f455f868f56043bec",
+  "release_note": "Promote governed MFMS Intelligence from the verified live Preview interface with isolated Production authentication and analytics configuration",
+  "base_commit": "de98369d1c8e4e0b4cfe8bf7006d30df2c3cb8f6",
   "preview_approved": {
     "revision": "8f6d08cf306c0161ced355d3da2359fb55183657",
     "image_id": "sha256:44ad25e4e28a6a1edcba6c8044cceeab118c6bbd2db2b9b401c70b2abad85e12",
-    "feature_revision": "3a9fbf850bf846fb81726b3997eb381818be0013",
+    "feature_revision": "8f6d08cf306c0161ced355d3da2359fb55183657",
     "verified_files": [
-      "app/farm-map/page.tsx",
-      "components/maps/farm-map-analytics.tsx",
-      "components/maps/farm-map-client.tsx",
-      "components/maps/farm-map-orthomosaic.tsx",
-      "components/maps/farm-map-tree-search.tsx",
-      "lib/farm-map-analytics.ts",
-      "lib/farm-map-layer.ts",
-      "lib/farm-map-trees.ts",
-      "public/map-data/vector/jackfruit-trees-ffbcd4efe04a955b.geojson",
-      "public/map-data/vector/nutmeg-trees-92968dc1573b3b2e.geojson",
-      "tests/farm-map-three-crops.mjs"
+      "app/intelligence/page.tsx",
+      "components/intelligence/intelligence-client.tsx",
+      "lib/mfms-intelligence-excel.ts"
     ],
     "production_adaptations": [
-      "app/layout.tsx",
+      "app/api/intelligence/ask/route.ts",
+      "app/intelligence/layout.tsx",
       "deploy/production-release-manifest.json",
+      "lib/mfms-navigation.ts",
       "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
       "tests/farm-calendar-production-promotion.mjs",
-      "tests/farm-map-coconut-trees.mjs",
-      "tests/tree-number-autocomplete.mjs"
+      "tests/mfms-intelligence-contract.mjs",
+      "tests/mfms-intelligence-excel.mjs",
+      "tests/mfms-intelligence-route.mjs"
     ]
   },
   "protected_invariants": {
@@ -43,24 +36,17 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/farm-map/page.tsx",
-    "app/layout.tsx",
-    "components/maps/farm-map-analytics.tsx",
-    "components/maps/farm-map-client.tsx",
-    "components/maps/farm-map-orthomosaic.tsx",
-    "components/maps/farm-map-tree-search.tsx",
+    "app/api/intelligence/ask/route.ts",
+    "app/intelligence/layout.tsx",
+    "app/intelligence/page.tsx",
+    "components/intelligence/intelligence-client.tsx",
     "deploy/production-release-manifest.json",
-    "lib/farm-map-analytics.ts",
-    "lib/farm-map-layer.ts",
-    "lib/farm-map-trees.ts",
+    "lib/mfms-intelligence-excel.ts",
+    "lib/mfms-navigation.ts",
     "package.json",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-    "public/map-data/vector/jackfruit-trees-ffbcd4efe04a955b.geojson",
-    "public/map-data/vector/nutmeg-trees-92968dc1573b3b2e.geojson",
     "tests/farm-calendar-production-promotion.mjs",
-    "tests/farm-map-coconut-trees.mjs",
-    "tests/farm-map-three-crops.mjs",
-    "tests/tree-number-autocomplete.mjs"
+    "tests/mfms-intelligence-contract.mjs",
+    "tests/mfms-intelligence-excel.mjs",
+    "tests/mfms-intelligence-route.mjs"
   ]
 }
