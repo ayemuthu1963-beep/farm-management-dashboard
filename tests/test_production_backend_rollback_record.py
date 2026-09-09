@@ -488,6 +488,8 @@ python3() {{ command '{Path(os.sys.executable).as_posix()}' "$@"; }}
                 lambda value: value["Mounts"][0].update(RW=False),
                 lambda value: value.update(RestartCount=1),
                 lambda value: value["HostConfig"]["RestartPolicy"].update(Name="no"),
+                lambda value: value["HostConfig"].update(Memory=1048576),
+                lambda value: value["HostConfig"].update(NanoCpus=1000000000),
                 lambda value: value["State"].update(StartedAt="2026-09-09T00:00:00Z"),
                 lambda value: value["State"].update(Status="restarting"),
                 lambda value: value["State"]["Health"].update(Status="unhealthy"),

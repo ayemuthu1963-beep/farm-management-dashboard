@@ -316,7 +316,7 @@ snapshot_unrelated_containers() {
   # Raw inspection stays inside this pipe. Persist only the canonical operational
   # fields below; never environments or changing health-log probe timestamps.
   docker inspect "${identifiers[@]}" | python3 -c '
-import json, sys
+import hashlib, json, sys
 backend = sys.argv[1]
 result = []
 for item in json.load(sys.stdin):
@@ -338,6 +338,7 @@ for item in json.load(sys.stdin):
         "health_status": (state.get("Health") or {}).get("Status"), "restart_count": item["RestartCount"],
         "network_mode": item["HostConfig"]["NetworkMode"], "ports": item["HostConfig"]["PortBindings"],
         "restart_policy": item["HostConfig"]["RestartPolicy"], "networks": networks,
+        "host_config_sha256": hashlib.sha256(json.dumps(item["HostConfig"], sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
         "mounts": sorted(mounts, key=lambda value: json.dumps(value, sort_keys=True)),
     })
 print(json.dumps(sorted(result, key=lambda value: value["id"]), sort_keys=True, separators=(",", ":")))
