@@ -120,3 +120,34 @@ to prove the synthetic future pair, tamper rejection, stopped-source restoration
 post-workflow availability, repeated requests and lock behavior without using live
 containers or production credentials. The existing CI workflow runs these tests through
 `tests/production-backend-deployment-workflow.mjs`.
+
+## Application-only Intelligence promotion
+
+Select `deployment_mode=application-only` in the existing guarded Production backend
+workflow. Its forced command is `deploy-production-backend-application-only SHA RUN_ID`.
+The descriptor must declare `backend-application-only`, the
+`production-intelligence-v1` runtime profile and the database invariant
+`read-only-verification-only`. All 13 migration path/checksum entries must equal the
+current deployed descriptor; database files and the migration runner cannot change.
+
+This mode invokes the existing migration runner only with `--verify`. That runner
+opens PostgreSQL with `default_transaction_read_only=on`, requires the existing ledger,
+and rejects unapplied or checksum-mismatched entries. No backup, ledger creation or
+migration application is invoked. The sanitized workflow report must confirm
+`database_backup_operations=none`, `database_migration_operations=none` and
+`database_migrations=read-only-verified` before declaring success.
+
+The current environment is preserved except for build metadata and these approved
+Intelligence settings: enabled=true, endpoint `http://10.122.0.3:8765`, service identity
+`mfms-production-backend`, and key file `/run/secrets/mfms_intelligence_production_key`.
+The dedicated host key is `/home/muthu/.local/state/mfms-production-intelligence/production_service_key`,
+owned by muthu, regular, non-symlink, single-link and mode 0400 inside a 0700 directory.
+It is mounted read-only. Provisioning and distributing its value is a separate guarded
+operation; never put it in a workflow parameter, repository, log or report.
+
+Signed rollback records retain each exact mount/environment profile. A new Intelligence
+backend can roll back to its adjacent legacy base backend without the Intelligence
+mount; smoke containers use the retained target's profile. Keep the dedicated key while
+any signed retained artifact references it. A mode/profile downgrade cannot substitute
+for the recorded source or target. Existing deployment locking, staged signed records,
+private key integrity, fixed-IP recovery and protected-service comparison remain active.
