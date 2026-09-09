@@ -377,6 +377,31 @@ rollback_record() {{ return 0; }}
             finally:
                 holder.communicate("stop\n", timeout=5)
 
+    def test_nested_guards_propagate_command_failure_and_early_mismatch(self):
+        prefix = '''set +e
+blocked() { return 1; }
+database_name=mfms_server_prod
+production_network=harvest-net
+approved_production_subnet=172.19.0.0/16
+approved_production_gateway=172.19.0.1
+approved_production_dynamic_pool=172.19.128.0/17
+expected_mount_contract=approved
+'''
+        cases = [
+            ("assert_database_target", 'database_for_container() { echo wrong-db; }; docker() { echo mfms_server_prod; }'),
+            ("assert_database_target", 'database_for_container() { echo mfms_server_prod; return 7; }; docker() { echo mfms_server_prod; }'),
+            ("assert_database_target", 'database_for_container() { echo mfms_server_prod; }; docker() { echo mfms_server_prod; return 7; }'),
+            ("assert_approved_mount_contract", 'mount_contract_for_container() { echo approved; return 7; }'),
+            ("assert_production_ipam_contract", 'docker() { case "$*" in *Subnet*) echo wrong-subnet;; *Gateway*) echo 172.19.0.1;; *IPRange*) echo 172.19.128.0/17;; esac; }'),
+            ("assert_production_ipam_contract", 'docker() { case "$*" in *Subnet*) echo 172.19.0.0/16;; *Gateway*) echo wrong-gateway;; *IPRange*) echo 172.19.128.0/17;; esac; }'),
+            ("assert_production_ipam_contract", 'docker() { case "$*" in *Subnet*) echo 172.19.0.0/16;; *Gateway*) echo 172.19.0.1;; *IPRange*) echo 172.19.128.0/17;; esac; return 7; }'),
+        ]
+        for function, stubs in cases:
+            with self.subTest(function=function, stubs=stubs):
+                result = self.bash(prefix + stubs + "\n" + shell_function(function) + f"\n{function} harvest-api || exit 7\necho UNSAFE_PASS\n")
+                self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+                self.assertNotIn("UNSAFE_PASS", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

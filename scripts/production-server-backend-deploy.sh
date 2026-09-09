@@ -191,7 +191,7 @@ environment_sha256_for_container() {
 
 assert_approved_mount_contract() {
   local container=$1 contract
-  contract=$(mount_contract_for_container "$container")
+  contract=$(mount_contract_for_container "$container") || return 1
   [[ "$contract" == "$expected_mount_contract" ]] \
     || blocked "Production backend mount contract differs from the approved persistent storage and /tmp bind mounts"
 }
@@ -241,17 +241,17 @@ ensure_production_network_attachment() {
 assert_production_ipam_contract() {
   local network_subnet network_gateway network_dynamic_pool
   network_subnet=$(docker network inspect \
-    --format '{{(index .IPAM.Config 0).Subnet}}' "$production_network")
+    --format '{{(index .IPAM.Config 0).Subnet}}' "$production_network") || return 1
   network_gateway=$(docker network inspect \
-    --format '{{(index .IPAM.Config 0).Gateway}}' "$production_network")
+    --format '{{(index .IPAM.Config 0).Gateway}}' "$production_network") || return 1
   network_dynamic_pool=$(docker network inspect \
-    --format '{{(index .IPAM.Config 0).IPRange}}' "$production_network")
+    --format '{{(index .IPAM.Config 0).IPRange}}' "$production_network") || return 1
   [[ "$network_subnet" == "$approved_production_subnet" ]] \
-    || blocked "Production network subnet differs from $approved_production_subnet"
+    || { blocked "Production network subnet differs from $approved_production_subnet"; return 1; }
   [[ "$network_gateway" == "$approved_production_gateway" ]] \
-    || blocked "Production network gateway differs from $approved_production_gateway"
+    || { blocked "Production network gateway differs from $approved_production_gateway"; return 1; }
   [[ "$network_dynamic_pool" == "$approved_production_dynamic_pool" ]] \
-    || blocked "Production network dynamic pool differs from $approved_production_dynamic_pool"
+    || { blocked "Production network dynamic pool differs from $approved_production_dynamic_pool"; return 1; }
 }
 
 image_revision_for_container() {
@@ -274,11 +274,11 @@ database_for_container() {
 
 assert_database_target() {
   local container=$1 reported
-  reported=$(database_for_container "$container")
+  reported=$(database_for_container "$container") || return 1
   [[ "$reported" == "$database_name" ]] \
     || { blocked "backend database is $reported rather than $database_name"; return 1; }
   reported=$(docker exec "$container" python -c \
-    'import psycopg; from app.config import get_settings; c=psycopg.connect(get_settings().database_url); print(c.execute("select current_database()").fetchone()[0])')
+    'import psycopg; from app.config import get_settings; c=psycopg.connect(get_settings().database_url); print(c.execute("select current_database()").fetchone()[0])') || return 1
   [[ "$reported" == "$database_name" ]] \
     || { blocked "database connection resolved to $reported rather than $database_name"; return 1; }
 }
