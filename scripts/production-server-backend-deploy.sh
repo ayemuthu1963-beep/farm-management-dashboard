@@ -197,31 +197,54 @@ assert_approved_mount_contract() {
     || blocked "Production backend mount contract differs from the approved persistent storage and /tmp bind mounts"
 }
 
+network_attached_for_container() {
+  docker inspect --format \
+    "{{if index .NetworkSettings.Networks \"$production_network\"}}true{{else}}false{{end}}" "$1"
+}
+
+network_static_ip_for_container() {
+  docker inspect --format \
+    "{{with index .NetworkSettings.Networks \"$production_network\"}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}" "$1"
+}
+
 disconnect_production_network() {
-  local container=$1
-  if [[ -n "$(network_ip_for_container "$container")" ]]; then
-    docker network disconnect "$production_network" "$container"
+  local container=$1 attached
+  attached=$(network_attached_for_container "$container") || return 1
+  [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+  if [[ "$attached" == "true" ]]; then
+    # A stopped container can have a blank runtime IP while its endpoint still
+    # reserves the static address. Remove that exact endpoint before reclaiming it.
+    docker network disconnect --force "$production_network" "$container" || return 1
+    attached=$(network_attached_for_container "$container") || return 1
+    [[ "$attached" == "false" ]] || return 1
   fi
 }
 
 ensure_production_network_ip() {
-  local container=$1 expected_ip=$2 current_ip attempt
+  local container=$1 expected_ip=$2 current_ip configured_ip attached running attempt
   for attempt in $(seq 1 30); do
-    current_ip=$(network_ip_for_container "$container")
-    if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
-      docker network disconnect "$production_network" "$container" >/dev/null 2>&1 || true
-      current_ip=""
+    attached=$(network_attached_for_container "$container") || return 1
+    [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+    current_ip=$(network_ip_for_container "$container") || return 1
+    configured_ip=$(network_static_ip_for_container "$container") || return 1
+    if [[ "$attached" == "true" ]]; then
+      if [[ "$current_ip" == "$expected_ip" && ( -z "$configured_ip" || "$configured_ip" == "$expected_ip" ) ]]; then
+        return 0
+      fi
+      running=$(docker inspect --format '{{.State.Running}}' "$container") || return 1
+      # Connecting a stopped target reserves the correct address but does not
+      # necessarily populate IPAddress until docker start. Do not connect twice.
+      if [[ "$running" == "false" && -z "$current_ip" && "$configured_ip" == "$expected_ip" ]]; then
+        return 0
+      fi
+      [[ "$running" == "true" || "$running" == "false" ]] || return 1
+      disconnect_production_network "$container" || return 1
     fi
-    if [[ -z "$current_ip" ]]; then
-      docker network connect --ip "$expected_ip" "$production_network" "$container" \
-        >/dev/null 2>&1 || {
-          sleep 1
-          continue
-        }
-      current_ip=$(network_ip_for_container "$container")
-    fi
-    [[ "$current_ip" == "$expected_ip" ]] && return 0
-    sleep 1
+    docker network connect --ip "$expected_ip" "$production_network" "$container" \
+      >/dev/null 2>&1 || {
+        sleep 1
+        continue
+      }
   done
   return 1
 }
@@ -285,18 +308,40 @@ assert_database_target() {
 }
 
 snapshot_unrelated_containers() {
-  local id name
-  docker ps -aq | while IFS= read -r id; do
-    [[ -n "$id" ]] || continue
-    name=$(docker inspect --format '{{.Name}}' "$id")
-    name=${name#/}
-    case "$name" in
-      "$backend_live_container"|"$backend_live_container"-candidate-*|"$backend_live_container"-pre-*)
+  local listed
+  local -a identifiers
+  listed=$(docker ps -aq) || return 1
+  [[ -n "$listed" ]] || return 1
+  mapfile -t identifiers <<< "$listed"
+  # Raw inspection stays inside this pipe. Persist only the canonical operational
+  # fields below; never environments or changing health-log probe timestamps.
+  docker inspect "${identifiers[@]}" | python3 -c '
+import json, sys
+backend = sys.argv[1]
+result = []
+for item in json.load(sys.stdin):
+    name = item["Name"].removeprefix("/")
+    if name == backend or name.startswith((backend + "-candidate-", backend + "-pre-")):
         continue
-        ;;
-    esac
-    docker inspect --format '{{.Id}}|{{.Name}}|{{.Image}}|{{.State.Running}}|{{.HostConfig.NetworkMode}}|{{json .HostConfig.PortBindings}}' "$id"
-  done | LC_ALL=C sort
+    state = item["State"]
+    mounts = [{key: mount.get(key) for key in ("Type", "Name", "Source", "Destination", "RW", "Propagation")} for mount in item["Mounts"]]
+    networks = {}
+    for network, endpoint in item["NetworkSettings"]["Networks"].items():
+        endpoint = dict(endpoint)
+        for key in ("Aliases", "DNSNames", "Links"):
+            if endpoint.get(key) is not None:
+                endpoint[key] = sorted(endpoint[key])
+        networks[network] = endpoint
+    result.append({
+        "id": item["Id"], "name": name, "image": item["Image"],
+        "running": state["Running"], "status": state["Status"], "started_at": state["StartedAt"],
+        "health_status": (state.get("Health") or {}).get("Status"), "restart_count": item["RestartCount"],
+        "network_mode": item["HostConfig"]["NetworkMode"], "ports": item["HostConfig"]["PortBindings"],
+        "restart_policy": item["HostConfig"]["RestartPolicy"], "networks": networks,
+        "mounts": sorted(mounts, key=lambda value: json.dumps(value, sort_keys=True)),
+    })
+print(json.dumps(sorted(result, key=lambda value: value["id"]), sort_keys=True, separators=(",", ":")))
+' "$backend_live_container" || return 1
 }
 
 cron_digest() {
@@ -1628,7 +1673,7 @@ assert_live_contract() {
 }
 
 restore_original_backend() {
-  local live_id="" recovery_name=""
+  local live_id="" recovery_name="" require_same_network_ip=true
   automatic_restore_result="failed"
   if container_exists "$backend_live_container"; then
     live_id=$(docker inspect --format '{{.Id}}' "$backend_live_container")
@@ -1662,7 +1707,12 @@ restore_original_backend() {
       chmod 600 "$restored_state" || return 1
       mv "$restored_state" "$state_file" || return 1
     fi
-    assert_live_contract "$original_revision" "$original_image_id" || return 1
+    if [[ "$operation" == "rollback" && -z "${original_network_ip:-}" ]]; then
+      # The stopped source had no runtime address. The live contract still
+      # requires the approved fixed address after starting the restored source.
+      require_same_network_ip=false
+    fi
+    assert_live_contract "$original_revision" "$original_image_id" true "$require_same_network_ip" || return 1
     rollback_record restored "$deployment_id" "$operation" || return 1
     automatic_restore_result="pass"
   fi

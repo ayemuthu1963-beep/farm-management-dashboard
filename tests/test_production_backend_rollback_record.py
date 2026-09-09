@@ -290,6 +290,88 @@ python3() {{ echo UNSAFE_EXECUTION; return 0; }}
             self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
             self.assertNotIn("UNSAFE", result.stdout)
 
+    def test_stopped_static_endpoint_is_released_and_restored_before_start(self):
+        functions = "\n".join(shell_function(name) for name in ["network_ip_for_container", "network_attached_for_container", "network_static_ip_for_container", "disconnect_production_network", "ensure_production_network_ip"])
+        harness = '''set -euo pipefail
+production_network=harvest-net
+declare -A fixture_attached=([source]=true [target]=false)
+declare -A fixture_runtime_ip=([source]='' [target]='')
+declare -A fixture_static_ip=([source]=172.19.0.2 [target]='')
+declare -A fixture_running=([source]=false [target]=false)
+disconnects=0
+connects=0
+sleep() { :; }
+docker() {
+  local name template other
+  case "$1 $2" in
+    'inspect --format')
+      template=$3; name=$4
+      case "$template" in
+        *'if index'*) echo "${fixture_attached[$name]}";;
+        *IPAMConfig*) echo "${fixture_static_ip[$name]}";;
+        *IPAddress*) echo "${fixture_runtime_ip[$name]}";;
+        *State.Running*) echo "${fixture_running[$name]}";;
+        *) return 91;;
+      esac;;
+    'network disconnect')
+      [[ "$3" == --force && "$4" == harvest-net ]] || return 92
+      name=$5
+      fixture_attached[$name]=false; fixture_runtime_ip[$name]=''; fixture_static_ip[$name]=''
+      disconnects=$((disconnects + 1));;
+    'network connect')
+      name=$6
+      [[ "$3" == --ip && "$4" == 172.19.0.2 && "$5" == harvest-net ]] || return 93
+      [[ "${fixture_attached[$name]}" == false ]] || return 94
+      for other in source target; do
+        [[ "$other" == "$name" || "${fixture_static_ip[$other]}" != 172.19.0.2 ]] || return 95
+      done
+      fixture_attached[$name]=true; fixture_static_ip[$name]=172.19.0.2
+      # Docker reserves IPAM here; the runtime address appears only at start.
+      connects=$((connects + 1));;
+    'start source'|'start target')
+      name=$2
+      [[ "${fixture_attached[$name]}" == true && "${fixture_static_ip[$name]}" == 172.19.0.2 ]] || return 96
+      fixture_running[$name]=true; fixture_runtime_ip[$name]=172.19.0.2;;
+    'stop source'|'stop target')
+      name=$2; fixture_running[$name]=false; fixture_runtime_ip[$name]='';;
+    *) return 97;;
+  esac
+}
+'''
+        actions = '''
+disconnect_production_network source
+[[ "${fixture_attached[source]}" == false && -z "${fixture_static_ip[source]}" ]]
+ensure_production_network_ip target 172.19.0.2
+[[ "${fixture_attached[target]}" == true && -z "${fixture_runtime_ip[target]}" ]]
+ensure_production_network_ip target 172.19.0.2
+[[ "$connects" == 1 ]]
+docker start target
+# Simulate a failed target's health check and restore the original source.
+docker stop target
+disconnect_production_network target
+ensure_production_network_ip source 172.19.0.2
+docker start source
+[[ "${fixture_runtime_ip[source]}" == 172.19.0.2 && "${fixture_attached[target]}" == false ]]
+[[ "$disconnects" == 2 && "$connects" == 2 ]]
+echo STOPPED_ENDPOINT_ROLLBACK_AND_RESTORE=PASS
+'''
+        result = self.bash(harness + functions + actions)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("STOPPED_ENDPOINT_ROLLBACK_AND_RESTORE=PASS", result.stdout)
+
+    def test_endpoint_inspection_and_disconnect_failure_cannot_be_masked(self):
+        functions = "\n".join(shell_function(name) for name in ["disconnect_production_network", "ensure_production_network_ip"])
+        for stubs, command in [
+            ('network_attached_for_container() { echo true; return 7; }', 'disconnect_production_network source'),
+            ('network_attached_for_container() { echo true; }; docker() { return 7; }', 'disconnect_production_network source'),
+            ('network_attached_for_container() { echo true; }; docker() { return 0; }', 'disconnect_production_network source'),
+            ('network_attached_for_container() { echo false; return 7; }', 'ensure_production_network_ip source 172.19.0.2'),
+        ]:
+            with self.subTest(stubs=stubs):
+                result = self.bash('set +e\n' + stubs + '\n' + functions + '\n' + command + ' || exit 7\necho UNSAFE_PASS\n')
+                self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+                self.assertNotIn("UNSAFE_PASS", result.stdout)
+
     def test_controller_actual_rollback_and_repeat_execute_only_exact_adjacent_pair(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
             folder = Path(directory).as_posix()
@@ -345,7 +427,7 @@ rollback_record() {{ echo "record $*" >> "$trace"; }}
                     self.assertLess(operations.index("protected-check"), operations.index("record receipt"))
                     self.assertNotRegex(operations, r"migrat|pg_dump|pg_restore")
 
-    def test_failure_restores_prior_state_and_cannot_report_pass_on_contract_failure(self):
+    def test_stopped_source_failure_restores_prior_state_and_cannot_mask_contract_failure(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
             folder = Path(directory).as_posix()
             for validation in ["false", "true"]:
@@ -359,7 +441,8 @@ original_container_id=original-id
 original_image_id=original-image
 original_revision={CURRENT}
 deployment_id={IDENTITY}
-operation=deploy
+operation=rollback
+original_network_ip=''
 transaction_backup=''
 state_dir='{folder}'
 previous_state='{old.as_posix()}'
@@ -368,13 +451,58 @@ approved_production_ipv4=172.19.0.2
 container_exists() {{ return 0; }}
 docker() {{ echo original-id; }}
 ensure_production_network_ip() {{ return 0; }}
-assert_live_contract() {{ {validation}; }}
+assert_live_contract() {{ [[ "$3" == true && "$4" == false ]] && {validation}; }}
 rollback_record() {{ return 0; }}
 '''
                 result = self.bash(harness + shell_function("restore_original_backend") + '\nrestore_original_backend || true\necho "RESTORE=$automatic_restore_result"\n')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(active.read_text(), "original-state\n")
                 self.assertIn("RESTORE=" + ("pass" if validation == "true" else "failed"), result.stdout)
+
+    def test_protected_snapshot_rejects_endpoint_mount_and_restart_drift(self):
+        item, _ = artifacts(CURRENT, "1", running=True)
+        item["Name"] = "/protected-preview"
+        item["State"].update(Status="running", StartedAt="2026-09-01T00:00:00Z", Health={"Status": "healthy", "Log": [{"End": "volatile-probe-time"}]})
+        item["NetworkSettings"]["Networks"]["harvest-net"].update(Aliases=["protected-alias", "second-alias"], IPAMConfig={"IPv4Address": "172.19.0.9"})
+        item["Config"]["Env"].append("SENTINEL_SECRET=must-never-appear")
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
+            fixture = Path(directory) / "inspect.json"
+            harness = f'''set -euo pipefail
+backend_live_container=harvest-api
+docker() {{ if [[ "$1" == ps ]]; then echo protected-id; else cat '{fixture.as_posix()}'; fi; }}
+python3() {{ command '{Path(os.sys.executable).as_posix()}' "$@"; }}
+'''
+            def snapshot(value):
+                fixture.write_text(json.dumps([value]))
+                result = self.bash(harness + shell_function("snapshot_unrelated_containers") + "\nsnapshot_unrelated_containers\n")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotIn("SENTINEL_SECRET", result.stdout)
+                self.assertNotIn("volatile-probe-time", result.stdout)
+                return result.stdout
+            baseline = snapshot(item)
+            changes = [
+                lambda value: value["NetworkSettings"]["Networks"]["harvest-net"].update(Aliases=["changed-alias"]),
+                lambda value: value["NetworkSettings"]["Networks"]["harvest-net"].update(IPAddress="172.19.0.99"),
+                lambda value: value["NetworkSettings"]["Networks"]["harvest-net"]["IPAMConfig"].update(IPv4Address="172.19.0.99"),
+                lambda value: value["NetworkSettings"]["Networks"].update(extra={"IPAddress": "10.0.0.9"}),
+                lambda value: value["Mounts"][0].update(RW=False),
+                lambda value: value.update(RestartCount=1),
+                lambda value: value["HostConfig"]["RestartPolicy"].update(Name="no"),
+                lambda value: value["State"].update(StartedAt="2026-09-09T00:00:00Z"),
+                lambda value: value["State"].update(Status="restarting"),
+                lambda value: value["State"]["Health"].update(Status="unhealthy"),
+            ]
+            for change in changes:
+                modified = copy.deepcopy(item)
+                change(modified)
+                self.assertNotEqual(snapshot(modified), baseline)
+            equivalent = dict(reversed(list(item.items())))
+            equivalent["Mounts"] = list(reversed(item["Mounts"]))
+            equivalent["NetworkSettings"] = {"Networks": {"harvest-net": dict(reversed(list(item["NetworkSettings"]["Networks"]["harvest-net"].items())))}}
+            equivalent["NetworkSettings"]["Networks"]["harvest-net"]["Aliases"] = list(reversed(item["NetworkSettings"]["Networks"]["harvest-net"]["Aliases"]))
+            equivalent["State"] = copy.deepcopy(item["State"])
+            equivalent["State"]["Health"]["Log"] = [{"End": "later-probe-time"}]
+            self.assertEqual(snapshot(equivalent), baseline)
 
     def test_shell_lock_prevents_concurrent_mutation(self):
         if os.name == "nt":
