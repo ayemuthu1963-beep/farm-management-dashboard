@@ -109,7 +109,13 @@ jobs:
           grep -Fqx 'proxy_configuration_unchanged=true' "$report"
           grep -Fqx 'preview_touched=0' "$report"
           grep -Fqx 'test_touched=0' "$report"
-          grep -Fqx 'production_frontend_touched=1' "$report"
+          if grep -Fqx 'rollback_status=already-complete' "$report"; then
+            grep -Fqx 'production_frontend_touched=0' "$report"
+            grep -Fqx 'traffic_switch=not-performed' "$report"
+          else
+            grep -Fqx 'rollback_status=restored' "$report"
+            grep -Fqx 'production_frontend_touched=1' "$report"
+          fi
           grep -Fqx 'PRODUCTION_ROLLBACK=PASS' "$report"
 
       - name: Upload sanitized Production frontend rollback report

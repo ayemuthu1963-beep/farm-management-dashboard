@@ -11,7 +11,7 @@ const deploy = readText(".github/workflows/production-frontend-deploy.yml")
 const rollback = readText(".github/workflows/production-frontend-rollback.yml")
 const helper = readText("scripts/production-server-deploy.sh")
 const helperSha256 = createHash("sha256")
-  .update(readFileSync("scripts/production-server-deploy.sh"))
+  .update(helper)
   .digest("hex")
 
 for (const workflow of [deploy, rollback]) {
@@ -48,7 +48,7 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.equal(helperSha256, "749675b8aff7eb241b5e528bbcffa684b5ae2c2b242ced9148c0779055c46648")
+assert.equal(helperSha256, "0c6b22ae61cf3b24ae7c84f8b949a053f6742bc3da8af6df30652ac66d138c27")
 assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
 assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
 
@@ -98,6 +98,8 @@ const runServiceGuard = ({
   running = productionServiceManifest.map(({ container }) => container),
 } = {}) => spawnSync(bashExecutable, ["-c", `
 set -euo pipefail
+rollback_source_allowed=0
+live_container=mfms-v0-preview-web
 blocked() { printf '%s\n' "\$*" >&2; exit 71; }
 container_exists() { [[ ",\${EXISTING_CONTAINERS}," == *",\$1,"* ]]; }
 container_running() { [[ ",\${RUNNING_CONTAINERS}," == *",\$1,"* ]]; }
@@ -134,7 +136,7 @@ const duplicateContainer = runServiceGuard({
 assert.equal(duplicateContainer.status, 71)
 assert.match(duplicateContainer.stderr, /duplicate container: mfms-v0-preview-web/)
 
-const healthGuardStart = commonValidation.indexOf("  [[ \"$(docker ps --filter health=unhealthy -q")
+const healthGuardStart = commonValidation.indexOf("  unhealthy_ids=$(docker ps --filter health=unhealthy -q")
 const healthGuardEnd = commonValidation.indexOf("  for maintenance_lock")
 assert.ok(healthGuardStart >= 0 && healthGuardEnd > healthGuardStart)
 const healthAndRestartGuard = commonValidation.slice(healthGuardStart, healthGuardEnd)
@@ -142,6 +144,8 @@ const runHealthAndRestartGuard = ({ unhealthy = false, restarted = false } = {})
   bashExecutable,
   ["-c", `
 set -euo pipefail
+rollback_source_allowed=0
+live_container=mfms-v0-preview-web
 blocked() { exit 71; }
 docker() {
   if [[ "\$1" == "ps" && "\$2" == "--filter" ]]; then
@@ -186,12 +190,13 @@ const toDockerInspectRecord = ({
   omitHealthState = false,
   network,
   ports,
+  networks = {}, mounts = [], hostConfig = {}, environment = [], startedAt = "fixture-start",
 }) => {
-  const config = {}
+  const config = { Env: environment }
   if (healthMode === "configured") config.Healthcheck = { Test: healthTest ?? ["CMD", "true"] }
   if (healthMode === "none-explicit") config.Healthcheck = { Test: ["NONE"] }
   if (healthMode === "malformed") config.Healthcheck = { Test: [] }
-  const state = { Running: running === "true" }
+  const state = { Running: running === "true", StartedAt: startedAt }
   if (!omitHealthState) state.Health = { Status: healthStatus }
   return [{
     Id: inspectedId,
@@ -200,7 +205,10 @@ const toDockerInspectRecord = ({
     RestartCount: restartCount,
     Config: config,
     State: state,
+    NetworkSettings: { Networks: networks },
+    Mounts: mounts,
     HostConfig: {
+      ...hostConfig,
       NetworkMode: network,
       PortBindings: ports === "none" ? null : { "3000/tcp": [{ HostIp: "127.0.0.1", HostPort: ports }] },
     },
@@ -217,7 +225,7 @@ const runSnapshotFromController = (
           ? "return 1"
           : `printf '%s\\n' ${shellQuote(JSON.stringify(record.malformedPayload ? { invalid: true } : toDockerInspectRecord(record)))}; return 0`}
         ;;`).join("")
-  const result = spawnSync(bashExecutable, ["-c", `
+  const script = `
 set -euo pipefail
 live_container="mfms-v0-preview-web"
 blocked() { printf '%s\n' "\$*" >&2; exit 71; }
@@ -236,7 +244,9 @@ docker() {
 }
 ${snapshotUnrelated}
 snapshot_unrelated_containers
-`], {
+`
+  const result = spawnSync(bashExecutable, ["--noprofile", "--norc"], {
+    input: script,
     encoding: "utf8",
     env: { ...process.env, ENUMERATION_FAILURE: enumerationFailure ? "1" : "0" },
   })
@@ -290,6 +300,28 @@ assert.notEqual(snapshotFromController(targetOnlySwitch.filter(({ name }) => nam
 assert.notEqual(snapshotFromController(targetOnlySwitch.map((record) => (
   record.name === "harvest-api" ? { ...record, image: "api:changed" } : record
 ))), baselineUnrelated)
+for (const extra of [
+  { networks: { "harvest-net": { IPAddress: "172.19.0.99" } } },
+  { networks: { "harvest-net": { Aliases: ["unapproved"] } } },
+  { mounts: [{ Type: "bind", Source: "/new", Destination: "/new", RW: true }] },
+  { hostConfig: { Memory: 1024 } },
+  { environment: ["SYNTHETIC_SECRET=never-print-me"] },
+  { startedAt: "new-start" },
+]) {
+  const changed = targetOnlySwitch.map(record => record.name === "harvest-api" ? { ...record, ...extra } : record)
+  const snapshot = snapshotFromController(changed)
+  assert.notEqual(snapshot, baselineUnrelated)
+  assert.doesNotMatch(snapshot, /never-print-me/)
+}
+const ordered = targetOnlySwitch.map(record => record.name === "harvest-api" ? {
+  ...record, networks: { "harvest-net": { Aliases: ["b", "a"], DNSNames: ["d", "c"] } },
+  mounts: [{ Source: "/b" }, { Source: "/a" }], environment: ["B=2", "A=1"],
+} : record)
+const reordered = ordered.map(record => record.name === "harvest-api" ? {
+  ...record, networks: { "harvest-net": { DNSNames: ["c", "d"], Aliases: ["a", "b"] } },
+  mounts: [...record.mounts].reverse(), environment: [...record.environment].reverse(),
+} : record)
+assert.equal(snapshotFromController(ordered), snapshotFromController(reordered))
 const stoppedProtected = runSnapshotFromController(targetOnlySwitch.map((record) => (
   record.name === "harvest-api" ? { ...record, running: "false" } : record
 )))
@@ -405,7 +437,7 @@ assert.match(liveContract, /an? backend, Production, ODK, proxy, database, or un
 assert.match(liveContract, /RestartCount.*"\$live_container"/)
 assert.match(liveContract, /\{\{len \.Mounts\}\}.*"\$live_container"/)
 const targetRestartGuardStart = liveContract.indexOf(
-  `  [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]]`,
+  `  [[ "$allow_source_restarts" == "true" && "$operation" == "rollback" ]] || [[ "$(docker inspect --format '{{.RestartCount}}' "$live_container")" == "0" ]]`,
 )
 const targetRestartGuardMessage = liveContract.indexOf(
   "Production frontend restarted during the guarded switch",
@@ -417,6 +449,8 @@ const targetRestartGuard = liveContract.slice(targetRestartGuardStart, targetRes
 const runTargetRestartGuard = (restartCount) => spawnSync(bashExecutable, ["-c", `
 set -euo pipefail
 live_container="mfms-v0-preview-web"
+allow_source_restarts=false
+operation=deploy
 blocked() { exit 71; }
 docker() { printf '%s\n' "\${RESTART_COUNT}"; }
 verify_target_restart() {
@@ -848,3 +882,6 @@ assert.match(helper, /<\(git -C "\$source_dir" cat-file blob "\$candidate_blob"\
 assert.doesNotMatch(manifestFunction, /if \[\[ "\$candidate_revision" != "\$coordinated_candidate_revision" \]\]; then\s+git -C "\$source_dir" merge-base --is-ancestor/)
 
 console.log("Production frontend deployment and rollback workflow tests passed.")
+
+const frontendRecords = spawnSync(process.env.MFMS_TEST_PYTHON || "python3", ["tests/test_production_frontend_rollback_record.py"], { encoding: "utf8" })
+assert.equal(frontendRecords.status, 0, frontendRecords.stdout + frontendRecords.stderr)

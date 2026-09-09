@@ -51,3 +51,37 @@ approved Production environment values.
 Creating or merging these control files does not execute the workflow. A
 future Production promotion still requires the owner freeze gate and an
 explicit manual workflow dispatch.
+
+## Signed rollback after the deployment workflow completes
+
+Install the reviewed controller at `/home/muthu/.local/bin/deploy-production-frontend`
+and its dedicated companion at
+`/home/muthu/.local/libexec/mfms-production-frontend-rollback-record.py`, preserving
+owner muthu and mode 0700. Keep exact backups and compare all container, routing,
+release-state and existing backend signing-record state before and after installation.
+No container is switched by installation. Frontend records and its signing key use
+separate `frontend-rollback-records` and `frontend-rollback-signing.key` paths in the
+existing protected Production state directory; do not reuse the backend signing key.
+
+The one-time forced command `enroll-production-frontend-rollback CURRENT_SHA STATE_SHA256 RUN_ID`
+requires fresh exact current and retained image/container/revision metadata and the
+unchanged unsigned frontend state hash. It signs the existing adjacent pair without
+changing traffic. Never enroll an already signed state. The read-only command
+`dry-run-production-frontend-rollback CURRENT_SHA RUN_ID` verifies the signed pair,
+protected services and exact network identity without Docker mutation.
+
+Every future deployment records its previous live artifact before starting its smoke
+candidate and binds the final replacement container before starting it. Successful
+activation commits the signed record. Explicit rollback checks the same record even
+when the source has stopped, restarted or lost its runtime address; wrong nonempty
+addresses, configuration, image or identity still reject. The restored target must be
+running and pass the existing local/public acceptance and protected-service checks.
+A signed receipt makes repeated rollback a verified no-op, never a reverse switch.
+
+Automatic restoration verifies the exact source, signed state and preserved target.
+A retained-target naming collision refuses recovery without deleting that artifact.
+Keep all recorded targets and signing files until a separately reviewed retention
+operation establishes they are no longer rollback dependencies. The hermetic tests
+exercise stopped-source rollback, signature tampering, mismatched configuration,
+protected-service drift and immutable activation order; no actual Production rollback
+is part of commissioning this repair.
