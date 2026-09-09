@@ -851,6 +851,12 @@ for item in migrations:
 required_paths = data.get("required_openapi_paths")
 if not isinstance(required_paths, list) or not required_paths:
     raise SystemExit("backend release descriptor required_openapi_paths is empty")
+if mode == "application-only":
+    previous_paths = previous.get("required_openapi_paths")
+    if not isinstance(previous_paths, list) or not previous_paths or not all(isinstance(path, str) for path in previous_paths):
+        raise SystemExit("current required API contract is invalid")
+    if not all(path in required_paths for path in [*previous_paths, "/api/intelligence/ask"]):
+        raise SystemExit("Intelligence application-only release must preserve core API paths and require /api/intelligence/ask")
 openapi_paths = []
 for path in required_paths:
     if not isinstance(path, str) or not re.fullmatch(r"/(?:health|api(?:/[A-Za-z0-9_.{}-]+)*)", path):
