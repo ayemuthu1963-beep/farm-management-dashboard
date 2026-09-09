@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.parse import unquote, urlsplit
 
 MODULE = Path(__file__).resolve().parents[1] / "scripts/preview-coconut-one-time-hotfix.py"
 spec = importlib.util.spec_from_file_location("hotfix", MODULE)
@@ -36,6 +37,14 @@ class LiveGates(unittest.TestCase):
 
     def test_pinned_live_accepts(self):
         hotfix.validate_live(self.live)
+
+    def test_shadow_readonly_options_use_uri_space_encoding(self):
+        payload = hotfix.create_payload(self.live, "synthetic-image", hotfix.CANDIDATE, shadow=True)
+        environment = dict(value.split("=", 1) for value in payload["Env"])
+        query = urlsplit(environment["DATABASE_URL"]).query
+        self.assertEqual(query, "options=-c%20default_transaction_read_only%3Don")
+        # libpq uses URI percent-decoding, not form decoding of '+' as space.
+        self.assertEqual(unquote(query.split("=", 1)[1]), "-c default_transaction_read_only=on")
 
     def test_wrong_image_rejected(self):
         self.live["Image"] = "sha256:" + "1" * 64
