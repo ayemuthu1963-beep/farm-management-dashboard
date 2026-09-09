@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+const pythonBinary = process.env.MFMS_TEST_PYTHON || "python3"
 const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
 
 const deploy = readText(".github/workflows/production-backend-deploy.yml")
@@ -58,25 +59,11 @@ assert.match(rollback, /rollback-production-backend \$CURRENT_REVISION \$GITHUB_
 assert.match(rollback, /database_migrations=forward-only-retained/)
 assert.match(rollback, /PRODUCTION_BACKEND_ROLLBACK=PASS/)
 
-const exactHistoricalRollback = {
-  currentRevision: "94b28f17702e409e13d25e288fc5cd4b9bbef545",
-  currentContainer: "969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47",
-  currentImage: "sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512",
-  currentEnvironment: "90213d0772f3fa45c40987748bc4b1815cdb55fb24e701ecd4a2bcc941e81e12",
-  targetRevision: "515638139232c76992a7c7ceaadd8e191e444176",
-  targetContainer: "38aaed2a9555f4f51df06efab59972886c58225ed0d88035e4b075243b289e1c",
-  targetImage: "sha256:fbe824766b16ebdc2e85f6ed814c4b10bc7f9b4bc0a285945c07e544861b1fe8",
-  targetEnvironment: "15da2029147713e2795ddc3d746cc57eed46cd9d090af189f864390d3a56dff9",
-}
-const historicalRollbackAccepted = (state) => Object.entries(exactHistoricalRollback)
-  .every(([key, value]) => state[key] === value)
-assert.equal(historicalRollbackAccepted(exactHistoricalRollback), true)
-for (const key of Object.keys(exactHistoricalRollback)) {
-  assert.equal(historicalRollbackAccepted({ ...exactHistoricalRollback, [key]: "0".repeat(64) }), false)
-}
-for (const value of Object.values(exactHistoricalRollback)) {
-  assert.match(gate, new RegExp(value.replaceAll(".", "\\.")))
-}
+assert.match(gate, /rollback_record verify/)
+assert.match(gate, /rollback_record stage/)
+assert.match(gate, /rollback_record finalize/)
+assert.match(gate, /rollback_record activate/)
+assert.doesNotMatch(gate, /approved_rollback_current_revision|assert_exact_historical_application_rollback/)
 
 assert.match(gate, /root SSH access is prohibited/)
 assert.match(gate, /readonly backend_repo_dir="\/home\/muthu\/muthu-harvest-dashboard-production-release"/)
@@ -144,7 +131,7 @@ const extractEmbeddedPython = (marker) => {
   assert.ok(match, `Missing embedded Python marker ${marker}`)
   return match[1]
 }
-const runPython = (scriptPath, args) => spawnSync("python3", [scriptPath, ...args.map(String)], {
+const runPython = (scriptPath, args) => spawnSync(pythonBinary, [scriptPath, ...args.map(String)], {
   encoding: "utf8",
 })
 
@@ -210,13 +197,13 @@ const dryRunRollbackFunction = gate.slice(
 const rollbackFunction = gate.slice(gate.indexOf("rollback_backend()"), gate.indexOf('case "$operation"'))
 const restoreOriginalFunction = gate.slice(gate.indexOf("restore_original_backend()"), gate.indexOf("cleanup()"))
 assert.match(gate, /dry-run-production-backend-rollback \(\[0-9a-f\]\{40\}\) \(\[0-9\]\+\)/)
-assert.match(dryRunRollbackFunction, /assert_exact_historical_application_rollback/)
+assert.match(dryRunRollbackFunction, /assert_adjacent_application_rollback/)
 assert.match(dryRunRollbackFunction, /snapshot_rollback_database_evidence/)
 assert.match(dryRunRollbackFunction, /traffic_switch=not-performed/)
 assert.match(dryRunRollbackFunction, /database_backup_operations=none/)
 assert.match(dryRunRollbackFunction, /database_migration_operations=none/)
 assert.doesNotMatch(dryRunRollbackFunction, /docker (?:run|start|stop|rename|rm)|create_production_database_backup|apply_migrations|verify_migrations/)
-assert.match(rollbackFunction, /assert_exact_historical_application_rollback/)
+assert.match(rollbackFunction, /assert_adjacent_application_rollback/)
 assert.match(rollbackFunction, /start_candidate true false/)
 assert.match(rollbackFunction, /cmp -s "\$rollback_database_before" "\$rollback_database_after"/)
 assert.match(rollbackFunction, /application-only rollback changed the migration ledger, settings, audit history, or protection trigger/)
@@ -247,12 +234,17 @@ assert.match(databaseEvidenceFunction, /20260818_production_irrigation_plan_pers
 assert.match(gate, /87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1/)
 assert.match(gate, /5f107665e1a8973c91c53c551aa038e099cea388e13f535a694d365896a335b9/)
 
-const readinessTests = spawnSync("python3", ["tests/test_production_backup_restore_readiness.py"], {
+const rollbackRecordTests = spawnSync(pythonBinary, ["tests/test_production_backend_rollback_record.py"], {
+  encoding: "utf8",
+})
+assert.equal(rollbackRecordTests.status, 0, rollbackRecordTests.stdout + rollbackRecordTests.stderr)
+
+const readinessTests = spawnSync(pythonBinary, ["tests/test_production_backup_restore_readiness.py"], {
   encoding: "utf8",
 })
 assert.equal(readinessTests.status, 0, `${readinessTests.stdout}\n${readinessTests.stderr}`)
 
-const remediationTests = spawnSync("python3", ["tests/test_production_backup_role_remediation.py"], {
+const remediationTests = spawnSync(pythonBinary, ["tests/test_production_backup_role_remediation.py"], {
   encoding: "utf8",
 })
 assert.equal(remediationTests.status, 0, `${remediationTests.stdout}\n${remediationTests.stderr}`)
