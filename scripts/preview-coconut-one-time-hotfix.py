@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import signal
 import socket
 import subprocess
@@ -68,12 +69,44 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
 
 
-def command(*args, data=None):
+def sanitize_build_output(value):
+    text = value.decode("utf-8", errors="replace")
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    text = "".join(character for character in text if character in "\n\t" or ord(character) >= 32)
+    text = re.sub(r"(https?://)[^\s/@]+@", r"\1[REDACTED]@", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?im)(authorization\s*:\s*).*", r"\1[REDACTED]", text)
+    return re.sub(r"(?i)((?:password|passwd|token|secret|api[_-]?key)\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]", text)
+
+
+def retain_build_evidence(result):
+    # This receives public-source build output only, never container exec output.
+    directory = STATE / "coconut-build-evidence"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    require(not directory.is_symlink() and directory.stat().st_uid == os.getuid()
+            and directory.stat().st_mode & 0o777 == 0o700, "build evidence directory must be private")
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=CANDIDATE + "-", suffix=".log", dir=directory, delete=False) as output:
+        os.fchmod(output.fileno(), 0o600)
+        output.write("stage=docker build\nexit_code=" + str(result.returncode) + "\nstdout:\n")
+        output.write(sanitize_build_output(result.stdout))
+        output.write("\nstderr:\n")
+        output.write(sanitize_build_output(result.stderr))
+        output.flush()
+        os.fsync(output.fileno())
+        return output.name
+
+
+def command(*args, data=None, retain_build=False):
+    require(not retain_build or args[:2] == ("docker", "build"), "evidence logging is restricted to docker build")
     environment = os.environ.copy()
     environment["GIT_TERMINAL_PROMPT"] = "0"
     environment["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o ConnectTimeout=15"
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
-    require(result.returncode == 0, "command failed: " + args[0])
+    stage = "docker " + args[1] if args[:2] in {("docker", "build"), ("docker", "exec")} else args[0]
+    evidence = retain_build_evidence(result) if retain_build else None
+    suffix = " evidence=" + evidence if evidence else ""
+    require(result.returncode == 0, "command failed: " + stage + " exit_code=" + str(result.returncode) + suffix)
+    if evidence:
+        print("PREVIEW_COCONUT_BUILD_EVIDENCE=" + evidence)
     return result.stdout
 
 
@@ -332,7 +365,7 @@ def deploy():
             iid = Path(temporary) / "image-id"
             command("docker", "build", "--iidfile", str(iid), "--build-arg", "MFMS_GIT_COMMIT=" + CANDIDATE,
                     "--build-arg", "MFMS_BUILD_ENVIRONMENT=Preview", "--build-arg", "MFMS_BUILD_TIMESTAMP=" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()),
-                    "-f", "api/Dockerfile", "-", data=archive)
+                    "-f", "api/Dockerfile", "-", data=archive, retain_build=True)
             image = iid.read_text().strip()
             require(image.startswith("sha256:") and len(image) == 71, "immutable image ID unavailable")
             labels = docker("GET", "/images/" + image + "/json")["Config"]["Labels"]
