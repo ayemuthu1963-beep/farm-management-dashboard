@@ -41,7 +41,13 @@ type ZipEntry = { name: string; content: string }
 const encoder = new TextEncoder()
 
 function xml(value: string) {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;")
+  // Preserve XML 1.0 characters, including valid surrogate pairs, in every cell.
+  const text = Array.from(value).filter((character) => {
+    const code = character.codePointAt(0) ?? 0
+    return code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 0xD7FF)
+      || (code >= 0xE000 && code <= 0xFFFD) || (code >= 0x10000 && code <= 0x10FFFF)
+  }).join("")
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;")
 }
 
 function columnName(index: number) {

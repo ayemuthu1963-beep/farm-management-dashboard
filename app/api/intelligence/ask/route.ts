@@ -197,6 +197,12 @@ function isSafeExportContext(value: unknown, table: unknown) {
   if (!Array.isArray(value.default_columns) || !value.default_columns.every((key) => typeof key === "string" && keys.includes(key))) return false
   if (JSON.stringify(value.available_columns.filter((column) => isRecord(column) && column.default_selected).map((column) => (column as Record<string, unknown>).key)) !== JSON.stringify(value.default_columns)) return false
   if (!value.rows.every((row) => isRecord(row) && JSON.stringify(Object.keys(row)) === JSON.stringify(keys) && keys.every((key) => isSafeCell(row[key], formats.get(key) ?? "", key)))) return false
+  if (!Array.isArray(table.columns) || table.rows.length > value.rows.length) return false
+  const displayedColumns = table.columns
+  if (!displayedColumns.every((column) => isRecord(column) && typeof column.key === "string" && formats.get(column.key) === column.format)) return false
+  const exportRows = value.rows
+  if (!table.rows.every((row, index) => isRecord(row) && displayedColumns.every((column) => isRecord(column)
+    && JSON.stringify(row[String(column.key)]) === JSON.stringify((exportRows[index] as Record<string, unknown>)[String(column.key)])))) return false
   return isRecord(value.verification) && hasExactFields(value.verification, ["applied_filters", "complete_history_denominator", "denominator", "direction_rule", "duplicate_tree_1112_policy", "incomplete_history_exclusions", "lifecycle_filter", "period", "period_end", "period_start", "precision_policy", "quality_policy"])
 }
 
@@ -214,7 +220,9 @@ function isSafeResponse(value: unknown): value is Record<string, unknown> {
   if (!Array.isArray(value.sections) || value.sections.length < 2 || value.sections.length > 4 || !value.sections.every(isSafeSection)) return false
   const sections = value.sections as Array<Record<string, unknown>>
   const domains = sections.map((section) => String(section.domain))
-  if (new Set(domains).size !== domains.length || !isSafeFreshness(value.freshness, domains)) return false
+  if (!isRecord(value.analysis_plan) || value.analysis_plan.kind !== "composite"
+    || JSON.stringify(domains) !== JSON.stringify(value.analysis_plan.domains)
+    || new Set(domains).size !== domains.length || !isSafeFreshness(value.freshness, domains)) return false
   return Array.isArray(value.charts) && value.charts.length <= 4 && value.charts.every((chart) => isSafePanelChart(chart, sections))
 }
 

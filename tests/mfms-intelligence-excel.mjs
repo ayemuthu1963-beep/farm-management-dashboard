@@ -72,5 +72,21 @@ assert.match(safeTextXml, /t="inlineStr"/)
 assert.match(safeTextXml, /&quot;https:\/\/example\.invalid&quot;/)
 assert.match(safeTextXml, /&lt;&amp;/)
 assert.doesNotMatch(safeTextXml, /<f[ >]/, "Response text must never become an Excel formula")
+
+const invalidText = "A\u0000\u0001\u0008\u000B\u000C\u001F\uD800B\uDC00C\uFFFE\uFFFF\t\n\r \u0BAE\u0BB0\u0BAE\u0BCD \u{1F334}<&"
+const cleanText = "ABC\t\n\r \u0BAE\u0BB0\u0BAE\u0BCD \u{1F334}&lt;&amp;"
+const xmlContext = { ...textContext, question: invalidText, rows: [{ ...rows[0], tree_no: invalidText }], available_columns: columns.map((column) => column.key === "tree_no" ? { ...column, label: invalidText } : column) }
+const xmlParts = unzipSync(new Uint8Array(await buildIntelligenceWorkbook(xmlContext, ["tree_no"], "all").arrayBuffer()))
+for (const name of ["xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml"]) {
+  const content = strFromU8(xmlParts[name])
+  assert.ok(content.includes(cleanText), "XML filtering preserves tabs, newlines, Tamil and valid surrogate pairs")
+  assert.ok(!content.includes("\uFFFD"), "Unpaired surrogates must be removed before UTF-8 encoding")
+  for (const character of content) {
+    const code = character.codePointAt(0)
+    assert.ok(code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 0xD7FF) || (code >= 0xE000 && code <= 0xFFFD) || (code >= 0x10000 && code <= 0x10FFFF), "Every serialized character is legal XML 1.0")
+  }
+}
+assert.equal(xmlContext.question, invalidText, "XML filtering must not mutate the verified snapshot")
+
 if (process.env.MFMS_XLSX_OUTPUT) await writeFile(process.env.MFMS_XLSX_OUTPUT, allBytes)
 console.log("MFMS Intelligence Excel workbook tests passed")

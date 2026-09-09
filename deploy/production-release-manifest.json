@@ -10,14 +10,14 @@
     "image_id": "sha256:44ad25e4e28a6a1edcba6c8044cceeab118c6bbd2db2b9b401c70b2abad85e12",
     "feature_revision": "8f6d08cf306c0161ced355d3da2359fb55183657",
     "verified_files": [
-      "app/intelligence/page.tsx",
-      "components/intelligence/intelligence-client.tsx",
-      "lib/mfms-intelligence-excel.ts"
+      "app/intelligence/page.tsx"
     ],
     "production_adaptations": [
       "app/api/intelligence/ask/route.ts",
       "app/intelligence/layout.tsx",
+      "components/intelligence/intelligence-client.tsx",
       "deploy/production-release-manifest.json",
+      "lib/mfms-intelligence-excel.ts",
       "lib/mfms-navigation.ts",
       "package.json",
       "tests/farm-calendar-production-promotion.mjs",

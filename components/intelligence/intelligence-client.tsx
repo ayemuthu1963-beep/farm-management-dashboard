@@ -207,11 +207,13 @@ export function IntelligenceClient() {
   const [askedQuestion, setAskedQuestion] = useState(examples[0])
   const [result, setResult] = useState<IntelligenceResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [resultSequence, setResultSequence] = useState(0)
 
   async function ask(event: FormEvent) {
     event.preventDefault()
     if (!question.trim() || loading) return
     setLoading(true); setResult(null); setAskedQuestion(question.trim())
+    setResultSequence((sequence) => sequence + 1)
     try {
       const response = await fetch("/api/intelligence/ask", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -240,7 +242,7 @@ export function IntelligenceClient() {
       <p className="mt-3 text-xs text-muted-foreground">Historical lifecycle reconstruction, per-tree irrigation, missed-harvest, revenue, recharge, sufficiency, forecasting, causal, trap-effectiveness, placement, and treatment recommendations remain blocked.</p>
     </section>
 
-    {result && <section aria-live="polite" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+    {result && <section key={resultSequence} aria-live="polite" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <div className="flex items-center gap-2">{answered ? <CheckCircle2 className="size-5 text-emerald-600" /> : <AlertTriangle className="size-5 text-amber-600" />}<h2 className="font-bold">{answered ? "Verified answer" : "Blocked or clarification required"}</h2></div>
       <p className="mt-4 whitespace-pre-wrap text-sm leading-6">{result.answer || result.blocked_reason}</p>
 
