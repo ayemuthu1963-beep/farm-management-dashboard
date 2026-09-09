@@ -1,4 +1,4 @@
-import { Analytics } from '@vercel/analytics/next'
+import { Analytics } from '@/components/maps/farm-map-analytics'
 import type { Metadata, Viewport } from 'next'
 import { Inter, Merriweather } from 'next/font/google'
 import { LocalEnvironmentBanner } from '@/components/farm/local-environment-banner'
