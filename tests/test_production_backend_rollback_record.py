@@ -9,6 +9,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
+import hashlib
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -221,6 +224,44 @@ class RecordTests(unittest.TestCase):
         with self.assertRaises(MODULE.Refused):
             self.records.verify(FUTURE)
 
+    def test_intelligence_future_pair_retains_legacy_target_and_rejects_downgrade(self):
+        self.enroll()
+        candidate = artifacts(FUTURE, "3", running=False)
+        candidate[0]["Config"]["Env"] += [key + "=" + value for key, value in MODULE.INTELLIGENCE_ENVIRONMENT.items()]
+        candidate[0]["Mounts"] = [{"Type": t, "Source": source, "Destination": target, "RW": rw} for t, source, target, rw in MODULE.INTELLIGENCE_MOUNTS]
+        self.records.stage(FUTURE_ID, FUTURE, candidate[0]["Image"], FUTURE_TARGET, "1000", "20260909T100000Z")
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.containers[FUTURE_TARGET] = self.live
+        self.containers["harvest-api"] = candidate
+        self.records.finalize(FUTURE_ID, "future-tag", "current-tag")
+        candidate[0]["State"]["Running"] = True
+        candidate[0]["NetworkSettings"]["Networks"] = {"harvest-net": {"IPAddress": "172.19.0.2"}}
+        self.records.activate(FUTURE_ID)
+        plan = self.records.verify(FUTURE)
+        self.assertEqual(plan["target"]["mount_policy"], "production-backend-base-v1")
+        # Both mount and env can form another approved profile, but cannot replace the signed source.
+        candidate[0]["Config"]["Env"] = [v for v in candidate[0]["Config"]["Env"] if not v.startswith("MFMS_INTELLIGENCE_")]
+        candidate[0]["Mounts"] = [{"Type": t, "Source": source, "Destination": target, "RW": rw} for t, source, target, rw in MODULE.BASE_MOUNTS]
+        with self.assertRaises(MODULE.Refused):
+            self.records.verify(FUTURE)
+
+    def test_intelligence_mount_environment_and_database_overrides_fail_closed(self):
+        baseline = artifacts(FUTURE, "3", running=False)
+        baseline[0]["Config"]["Env"] += [key + "=" + value for key, value in MODULE.INTELLIGENCE_ENVIRONMENT.items()]
+        baseline[0]["Mounts"] = [{"Type": t, "Source": source, "Destination": target, "RW": rw} for t, source, target, rw in MODULE.INTELLIGENCE_MOUNTS]
+        self.assertEqual(MODULE.snapshot(*baseline)["static"]["mount_policy"], "production-intelligence-v1")
+        for mutation in ["writable", "missing", "wrong-source", "preview-identity", "database-query"]:
+            with self.subTest(mutation=mutation):
+                item, image = copy.deepcopy(baseline)
+                key_mount = next(m for m in item["Mounts"] if m["Destination"] == MODULE.INTELLIGENCE_KEY_TARGET)
+                if mutation == "writable": key_mount["RW"] = True
+                if mutation == "missing": item["Mounts"].remove(key_mount)
+                if mutation == "wrong-source": key_mount["Source"] += ".preview"
+                if mutation == "preview-identity": item["Config"]["Env"] = [v.replace("mfms-production-backend", "mfms-preview-backend") for v in item["Config"]["Env"]]
+                if mutation == "database-query": item["Config"]["Env"] = [v + "?dbname=mfms_server_uat" if v.startswith("DATABASE_URL=") else v for v in item["Config"]["Env"]]
+                with self.assertRaises(MODULE.Refused): MODULE.snapshot(item, image)
+
     def test_immutable_record_collision_and_tampered_preparation_reject(self):
         self.enroll()
         with self.assertRaises(FileExistsError):
@@ -282,6 +323,79 @@ class ControllerTests(unittest.TestCase):
         if os.name == "nt":
             executable = "C:/Program Files/Git/bin/bash.exe"
         return subprocess.run([executable, "--noprofile", "--norc"], input=script, text=True, capture_output=True)
+
+    def test_application_only_never_calls_backup_or_apply_and_verify_failure_stops(self):
+        # Execute the actual pre-activation deploy body under its real direct set-e context.
+        function = shell_function("deploy_backend").split('  transaction_backup=', 1)[0] + "}"
+        for mode, result, expected in [("application-only", 0, "verify"), ("application-only", 1, "verify"), ("forward-only-migrations", 0, "backup\napply"), ("forward-only-migrations", 1, "backup"), ("invalid", 0, "")]:
+            with self.subTest(mode=mode, result=result):
+                harness = f"set -euo pipefail\ndeployment_mode={mode}\nbackend_live_container=fixture\ncandidate_revision=fixture\nverify_migrations() {{ echo verify; return {result}; }}\ncreate_production_database_backup() {{ echo backup; return {result}; }}\napply_migrations() {{ echo apply; }}\nblocked() {{ return 1; }}\n"
+                for name in ["validate_common_live_state", "assert_candidate_port_available", "prepare_backend_source", "validate_release_descriptor", "build_image", "select_candidate_mounts", "write_application_only_environment", "write_environment_file"]:
+                    harness += name + "() { :; }\n"
+                actual = self.bash(harness + function + "\ndeploy_backend\n")
+                self.assertEqual(actual.stdout.strip(), expected)
+                self.assertEqual(actual.returncode == 0, mode != "invalid" and result == 0)
+
+    def test_verify_invocation_rejects_empty_plan_and_any_failed_read(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
+            plan = Path(directory) / "plan"
+            for contents, status, expected_calls in [("", 0, 0), ("a|b\nc|d\n", 0, 2), ("a|b\nc|d\n", 7, 1)]:
+                plan.write_text(contents)
+                harness = f"set +e\nmigration_plan='{plan.as_posix()}'\nproduction_network=fixture\nenvironment_file=fixture\nnew_image=fixture\nblocked() {{ return 1; }}\ndocker() {{ [[ \"$*\" == *--verify ]] || exit 99; echo verify; return {status}; }}\n"
+                result = self.bash(harness + shell_function("verify_migrations") + "\nverify_migrations || exit 7\n")
+                self.assertEqual(result.stdout.count("verify"), expected_calls)
+                self.assertEqual(result.returncode == 0, bool(contents) and status == 0)
+
+    def test_candidate_mount_selection_uses_each_exact_recorded_profile(self):
+        for contract, expected in [("base", ""), ("intelligence", "readonly"), ("wrong", None)]:
+            harness = f"set -euo pipefail\nexpected_mount_contract=base\nintelligence_mount_contract=intelligence\nintelligence_key_source=/approved/key\nintelligence_key_target=/run/secrets/key\nmount_contract_for_container() {{ echo {contract}; }}\nvalidate_intelligence_key_file() {{ return 0; }}\nblocked() {{ return 1; }}\n"
+            functions = shell_function("assert_approved_mount_contract") + "\n" + shell_function("select_candidate_mounts")
+            result = self.bash(harness + functions + '\nselect_candidate_mounts target\nprintf "%s" "${candidate_extra_mount_args[*]}"\n')
+            self.assertEqual(result.returncode == 0, expected is not None)
+            if expected: self.assertIn(expected, result.stdout)
+            if expected == "": self.assertEqual(result.stdout, "")
+
+    def test_application_only_descriptor_preserves_exact_migrations_and_runner(self):
+        code = CONTROLLER.split("validate_release_descriptor() {", 1)[1].split("\nbuild_image() {", 1)[0].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
+            root = Path(directory)
+            (root / "db/migrations").mkdir(parents=True)
+            migrations = []
+            for index in range(13):
+                relative = f"db/migrations/20260909_{index}.sql"
+                content = f"-- immutable fixture {index}\n".encode()
+                (root / relative).write_bytes(content)
+                migrations.append({"path": relative, "sha256": hashlib.sha256(content).hexdigest()})
+            descriptor = {"schema_version": 1, "environment": "Production", "target_database": "mfms_server_prod", "repository": "ayemuthu1963-beep/muthu-harvest-dashboard", "release_branch": "production-release", "deployment_kind": "backend-application-only", "runtime_profile": "production-intelligence-v1", "migrations": migrations, "required_openapi_paths": ["/health", "/api/intelligence/ask"], "protected_invariants": dict(database="read-only-verification-only", frontend="unchanged", odk="unchanged", schedules="unchanged", proxy_configuration="unchanged", test="unchanged", preview="unchanged")}
+            path = root / "descriptor.json"
+            args = ["controller", str(path), str(root), CURRENT, FUTURE, str(root / "migrations.plan"), str(root / "openapi.plan"), "application-only"]
+            for case in ["valid", "wrong-mode", "wrong-profile", "new-pin", "missing-pin", "checksum", "runner", "sql", "missing-intelligence", "missing-core"]:
+                with self.subTest(case=case):
+                    data = copy.deepcopy(descriptor)
+                    argv = args.copy()
+                    changed = "api/app/config.py\n"
+                    if case == "missing-intelligence": data["required_openapi_paths"] = ["/health"]
+                    if case == "missing-core": data["required_openapi_paths"] = ["/api/intelligence/ask"]
+                    if case == "wrong-mode": argv[-1] = "forward-only-migrations"
+                    if case == "wrong-profile": data["runtime_profile"] = "preview"
+                    if case == "new-pin": data["migrations"][0]["sha256"] = "0" * 64
+                    if case == "missing-pin": data["migrations"].pop()
+                    if case == "runner": changed = "scripts/apply_production_migrations.py\n"
+                    if case == "sql": changed = migrations[0]["path"] + "\n"
+                    path.write_text(json.dumps(data))
+                    target = root / migrations[0]["path"]
+                    saved = target.read_bytes()
+                    if case == "checksum": target.write_bytes(b"tampered")
+                    def git_result(command, **kwargs):
+                        return json.dumps({"migrations": migrations, "required_openapi_paths": ["/health"]}).encode() if "show" in command else changed
+                    try:
+                        with mock.patch.object(sys, "argv", argv), mock.patch.object(subprocess, "check_output", side_effect=git_result):
+                            if case == "valid": exec(compile(code, "descriptor-validator", "exec"), {})
+                            else:
+                                with self.assertRaises(SystemExit): exec(compile(code, "descriptor-validator", "exec"), {})
+                    finally:
+                        target.write_bytes(saved)
+            self.assertEqual(len((root / "migrations.plan").read_text().splitlines()), 13)
 
     def test_record_stage_precedes_smoke_and_final_record_precedes_activation(self):
         for name in ["deploy_backend", "credential_cutover_backend"]:
@@ -414,6 +528,7 @@ echo STOPPED_ENDPOINT_ROLLBACK_AND_RESTORE=PASS
             for status in ["ready", "already-complete"]:
                 trace = Path(directory) / (status + ".trace")
                 harness = f'''set -e
+select_candidate_mounts() {{ :; }}
 trace='{trace.as_posix()}'
 : > "$trace"
 state_file='{folder}/state'

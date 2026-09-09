@@ -47,7 +47,11 @@ for (const workflow of [deploy, rollback]) {
 
 assert.match(deploy, /\[\[ "\$WORKFLOW_REF" == "refs\/heads\/main" \]\]/)
 assert.match(deploy, /DEPLOY PRODUCTION BACKEND ONLY/)
-assert.match(deploy, /deploy-production-backend \$CANDIDATE_REVISION \$GITHUB_RUN_ID/)
+assert.match(deploy, /command="deploy-production-backend"/)
+assert.match(deploy, /command="deploy-production-backend-application-only"/)
+assert.match(deploy, /"\$command \$CANDIDATE_REVISION \$GITHUB_RUN_ID"/)
+assert.match(deploy, /database_migrations=read-only-verified/)
+assert.match(deploy, /database_migration_operations=none/)
 assert.match(deploy, /database=mfms_server_prod/)
 assert.match(deploy, /database_backup_verified=true/)
 assert.match(deploy, /database_migrations=forward-only/)
@@ -186,7 +190,7 @@ assert.match(cleanupFunction, /docker rm -f "\$database_backup_restore_container
 assert.doesNotMatch(cleanupFunction, /docker volume/)
 const deployFunction = gate.slice(gate.indexOf("deploy_backend()"), gate.indexOf("credential_cutover_backend()"))
 assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("apply_migrations"))
-assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("start_candidate"))
+assert.ok(deployFunction.indexOf("verify_migrations") < deployFunction.indexOf("start_candidate"))
 assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("docker stop"))
 assert.match(gate.slice(gate.indexOf("apply_migrations()"), gate.indexOf("verify_migrations()")), /assert_validated_database_backup/)
 
@@ -218,7 +222,7 @@ assert.match(restoreOriginalFunction, /ensure_production_network_ip "\$backend_l
 assert.match(restoreOriginalFunction, /docker start "\$backend_live_container"/)
 assert.match(restoreOriginalFunction, /automatic_restore_result="pass"/)
 assert.match(gate.slice(gate.indexOf("on_exit()"), gate.indexOf("deploy_backend()")), /transaction_active.*restore_original_backend/s)
-assert.match(deployFunction, /validate_release_descriptor[\s\S]*?apply_migrations[\s\S]*?start_candidate/)
+assert.match(deployFunction, /validate_release_descriptor[\s\S]*?verify_migrations[\s\S]*?apply_migrations[\s\S]*?start_candidate/)
 assert.doesNotMatch(deployFunction, /start_candidate true false/)
 const databaseEvidenceFunction = gate.slice(
   gate.indexOf("snapshot_rollback_database_evidence()"),

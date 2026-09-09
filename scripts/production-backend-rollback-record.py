@@ -120,6 +120,15 @@ BASE_MOUNTS = sorted([
     ["bind", "/home/muthu/mfms_data/production/motor-screenshot-analysis", "/var/lib/mfms/motor-screenshot-analysis", True],
     ["bind", "/tmp", "/host-tmp", True],
 ])
+INTELLIGENCE_KEY_SOURCE = "/home/muthu/.local/state/mfms-production-intelligence/production_service_key"
+INTELLIGENCE_KEY_TARGET = "/run/secrets/mfms_intelligence_production_key"
+INTELLIGENCE_MOUNTS = sorted(BASE_MOUNTS + [["bind", INTELLIGENCE_KEY_SOURCE, INTELLIGENCE_KEY_TARGET, False]])
+INTELLIGENCE_ENVIRONMENT = {
+    "MFMS_INTELLIGENCE_ENABLED": "true",
+    "MFMS_INTELLIGENCE_URL": "http://10.122.0.3:8765",
+    "MFMS_INTELLIGENCE_SERVICE_ID": "mfms-production-backend",
+    "MFMS_INTELLIGENCE_SERVICE_KEY_FILE": INTELLIGENCE_KEY_TARGET,
+}
 
 
 def inspect_container(name):
@@ -128,7 +137,11 @@ def inspect_container(name):
     item = parse_json(raw)[0]
     image = parse_json(subprocess.check_output(["docker", "image", "inspect", item["Image"]], stderr=subprocess.DEVNULL))[0]
     network = parse_json(subprocess.check_output(["docker", "network", "inspect", "harvest-net"], stderr=subprocess.DEVNULL))[0]
-    return snapshot(item, image, network)
+    result = snapshot(item, image, network)
+    if result["static"]["mount_policy"] == "production-intelligence-v1":
+        secure_path(Path(INTELLIGENCE_KEY_SOURCE).parent, directory=True, mode=0o700)
+        secure_path(Path(INTELLIGENCE_KEY_SOURCE), mode=0o400)
+    return result
 
 
 def snapshot(item, image, network=None):
@@ -141,7 +154,8 @@ def snapshot(item, image, network=None):
         env[key] = value
     require(env.get("MFMS_ENV") == "production", "wrong runtime environment")
     require(env.get("MFMS_TARGET_DATABASE") == "mfms_server_prod", "wrong target database")
-    require(urlsplit(env.get("DATABASE_URL", "")).path == "/mfms_server_prod", "wrong database URL target")
+    database_url = urlsplit(env.get("DATABASE_URL", ""))
+    require(database_url.path == "/mfms_server_prod" and not database_url.query and not database_url.fragment, "wrong database URL target")
     labels = image["Config"].get("Labels") or {}
     revision = labels.get("org.opencontainers.image.revision", "")
     require(re.fullmatch(r"[0-9a-f]{40}", revision), "invalid image revision")
@@ -149,9 +163,14 @@ def snapshot(item, image, network=None):
     require(image["Id"] == item["Image"], "image identity mismatch")
     require(env.get("MFMS_GIT_COMMIT") == revision, "runtime revision mismatch")
     mounts = sorted([[m["Type"], m["Source"], m["Destination"], m["RW"]] for m in item["Mounts"]])
-    # Phase A authorizes only the existing mounts. A later reviewed feature may
-    # add a new explicit policy; each record retains its own validated mount set.
-    require(mounts == BASE_MOUNTS, "unapproved mount contract")
+    if mounts == BASE_MOUNTS:
+        require(env.get("MFMS_INTELLIGENCE_ENABLED", "false") == "false", "Intelligence requires its read-only credential mount")
+        mount_policy = "production-backend-base-v1"
+    elif mounts == INTELLIGENCE_MOUNTS:
+        require(all(env.get(key) == value for key, value in INTELLIGENCE_ENVIRONMENT.items()), "Intelligence environment/credential identity mismatch")
+        mount_policy = "production-intelligence-v1"
+    else:
+        raise Refused("unapproved mount contract")
     require(host["NetworkMode"] == "harvest-net", "wrong network mode")
     require(host["PortBindings"] == {"8000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8001"}]}, "wrong port binding")
     require(host["RestartPolicy"] == {"Name": "unless-stopped", "MaximumRetryCount": 0}, "wrong restart policy")
@@ -183,7 +202,7 @@ def snapshot(item, image, network=None):
         "container_id": item["Id"], "revision": revision, "image_id": item["Image"],
         "environment_sha256": digest(("\n".join(sorted(entries)) + "\n").encode()),
         "host_config_sha256": digest(canonical(host)), "mounts": mounts,
-        "mount_policy": "production-backend-base-v1", "database": "mfms_server_prod",
+        "mount_policy": mount_policy, "database": "mfms_server_prod",
         "environment": "Production", "network": "harvest-net", "production_ip": "172.19.0.2",
         "network_id": network["Id"] if network is not None else "hermetic-fixture",
         "restart_count": item["RestartCount"],
