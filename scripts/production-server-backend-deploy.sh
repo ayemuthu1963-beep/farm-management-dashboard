@@ -67,16 +67,7 @@ readonly approved_storage_mount_target="/var/lib/mfms/motor-screenshot-analysis"
 readonly expected_mount_contract="bind|$approved_storage_mount_source|$approved_storage_mount_target|true
 bind|$approved_temp_mount_source|$approved_temp_mount_target|true"
 readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8001"}]}'
-readonly approved_rollback_current_revision="94b28f17702e409e13d25e288fc5cd4b9bbef545"
-readonly approved_rollback_current_container_id="969d9cab57c47c06716b3e94d858f3a56cd145a39280ca41c417b497647fef47"
-readonly approved_rollback_current_image_id="sha256:55b070597e6ee195f50226e7a0e4834a2e64986b20c5d53fa758ee925f45f512"
-readonly approved_rollback_current_environment_sha256="90213d0772f3fa45c40987748bc4b1815cdb55fb24e701ecd4a2bcc941e81e12"
-readonly approved_rollback_target_revision="515638139232c76992a7c7ceaadd8e191e444176"
-readonly approved_rollback_target_container="harvest-api-pre-github-2026081802-20260818T050946Z"
-readonly approved_rollback_target_container_id="38aaed2a9555f4f51df06efab59972886c58225ed0d88035e4b075243b289e1c"
-readonly approved_rollback_target_image_id="sha256:fbe824766b16ebdc2e85f6ed814c4b10bc7f9b4bc0a285945c07e544861b1fe8"
-readonly approved_rollback_target_environment_sha256="15da2029147713e2795ddc3d746cc57eed46cd9d090af189f864390d3a56dff9"
-readonly approved_rollback_state_sha256="112fc3e7b302ec5636cd237b0dcd0f70b9f85d97f162dcaa2f1795fc52d6b6c2"
+readonly rollback_record_helper="/home/muthu/.local/libexec/mfms-production-backend-rollback-record.py"
 readonly approved_irrigation_settings_migration="db/migrations/20260818_production_irrigation_plan_settings.sql"
 readonly approved_irrigation_settings_sha256="87e8171a9e2bcfa955c9ea904b2fea9f652da1a57b8326cfdf6fe31ab5287db1"
 readonly approved_irrigation_audit_migration="db/migrations/20260818_production_irrigation_plan_persistence_v2.sql"
@@ -96,6 +87,7 @@ run_id=""
 readonly deploy_command_pattern='^deploy-production-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-production-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_dry_run_command_pattern='^dry-run-production-backend-rollback ([0-9a-f]{40}) ([0-9]+)$'
+readonly enroll_rollback_command_pattern='^enroll-production-backend-rollback ([0-9a-f]{40}) ([0-9a-f]{64}) ([0-9]+)$'
 readonly credential_cutover_command_pattern='^cutover-production-database-role ([0-9a-f]{40}) ([0-9]+)$'
 
 original_command=${SSH_ORIGINAL_COMMAND:-}
@@ -111,12 +103,17 @@ elif [[ "$original_command" =~ $rollback_dry_run_command_pattern ]]; then
   operation="rollback-dry-run"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $enroll_rollback_command_pattern ]]; then
+  operation="rollback-enroll"
+  expected_current_revision=${BASH_REMATCH[1]}
+  enrollment_state_sha256=${BASH_REMATCH[2]}
+  run_id=${BASH_REMATCH[3]}
 elif [[ "$original_command" =~ $credential_cutover_command_pattern ]]; then
   operation="credential-cutover"
   expected_current_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
 else
-  blocked "the SSH key accepts only an exact Production backend deploy, rollback, rollback dry run, or database-role cutover command"
+  blocked "the SSH key accepts only an exact Production backend deploy, rollback, rollback dry run, one-time rollback enrollment, or database-role cutover command"
 fi
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -155,6 +152,15 @@ transaction_active=0
 automatic_restore_result="not-required"
 rollback_database_before="$work_dir/rollback-database.before.json"
 rollback_database_after="$work_dir/rollback-database.after.json"
+rollback_plan="$work_dir/rollback-plan.json"
+previous_state="$work_dir/backend-state.before"
+deployment_id=""
+rollback_status=""
+rollback_target_container=""
+rollback_target_container_id=""
+rollback_target_revision=""
+rollback_target_image=""
+[[ ! -e "$state_file" ]] || cat "$state_file" > "$previous_state"
 
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
@@ -186,36 +192,59 @@ environment_sha256_for_container() {
 
 assert_approved_mount_contract() {
   local container=$1 contract
-  contract=$(mount_contract_for_container "$container")
+  contract=$(mount_contract_for_container "$container") || return 1
   [[ "$contract" == "$expected_mount_contract" ]] \
     || blocked "Production backend mount contract differs from the approved persistent storage and /tmp bind mounts"
 }
 
+network_attached_for_container() {
+  docker inspect --format \
+    "{{if index .NetworkSettings.Networks \"$production_network\"}}true{{else}}false{{end}}" "$1"
+}
+
+network_static_ip_for_container() {
+  docker inspect --format \
+    "{{with index .NetworkSettings.Networks \"$production_network\"}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}" "$1"
+}
+
 disconnect_production_network() {
-  local container=$1
-  if [[ -n "$(network_ip_for_container "$container")" ]]; then
-    docker network disconnect "$production_network" "$container"
+  local container=$1 attached
+  attached=$(network_attached_for_container "$container") || return 1
+  [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+  if [[ "$attached" == "true" ]]; then
+    # A stopped container can have a blank runtime IP while its endpoint still
+    # reserves the static address. Remove that exact endpoint before reclaiming it.
+    docker network disconnect --force "$production_network" "$container" || return 1
+    attached=$(network_attached_for_container "$container") || return 1
+    [[ "$attached" == "false" ]] || return 1
   fi
 }
 
 ensure_production_network_ip() {
-  local container=$1 expected_ip=$2 current_ip attempt
+  local container=$1 expected_ip=$2 current_ip configured_ip attached running attempt
   for attempt in $(seq 1 30); do
-    current_ip=$(network_ip_for_container "$container")
-    if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
-      docker network disconnect "$production_network" "$container" >/dev/null 2>&1 || true
-      current_ip=""
+    attached=$(network_attached_for_container "$container") || return 1
+    [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+    current_ip=$(network_ip_for_container "$container") || return 1
+    configured_ip=$(network_static_ip_for_container "$container") || return 1
+    if [[ "$attached" == "true" ]]; then
+      if [[ "$current_ip" == "$expected_ip" && ( -z "$configured_ip" || "$configured_ip" == "$expected_ip" ) ]]; then
+        return 0
+      fi
+      running=$(docker inspect --format '{{.State.Running}}' "$container") || return 1
+      # Connecting a stopped target reserves the correct address but does not
+      # necessarily populate IPAddress until docker start. Do not connect twice.
+      if [[ "$running" == "false" && -z "$current_ip" && "$configured_ip" == "$expected_ip" ]]; then
+        return 0
+      fi
+      [[ "$running" == "true" || "$running" == "false" ]] || return 1
+      disconnect_production_network "$container" || return 1
     fi
-    if [[ -z "$current_ip" ]]; then
-      docker network connect --ip "$expected_ip" "$production_network" "$container" \
-        >/dev/null 2>&1 || {
-          sleep 1
-          continue
-        }
-      current_ip=$(network_ip_for_container "$container")
-    fi
-    [[ "$current_ip" == "$expected_ip" ]] && return 0
-    sleep 1
+    docker network connect --ip "$expected_ip" "$production_network" "$container" \
+      >/dev/null 2>&1 || {
+        sleep 1
+        continue
+      }
   done
   return 1
 }
@@ -236,17 +265,17 @@ ensure_production_network_attachment() {
 assert_production_ipam_contract() {
   local network_subnet network_gateway network_dynamic_pool
   network_subnet=$(docker network inspect \
-    --format '{{(index .IPAM.Config 0).Subnet}}' "$production_network")
+    --format '{{(index .IPAM.Config 0).Subnet}}' "$production_network") || return 1
   network_gateway=$(docker network inspect \
-    --format '{{(index .IPAM.Config 0).Gateway}}' "$production_network")
+    --format '{{(index .IPAM.Config 0).Gateway}}' "$production_network") || return 1
   network_dynamic_pool=$(docker network inspect \
-    --format '{{(index .IPAM.Config 0).IPRange}}' "$production_network")
+    --format '{{(index .IPAM.Config 0).IPRange}}' "$production_network") || return 1
   [[ "$network_subnet" == "$approved_production_subnet" ]] \
-    || blocked "Production network subnet differs from $approved_production_subnet"
+    || { blocked "Production network subnet differs from $approved_production_subnet"; return 1; }
   [[ "$network_gateway" == "$approved_production_gateway" ]] \
-    || blocked "Production network gateway differs from $approved_production_gateway"
+    || { blocked "Production network gateway differs from $approved_production_gateway"; return 1; }
   [[ "$network_dynamic_pool" == "$approved_production_dynamic_pool" ]] \
-    || blocked "Production network dynamic pool differs from $approved_production_dynamic_pool"
+    || { blocked "Production network dynamic pool differs from $approved_production_dynamic_pool"; return 1; }
 }
 
 image_revision_for_container() {
@@ -269,28 +298,51 @@ database_for_container() {
 
 assert_database_target() {
   local container=$1 reported
-  reported=$(database_for_container "$container")
+  reported=$(database_for_container "$container") || return 1
   [[ "$reported" == "$database_name" ]] \
-    || blocked "backend database is $reported rather than $database_name"
+    || { blocked "backend database is $reported rather than $database_name"; return 1; }
   reported=$(docker exec "$container" python -c \
-    'import psycopg; from app.config import get_settings; c=psycopg.connect(get_settings().database_url); print(c.execute("select current_database()").fetchone()[0])')
+    'import psycopg; from app.config import get_settings; c=psycopg.connect(get_settings().database_url); print(c.execute("select current_database()").fetchone()[0])') || return 1
   [[ "$reported" == "$database_name" ]] \
-    || blocked "database connection resolved to $reported rather than $database_name"
+    || { blocked "database connection resolved to $reported rather than $database_name"; return 1; }
 }
 
 snapshot_unrelated_containers() {
-  local id name
-  docker ps -aq | while IFS= read -r id; do
-    [[ -n "$id" ]] || continue
-    name=$(docker inspect --format '{{.Name}}' "$id")
-    name=${name#/}
-    case "$name" in
-      "$backend_live_container"|"$backend_live_container"-candidate-*|"$backend_live_container"-pre-*)
+  local listed
+  local -a identifiers
+  listed=$(docker ps -aq) || return 1
+  [[ -n "$listed" ]] || return 1
+  mapfile -t identifiers <<< "$listed"
+  # Raw inspection stays inside this pipe. Persist only the canonical operational
+  # fields below; never environments or changing health-log probe timestamps.
+  docker inspect "${identifiers[@]}" | python3 -c '
+import hashlib, json, sys
+backend = sys.argv[1]
+result = []
+for item in json.load(sys.stdin):
+    name = item["Name"].removeprefix("/")
+    if name == backend or name.startswith((backend + "-candidate-", backend + "-pre-")):
         continue
-        ;;
-    esac
-    docker inspect --format '{{.Id}}|{{.Name}}|{{.Image}}|{{.State.Running}}|{{.HostConfig.NetworkMode}}|{{json .HostConfig.PortBindings}}' "$id"
-  done | LC_ALL=C sort
+    state = item["State"]
+    mounts = [{key: mount.get(key) for key in ("Type", "Name", "Source", "Destination", "RW", "Propagation")} for mount in item["Mounts"]]
+    networks = {}
+    for network, endpoint in item["NetworkSettings"]["Networks"].items():
+        endpoint = dict(endpoint)
+        for key in ("Aliases", "DNSNames", "Links"):
+            if endpoint.get(key) is not None:
+                endpoint[key] = sorted(endpoint[key])
+        networks[network] = endpoint
+    result.append({
+        "id": item["Id"], "name": name, "image": item["Image"],
+        "running": state["Running"], "status": state["Status"], "started_at": state["StartedAt"],
+        "health_status": (state.get("Health") or {}).get("Status"), "restart_count": item["RestartCount"],
+        "network_mode": item["HostConfig"]["NetworkMode"], "ports": item["HostConfig"]["PortBindings"],
+        "restart_policy": item["HostConfig"]["RestartPolicy"], "networks": networks,
+        "host_config_sha256": hashlib.sha256(json.dumps(item["HostConfig"], sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+        "mounts": sorted(mounts, key=lambda value: json.dumps(value, sort_keys=True)),
+    })
+print(json.dumps(sorted(result, key=lambda value: value["id"]), sort_keys=True, separators=(",", ":")))
+' "$backend_live_container" || return 1
 }
 
 cron_digest() {
@@ -461,7 +513,10 @@ live_revision() {
 validate_common_live_state() {
   assert_production_ipam_contract
   container_exists "$backend_live_container" || blocked "Production backend container is missing"
-  container_running "$backend_live_container" || blocked "Production backend container is not running"
+  if ! container_running "$backend_live_container"; then
+    [[ "$operation" == "rollback" || "$operation" == "rollback-dry-run" ]] \
+      || blocked "Production backend container is not running"
+  fi
   container_exists "$frontend_container" || blocked "Production frontend container is missing"
   container_running "$frontend_container" || blocked "Production frontend container is not running"
   container_exists "$proxy_container" || blocked "Production proxy container is missing"
@@ -479,8 +534,11 @@ validate_common_live_state() {
   original_image_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
   original_image_tag=$(docker inspect --format '{{.Config.Image}}' "$backend_live_container")
   original_network_ip=$(network_ip_for_container "$backend_live_container")
-  [[ "$original_network_ip" == "$approved_production_ipv4" ]] \
-    || blocked "Production backend must own fixed address $approved_production_ipv4"
+  if [[ "$original_network_ip" != "$approved_production_ipv4" ]]; then
+    [[ -z "$original_network_ip" && ( "$operation" == "rollback" || "$operation" == "rollback-dry-run" ) ]] \
+      && ! container_running "$backend_live_container" \
+      || blocked "Production backend must own fixed address $approved_production_ipv4"
+  fi
   original_revision=$(live_revision)
   frontend_id_before=$(docker inspect --format '{{.Id}}' "$frontend_container")
   frontend_image_before=$(docker inspect --format '{{.Image}}' "$frontend_container")
@@ -489,62 +547,58 @@ validate_common_live_state() {
   cron_digest_before=$(cron_digest)
   [[ "$proxy_target_count_before" =~ ^[1-9][0-9]*$ ]] \
     || blocked "Production proxy has no approved frontend target"
-  assert_database_target "$backend_live_container"
+  if [[ "$operation" != "rollback" && "$operation" != "rollback-dry-run" ]]; then
+    assert_database_target "$backend_live_container"
+  fi
   snapshot_unrelated_containers > "$before_unrelated"
 }
 
-assert_exact_historical_application_rollback() {
-  local rollback_container rollback_revision rollback_image_id state_migrations
-  [[ "$expected_current_revision" == "$approved_rollback_current_revision" ]] \
-    || blocked "rollback is not for the exact approved current Production revision"
-  [[ "$original_revision" == "$approved_rollback_current_revision" ]] \
-    || blocked "live Production revision is not the approved rollback source"
-  [[ "$original_container_id" == "$approved_rollback_current_container_id" ]] \
-    || blocked "live Production container is not the approved rollback source"
-  [[ "$original_image_id" == "$approved_rollback_current_image_id" ]] \
-    || blocked "live Production image is not the approved rollback source"
-  [[ "$(environment_sha256_for_container "$backend_live_container")" == "$approved_rollback_current_environment_sha256" ]] \
-    || blocked "live Production backend environment differs from the approved rollback source"
-  [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$approved_rollback_state_sha256" ]] \
-    || blocked "Production backend rollback state differs from the approved release record"
+rollback_record() {
+  [[ -f "$rollback_record_helper" && ! -L "$rollback_record_helper" ]] \
+    || { blocked "the reviewed rollback record helper is unavailable"; return 1; }
+  python3 "$rollback_record_helper" --state-dir "$state_dir" "$@"
+}
 
-  rollback_container=$(read_state_value rollback_container)
-  rollback_revision=$(read_state_value rollback_revision)
-  rollback_image_id=$(read_state_value rollback_image_id)
-  state_migrations=$(read_state_value database_migrations)
-  [[ "$rollback_container" == "$approved_rollback_target_container" ]] \
-    || blocked "recorded rollback container is not the approved historical target"
-  [[ "$rollback_revision" == "$approved_rollback_target_revision" ]] \
-    || blocked "recorded rollback revision is not the approved historical target"
-  [[ "$rollback_image_id" == "$approved_rollback_target_image_id" ]] \
-    || blocked "recorded rollback image is not the approved historical target"
-  [[ "$state_migrations" == "forward-only" ]] \
-    || blocked "forward-only migration state is not retained"
-  container_exists "$rollback_container" || blocked "approved historical rollback container is missing"
-  ! container_running "$rollback_container" || blocked "approved historical rollback container is unexpectedly running"
-  [[ "$(docker inspect --format '{{.Id}}' "$rollback_container")" == "$approved_rollback_target_container_id" ]] \
-    || blocked "approved historical rollback container identity changed"
-  [[ "$(docker inspect --format '{{.Image}}' "$rollback_container")" == "$approved_rollback_target_image_id" ]] \
-    || blocked "approved historical rollback image changed"
-  [[ "$(image_revision_for_container "$rollback_container")" == "$approved_rollback_target_revision" ]] \
-    || blocked "approved historical rollback revision changed"
-  [[ "$(image_environment_for_container "$rollback_container")" == "Production" ]] \
-    || blocked "approved historical rollback image is not labelled Production"
-  [[ "$(environment_sha256_for_container "$rollback_container")" == "$approved_rollback_target_environment_sha256" ]] \
-    || blocked "approved historical rollback environment changed"
-  [[ "$(docker inspect --format '{{.RestartCount}}' "$rollback_container")" == "0" ]] \
-    || blocked "approved historical rollback container has restarted"
-  [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$rollback_container")" == "$production_network" ]] \
-    || blocked "approved historical rollback network mode changed"
-  [[ -z "$(network_ip_for_container "$rollback_container")" ]] \
-    || blocked "approved historical rollback container is unexpectedly attached to Production"
-  [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$rollback_container")" == "$expected_port_bindings" ]] \
-    || blocked "approved historical rollback port contract changed"
-  [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$rollback_container")" == "$approved_restart_policy" ]] \
-    || blocked "approved historical rollback restart policy changed"
-  assert_approved_mount_contract "$rollback_container"
-  wait_for_health "http://127.0.0.1:$live_port" \
-    || blocked "current Production backend is not healthy enough for the approved rollback"
+new_deployment_id() {
+  printf '%s-%s-%s\n' "$run_id" "$timestamp" "$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+}
+
+stage_backend_rollback_record() {
+  deployment_id=$(new_deployment_id)
+  rollback_record stage "$deployment_id" "$candidate_revision" "$new_image_id" \
+    "$transaction_backup" "$run_id" "$timestamp"
+}
+
+assert_adjacent_application_rollback() {
+  rollback_record verify "$expected_current_revision" > "$rollback_plan"
+  rollback_status=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$rollback_plan")
+  deployment_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["deployment_id"])' "$rollback_plan")
+  rollback_target_container=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target_name"])' "$rollback_plan")
+  rollback_target_container_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["container_id"])' "$rollback_plan")
+  rollback_target_revision=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["revision"])' "$rollback_plan")
+  rollback_target_image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["image_id"])' "$rollback_plan")
+}
+
+# Enrollment is available only for the existing unsigned adjacent release state.
+# It changes protected local records, never containers, routing or database data.
+enroll_backend_rollback() {
+  validate_common_live_state
+  [[ "$original_revision" == "$expected_current_revision" ]] \
+    || blocked "live revision differs from the one-time enrollment request"
+  [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$enrollment_state_sha256" ]] \
+    || blocked "release state changed before one-time enrollment"
+  snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
+  rollback_record initialize
+  deployment_id=$(new_deployment_id)
+  rollback_record stage "$deployment_id" "$original_revision" "$original_image_id" \
+    "$(read_state_value rollback_container)" "$run_id" "$timestamp" "$enrollment_state_sha256"
+  rollback_record finalize "$deployment_id" "$original_image_tag" "$(read_state_value rollback_image_tag)"
+  rollback_record activate "$deployment_id"
+  rollback_record verify "$expected_current_revision" > "$rollback_plan"
+  echo "rollback_deployment_id=$deployment_id"
+  echo "traffic_switch=not-performed"
+  echo "database_migration_operations=none"
+  echo "PRODUCTION_BACKEND_ROLLBACK_ENROLLMENT=PASS"
 }
 
 snapshot_rollback_database_evidence() {
@@ -1576,72 +1630,51 @@ remove_candidate() {
 assert_live_contract() {
   local expected_revision=$1 expected_image_id=$2 require_version_endpoint=${3:-true}
   local require_same_network_ip=${4:-true}
-  container_exists "$backend_live_container" || blocked "Production backend container is missing after switch"
-  container_running "$backend_live_container" || blocked "Production backend container is not running after switch"
+  container_exists "$backend_live_container" || { blocked "Production backend container is missing after switch"; return 1; }
+  container_running "$backend_live_container" || { blocked "Production backend container is not running after switch"; return 1; }
   [[ "$(docker inspect --format '{{.Image}}' "$backend_live_container")" == "$expected_image_id" ]] \
-    || blocked "Production backend image ID does not match"
+    || { blocked "Production backend image ID does not match"; return 1; }
   [[ "$(image_revision_for_container "$backend_live_container")" == "$expected_revision" ]] \
-    || blocked "Production backend revision does not match"
+    || { blocked "Production backend revision does not match"; return 1; }
   [[ "$(image_environment_for_container "$backend_live_container")" == "Production" ]] \
-    || blocked "Production backend image is not labelled Production"
+    || { blocked "Production backend image is not labelled Production"; return 1; }
   [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$backend_live_container")" == "$approved_restart_policy" ]] \
-    || blocked "Production backend restart policy changed"
+    || { blocked "Production backend restart policy changed"; return 1; }
   [[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$backend_live_container")" == "$production_network" ]] \
-    || blocked "Production backend network changed"
+    || { blocked "Production backend network changed"; return 1; }
   [[ "$(network_ip_for_container "$backend_live_container")" == "$approved_production_ipv4" ]] \
-    || blocked "Production backend does not own fixed address $approved_production_ipv4"
+    || { blocked "Production backend does not own fixed address $approved_production_ipv4"; return 1; }
   if [[ "$require_same_network_ip" == "true" ]]; then
     [[ "$(network_ip_for_container "$backend_live_container")" == "$original_network_ip" ]] \
-      || blocked "Production backend network address changed"
+      || { blocked "Production backend network address changed"; return 1; }
   else
     [[ -n "$(network_ip_for_container "$backend_live_container")" ]] \
-      || blocked "Production backend is not attached to the Production network"
+      || { blocked "Production backend is not attached to the Production network"; return 1; }
   fi
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$backend_live_container")" == "$expected_port_bindings" ]] \
-    || blocked "Production backend host port changed"
-  assert_approved_mount_contract "$backend_live_container"
+    || { blocked "Production backend host port changed"; return 1; }
+  assert_approved_mount_contract "$backend_live_container" || return 1
   [[ "$(docker inspect --format '{{.Id}}' "$frontend_container")" == "$frontend_id_before" ]] \
-    || blocked "Production frontend container changed"
+    || { blocked "Production frontend container changed"; return 1; }
   [[ "$(docker inspect --format '{{.Image}}' "$frontend_container")" == "$frontend_image_before" ]] \
-    || blocked "Production frontend image changed"
-  [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || blocked "proxy configuration changed"
-  [[ "$(cron_digest)" == "$cron_digest_before" ]] || blocked "Production schedules changed"
+    || { blocked "Production frontend image changed"; return 1; }
+  [[ "$(proxy_digest)" == "$proxy_digest_before" ]] || { blocked "proxy configuration changed"; return 1; }
+  [[ "$(cron_digest)" == "$cron_digest_before" ]] || { blocked "Production schedules changed"; return 1; }
   [[ "$(proxy_target_count)" == "$proxy_target_count_before" ]] \
-    || blocked "Production proxy target count changed"
-  assert_database_target "$backend_live_container"
-  wait_for_health "http://127.0.0.1:$live_port" || blocked "replacement backend health endpoint failed"
+    || { blocked "Production proxy target count changed"; return 1; }
+  assert_database_target "$backend_live_container" || return 1
+  wait_for_health "http://127.0.0.1:$live_port" || { blocked "replacement backend health endpoint failed"; return 1; }
   if [[ "$require_version_endpoint" == "true" ]]; then
     wait_for_backend_version "http://127.0.0.1:$live_port" "$expected_revision" \
-      || blocked "replacement backend version endpoint failed"
+      || { blocked "replacement backend version endpoint failed"; return 1; }
   fi
-  snapshot_unrelated_containers > "$after_unrelated"
+  snapshot_unrelated_containers > "$after_unrelated" || return 1
   cmp -s "$before_unrelated" "$after_unrelated" \
-    || blocked "a frontend, Test, Preview, ODK, proxy, scheduler, or unrelated container changed"
-}
-
-write_state() {
-  local deployed_revision=$1 deployed_image_id=$2 deployed_image_tag=$3
-  local rollback_container=$4 rollback_revision=$5 rollback_image_id=$6 rollback_image_tag=$7
-  local temporary_state
-  temporary_state=$(mktemp "$state_dir/backend-state.XXXXXX")
-  cat > "$temporary_state" <<EOF
-deployed_revision=$deployed_revision
-deployed_image_id=$deployed_image_id
-deployed_image_tag=$deployed_image_tag
-rollback_container=$rollback_container
-rollback_revision=$rollback_revision
-rollback_image_id=$rollback_image_id
-rollback_image_tag=$rollback_image_tag
-run_id=$run_id
-updated_at=$timestamp
-database_migrations=forward-only
-EOF
-  chmod 600 "$temporary_state"
-  mv "$temporary_state" "$state_file"
+    || { blocked "a frontend, Test, Preview, ODK, proxy, scheduler, or unrelated container changed"; return 1; }
 }
 
 restore_original_backend() {
-  local live_id="" recovery_name=""
+  local live_id="" recovery_name="" require_same_network_ip=true
   automatic_restore_result="failed"
   if container_exists "$backend_live_container"; then
     live_id=$(docker inspect --format '{{.Id}}' "$backend_live_container")
@@ -1667,9 +1700,22 @@ restore_original_backend() {
     ensure_production_network_ip "$backend_live_container" "$approved_production_ipv4" \
       >/dev/null 2>&1 || return 1
     docker start "$backend_live_container" >/dev/null 2>&1 || return 1
-    if wait_for_health "http://127.0.0.1:$live_port"; then
-      automatic_restore_result="pass"
+    [[ "$(docker inspect --format '{{.Id}}' "$backend_live_container")" == "$original_container_id" ]] || return 1
+    if [[ -f "$previous_state" ]]; then
+      local restored_state
+      restored_state=$(mktemp "$state_dir/backend-state-restore.XXXXXX") || return 1
+      cat "$previous_state" > "$restored_state" || return 1
+      chmod 600 "$restored_state" || return 1
+      mv "$restored_state" "$state_file" || return 1
     fi
+    if [[ "$operation" == "rollback" && -z "${original_network_ip:-}" ]]; then
+      # The stopped source had no runtime address. The live contract still
+      # requires the approved fixed address after starting the restored source.
+      require_same_network_ip=false
+    fi
+    assert_live_contract "$original_revision" "$original_image_id" true "$require_same_network_ip" || return 1
+    rollback_record restored "$deployment_id" "$operation" || return 1
+    automatic_restore_result="pass"
   fi
 }
 
@@ -1730,15 +1776,16 @@ deploy_backend() {
   # The verified custom-format backup is retained before the checksum-pinned,
   # forward-only migration is applied and independently verified.
   apply_migrations
+  transaction_backup="$backend_live_container-pre-github-$run_id-$timestamp"
+  stage_backend_rollback_record
   start_candidate
   remove_candidate
 
-  transaction_backup="$backend_live_container-pre-github-$run_id-$timestamp"
   transaction_active=1
   docker stop --time 30 "$backend_live_container" >/dev/null
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
-  docker run -d \
+  docker create \
     --name "$backend_live_container" \
     --network "$production_network" \
     --ip "$approved_production_ipv4" \
@@ -1751,12 +1798,12 @@ deploy_backend() {
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
+  rollback_record finalize "$deployment_id" "$new_image" "$original_image_tag"
+  docker start "$backend_live_container" >/dev/null
 
   assert_live_contract "$candidate_revision" "$new_image_id"
   trap '' HUP INT TERM
-  write_state \
-    "$candidate_revision" "$new_image_id" "$new_image" \
-    "$transaction_backup" "$original_revision" "$original_image_id" "$original_image_tag"
+  rollback_record activate "$deployment_id"
   transaction_active=0
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -1800,15 +1847,16 @@ credential_cutover_backend() {
   new_image="$original_image_id"
   new_image_id="$original_image_id"
   write_environment_file "$backend_live_container" "$original_revision"
+  transaction_backup="$backend_live_container-pre-database-role-$run_id-$timestamp"
+  stage_backend_rollback_record
   start_candidate true false
   remove_candidate
 
-  transaction_backup="$backend_live_container-pre-database-role-$run_id-$timestamp"
   transaction_active=1
   docker stop --time 30 "$backend_live_container" >/dev/null
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
-  docker run -d \
+  docker create \
     --name "$backend_live_container" \
     --network "$production_network" \
     --ip "$approved_production_ipv4" \
@@ -1821,12 +1869,12 @@ credential_cutover_backend() {
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     --env-file "$environment_file" \
     "$original_image_id" >/dev/null
+  rollback_record finalize "$deployment_id" "$original_image_tag" "$original_image_tag"
+  docker start "$backend_live_container" >/dev/null
 
   assert_live_contract "$original_revision" "$original_image_id"
   trap '' HUP INT TERM
-  write_state \
-    "$original_revision" "$original_image_id" "$original_image_tag" \
-    "$transaction_backup" "$original_revision" "$original_image_id" "$original_image_tag"
+  rollback_record activate "$deployment_id"
   transaction_active=0
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -1849,20 +1897,31 @@ credential_cutover_backend() {
 dry_run_backend_rollback() {
   [[ -f "$state_file" ]] || blocked "no successful Production backend deployment is recorded"
   validate_common_live_state
-  assert_exact_historical_application_rollback
+  assert_adjacent_application_rollback
   assert_candidate_port_available
-  snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
+  if container_running "$backend_live_container" \
+    && snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before" 2> "$work_dir/source-database-probe.error"; then
+    echo "rollback_dry_run_database_validation=live-read-only"
+  else
+    # The signed record binds the database identity checked before activation.
+    # Actual rollback additionally verifies the retained image against Production
+    # through an isolated candidate before changing the live container.
+    printf '{"database":"mfms_server_prod","source":"signed-deployment-record"}\n' > "$rollback_database_before"
+    echo "rollback_dry_run_database_validation=signed-identity-source-unavailable"
+  fi
 
   echo "rollback_dry_run_environment=Production"
   echo "rollback_dry_run_component=backend"
   echo "rollback_dry_run_current_revision=$original_revision"
   echo "rollback_dry_run_current_container=$original_container_id"
   echo "rollback_dry_run_current_image=$original_image_id"
-  echo "rollback_dry_run_target_revision=$approved_rollback_target_revision"
-  echo "rollback_dry_run_target_container=$approved_rollback_target_container_id"
-  echo "rollback_dry_run_target_image=$approved_rollback_target_image_id"
+  echo "rollback_dry_run_target_revision=$rollback_target_revision"
+  echo "rollback_dry_run_target_container=$rollback_target_container_id"
+  echo "rollback_dry_run_target_name=$rollback_target_container"
+  echo "rollback_deployment_id=$deployment_id"
+  echo "rollback_dry_run_target_image=$rollback_target_image"
   echo "rollback_dry_run_database_evidence_sha256=$(sha256sum "$rollback_database_before" | awk '{print $1}')"
-  echo "rollback_dry_run_migration_plan=empty-approved-historical-application-only"
+  echo "rollback_dry_run_migration_plan=empty-adjacent-application-only"
   echo "database_backup_operations=none"
   echo "database_migration_operations=none"
   echo "traffic_switch=not-performed"
@@ -1875,10 +1934,27 @@ rollback_backend() {
   local rollback_container rollback_revision rollback_image_id rollback_image_tag replacement_id
   [[ -f "$state_file" ]] || blocked "no successful Production backend deployment is recorded"
   validate_common_live_state
-  [[ "$expected_current_revision" == "$original_revision" ]] \
-    || blocked "current Production backend does not match the requested rollback revision"
-  assert_exact_historical_application_rollback
-  snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
+  assert_adjacent_application_rollback
+  if [[ "$rollback_status" == "already-complete" ]]; then
+    assert_live_contract "$original_revision" "$original_image_id"
+    echo "rollback_environment=Production"
+    echo "rollback_component=backend"
+    echo "rollback_url=$production_url"
+    echo "previous_backend_revision=$expected_current_revision"
+    echo "restored_backend_revision=$original_revision"
+    echo "rollback_already_complete=true"
+    echo "database_migrations=forward-only-retained"
+    echo "database_backup_operations=none"
+    echo "database_migration_operations=none"
+    echo "frontend_unchanged=true"
+    echo "odk_unchanged=true"
+    echo "schedules_unchanged=true"
+    echo "proxy_configuration_unchanged=true"
+    echo "test_touched=0"
+    echo "preview_touched=0"
+    echo "PRODUCTION_BACKEND_ROLLBACK=PASS"
+    return
+  fi
 
   deployed_revision=$(read_state_value deployed_revision)
   deployed_image_id=$(read_state_value deployed_image_id)
@@ -1898,20 +1974,27 @@ rollback_backend() {
   [[ "$(image_revision_for_container "$rollback_container")" == "$rollback_revision" ]] \
     || blocked "backend rollback container revision changed"
 
-  write_environment_file "$rollback_container" "$rollback_revision"
+  # Smoke-test the retained artifact with its exact original environment.
+  docker inspect --format '{{json .Config.Env}}' "$rollback_container" \
+    | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)))' > "$environment_file"
+  chmod 600 "$environment_file"
   assert_candidate_port_available
   new_image="$rollback_image_id"
   candidate_revision="$rollback_revision"
-  # The exact historical application rollback intentionally has no forward
+  # The exact adjacent application rollback intentionally has no forward
   # migration plan. Health and revision are tested without invoking migration
   # verification; every forward deployment still uses the required plan.
   start_candidate true false
+  assert_database_target "$candidate_container"
+  snapshot_rollback_database_evidence "$candidate_container" "$rollback_database_before"
   remove_candidate
 
   transaction_backup="$backend_live_container-pre-rollback-$run_id-$timestamp"
   replacement_origin="$rollback_container"
   transaction_active=1
-  docker stop --time 30 "$backend_live_container" >/dev/null
+  if container_running "$backend_live_container"; then
+    docker stop --time 30 "$backend_live_container" >/dev/null
+  fi
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
   docker rename "$rollback_container" "$backend_live_container"
@@ -1925,9 +2008,7 @@ rollback_backend() {
   cmp -s "$rollback_database_before" "$rollback_database_after" \
     || blocked "application-only rollback changed the migration ledger, settings, audit history, or protection trigger"
   trap '' HUP INT TERM
-  write_state \
-    "$rollback_revision" "$replacement_id" "$rollback_image_tag" \
-    "$transaction_backup" "$deployed_revision" "$deployed_image_id" "$deployed_image_tag"
+  rollback_record receipt "$deployment_id" "$(new_deployment_id)" "$transaction_backup" "$run_id" "$timestamp"
   transaction_active=0
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -1959,6 +2040,9 @@ case "$operation" in
     ;;
   rollback)
     rollback_backend
+    ;;
+  rollback-enroll)
+    enroll_backend_rollback
     ;;
   rollback-dry-run)
     dry_run_backend_rollback
