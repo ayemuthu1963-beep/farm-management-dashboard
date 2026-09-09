@@ -157,6 +157,7 @@ previous_state="$work_dir/backend-state.before"
 deployment_id=""
 rollback_status=""
 rollback_target_container=""
+rollback_target_container_id=""
 rollback_target_revision=""
 rollback_target_image=""
 [[ ! -e "$state_file" ]] || cat "$state_file" > "$previous_state"
@@ -527,6 +528,7 @@ assert_adjacent_application_rollback() {
   rollback_status=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$rollback_plan")
   deployment_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["deployment_id"])' "$rollback_plan")
   rollback_target_container=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target_name"])' "$rollback_plan")
+  rollback_target_container_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["container_id"])' "$rollback_plan")
   rollback_target_revision=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["revision"])' "$rollback_plan")
   rollback_target_image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["image_id"])' "$rollback_plan")
 }
@@ -1863,7 +1865,9 @@ dry_run_backend_rollback() {
   echo "rollback_dry_run_current_container=$original_container_id"
   echo "rollback_dry_run_current_image=$original_image_id"
   echo "rollback_dry_run_target_revision=$rollback_target_revision"
-  echo "rollback_dry_run_target_container=$rollback_target_container"
+  echo "rollback_dry_run_target_container=$rollback_target_container_id"
+  echo "rollback_dry_run_target_name=$rollback_target_container"
+  echo "rollback_deployment_id=$deployment_id"
   echo "rollback_dry_run_target_image=$rollback_target_image"
   echo "rollback_dry_run_database_evidence_sha256=$(sha256sum "$rollback_database_before" | awk '{print $1}')"
   echo "rollback_dry_run_migration_plan=empty-adjacent-application-only"
