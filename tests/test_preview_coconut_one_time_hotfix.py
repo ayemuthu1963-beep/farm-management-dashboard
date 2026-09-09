@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -190,6 +191,50 @@ class LostResponseRollback(unittest.TestCase):
         with patch.object(hotfix, "docker", return_value=rows) as call, self.assertRaises(hotfix.Blocked):
             hotfix.cleanup_shadow("owned-shadow", "candidate-image")
         self.assertEqual(call.call_count, 1)
+
+
+class BuildDiagnostics(unittest.TestCase):
+    def test_failed_build_retains_only_private_sanitized_evidence_and_stage(self):
+        result = subprocess.CompletedProcess([], 7, stdout=b"dependency step\nhttps://user:private-password@example.invalid/file\n",
+                                             stderr=b"Authorization: Bearer private-bearer\nTOKEN=private-token\n\x1b[31mnetwork timeout\x1b[0m\n")
+        with tempfile.TemporaryDirectory() as state, patch.object(hotfix, "STATE", Path(state)), patch.object(hotfix.subprocess, "run", return_value=result):
+            with self.assertRaises(hotfix.Blocked) as failure:
+                hotfix.command("docker", "build", "-", data=b"public archive", retain_build=True)
+            message = str(failure.exception)
+            self.assertIn("docker build exit_code=7 evidence=", message)
+            evidence = list((Path(state) / "coconut-build-evidence").iterdir())
+            self.assertEqual(len(evidence), 1)
+            self.assertEqual(evidence[0].stat().st_mode & 0o777, 0o600)
+            self.assertEqual(evidence[0].parent.stat().st_mode & 0o777, 0o700)
+            text = evidence[0].read_text()
+            self.assertIn("network timeout", text)
+            self.assertIn("dependency step", text)
+            for secret in ("private-password", "private-bearer", "private-token"):
+                self.assertNotIn(secret, text + message)
+            self.assertNotIn("\x1b", text)
+
+    def test_generic_exec_failure_never_retains_or_reports_output_or_arguments(self):
+        result = subprocess.CompletedProcess([], 9, stdout=b"DATABASE_URL=private-value", stderr=b"secret traceback")
+        with tempfile.TemporaryDirectory() as state, patch.object(hotfix, "STATE", Path(state)), patch.object(hotfix.subprocess, "run", return_value=result):
+            with self.assertRaises(hotfix.Blocked) as failure:
+                hotfix.command("docker", "exec", "private-argument", data=b"private-input")
+            self.assertEqual(str(failure.exception), "command failed: docker exec exit_code=9")
+            self.assertEqual(list(Path(state).iterdir()), [])
+
+    def test_logging_cannot_be_enabled_for_container_exec(self):
+        with patch.object(hotfix.subprocess, "run") as run, self.assertRaisesRegex(hotfix.Blocked, "restricted"):
+            hotfix.command("docker", "exec", "container", retain_build=True)
+        run.assert_not_called()
+
+    def test_existing_nonprivate_evidence_directory_rejected(self):
+        result = subprocess.CompletedProcess([], 1, stdout=b"public", stderr=b"public")
+        with tempfile.TemporaryDirectory() as state, patch.object(hotfix, "STATE", Path(state)):
+            directory = Path(state) / "coconut-build-evidence"
+            directory.mkdir(mode=0o755)
+            os.chmod(directory, 0o755)
+            with self.assertRaisesRegex(hotfix.Blocked, "private"):
+                hotfix.retain_build_evidence(result)
+            self.assertEqual(list(directory.iterdir()), [])
 
 
 if __name__ == "__main__":
