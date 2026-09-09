@@ -164,8 +164,15 @@ def snapshot(item, image, network=None):
     endpoint = networks.get("harvest-net", {})
     require(not endpoint.get("Aliases") and not endpoint.get("Links") and not endpoint.get("DriverOpts"), "unapproved network endpoint options")
     require(not endpoint.get("GlobalIPv6Address"), "unapproved IPv6 endpoint")
-    ipam = endpoint.get("IPAMConfig") or {}
-    require(not set(ipam) - {"IPv4Address"} and ipam.get("IPv4Address", "172.19.0.2") == "172.19.0.2", "unapproved static endpoint")
+    ipam = endpoint.get("IPAMConfig")
+    require(ipam is None or isinstance(ipam, dict), "invalid endpoint IPAM configuration")
+    ipam = ipam or {}
+    require(not set(ipam) - {"IPv4Address", "IPv6Address", "LinkLocalIPs"}, "unapproved static endpoint options")
+    require(ipam.get("IPv4Address", "172.19.0.2") == "172.19.0.2", "unapproved static endpoint")
+    # Docker may serialize empty IPv6/list defaults on an IPv4-only endpoint.
+    # They carry no address capability; all nonempty or mistyped values reject.
+    require(ipam.get("IPv6Address", "") == "", "unapproved static IPv6 endpoint")
+    require(ipam.get("LinkLocalIPs") is None or ipam.get("LinkLocalIPs") == [], "unapproved link-local endpoint")
     ip = endpoint.get("IPAddress", "")
     require(ip in {"", "172.19.0.2"}, "wrong Production address")
     if network is not None:

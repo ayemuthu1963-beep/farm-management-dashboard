@@ -170,6 +170,40 @@ class RecordTests(unittest.TestCase):
         with self.assertRaises(MODULE.Refused):
             self.records.verify(FUTURE)
 
+    def test_captured_live_and_retained_docker_endpoint_defaults(self):
+        # Sanitized Production inspection captured 2026-09-09: metadata only.
+        # Credentials/environment values are deliberately absent from this fixture.
+        endpoint = {
+            "Aliases": None, "DNSNames": ["harvest-api", "05fb88f88251"], "DriverOpts": None,
+            "EndpointID": "126b038f907e1f33a82abb9118de48a34b39778771cad0192d866dbdf37f4296",
+            "Gateway": "172.19.0.1", "GlobalIPv6Address": "", "GlobalIPv6PrefixLen": 0, "GwPriority": 0,
+            "IPAMConfig": {"IPv4Address": "172.19.0.2", "IPv6Address": ""},
+            "IPAddress": "172.19.0.2", "IPPrefixLen": 16, "IPv6Gateway": "", "Links": None,
+            "MacAddress": "3e:fd:2d:68:40:70",
+            "NetworkID": "6327f4a8da1cd862d74776049e808fbd4cd1a2125055d73f7db42382a368005f",
+        }
+        network = {"Name": "harvest-net", "Driver": "bridge", "Id": endpoint["NetworkID"], "IPAM": {"Config": [{"Subnet": "172.19.0.0/16", "IPRange": "172.19.128.0/17", "Gateway": "172.19.0.1"}]}}
+        self.live[0]["Id"] = "05fb88f88251cc79954f9212b07e6484c71c15c6e21da74445122292f5d0c4fe"
+        self.live[0]["NetworkSettings"]["Networks"] = {"harvest-net": endpoint}
+        self.previous[0]["Id"] = "b7de813c314274c043fb4e5f5220ad764a5dbda034fe233c3936fdcdf080b09a"
+        self.previous[0]["NetworkSettings"]["Networks"] = {}
+        captured = MODULE.snapshot(*self.live, network)
+        self.assertEqual(captured["ip"], "172.19.0.2")
+        self.assertEqual(MODULE.snapshot(*self.previous, network)["ip"], "")
+        for empty in [None, []]:
+            endpoint["IPAMConfig"]["LinkLocalIPs"] = empty
+            self.assertEqual(MODULE.snapshot(*self.live, network), captured)
+        for invalid in [
+            {"IPv6Address": "fd00::2"}, {"IPv6Address": None}, {"IPv6Address": False},
+            {"LinkLocalIPs": ["169.254.1.2"]}, {"LinkLocalIPs": ["fe80::2"]},
+            {"LinkLocalIPs": ""}, {"LinkLocalIPs": False}, {"LinkLocalIPs": {}},
+            {"IPv4Address": "172.19.0.3"}, {"UnknownOption": ""},
+        ]:
+            with self.subTest(invalid=invalid):
+                endpoint["IPAMConfig"] = {"IPv4Address": "172.19.0.2", "IPv6Address": "", **invalid}
+                with self.assertRaises(MODULE.Refused):
+                    MODULE.snapshot(*self.live, network)
+
     def test_repeated_successful_rollback_is_verified_noop_never_reverse(self):
         candidate = self.future()
         candidate[0]["State"]["Running"] = False
