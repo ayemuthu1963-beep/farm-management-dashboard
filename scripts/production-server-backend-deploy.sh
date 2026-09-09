@@ -500,7 +500,7 @@ validate_common_live_state() {
   cron_digest_before=$(cron_digest)
   [[ "$proxy_target_count_before" =~ ^[1-9][0-9]*$ ]] \
     || blocked "Production proxy has no approved frontend target"
-  if container_running "$backend_live_container"; then
+  if [[ "$operation" != "rollback" && "$operation" != "rollback-dry-run" ]]; then
     assert_database_target "$backend_live_container"
   fi
   snapshot_unrelated_containers > "$before_unrelated"
@@ -1846,15 +1846,15 @@ dry_run_backend_rollback() {
   validate_common_live_state
   assert_adjacent_application_rollback
   assert_candidate_port_available
-  if container_running "$backend_live_container"; then
-    snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
+  if container_running "$backend_live_container" \
+    && snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before" 2> "$work_dir/source-database-probe.error"; then
     echo "rollback_dry_run_database_validation=live-read-only"
   else
     # The signed record binds the database identity checked before activation.
     # Actual rollback additionally verifies the retained image against Production
     # through an isolated candidate before changing the live container.
     printf '{"database":"mfms_server_prod","source":"signed-deployment-record"}\n' > "$rollback_database_before"
-    echo "rollback_dry_run_database_validation=signed-identity-stopped-source"
+    echo "rollback_dry_run_database_validation=signed-identity-source-unavailable"
   fi
 
   echo "rollback_dry_run_environment=Production"
@@ -1880,10 +1880,8 @@ rollback_backend() {
   [[ -f "$state_file" ]] || blocked "no successful Production backend deployment is recorded"
   validate_common_live_state
   assert_adjacent_application_rollback
-  if container_running "$backend_live_container"; then
-    snapshot_rollback_database_evidence "$backend_live_container" "$rollback_database_before"
-  fi
   if [[ "$rollback_status" == "already-complete" ]]; then
+    assert_live_contract "$original_revision" "$original_image_id"
     echo "rollback_environment=Production"
     echo "rollback_component=backend"
     echo "rollback_url=$production_url"
@@ -1933,9 +1931,7 @@ rollback_backend() {
   # verification; every forward deployment still uses the required plan.
   start_candidate true false
   assert_database_target "$candidate_container"
-  if [[ ! -s "$rollback_database_before" ]]; then
-    snapshot_rollback_database_evidence "$candidate_container" "$rollback_database_before"
-  fi
+  snapshot_rollback_database_evidence "$candidate_container" "$rollback_database_before"
   remove_candidate
 
   transaction_backup="$backend_live_container-pre-rollback-$run_id-$timestamp"

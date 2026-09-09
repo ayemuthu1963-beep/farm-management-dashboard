@@ -69,7 +69,7 @@ Both rollback commands validate the same signed exact adjacent pair; callers can
 select an arbitrary historical image. A stopped or unhealthy exact source remains
 eligible after the workflow has exited. Its signed database identity and immutable
 configuration must still match. Dry-run reports when database validation uses that
-signed identity because the source is stopped; actual rollback checks the retained
+signed identity because the source is stopped or unavailable; actual rollback checks the retained
 image's real database through the isolated candidate before the traffic switch, then
 compares read-only database evidence before and after restoration. No rollback path
 runs migrations or restores a database dump.

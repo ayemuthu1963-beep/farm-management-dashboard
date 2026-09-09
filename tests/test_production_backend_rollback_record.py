@@ -326,7 +326,7 @@ rollback_record() {{ echo "record $*" >> "$trace"; }}
                 self.assertIn("PRODUCTION_BACKEND_ROLLBACK=PASS", result.stdout)
                 operations = trace.read_text()
                 if status == "already-complete":
-                    self.assertEqual(operations, "")
+                    self.assertEqual(operations, "protected-check\n")
                 else:
                     self.assertIn(f"docker rename {TARGET} harvest-api", operations)
                     self.assertLess(operations.index("protected-check"), operations.index("record receipt"))
