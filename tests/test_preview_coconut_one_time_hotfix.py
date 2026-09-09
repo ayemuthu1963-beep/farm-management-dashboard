@@ -202,6 +202,66 @@ class LostResponseRollback(unittest.TestCase):
         self.assertEqual(call.call_count, 1)
 
 
+class ProtectedInventory(unittest.TestCase):
+    def setUp(self):
+        self.rows = [{"Id": "protected-one", "Names": ["/name-one", "/alias-one"], "ImageID": "sha256:one", "State": "running",
+                      "Ports": [{"IP": "127.0.0.1", "PrivatePort": 8000, "PublicPort": 8010, "Type": "tcp"},
+                                {"IP": "", "PrivatePort": 443, "Type": "tcp"}]},
+                     {"Id": "protected-two", "Names": ["/name-two"], "ImageID": "sha256:two", "State": "exited", "Ports": []}]
+
+    def snapshot(self, rows, exclude=frozenset()):
+        with patch.object(hotfix, "docker", return_value=rows):
+            return hotfix.protected(exclude)
+
+    def test_only_order_of_ports_names_and_container_entries_is_ignored(self):
+        changed = copy.deepcopy(self.rows)
+        changed[0]["Ports"].reverse()
+        changed[0]["Names"].reverse()
+        changed.reverse()
+        self.assertEqual(self.snapshot(self.rows), self.snapshot(changed))
+
+    def test_each_port_field_and_record_multiplicity_is_preserved(self):
+        for field, value in (("IP", "0.0.0.0"), ("PrivatePort", 8001), ("PublicPort", 8011), ("Type", "udp"), ("ExtraField", "new")):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(self.rows)
+                changed[0]["Ports"][0][field] = value
+                self.assertNotEqual(self.snapshot(self.rows), self.snapshot(changed))
+        for operation in ("add", "remove", "duplicate", "remove-field"):
+            with self.subTest(operation=operation):
+                changed = copy.deepcopy(self.rows)
+                ports = changed[0]["Ports"]
+                if operation == "add":
+                    ports.append({"PrivatePort": 9000, "Type": "tcp"})
+                elif operation == "remove":
+                    ports.pop()
+                elif operation == "duplicate":
+                    ports.append(copy.deepcopy(ports[0]))
+                else:
+                    del ports[0]["IP"]
+                self.assertNotEqual(self.snapshot(self.rows), self.snapshot(changed))
+
+    def test_names_images_state_and_container_inventory_changes_are_rejected(self):
+        for field, value in (("Names", ["/changed"]), ("Names", ["/name-one", "/alias-one", "/name-one"]),
+                             ("Names", ["/name-one"]), ("Names", ["/name-one", "/alias-one", "/new"]),
+                             ("ImageID", "sha256:changed"), ("State", "exited"), ("Id", "changed-id")):
+            with self.subTest(field=field, value=value):
+                changed = copy.deepcopy(self.rows)
+                changed[0][field] = value
+                self.assertNotEqual(self.snapshot(self.rows), self.snapshot(changed))
+        self.assertNotEqual(self.snapshot(self.rows), self.snapshot(self.rows[1:]))
+        self.assertNotEqual(self.snapshot(self.rows), self.snapshot(self.rows + [{**self.rows[1], "Id": "extra-container"}]))
+
+    def test_exclusions_remain_exact_container_ids(self):
+        expected = self.snapshot(self.rows, {"protected-one"})
+        self.assertEqual(set(expected), {"protected-two"})
+        self.assertEqual(self.snapshot(self.rows, {"/name-one"}), self.snapshot(self.rows))
+        changed = copy.deepcopy(self.rows)
+        changed[0]["Ports"] = []
+        self.assertEqual(expected, self.snapshot(changed, {"protected-one"}))
+        changed[1]["State"] = "running"
+        self.assertNotEqual(expected, self.snapshot(changed, {"protected-one"}))
+
+
 class BuildDiagnostics(unittest.TestCase):
     def test_failed_build_retains_only_private_sanitized_evidence_and_stage(self):
         result = subprocess.CompletedProcess([], 7, stdout=b"dependency step\nhttps://user:private-password@example.invalid/file\n",
