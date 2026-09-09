@@ -66,6 +66,10 @@ readonly approved_storage_mount_source="/home/muthu/mfms_data/production/motor-s
 readonly approved_storage_mount_target="/var/lib/mfms/motor-screenshot-analysis"
 readonly expected_mount_contract="bind|$approved_storage_mount_source|$approved_storage_mount_target|true
 bind|$approved_temp_mount_source|$approved_temp_mount_target|true"
+readonly intelligence_key_source="/home/muthu/.local/state/mfms-production-intelligence/production_service_key"
+readonly intelligence_key_target="/run/secrets/mfms_intelligence_production_key"
+readonly intelligence_mount_contract="bind|$intelligence_key_source|$intelligence_key_target|false
+$expected_mount_contract"
 readonly expected_port_bindings='{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8001"}]}'
 readonly rollback_record_helper="/home/muthu/.local/libexec/mfms-production-backend-rollback-record.py"
 readonly approved_irrigation_settings_migration="db/migrations/20260818_production_irrigation_plan_settings.sql"
@@ -81,9 +85,12 @@ exec 9>"$lock_file"
 flock -n 9 || blocked "another Production deployment or rollback is already running"
 
 operation=""
+deployment_mode="forward-only-migrations"
+candidate_extra_mount_args=()
 candidate_revision=""
 expected_current_revision=""
 run_id=""
+readonly application_only_command_pattern='^deploy-production-backend-application-only ([0-9a-f]{40}) ([0-9]+)$'
 readonly deploy_command_pattern='^deploy-production-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_command_pattern='^rollback-production-backend ([0-9a-f]{40}) ([0-9]+)$'
 readonly rollback_dry_run_command_pattern='^dry-run-production-backend-rollback ([0-9a-f]{40}) ([0-9]+)$'
@@ -93,6 +100,11 @@ readonly credential_cutover_command_pattern='^cutover-production-database-role (
 original_command=${SSH_ORIGINAL_COMMAND:-}
 if [[ "$original_command" =~ $deploy_command_pattern ]]; then
   operation="deploy"
+  candidate_revision=${BASH_REMATCH[1]}
+  run_id=${BASH_REMATCH[2]}
+elif [[ "$original_command" =~ $application_only_command_pattern ]]; then
+  operation="deploy"
+  deployment_mode="application-only"
   candidate_revision=${BASH_REMATCH[1]}
   run_id=${BASH_REMATCH[2]}
 elif [[ "$original_command" =~ $rollback_command_pattern ]]; then
@@ -193,8 +205,46 @@ environment_sha256_for_container() {
 assert_approved_mount_contract() {
   local container=$1 contract
   contract=$(mount_contract_for_container "$container") || return 1
-  [[ "$contract" == "$expected_mount_contract" ]] \
-    || blocked "Production backend mount contract differs from the approved persistent storage and /tmp bind mounts"
+  [[ "$contract" == "$expected_mount_contract" || "$contract" == "$intelligence_mount_contract" ]] \
+    || { blocked "Production backend mount contract differs from an exact approved profile"; return 1; }
+  if [[ "$contract" == "$intelligence_mount_contract" ]]; then
+    validate_intelligence_key_file || return 1
+  fi
+}
+
+validate_intelligence_key_file() {
+  python3 - "$intelligence_key_source" <<'PY_INTELLIGENCE_KEY'
+import os, pathlib, stat, sys
+path = pathlib.Path(sys.argv[1])
+for item, mode, directory in [(path.parent, 0o700, True), (path, 0o400, False)]:
+    metadata = item.lstat()
+    if item.is_symlink() or (not directory and metadata.st_nlink != 1) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != mode:
+        raise SystemExit("Production Intelligence credential metadata is unsafe")
+    if directory and not stat.S_ISDIR(metadata.st_mode) or not directory and not stat.S_ISREG(metadata.st_mode):
+        raise SystemExit("Production Intelligence credential type is unsafe")
+PY_INTELLIGENCE_KEY
+}
+
+select_candidate_mounts() {
+  local source_container=$1 contract
+  candidate_extra_mount_args=()
+  assert_approved_mount_contract "$source_container" || return 1
+  contract=$(mount_contract_for_container "$source_container") || return 1
+  if [[ "$contract" == "$intelligence_mount_contract" ]]; then
+    candidate_extra_mount_args=(--mount "type=bind,source=$intelligence_key_source,target=$intelligence_key_target,readonly")
+  fi
+}
+
+write_application_only_environment() {
+  validate_intelligence_key_file || return 1
+  # Preserve every unrelated live setting, including database and actor identity.
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$backend_live_container" \
+    | awk 'length($0) && $0 !~ /^(MFMS_GIT_COMMIT|MFMS_BUILD_TIMESTAMP|MFMS_BUILD_ENVIRONMENT|MFMS_INTELLIGENCE_ENABLED|MFMS_INTELLIGENCE_URL|MFMS_INTELLIGENCE_SERVICE_ID|MFMS_INTELLIGENCE_SERVICE_KEY_FILE)=/' \
+    > "$environment_file" || return 1
+  printf 'MFMS_GIT_COMMIT=%s\nMFMS_BUILD_TIMESTAMP=%s\nMFMS_BUILD_ENVIRONMENT=Production\n' "$candidate_revision" "$timestamp" >> "$environment_file"
+  printf 'MFMS_INTELLIGENCE_ENABLED=true\nMFMS_INTELLIGENCE_URL=http://10.122.0.3:8765\nMFMS_INTELLIGENCE_SERVICE_ID=mfms-production-backend\nMFMS_INTELLIGENCE_SERVICE_KEY_FILE=%s\n' "$intelligence_key_target" >> "$environment_file"
+  chmod 600 "$environment_file" || return 1
+  candidate_extra_mount_args=(--mount "type=bind,source=$intelligence_key_source,target=$intelligence_key_target,readonly")
 }
 
 network_attached_for_container() {
@@ -729,19 +779,20 @@ validate_release_descriptor() {
   local descriptor="$source_dir/deploy/production-backend-release.json"
   [[ -f "$descriptor" ]] || blocked "Production backend release descriptor is missing"
   python3 - "$descriptor" "$source_dir" "$original_revision" "$candidate_revision" \
-    "$migration_plan" "$openapi_plan" <<'PY'
+    "$migration_plan" "$openapi_plan" "$deployment_mode" <<'PY'
 import hashlib
 import json
 import pathlib
 import re
 import sys
+import subprocess
 
-descriptor_path, source_text, current, candidate, migrations_output, openapi_output = sys.argv[1:]
+descriptor_path, source_text, current, candidate, migrations_output, openapi_output, mode = sys.argv[1:]
 source = pathlib.Path(source_text).resolve()
 data = json.loads(pathlib.Path(descriptor_path).read_text(encoding="utf-8"))
 
 expected_invariants = {
-    "database": "production-migrations-only",
+    "database": "read-only-verification-only" if mode == "application-only" else "production-migrations-only",
     "frontend": "unchanged",
     "odk": "unchanged",
     "schedules": "unchanged",
@@ -759,7 +810,12 @@ if data.get("repository") != "ayemuthu1963-beep/muthu-harvest-dashboard":
     raise SystemExit("backend release descriptor repository is invalid")
 if data.get("release_branch") != "production-release":
     raise SystemExit("backend release descriptor branch is invalid")
-if data.get("deployment_kind") != "backend-with-forward-only-migrations":
+if mode not in {"application-only", "forward-only-migrations"}:
+    raise SystemExit("invalid explicit deployment mode")
+expected_kind = "backend-application-only" if mode == "application-only" else "backend-with-forward-only-migrations"
+if mode == "application-only" and data.get("runtime_profile") != "production-intelligence-v1":
+    raise SystemExit("application-only runtime profile is invalid")
+if data.get("deployment_kind") != expected_kind:
     raise SystemExit("backend release descriptor deployment kind is invalid")
 if data.get("protected_invariants") != expected_invariants:
     raise SystemExit("backend release descriptor protected invariants are incomplete")
@@ -769,6 +825,10 @@ if not isinstance(migrations, list):
     raise SystemExit("backend release descriptor migrations must be a list")
 if not migrations:
     raise SystemExit("Production migration release must contain a declared migration")
+if mode == "application-only":
+    previous = json.loads(subprocess.check_output(["git", "-C", str(source), "show", current + ":deploy/production-backend-release.json"]))
+    if migrations != previous.get("migrations") or len(migrations) != 13:
+        raise SystemExit("application-only release must preserve all 13 current migration checksums")
 safe_migration = re.compile(r"^db/migrations/[0-9][A-Za-z0-9_.-]*\.sql$")
 seen = set()
 plan = []
@@ -863,6 +923,8 @@ def release_specific_path_approved(path):
 if not changed:
     raise SystemExit("backend candidate contains no changes from the live revision")
 for path in changed:
+    if mode == "application-only" and (path.startswith("db/") or path == "scripts/apply_production_migrations.py"):
+        raise SystemExit("application-only release cannot change database artifacts or the verified migration runner")
     if allowed.fullmatch(path) or release_specific_path_approved(path):
         continue
     raise SystemExit(f"backend candidate contains an unapproved path: {path}")
@@ -1565,10 +1627,10 @@ apply_migrations() {
 verify_migrations() {
   local path checksum
   [[ -s "$migration_plan" ]] \
-    || blocked "Production migration release has an empty migration plan"
+    || { blocked "Production migration release has an empty migration plan"; return 1; }
   while IFS='|' read -r path checksum; do
     [[ -n "$path" && -n "$checksum" ]] \
-      || blocked "Production migration verification entry is incomplete"
+      || { blocked "Production migration verification entry is incomplete"; return 1; }
     docker run --rm \
       --network "$production_network" \
       --env-file "$environment_file" \
@@ -1577,7 +1639,7 @@ verify_migrations() {
         --confirm-production \
         --migration "$path" \
         --expected-sha256 "$checksum" \
-        --verify
+        --verify || return 1
   done < "$migration_plan"
 }
 
@@ -1595,6 +1657,7 @@ start_candidate() {
     -p "127.0.0.1:$candidate_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
+    "${candidate_extra_mount_args[@]}" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
   wait_for_health "http://127.0.0.1:$candidate_port" \
@@ -1770,12 +1833,22 @@ deploy_backend() {
   prepare_backend_source
   validate_release_descriptor
   build_image
-  write_environment_file "$backend_live_container" "$candidate_revision"
-  create_production_database_backup
-
-  # The verified custom-format backup is retained before the checksum-pinned,
-  # forward-only migration is applied and independently verified.
-  apply_migrations
+  select_candidate_mounts "$backend_live_container"
+  if [[ "$deployment_mode" == "application-only" ]]; then
+    write_application_only_environment
+  else
+    write_environment_file "$backend_live_container" "$candidate_revision"
+  fi
+  if [[ "$deployment_mode" == "application-only" ]]; then
+    verify_migrations || return 1
+  elif [[ "$deployment_mode" == "forward-only-migrations" ]]; then
+    # Preserve the established direct execution context of the guarded backup.
+    create_production_database_backup
+    apply_migrations
+  else
+    blocked "unapproved database deployment mode"
+    return 1
+  fi
   transaction_backup="$backend_live_container-pre-github-$run_id-$timestamp"
   stage_backend_rollback_record
   start_candidate
@@ -1796,6 +1869,7 @@ deploy_backend() {
     -p "127.0.0.1:$live_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
+    "${candidate_extra_mount_args[@]}" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
   rollback_record finalize "$deployment_id" "$new_image" "$original_image_tag"
@@ -1818,14 +1892,21 @@ deploy_backend() {
   echo "deployed_backend_image_id=$new_image_id"
   echo "rollback_container=$transaction_backup"
   echo "database=$database_name"
-  echo "database_backup_path=$database_backup_file"
-  echo "database_backup_sha256=$database_backup_sha256"
-  echo "database_backup_bytes=$database_backup_bytes"
-  echo "database_backup_verified=true"
-  echo "database_backup_role=$database_backup_role"
-  echo "database_backup_restore_postgres_major=$database_backup_restore_postgres_major"
-  echo "database_backup_restore_verified=$database_backup_restore_verified"
-  echo "database_migrations=forward-only"
+  echo "deployment_mode=$deployment_mode"
+  if [[ "$deployment_mode" == "application-only" ]]; then
+    echo "database_backup_operations=none"
+    echo "database_migration_operations=none"
+    echo "database_migrations=read-only-verified"
+  else
+    echo "database_backup_path=$database_backup_file"
+    echo "database_backup_sha256=$database_backup_sha256"
+    echo "database_backup_bytes=$database_backup_bytes"
+    echo "database_backup_verified=true"
+    echo "database_backup_role=$database_backup_role"
+    echo "database_backup_restore_postgres_major=$database_backup_restore_postgres_major"
+    echo "database_backup_restore_verified=$database_backup_restore_verified"
+    echo "database_migrations=forward-only"
+  fi
   echo "worker_actor_assertion=server-local"
   echo "frontend_unchanged=true"
   echo "odk_unchanged=true"
@@ -1846,6 +1927,7 @@ credential_cutover_backend() {
   candidate_revision="$original_revision"
   new_image="$original_image_id"
   new_image_id="$original_image_id"
+  select_candidate_mounts "$backend_live_container"
   write_environment_file "$backend_live_container" "$original_revision"
   transaction_backup="$backend_live_container-pre-database-role-$run_id-$timestamp"
   stage_backend_rollback_record
@@ -1867,6 +1949,7 @@ credential_cutover_backend() {
     -p "127.0.0.1:$live_port:8000" \
     --mount "type=bind,source=$approved_storage_mount_source,target=$approved_storage_mount_target" \
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
+    "${candidate_extra_mount_args[@]}" \
     --env-file "$environment_file" \
     "$original_image_id" >/dev/null
   rollback_record finalize "$deployment_id" "$original_image_tag" "$original_image_tag"
@@ -1974,6 +2057,7 @@ rollback_backend() {
   [[ "$(image_revision_for_container "$rollback_container")" == "$rollback_revision" ]] \
     || blocked "backend rollback container revision changed"
 
+  select_candidate_mounts "$rollback_container"
   # Smoke-test the retained artifact with its exact original environment.
   docker inspect --format '{{json .Config.Env}}' "$rollback_container" \
     | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)))' > "$environment_file"

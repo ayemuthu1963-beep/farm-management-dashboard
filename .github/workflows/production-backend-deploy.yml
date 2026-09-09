@@ -7,6 +7,14 @@ on:
         description: Exact 40-character muthu-harvest-dashboard production-release revision to deploy
         required: true
         type: string
+      deployment_mode:
+        description: Explicit database behavior; application-only performs read-only verification
+        required: true
+        default: forward-only-migrations
+        type: choice
+        options:
+          - forward-only-migrations
+          - application-only
       confirmation:
         description: Type DEPLOY PRODUCTION BACKEND ONLY to authorize the guarded API switch
         required: true
@@ -25,11 +33,13 @@ jobs:
     timeout-minutes: 5
     outputs:
       candidate_revision: ${{ steps.release.outputs.candidate_revision }}
+      deployment_mode: ${{ steps.release.outputs.deployment_mode }}
     steps:
       - name: Require the exact Production-only backend release request
         id: release
         shell: bash
         env:
+          DEPLOYMENT_MODE: ${{ inputs.deployment_mode }}
           CANDIDATE_INPUT: ${{ inputs.candidate_revision }}
           CONFIRMATION: ${{ inputs.confirmation }}
           WORKFLOW_REF: ${{ github.ref }}
@@ -49,6 +59,8 @@ jobs:
             exit 1
           }
 
+          [[ "$DEPLOYMENT_MODE" == "application-only" || "$DEPLOYMENT_MODE" == "forward-only-migrations" ]] || exit 1
+          echo "deployment_mode=$DEPLOYMENT_MODE" >> "$GITHUB_OUTPUT"
           echo "candidate_revision=$CANDIDATE_INPUT" >> "$GITHUB_OUTPUT"
 
   deploy:
@@ -107,6 +119,7 @@ jobs:
       - name: Deploy the approved Production backend revision
         shell: bash
         env:
+          DEPLOYMENT_MODE: ${{ needs.authorize.outputs.deployment_mode }}
           CANDIDATE_REVISION: ${{ needs.authorize.outputs.candidate_revision }}
           IDENTITY_FILE: ${{ steps.ssh.outputs.identity_file }}
           KNOWN_HOSTS_FILE: ${{ steps.ssh.outputs.known_hosts_file }}
@@ -117,6 +130,12 @@ jobs:
           report="$RUNNER_TEMP/production-backend-deployment.txt"
           : > "$report"
 
+          command="deploy-production-backend"
+          if [[ "$DEPLOYMENT_MODE" == "application-only" ]]; then
+            command="deploy-production-backend-application-only"
+          elif [[ "$DEPLOYMENT_MODE" != "forward-only-migrations" ]]; then
+            exit 1
+          fi
           ssh -T \
             -i "$IDENTITY_FILE" \
             -o BatchMode=yes \
@@ -127,7 +146,7 @@ jobs:
             -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
             -o ConnectTimeout=10 \
             "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
-            "deploy-production-backend $CANDIDATE_REVISION $GITHUB_RUN_ID" \
+            "$command $CANDIDATE_REVISION $GITHUB_RUN_ID" \
             | tee "$report"
 
           grep -Fqx 'deployment_environment=Production' "$report"
@@ -135,11 +154,18 @@ jobs:
           grep -Fqx 'deployment_url=https://muthufarms.com' "$report"
           grep -Fqx "deployed_backend_revision=$CANDIDATE_REVISION" "$report"
           grep -Fqx 'database=mfms_server_prod' "$report"
-          grep -Eq '^database_backup_path=/home/muthu/\.local/state/mfms-production-github/database-backups/mfms_server_prod-pre-[0-9a-f]{40}-[0-9]{8}T[0-9]{6}Z\.dump$' "$report"
-          grep -Eq '^database_backup_sha256=[0-9a-f]{64}$' "$report"
-          grep -Eq '^database_backup_bytes=[1-9][0-9]*$' "$report"
-          grep -Fqx 'database_backup_verified=true' "$report"
-          grep -Fqx 'database_migrations=forward-only' "$report"
+          grep -Fqx "deployment_mode=$DEPLOYMENT_MODE" "$report"
+          if [[ "$DEPLOYMENT_MODE" == "application-only" ]]; then
+            grep -Fqx 'database_backup_operations=none' "$report"
+            grep -Fqx 'database_migration_operations=none' "$report"
+            grep -Fqx 'database_migrations=read-only-verified' "$report"
+          else
+            grep -Eq '^database_backup_path=/home/muthu/\.local/state/mfms-production-github/database-backups/mfms_server_prod-pre-[0-9a-f]{40}-[0-9]{8}T[0-9]{6}Z\.dump$' "$report"
+            grep -Eq '^database_backup_sha256=[0-9a-f]{64}$' "$report"
+            grep -Eq '^database_backup_bytes=[1-9][0-9]*$' "$report"
+            grep -Fqx 'database_backup_verified=true' "$report"
+            grep -Fqx 'database_migrations=forward-only' "$report"
+          fi
           grep -Fqx 'worker_actor_assertion=server-local' "$report"
           grep -Fqx 'frontend_unchanged=true' "$report"
           grep -Fqx 'odk_unchanged=true' "$report"
