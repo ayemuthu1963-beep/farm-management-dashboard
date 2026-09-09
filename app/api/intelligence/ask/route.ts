@@ -195,11 +195,14 @@ function isSafeExportContext(value: unknown, table: unknown) {
     keys.push(column.key); formats.set(column.key, column.format)
   }
   if (!Array.isArray(value.default_columns) || !value.default_columns.every((key) => typeof key === "string" && keys.includes(key))) return false
-  if (JSON.stringify(value.available_columns.filter((column) => isRecord(column) && column.default_selected).map((column) => (column as Record<string, unknown>).key)) !== JSON.stringify(value.default_columns)) return false
+  if (new Set(value.default_columns).size !== value.default_columns.length) return false
+  const selectedKeys = value.available_columns.filter((column) => isRecord(column) && column.default_selected).map((column) => String((column as Record<string, unknown>).key))
+  if (JSON.stringify(selectedKeys.toSorted()) !== JSON.stringify(value.default_columns.toSorted())) return false
   if (!value.rows.every((row) => isRecord(row) && JSON.stringify(Object.keys(row)) === JSON.stringify(keys) && keys.every((key) => isSafeCell(row[key], formats.get(key) ?? "", key)))) return false
   if (!Array.isArray(table.columns) || table.rows.length > value.rows.length) return false
   const displayedColumns = table.columns
   if (!displayedColumns.every((column) => isRecord(column) && typeof column.key === "string" && formats.get(column.key) === column.format)) return false
+  if (JSON.stringify(value.default_columns) !== JSON.stringify(displayedColumns.map((column) => (column as Record<string, unknown>).key))) return false
   const exportRows = value.rows
   if (!table.rows.every((row, index) => isRecord(row) && displayedColumns.every((column) => isRecord(column)
     && JSON.stringify(row[String(column.key)]) === JSON.stringify((exportRows[index] as Record<string, unknown>)[String(column.key)])))) return false

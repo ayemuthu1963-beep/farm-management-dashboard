@@ -159,7 +159,16 @@ try {
   }
   configure(); upstream = structuredClone(exportResponse)
   assert.equal((await ask()).status, 200, "Export may contain additional columns and undisplayed rows"); cases++
+  configure(); upstream = structuredClone(exportResponse); upstream.export_context.available_columns.reverse()
+  upstream.export_context.rows = upstream.export_context.rows.map((row) => Object.fromEntries(upstream.export_context.available_columns.map((column) => [column.key, row[column.key]])))
+  const reorderedDefaults = structuredClone(upstream.export_context.default_columns)
+  const reorderedResponse = await ask(); assert.equal(reorderedResponse.status, 200)
+  assert.deepEqual((await reorderedResponse.json()).export_context.default_columns, reorderedDefaults, "Selected column order is preserved independently of available-column category order"); cases++
   for (const mutate of [
+    (data) => { data.export_context.default_columns.reverse() },
+    (data) => { data.export_context.default_columns.push(data.export_context.default_columns[0]) },
+    (data) => { data.export_context.default_columns.pop() },
+    (data) => { data.export_context.default_columns.push("average_nuts_per_harvested_record") },
     (data) => { data.table.rows[0].total_nuts = 1 },
     (data) => { data.table.rows[0].tree_no = "351" },
     (data) => { data.table.rows[0].quality_flags = ["UNMATCHED"] },
@@ -202,6 +211,13 @@ try {
   const unavailable = await ask(); assert.equal(unavailable.status, 503); assert.ok(!(await unavailable.text()).includes(signingSecret)); cases++
   configure(); globalThis.fetch = async () => new Response("not JSON", { status: 500 })
   assert.equal((await ask()).status, 502); cases++
+  if (process.env.MFMS_INTELLIGENCE_RESPONSE_FIXTURE) {
+    const fixture = JSON.parse(readFileSync(process.env.MFMS_INTELLIGENCE_RESPONSE_FIXTURE, "utf8"))
+    for (const response of Array.isArray(fixture) ? fixture : [fixture]) {
+      configure(); upstream = response
+      assert.equal((await ask()).status, 200, "The supplied private-service compatibility response must pass the real frontend route"); cases++
+    }
+  }
   const entry = mfmsNavigationItems.find((item) => item.id === "mfms-intelligence")
   assert.ok(entry); assert.equal(entry.href, "/intelligence"); assert.equal(entry.status, "active")
   assert.equal(sidebarNavigationItems.filter((item) => item.id === entry.id).length, 1)
