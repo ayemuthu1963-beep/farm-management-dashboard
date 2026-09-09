@@ -140,6 +140,65 @@ try {
     const response = await ask(); assert.equal(response.status, 502)
     assert.ok(!JSON.stringify(await response.json()).includes(signingSecret)); cases++
   }
+
+  const exportRows = [
+    { tree_no: "35.1", total_nuts: 532, quality_flags: ["VERIFIED"], average_nuts_per_harvested_record: null },
+    { tree_no: "351", total_nuts: 610, quality_flags: [], average_nuts_per_harvested_record: "61.000000" },
+  ]
+  const tableColumns = [{ key: "tree_no", label: "Tree", format: "text" }, { key: "total_nuts", label: "Nuts", format: "integer" }, { key: "quality_flags", label: "Quality", format: "flags" }]
+  const availableColumns = [...tableColumns, { key: "average_nuts_per_harvested_record", label: "Average", format: "decimal6" }].map((column) => ({ ...column, category: "Core", required: false, default_selected: column.key !== "average_nuts_per_harvested_record" }))
+  const exportResponse = {
+    ...validResponse,
+    table: { title: "Snapshot", columns: tableColumns, rows: [{ tree_no: "35.1", total_nuts: 532, quality_flags: ["VERIFIED"] }] },
+    export_context: {
+      version: "MFMS_INTELLIGENCE_EXPORT_CONTEXT_V1", context_id: "a".repeat(64), question: "Verified trees", answer_type: "Trees", filename_stem: "Trees",
+      warehouse_refresh_id: "MFMS_REFRESH_TEST", harvest_data_as_of: "2026-08-04", lifecycle_as_of_date: null, selected_cycles: ["19"],
+      all_matching_row_count: 2, displayed_row_count: 1, available_columns: availableColumns, default_columns: tableColumns.map((column) => column.key), rows: exportRows,
+      verification: Object.fromEntries(["applied_filters", "complete_history_denominator", "denominator", "direction_rule", "duplicate_tree_1112_policy", "incomplete_history_exclusions", "lifecycle_filter", "period", "period_end", "period_start", "precision_policy", "quality_policy"].map((key) => [key, null])),
+    },
+  }
+  configure(); upstream = structuredClone(exportResponse)
+  assert.equal((await ask()).status, 200, "Export may contain additional columns and undisplayed rows"); cases++
+  configure(); upstream = structuredClone(exportResponse); upstream.export_context.available_columns.reverse()
+  upstream.export_context.rows = upstream.export_context.rows.map((row) => Object.fromEntries(upstream.export_context.available_columns.map((column) => [column.key, row[column.key]])))
+  const reorderedDefaults = structuredClone(upstream.export_context.default_columns)
+  const reorderedResponse = await ask(); assert.equal(reorderedResponse.status, 200)
+  assert.deepEqual((await reorderedResponse.json()).export_context.default_columns, reorderedDefaults, "Selected column order is preserved independently of available-column category order"); cases++
+  for (const mutate of [
+    (data) => { data.export_context.default_columns.reverse() },
+    (data) => { data.export_context.default_columns.push(data.export_context.default_columns[0]) },
+    (data) => { data.export_context.default_columns.pop() },
+    (data) => { data.export_context.default_columns.push("average_nuts_per_harvested_record") },
+    (data) => { data.table.rows[0].total_nuts = 1 },
+    (data) => { data.table.rows[0].tree_no = "351" },
+    (data) => { data.table.rows[0].quality_flags = ["UNMATCHED"] },
+    (data) => { data.export_context.rows.reverse() },
+    (data) => { data.export_context.rows[0].total_nuts = 1 },
+    (data) => { data.table.columns[1].format = "text"; data.table.rows[0].total_nuts = "532" },
+    (data) => { data.table.columns.push({ key: "plot", label: "Plot", format: "text" }); data.table.rows[0].plot = "Plot 1" },
+    (data) => { data.table.rows.push({ ...data.table.rows[0] }, { ...data.table.rows[0] }); data.export_context.displayed_row_count = 3 },
+  ]) {
+    configure(); upstream = structuredClone(exportResponse); mutate(upstream)
+    assert.equal((await ask()).status, 502, "Displayed rows must equal the leading export projection"); cases++
+  }
+  const irrigationPlan = { domain: "irrigation", metric: "runtime_minutes", group_by: "none", filters: { zones: [], motors: [], wells: [] }, period: { kind: "current_month", count: null, start: null, end: null }, sort: { direction: "asc" }, limit: null, chart_type: null }
+  const wellPlan = { domain: "well_water", metric: "calibrated_litres", group_by: "well", filters: { wells: [], reading_period: null, quality_filter: null }, period: { kind: "current_month", count: null, start: null, end: null }, sort: { direction: "asc" }, limit: null, chart_type: null }
+  const compositeResponse = { ...validResponse,
+    analysis_plan: { kind: "composite", domains: ["irrigation", "well_water"], period: { kind: "domain_default", start: null, end: null, count: null }, presentation: "domain_cards", execution: "independent_validated_domain_subplans", subplans: [irrigationPlan, wellPlan] },
+    sections: ["irrigation", "well_water"].map((domain) => ({ domain, title: domain, headline: "Verified", period: null, data_as_of: "2026-09-09", denominator: null, quality_flags: [], data_source_status: "VERIFIED_ANALYTICS", table: null, chart: null })), charts: [],
+    freshness: { domains: { irrigation: "2026-09-09", well_water: "2026-09-09" }, oldest_source_refresh: "2026-09-09", oldest_source_domain: "irrigation", quality_flags: [] },
+  }
+  configure(); upstream = structuredClone(compositeResponse); assert.equal((await ask()).status, 200); cases++
+  for (const mutate of [
+    (data) => { data.analysis_plan = null },
+    (data) => { data.analysis_plan.domains.reverse(); data.analysis_plan.subplans.reverse() },
+    (data) => { data.sections.reverse(); data.freshness.domains = { well_water: "2026-09-09", irrigation: "2026-09-09" } },
+    (data) => { data.sections[0].domain = "beetle_monitoring"; data.freshness.domains = { beetle_monitoring: "2026-09-09", well_water: "2026-09-09" }; data.freshness.oldest_source_domain = "beetle_monitoring" },
+  ]) {
+    configure(); upstream = structuredClone(compositeResponse); mutate(upstream)
+    assert.equal((await ask()).status, 502, "Composite result domains must match the validated plan in order"); cases++
+  }
+
   for (const status of ["BLOCKED_GOVERNANCE", "BLOCKED_SECURITY", "BLOCKED_NOT_YET_SUPPORTED", "BLOCKED_LIMIT"]) {
     configure(); upstream = { ...upstream, answer: "", status, blocked_reason: "Governed boundary", metabase_call_made: false, provider_call_made: false }
     upstreamStatus = status === "BLOCKED_LIMIT" ? 429 : 200
@@ -152,6 +211,13 @@ try {
   const unavailable = await ask(); assert.equal(unavailable.status, 503); assert.ok(!(await unavailable.text()).includes(signingSecret)); cases++
   configure(); globalThis.fetch = async () => new Response("not JSON", { status: 500 })
   assert.equal((await ask()).status, 502); cases++
+  if (process.env.MFMS_INTELLIGENCE_RESPONSE_FIXTURE) {
+    const fixture = JSON.parse(readFileSync(process.env.MFMS_INTELLIGENCE_RESPONSE_FIXTURE, "utf8"))
+    for (const response of Array.isArray(fixture) ? fixture : [fixture]) {
+      configure(); upstream = response
+      assert.equal((await ask()).status, 200, "The supplied private-service compatibility response must pass the real frontend route"); cases++
+    }
+  }
   const entry = mfmsNavigationItems.find((item) => item.id === "mfms-intelligence")
   assert.ok(entry); assert.equal(entry.href, "/intelligence"); assert.equal(entry.status, "active")
   assert.equal(sidebarNavigationItems.filter((item) => item.id === entry.id).length, 1)

@@ -10,14 +10,14 @@ const sha256 = (path) => createHash("sha256")
   .digest("hex")
 
 const intelligenceVerifiedFiles = [
-  "app/intelligence/page.tsx",
-  "components/intelligence/intelligence-client.tsx",
-  "lib/mfms-intelligence-excel.ts"
+  "app/intelligence/page.tsx"
 ]
 const intelligenceProductionAdaptations = [
   "app/api/intelligence/ask/route.ts",
   "app/intelligence/layout.tsx",
+  "components/intelligence/intelligence-client.tsx",
   "deploy/production-release-manifest.json",
+  "lib/mfms-intelligence-excel.ts",
   "lib/mfms-navigation.ts",
   "package.json",
   "tests/farm-calendar-production-promotion.mjs",
