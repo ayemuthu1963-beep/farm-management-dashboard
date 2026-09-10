@@ -80,7 +80,7 @@ def resource(value,meta):
 def metadata(path):
  global PRIVATE_ROOT
  path=Path(path)
- require(path.name=='adapter.json' and path.parent.name.startswith('lifecycle-'),'invalid adapter path')
+ require(path.name in {'adapter-prepare.json','adapter-finalized.json'} and path.parent.name.startswith('lifecycle-'),'invalid adapter path')
  for directory in [path.parent,*path.parent.parents]:
   info=directory.lstat()
   require(stat.S_ISDIR(info.st_mode) and not directory.is_symlink() and info.st_uid in (0,os.getuid()) and not info.st_mode & 0o022,'unsafe adapter ancestor')
@@ -90,6 +90,7 @@ def metadata(path):
  meta=json.loads(path.read_text());require(meta['prefix']==PREFIX and re.fullmatch('[0-9a-f]{64}',meta['network']),'adapter identity')
  require(all(re.fullmatch('[0-9a-f]{64}',v) for v in meta['ids']) and len(meta['ids'])==2 and len(set(meta['ids']))==2,'adapter ID set')
  require(meta['original'] in meta['ids'] and meta['candidate'] in meta['ids'] and meta['original']!=meta['candidate'],'adapter role IDs')
+ require(meta.get('state_name') in {'prepare-only-state','finalized-state'},'adapter state identity')
  PRIVATE_ROOT=path.parent
  return meta
 
@@ -161,7 +162,7 @@ def projected_snapshot(module,name,meta):
 
 def records(module,directory,meta):return module.Records(directory,inspect=lambda name:projected_snapshot(module,name,meta))
 def record_adapter(path,args):
- meta=metadata(path);module=load_module(HELPER,'repaired_records_adapter');r=records(module,Path(path).parent/'failed-state',meta)
+ meta=metadata(path);module=load_module(HELPER,'repaired_records_adapter');r=records(module,Path(path).parent/meta['state_name'],meta)
  require(args,'empty record operation')
  logical=lambda name: 'harvest-api' if name==LIVE else 'harvest-api-pre-disposable' if name==RETAINED else None
  if args[0]=='network-state':
@@ -175,7 +176,8 @@ def record_adapter(path,args):
  elif args[0] in ('restore-ready','replacement-ready'):
   require(len(args)==4 and args[1]==IDENTITY and args[2]=='deploy' and logical(args[3]),'invalid readiness arguments')
   method=r.restore_ready if args[0]=='restore-ready' else r.replacement_ready
-  method(IDENTITY,'deploy',logical(args[3]))
+  result=method(IDENTITY,'deploy',logical(args[3]))
+  if args[0]=='replacement-ready':print(result)
  elif args[0]=='transition-ready':
   require(len(args)==6 and args[1]==IDENTITY and args[2]=='deploy' and args[3] in ('source','target') and logical(args[4]) and args[5] in ('true','false'),'invalid transition readiness arguments')
   r.transition_ready(IDENTITY,'deploy',args[3],logical(args[4]),args[5])
@@ -193,7 +195,8 @@ def run_restore(meta_path):
  meta=metadata(meta_path);root=meta_path.parent
  funcs=['container_exists','container_running','network_ip_for_container','network_attached_for_container','network_static_ip_for_container','assert_transition_ownership','stop_backend_for_transition','start_backend_for_transition','disconnect_production_network','ensure_production_network_ip','restore_original_backend']
  prefix='set -Eeuo pipefail\n'
- variables=dict(backend_live_container=LIVE,production_network=NET,approved_production_ipv4=ADDRESS,original_container_id=meta['original'],transaction_backup=RETAINED,replacement_origin='',timestamp='20260909T190000Z',previous_state=str(root/'previous-state'),state_dir=str(root/'failed-state'),state_file=str(root/'failed-state/last-successful-backend-switch'),operation='deploy',original_revision=lifecycle.REVISION,original_image_id=IMAGE,original_network_ip=ADDRESS,deployment_id=IDENTITY)
+ state_dir=root/meta['state_name']
+ variables=dict(backend_live_container=LIVE,production_network=NET,approved_production_ipv4=ADDRESS,original_container_id=meta['original'],transaction_backup=RETAINED,replacement_origin='',timestamp='20260909T190000Z',previous_state=str(root/'previous-state'),state_dir=str(state_dir),state_file=str(state_dir/'last-successful-backend-switch'),operation='deploy',original_revision=lifecycle.REVISION,original_image_id=IMAGE,original_network_ip=ADDRESS,deployment_id=IDENTITY)
  prefix+='\n'.join(k+'='+shlex.quote(v) for k,v in variables.items())+'\n'
  invocation=shlex.quote(sys.executable)+' '+shlex.quote(str(Path(__file__).resolve()))
  prefix+='docker() { '+invocation+' --adapter '+shlex.quote(str(meta_path))+' "$@"; }\n'
@@ -215,6 +218,14 @@ def create(meta):
 
 def immutable_hashes(directory):
  return {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (directory/'backend-rollback-records').iterdir()}
+
+def protected_closure(summary,comparison):
+ changes=comparison['protected']
+ transient_exec_only=all(len(change.get('path',[]))==2 and change['path'][-1]=='ExecIDs'
+                         for change in changes)
+ return (summary['original_projection_canonical_changes']==0
+         and summary['protected_changes']==len(changes)
+         and (not changes or transient_exec_only))
 
 def main():
  global AUDIT,BEFORE
@@ -242,39 +253,61 @@ def main():
   owned_network(meta)
   create_attempted=True;meta['original']=create(meta)
   call('start',meta['original']);original=owned(meta['original'],meta);AUDIT.snapshot('original-running',{meta['original']:original})
-  directory=AUDIT.root/'failed-state';directory.mkdir(mode=0o700)
-  r=records(old,directory,meta);r.initialize()
+  prepare_dir=AUDIT.root/'prepare-only-state';prepare_dir.mkdir(mode=0o700)
+  r=records(old,prepare_dir,meta);r.initialize()
   state={'deployed_revision':lifecycle.REVISION,'deployed_image_id':IMAGE,'deployed_image_tag':'disposable-current','rollback_container':'harvest-api-pre-disposable','rollback_revision':lifecycle.REVISION,'rollback_image_id':IMAGE,'rollback_image_tag':'disposable-previous','run_id':'899999','updated_at':'20260909T185900Z','database_migrations':'forward-only'}
   old.atomic_write(r.state_path,old.state_bytes(state))
   source_state=r.state_path.read_bytes();AUDIT.write('previous-state',source_state,raw=True)
   r.stage(IDENTITY,lifecycle.REVISION,IMAGE,'harvest-api-pre-disposable','900000','20260909T190000Z')
   call('stop','--time','30',meta['original']);owned(meta['original'],meta);owned_network(meta)
   call('network','disconnect','--force',NET,meta['original']);call('rename',meta['original'],RETAINED)
-  meta['candidate']=create(meta);AUDIT.snapshot('candidate-created',{meta['candidate']:owned(meta['candidate'],meta)})
-  r.finalize(IDENTITY,'disposable-candidate','disposable-original')
-  signed_before=immutable_hashes(directory)
+  prepare_candidate=create(meta);meta['candidate']=prepare_candidate
+  AUDIT.snapshot('prepare-only-candidate-created',{prepare_candidate:owned(prepare_candidate,meta)})
+  prepare_signed_before=immutable_hashes(prepare_dir)
+  meta['state_name']='prepare-only-state';AUDIT.write('adapter-prepare.json',meta)
+  prepare_meta=AUDIT.root/'adapter-prepare.json'
+  run_restore(prepare_meta)
+  restored=owned(meta['original'],meta);require(restored['State']['Running'] and restored['Name']=='/'+LIVE,'prepare-only original not running')
+  require(all(restored[k]==original[k] for k in ('Id','Image','Config','HostConfig','Mounts')),'prepare-only original artifact/configuration changed')
+  require(r.state_path.read_bytes()==source_state and immutable_hashes(prepare_dir)==prepare_signed_before,'prepare-only signed state changed')
+  prepare_first_start=restored['State']['StartedAt'];run_restore(prepare_meta)
+  require(owned(meta['original'],meta)['State']['StartedAt']==prepare_first_start,'repeated prepare-only restore restarted original')
+  require(immutable_hashes(prepare_dir)==prepare_signed_before,'repeated prepare-only restore changed signed records')
+  AUDIT.snapshot('prepare-only-original-restored',{meta['original']:owned(meta['original'],meta)})
+
+  # Recreate the transaction and preserve the prior finalized-record lifecycle
+  # regression in a distinct signed state directory.
+  finalized_dir=AUDIT.root/'finalized-state';shutil.copytree(prepare_dir,finalized_dir)
+  meta['ids']=[meta['original']]
+  call('stop','--time','30',meta['original']);owned(meta['original'],meta);owned_network(meta)
+  call('network','disconnect','--force',NET,meta['original']);call('rename',meta['original'],RETAINED)
+  finalized_candidate=create(meta);meta['candidate']=finalized_candidate
+  AUDIT.snapshot('finalized-candidate-created',{finalized_candidate:owned(finalized_candidate,meta)})
+  finalized_records=records(old,finalized_dir,meta)
+  finalized_records.finalize(IDENTITY,'disposable-candidate','disposable-original')
+  finalized_signed_before=immutable_hashes(finalized_dir)
   created=owned(meta['candidate'],meta)
   call('start',meta['candidate']);running=owned(meta['candidate'],meta);AUDIT.snapshot('candidate-running',{meta['candidate']:running})
   require(created['HostConfig']['OomKillDisable'] is False and running['HostConfig']['OomKillDisable'] is None,'expected Docker lifecycle transition not reproduced')
   expected_refusal=False
-  try:r.activate(IDENTITY)
+  try:finalized_records.activate(IDENTITY)
   except old.Refused as error:
    require(str(error)=='container/image/environment/configuration drift','unexpected legacy failure')
    expected_refusal=True
-  require(expected_refusal and r.state_path.read_bytes()==source_state,'legacy activation did not refuse safely')
-  copy_dir=AUDIT.root/'repaired-activation-state';shutil.copytree(directory,copy_dir)
+  require(expected_refusal and finalized_records.state_path.read_bytes()==source_state,'legacy activation did not refuse safely')
+  copy_dir=AUDIT.root/'repaired-activation-state';shutil.copytree(finalized_dir,copy_dir)
   repaired=records(new,copy_dir,meta);repaired.activate(IDENTITY)
   require(repaired.state()[0]['rollback_record_id']==IDENTITY,'repaired activation not committed')
-  require(immutable_hashes(directory)==signed_before==immutable_hashes(copy_dir),'signed records were changed')
-  AUDIT.write('adapter.json',meta);meta_path=AUDIT.root/'adapter.json'
-  run_restore(meta_path)
+  require(immutable_hashes(finalized_dir)==finalized_signed_before==immutable_hashes(copy_dir),'signed records were changed')
+  meta['state_name']='finalized-state';AUDIT.write('adapter-finalized.json',meta);finalized_meta=AUDIT.root/'adapter-finalized.json'
+  run_restore(finalized_meta)
   restored=owned(meta['original'],meta);require(restored['State']['Running'] and restored['Name']=='/'+LIVE,'original not running')
   require(all(restored[k]==original[k] for k in ('Id','Image','Config','HostConfig','Mounts')),'original artifact/configuration changed')
-  require(r.state_path.read_bytes()==source_state and immutable_hashes(directory)==signed_before,'prior signed state not restored exactly')
-  first_start=restored['State']['StartedAt'];run_restore(meta_path)
+  require(finalized_records.state_path.read_bytes()==source_state and immutable_hashes(finalized_dir)==finalized_signed_before,'prior signed state not restored exactly')
+  first_start=restored['State']['StartedAt'];run_restore(finalized_meta)
   require(owned(meta['original'],meta)['State']['StartedAt']==first_start,'repeated restore restarted original')
   AUDIT.snapshot('original-restored',{meta['original']:owned(meta['original'],meta)})
-  AUDIT.write('signed-regression.json',{'legacy_expected_activation_refusal':True,'repaired_activation_pass':True,'actual_restore_pass':True,'repeat_restore_same_started_at':True,'signed_bytes_unchanged':True,'legacy_helper_sha256':BASE_HASH,'repaired_helper_sha256':hashlib.sha256(HELPER.read_bytes()).hexdigest(),'controller_sha256':hashlib.sha256(CONTROLLER.read_bytes()).hexdigest(),'original_id':meta['original'],'candidate_id':meta['candidate'],'source_state_sha256':hashlib.sha256(source_state).hexdigest()})
+  AUDIT.write('signed-regression.json',{'prepare_only_actual_restore_pass':True,'prepare_only_repeat_restore_same_started_at':True,'prepare_only_signed_bytes_unchanged':True,'legacy_expected_activation_refusal':True,'repaired_activation_pass':True,'finalized_actual_restore_pass':True,'finalized_repeat_restore_same_started_at':True,'finalized_signed_bytes_unchanged':True,'legacy_helper_sha256':BASE_HASH,'repaired_helper_sha256':hashlib.sha256(HELPER.read_bytes()).hexdigest(),'controller_sha256':hashlib.sha256(CONTROLLER.read_bytes()).hexdigest(),'original_id':meta['original'],'prepare_only_candidate_id':prepare_candidate,'finalized_candidate_id':finalized_candidate,'source_state_sha256':hashlib.sha256(source_state).hexdigest()})
   complete=True
  except BaseException as error:
   AUDIT.failure('restore-phase-failure',error)
@@ -296,7 +329,11 @@ def main():
    net=owned_network(meta);require(not net['Containers'],'test network still occupied');call('network','rm',meta['network'])
   after=lifecycle.inventory();AUDIT.snapshot('restore-after',after)
   summary=AUDIT.comparison(before,after,'restore-protected-comparison')
-  require(summary['protected_changes']==0 and summary['before_sha256']==summary['after_sha256'],'protected inventory drift')
+  comparison=json.loads((AUDIT.root/'restore-protected-comparison.json').read_text())
+  require(protected_closure(summary,comparison),'protected inventory drift')
+  AUDIT.write('protected-closure.json',{'protected_changes':summary['protected_changes'],
+              'transient_exec_activity_only':summary['protected_changes']>0,
+              'original_projection_canonical_changes':summary['original_projection_canonical_changes']})
   lifecycle.production_health()
  require(complete,'incomplete signed restoration test')
  print('PRIVATE_RESTORE_EVIDENCE_DIRECTORY='+str(AUDIT.root))

@@ -27,6 +27,21 @@ class AdapterBoundary(unittest.TestCase):
    value=copy.deepcopy(self.item);change(value)
    with self.subTest(change=repr(change)):self.reject(['start',h.LIVE],value)
 
+ def test_protected_closure_allows_only_transient_exec_ids(self):
+  self.assertTrue(h.protected_closure(
+   {'protected_changes':0,'original_projection_canonical_changes':0},{'protected':[]}))
+  transient={'path':['a'*64,'ExecIDs'],'change':'type','before':['b'*64],'after':None}
+  self.assertTrue(h.protected_closure(
+   {'protected_changes':1,'original_projection_canonical_changes':0},{'protected':[transient]}))
+  for summary,changes in [
+   ({'protected_changes':1,'original_projection_canonical_changes':1},[transient]),
+   ({'protected_changes':2,'original_projection_canonical_changes':0},[transient]),
+   ({'protected_changes':1,'original_projection_canonical_changes':0},[dict(transient,path=['a'*64,'State','Running'])]),
+   ({'protected_changes':1,'original_projection_canonical_changes':0},[dict(transient,path=['ExecIDs'])]),
+  ]:
+   with self.subTest(summary=summary,changes=changes):
+    self.assertFalse(h.protected_closure(summary,{'protected':changes}))
+
 class SignedBeforeMutation(unittest.TestCase):
  def test_bad_signature_configuration_state_and_owner_stop_actual_restore_before_mutation(self):
   for case in ('signature','configuration','state','owner'):
@@ -82,7 +97,7 @@ class OwnerTransitionBoundary(unittest.TestCase):
   invalid=[(1,'other-deployment'),(2,'rollback'),(3,'other-role'),(4,'harvest-api'),(4,'harvest-api-pilot'),(4,'f'*64),(5,'False'),(5,'0')]
   for index,value in invalid:
    args=base.copy();args[index]=value
-   with self.subTest(index=index,value=value),patch.object(h,'metadata',return_value={}),patch.object(h,'load_module'),patch.object(h,'records') as records,patch.object(h,'call') as docker:
+   with self.subTest(index=index,value=value),patch.object(h,'metadata',return_value={'state_name':'prepare-only-state'}),patch.object(h,'load_module'),patch.object(h,'records') as records,patch.object(h,'call') as docker:
     with self.assertRaises(RuntimeError):h.record_adapter(Path('unopened-adapter.json'),args)
     records.return_value.transition_ready.assert_not_called();docker.assert_not_called()
 
@@ -120,5 +135,129 @@ docker() { mutations=$((mutations+1)); echo MUTATION >&2; }
      self.assertEqual(result.returncode,7,result.stdout+result.stderr)
      self.assertNotIn('UNSAFE_CONTINUATION',result.stdout)
      self.assertEqual(result.stderr.count('MUTATION'),failure_check-1)
+
+ def test_prepare_only_failure_injection_restores_exact_original(self):
+  fixture=t.RecordTests();fixture.setUp()
+  try:
+   candidate=fixture.prepare_only()
+   original=fixture.live[0]['Id'];replacement=candidate[0]['Id']
+   # Exercise the real signed prepare-only gates before feeding their exact ID
+   # into the extracted controller restoration function.
+   fixture.records.restore_ready(t.FUTURE_ID,'deploy',t.FUTURE_TARGET)
+   self.assertEqual(fixture.records.replacement_ready(t.FUTURE_ID,'deploy','harvest-api'),replacement)
+   script=('''set -Eeuo pipefail
+backend_live_container=harvest-api
+transaction_backup=harvest-api-pre-test
+replacement_origin=''
+original_container_id=ORIGINAL
+original_image_id=original-image
+original_revision='''+t.CURRENT+'''
+original_network_ip=172.19.0.2
+approved_production_ipv4=172.19.0.2
+deployment_id='''+t.FUTURE_ID+'''
+operation=deploy
+previous_state=/nonexistent-previous-state
+state_dir=/nonexistent-state-dir
+state_file=/nonexistent-state-file
+fixture_live_id=REPLACEMENT
+backup_id=ORIGINAL
+live_exists=true
+backup_exists=true
+trace=''
+container_exists() {
+ [[ "$1" == harvest-api && "$live_exists" == true || "$1" == harvest-api-pre-test && "$backup_exists" == true ]]
+}
+container_running() { return 1; }
+rollback_record() {
+ case "$1" in
+  restore-ready|restored) return 0;;
+  replacement-ready) echo REPLACEMENT;;
+  *) return 90;;
+ esac
+}
+assert_transition_ownership() { trace+="ownership:$1:$2:$3 "; }
+stop_backend_for_transition() { [[ "$1 $2" == 'harvest-api target' ]]; trace+='stop '; }
+disconnect_production_network() { [[ "$1 $2" == 'harvest-api target' ]]; trace+='disconnect '; }
+ensure_production_network_ip() { [[ "$1 $2" == 'harvest-api 172.19.0.2' ]]; trace+='connect '; }
+start_backend_for_transition() { [[ "$1 $2" == 'harvest-api source' ]]; trace+='start '; }
+assert_live_contract() { trace+='contract '; }
+docker() {
+ if [[ "$1" == inspect && "$2" == --format && "$3" == '{{.Id}}' ]]; then
+  [[ "$4" == harvest-api ]] && echo "$fixture_live_id" || echo "$backup_id"
+ elif [[ "$1 $2 $3" == 'rm -f REPLACEMENT' ]]; then
+  [[ "$fixture_live_id" == REPLACEMENT ]]; live_exists=false; fixture_live_id=''; trace+='remove '
+ elif [[ "$1 $2 $3" == 'rename harvest-api-pre-test harvest-api' ]]; then
+  [[ "$backup_id" == ORIGINAL ]]; backup_exists=false; live_exists=true; fixture_live_id="$backup_id"; trace+='rename '
+ else
+  return 91
+ fi
+}
+''').replace('ORIGINAL',original).replace('REPLACEMENT',replacement)
+   script+=h.extract('restore_original_backend')+'\nrestore_original_backend\n[[ "$automatic_restore_result" == pass ]]\n[[ "$fixture_live_id" == "'+original+'" ]]\necho "$trace"\n'
+   bash='C:/Program Files/Git/bin/bash.exe' if os.name=='nt' else '/bin/bash'
+   result=subprocess.run([bash,'--noprofile','--norc'],input=script,text=True,capture_output=True)
+   self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+   self.assertIn('stop disconnect',result.stdout)
+   self.assertIn('remove',result.stdout);self.assertIn('rename',result.stdout);self.assertIn('start',result.stdout)
+  finally:fixture.tearDown()
+
+ def test_replacement_identity_output_and_toctou_fail_before_removal(self):
+  original='a'*64;replacement='b'*64;changed='c'*64
+  for case in ('blank','malformed','mismatch','changed-before-stop','changed-after-stop'):
+   with self.subTest(case=case):
+    output={'blank':'','malformed':'not-an-id','mismatch':changed}.get(case,replacement)
+    change_at={'changed-before-stop':2,'changed-after-stop':3}.get(case,0)
+    with t.tempfile.TemporaryDirectory(dir=t.ROOT/'tests') as directory:
+     counter=(Path(directory)/'counter').as_posix()
+     script=('''set -Eeuo pipefail
+backend_live_container=harvest-api
+transaction_backup=harvest-api-pre-test
+replacement_origin=''
+original_container_id=ORIGINAL
+original_image_id=original-image
+original_revision='''+t.CURRENT+'''
+original_network_ip=172.19.0.2
+approved_production_ipv4=172.19.0.2
+deployment_id='''+t.FUTURE_ID+'''
+operation=deploy
+previous_state=/nonexistent
+state_dir=/nonexistent
+state_file=/nonexistent
+counter_file=COUNTER
+printf '0\n' > "$counter_file"
+mutations=''
+container_exists() { return 0; }
+container_running() { return 1; }
+rollback_record() {
+ [[ "$1" == restore-ready ]] && return 0
+ [[ "$1" == replacement-ready ]] && { printf '%s\\n' 'OUTPUT'; return 0; }
+ return 90
+}
+docker() {
+ if [[ "$1" == inspect && "$2" == --format && "$3" == '{{.Id}}' ]]; then
+  if [[ "$4" == harvest-api-pre-test ]]; then echo ORIGINAL; return; fi
+  inspects=$(cat "$counter_file"); inspects=$((inspects+1)); printf '%s\n' "$inspects" > "$counter_file"
+  [[ CHANGEAT -gt 0 && "$inspects" -ge CHANGEAT ]] && echo CHANGED || echo REPLACEMENT
+  return
+ fi
+ mutations+="docker:$* "
+}
+stop_backend_for_transition() { mutations+='stop '; }
+disconnect_production_network() { mutations+='disconnect '; }
+assert_transition_ownership() { :; }
+ensure_production_network_ip() { mutations+='connect '; }
+start_backend_for_transition() { mutations+='start '; }
+assert_live_contract() { :; }
+''').replace('ORIGINAL',original).replace('REPLACEMENT',replacement).replace('CHANGED',changed).replace('OUTPUT',output).replace('CHANGEAT',str(change_at)).replace('COUNTER',h.shlex.quote(counter))
+     script+=h.extract('restore_original_backend')+'\nrestore_original_backend || status=$?\n[[ "${status:-0}" == 1 ]]\necho "$mutations"\n'
+     bash='C:/Program Files/Git/bin/bash.exe' if os.name=='nt' else '/bin/bash'
+     result=subprocess.run([bash,'--noprofile','--norc'],input=script,text=True,capture_output=True)
+     self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+     self.assertNotIn('docker:rm',result.stdout);self.assertNotIn('docker:rename',result.stdout)
+     self.assertNotIn('start',result.stdout)
+     if case=='changed-after-stop':
+      self.assertIn('stop disconnect',result.stdout)
+     else:
+      self.assertNotIn('stop',result.stdout);self.assertNotIn('disconnect',result.stdout)
 
 if __name__=='__main__':unittest.main(verbosity=2)

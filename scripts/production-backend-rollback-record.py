@@ -404,7 +404,8 @@ class Records:
         observed_restarts = observed.pop("restart_count")
         recorded_restarts = recorded.pop("restart_count")
         Records.match_static(dict(actual, static=observed), recorded)
-        require(isinstance(observed_restarts, int) and observed_restarts >= recorded_restarts, "invalid source restart history")
+        require(type(observed_restarts) is int and type(recorded_restarts) is int
+                and observed_restarts >= recorded_restarts, "invalid source restart history")
         # Crash-loop counters and running state may change after the deployment
         # workflow exits. They must not disable restoration of the exact artifact.
         require(actual["ip"] in ({"172.19.0.2"} if actual["running"] else {"", "172.19.0.2"}), "source network attachment mismatch")
@@ -517,7 +518,10 @@ class Records:
         else:
             require(operation in {"deploy", "credential-cutover"}, "invalid recovery operation")
             preparation = self.load(identity, "prepare")
-            self.match(self.inspect("harvest-api"), preparation["previous"], running=True)
+            source = self.inspect("harvest-api")
+            self.match_source(source, preparation["previous"])
+            require(source["running"] is True and source["ip"] == "172.19.0.2",
+                    "restored source lifecycle mismatch")
             require(self.state()[1] == preparation["source_state_sha256"], "deployment recovery state mismatch")
 
     def restore_ready(self, identity, operation, container):
@@ -531,28 +535,61 @@ class Records:
             preparation = self.load(identity, "prepare")
             expected = preparation["previous"]
             permitted_owners = {expected["container_id"]}
-            if self.path(identity, "deployment").exists():
+            deployment_path = self.path(identity, "deployment")
+            if deployment_path.exists() or deployment_path.is_symlink():
                 record, _ = self.deployment(identity)
                 permitted_owners.add(record["current"]["container_id"])
             require(self.state()[1] == preparation["source_state_sha256"], "deployment recovery state mismatch")
         source = self.inspect(container)
-        self.match_static(source, expected)
+        self.match_source(source, expected)
         self.match_owners(source, permitted_owners)
         require(type(source["running"]) is bool and source["ip"] == ("172.19.0.2" if source["running"] else ""),
                 "unverified restoration source lifecycle")
 
+    def prepare_only_replacement(self, identity, operation, container):
+        require(operation in {"deploy", "credential-cutover"}, "invalid prepare-only recovery operation")
+        require(container == "harvest-api", "invalid prepare-only replacement name")
+        deployment_path = self.path(identity, "deployment")
+        require(not deployment_path.exists() and not deployment_path.is_symlink(),
+                "deployment record exists for replacement")
+        preparation = self.load(identity, "prepare")
+        require(self.state()[1] == preparation["source_state_sha256"],
+                "deployment recovery state mismatch")
+        source = self.inspect(container)
+        expected_source = preparation["previous"]
+        observed = source["static"]
+        require(observed["container_id"] != expected_source["container_id"],
+                "prepare-only replacement aliases source")
+        require(observed["revision"] == preparation["revision"]
+                and observed["image_id"] == preparation["image_id"],
+                "prepare-only replacement identity mismatch")
+        require(all(observed[key] == expected_source[key] for key in
+                    ("database", "environment", "network", "production_ip", "network_id")),
+                "prepare-only replacement Production contract mismatch")
+        require(type(observed["restart_count"]) is int and observed["restart_count"] == 0,
+                "prepare-only replacement has lifecycle history")
+        self.match_owners(source, {expected_source["container_id"], observed["container_id"]})
+        require(source["running"] is False and source["ip"] == "",
+                "prepare-only replacement lifecycle mismatch")
+        return source
+
     def replacement_ready(self, identity, operation, container):
-        record, preparation = self.deployment(identity)
         if operation == "rollback":
+            record, preparation = self.deployment(identity)
             expected = record["previous"]
             require(self.state()[0] == record["committed_state"], "rollback recovery state mismatch")
         else:
             require(operation in {"deploy", "credential-cutover"}, "invalid recovery operation")
+            deployment_path = self.path(identity, "deployment")
+            if not deployment_path.exists() and not deployment_path.is_symlink():
+                return self.prepare_only_replacement(identity, operation, container)["static"]["container_id"]
+            record, preparation = self.deployment(identity)
             expected = record["current"]
             require(self.state()[1] == preparation["source_state_sha256"], "deployment recovery state mismatch")
         source = self.inspect(container)
         self.match_static(source, expected)
         self.match_owners(source, {record["current"]["container_id"], record["previous"]["container_id"]})
+        return source["static"]["container_id"]
 
     @staticmethod
     def match_owners(observed, permitted):
@@ -568,6 +605,7 @@ class Records:
 
     def transition_ready(self, identity, operation, role, container, running):
         require(role in {"source", "target"} and running in {"true", "false"}, "invalid transition phase")
+        observed = None
         if operation == "rollback":
             record, _ = self.deployment(identity)
             expected = record["current" if role == "source" else "previous"]
@@ -576,9 +614,17 @@ class Records:
             require(operation in {"deploy", "credential-cutover"}, "invalid transition operation")
             preparation = self.load(identity, "prepare")
             require(self.state()[1] == preparation["source_state_sha256"], "deployment transition state mismatch")
-            expected = preparation["previous"] if role == "source" else self.deployment(identity)[0]["current"]
-        observed = self.inspect(container)
-        self.match_static(observed, expected)
+            if role == "source":
+                expected = preparation["previous"]
+            else:
+                deployment_path = self.path(identity, "deployment")
+                if not deployment_path.exists() and not deployment_path.is_symlink():
+                    observed = self.prepare_only_replacement(identity, operation, container)
+                    expected = observed["static"]
+                else:
+                    expected = self.deployment(identity)[0]["current"]
+        observed = self.inspect(container) if observed is None else observed
+        self.match_source(observed, expected) if role == "source" else self.match_static(observed, expected)
         expected_running = running == "true"
         require(observed["running"] is expected_running
                 and observed["ip"] == ("172.19.0.2" if expected_running else ""), "transition lifecycle mismatch")
@@ -623,7 +669,7 @@ def main():
     elif args.operation == "restore-ready":
         records.restore_ready(*args.values)
     elif args.operation == "replacement-ready":
-        records.replacement_ready(*args.values)
+        print(records.replacement_ready(*args.values))
     elif args.operation == "transition-ready":
         records.transition_ready(*args.values)
 

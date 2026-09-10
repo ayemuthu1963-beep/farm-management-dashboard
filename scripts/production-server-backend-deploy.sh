@@ -274,11 +274,12 @@ docker_run_with_source_ownership() {
 }
 
 stop_backend_for_transition() {
-  local container=$1 role=$2 running status=0
+  local container=$1 role=$2 mutation_target=${3:-$1} running status=0
+  [[ "$mutation_target" == "$container" || "$mutation_target" =~ ^[0-9a-f]{64}$ ]] || return 1
   running=$(rollback_record network-state "$container" running) || return 1
   assert_transition_ownership "$container" "$role" "$running" || return 1
   if [[ "$running" == "true" ]]; then
-    docker stop --time 30 "$container" >/dev/null || status=$?
+    docker stop --time 30 "$mutation_target" >/dev/null || status=$?
   fi
   assert_transition_ownership "$container" "$role" false || return 1
   [[ "$status" -eq 0 ]]
@@ -293,14 +294,15 @@ start_backend_for_transition() {
 }
 
 disconnect_production_network() {
-  local container=$1 role=${2:-source} attached status=0
+  local container=$1 role=${2:-source} mutation_target=${3:-$1} attached status=0
+  [[ "$mutation_target" == "$container" || "$mutation_target" =~ ^[0-9a-f]{64}$ ]] || return 1
   attached=$(network_attached_for_container "$container") || return 1
   [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
   assert_transition_ownership "$container" "$role" false || return 1
   if [[ "$attached" == "true" ]]; then
     # A stopped container can have a blank runtime IP while its endpoint still
     # reserves the static address. Remove that exact endpoint before reclaiming it.
-    docker network disconnect --force "$production_network" "$container" || status=$?
+    docker network disconnect --force "$production_network" "$mutation_target" || status=$?
     assert_transition_ownership "$container" "$role" false || return 1
     attached=$(network_attached_for_container "$container") || return 1
     [[ "$attached" == "false" ]] || return 1
@@ -1781,7 +1783,7 @@ assert_live_contract() {
 }
 
 restore_original_backend() {
-  local live_id="" recovery_name="" source_name="" require_same_network_ip=true
+  local live_id="" replacement_id="" recovery_name="" source_name="" require_same_network_ip=true
   automatic_restore_result="failed"
   if [[ -n "$transaction_backup" ]] && container_exists "$transaction_backup"; then
     source_name=$transaction_backup
@@ -1804,21 +1806,25 @@ restore_original_backend() {
   if container_exists "$backend_live_container"; then
     live_id=$(docker inspect --format '{{.Id}}' "$backend_live_container") || return 1
     if [[ "$live_id" != "$original_container_id" ]]; then
-      rollback_record replacement-ready "$deployment_id" "$operation" "$backend_live_container" || return 1
+      replacement_id=$(rollback_record replacement-ready "$deployment_id" "$operation" "$backend_live_container") \
+        || return 1
+      [[ "$replacement_id" =~ ^[0-9a-f]{64}$ && "$replacement_id" == "$live_id" ]] || return 1
     fi
   fi
   if container_exists "$backend_live_container"; then
     live_id=$(docker inspect --format '{{.Id}}' "$backend_live_container")
     if [[ "$live_id" != "$original_container_id" ]]; then
-      stop_backend_for_transition "$backend_live_container" target || return 1
-      disconnect_production_network "$backend_live_container" target || return 1
+      [[ -n "$replacement_id" && "$live_id" == "$replacement_id" ]] || return 1
+      stop_backend_for_transition "$backend_live_container" target "$replacement_id" || return 1
+      disconnect_production_network "$backend_live_container" target "$replacement_id" || return 1
+      [[ "$(docker inspect --format '{{.Id}}' "$backend_live_container")" == "$replacement_id" ]] || return 1
       if [[ -n "$replacement_origin" ]]; then
         assert_transition_ownership "$backend_live_container" target false || return 1
-        docker rename "$backend_live_container" "$replacement_origin" >/dev/null 2>&1 || return 1
+        docker rename "$replacement_id" "$replacement_origin" >/dev/null 2>&1 || return 1
         assert_transition_ownership "$replacement_origin" target false || return 1
       else
         assert_transition_ownership "$backend_live_container" target false || return 1
-        docker rm -f "$backend_live_container" >/dev/null 2>&1 || return 1
+        docker rm -f "$replacement_id" >/dev/null 2>&1 || return 1
         assert_transition_ownership "$source_name" source false || return 1
       fi
     fi

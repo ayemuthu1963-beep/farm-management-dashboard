@@ -146,6 +146,16 @@ class RecordTests(unittest.TestCase):
         self.records.activate(FUTURE_ID)
         return candidate
 
+    def prepare_only(self):
+        self.enroll()
+        candidate = artifacts(FUTURE, "3", running=False)
+        self.records.stage(FUTURE_ID, FUTURE, candidate[0]["Image"], FUTURE_TARGET, "1000", "20260909T100000Z")
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.containers[FUTURE_TARGET] = self.live
+        self.containers["harvest-api"] = candidate
+        return candidate
+
     def test_current_and_future_adjacent_pairs_survive_new_process(self):
         self.enroll()
         self.assertEqual(self.records.verify(CURRENT)["target"]["revision"], PREVIOUS)
@@ -214,6 +224,116 @@ class RecordTests(unittest.TestCase):
         self.live[0]["HostConfig"]["Memory"] = 42
         with self.assertRaises(MODULE.Refused):
             self.records.restore_ready(FUTURE_ID, "deploy", "harvest-api")
+
+    def test_transition_source_allows_only_monotonic_restart_history(self):
+        self.live[0]["RestartCount"] = 2
+        self.enroll()
+        self.live[0]["RestartCount"] = 3
+        self.records.restore_ready(IDENTITY, "rollback", "harvest-api")
+        self.records.transition_ready(IDENTITY, "rollback", "source", "harvest-api", "true")
+        for restart_count in (1, -1, False, "3", None):
+            with self.subTest(restart_count=restart_count):
+                self.live[0]["RestartCount"] = restart_count
+                with self.assertRaises(MODULE.Refused):
+                    self.records.transition_ready(IDENTITY, "rollback", "source", "harvest-api", "true")
+        self.live[0]["RestartCount"] = 3
+        self.live[0]["HostConfig"]["Memory"] = 42
+        with self.assertRaises(MODULE.Refused):
+            self.records.transition_ready(IDENTITY, "rollback", "source", "harvest-api", "true")
+
+    def test_transition_target_preserves_exact_restart_count(self):
+        self.enroll()
+        self.previous[0]["RestartCount"] = 1
+        with self.assertRaises(MODULE.Refused):
+            self.records.transition_ready(IDENTITY, "rollback", "target", TARGET, "false")
+
+    def test_prepare_only_replacement_is_signed_bounded_and_idempotent(self):
+        candidate = self.prepare_only()
+        self.assertEqual(
+            self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api"),
+            candidate[0]["Id"],
+        )
+        self.records.transition_ready(FUTURE_ID, "deploy", "target", "harvest-api", "false")
+        self.records.restore_ready(FUTURE_ID, "deploy", FUTURE_TARGET)
+        self.live[0]["RestartCount"] = 2
+        self.records.transition_ready(FUTURE_ID, "deploy", "source", FUTURE_TARGET, "false")
+        self.records.restore_ready(FUTURE_ID, "deploy", FUTURE_TARGET)
+        del self.containers["harvest-api"]
+        self.containers["harvest-api"] = self.containers.pop(FUTURE_TARGET)
+        self.live[0]["State"]["Running"] = True
+        self.live[0]["NetworkSettings"]["Networks"] = {"harvest-net": {"IPAddress": "172.19.0.2"}}
+        self.records.restored(FUTURE_ID, "deploy")
+        self.live[0]["RestartCount"] = -1
+        with self.assertRaises(MODULE.Refused):
+            self.records.restored(FUTURE_ID, "deploy")
+        self.live[0]["RestartCount"] = 2
+        self.containers[FUTURE_TARGET] = self.containers.pop("harvest-api")
+        self.containers["harvest-api"] = candidate
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.assertEqual(
+            self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api"),
+            candidate[0]["Id"],
+        )
+
+    def test_prepare_only_replacement_tamper_and_ownership_fail_closed(self):
+        candidate = self.prepare_only()
+        original_inspect = self.records.inspect
+        mutations = [
+            lambda: candidate[0].update(Image="sha256:" + "4" * 64),
+            lambda: candidate[1]["Config"]["Labels"].update({"org.opencontainers.image.revision": CURRENT}),
+            lambda: candidate[0]["Config"]["Env"].__setitem__(0, "MFMS_ENV=preview"),
+            lambda: candidate[0]["Mounts"].append({"Type": "bind", "Source": "/", "Destination": "/host", "RW": True}),
+            lambda: candidate[0]["HostConfig"].update(Privileged=True),
+            lambda: candidate[0].update(RestartCount=1),
+            lambda: candidate[0]["State"].update(Running=True),
+            lambda: candidate[0].update(Id=self.live[0]["Id"]),
+        ]
+        baseline = copy.deepcopy(candidate)
+        for mutate in mutations:
+            with self.subTest(mutation=repr(mutate)):
+                candidate[0].clear(); candidate[0].update(copy.deepcopy(baseline[0]))
+                candidate[1].clear(); candidate[1].update(copy.deepcopy(baseline[1]))
+                mutate()
+                with self.assertRaises(MODULE.Refused):
+                    self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api")
+        candidate[0].clear(); candidate[0].update(copy.deepcopy(baseline[0]))
+        candidate[1].clear(); candidate[1].update(copy.deepcopy(baseline[1]))
+        for owners in ([self.live[0]["Id"], candidate[0]["Id"]], ["f" * 64],
+                       [candidate[0]["Id"], candidate[0]["Id"]], None):
+            def altered(name, owners=owners):
+                observed = original_inspect(name)
+                observed["production_address_owners"] = owners
+                return observed
+            with self.subTest(owners=owners), mock.patch.object(self.records, "inspect", altered):
+                with self.assertRaises(MODULE.Refused):
+                    self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api")
+
+    def test_prepare_only_record_signature_state_and_existing_record_fail_closed(self):
+        self.prepare_only()
+        prepare_path = self.records.path(FUTURE_ID, "prepare")
+        original_prepare = prepare_path.read_bytes()
+        envelope = json.loads(original_prepare)
+        envelope["signature"] = "0" * 64
+        prepare_path.chmod(0o600)
+        prepare_path.write_bytes(MODULE.canonical(envelope) + b"\n")
+        prepare_path.chmod(0o400)
+        with self.assertRaises(MODULE.Refused):
+            self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api")
+        prepare_path.chmod(0o600)
+        prepare_path.write_bytes(original_prepare)
+        prepare_path.chmod(0o400)
+        original_state = self.records.state_path.read_bytes()
+        changed = dict(self.records.state()[0], deployed_revision="f" * 40)
+        MODULE.atomic_write(self.records.state_path, MODULE.state_bytes(changed))
+        with self.assertRaises(MODULE.Refused):
+            self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api")
+        MODULE.atomic_write(self.records.state_path, original_state)
+        self.records.save(FUTURE_ID, "deployment", {})
+        with self.assertRaises(MODULE.Refused):
+            self.records.replacement_ready(FUTURE_ID, "deploy", "harvest-api")
+        with self.assertRaises(MODULE.Refused):
+            self.records.transition_ready(FUTURE_ID, "deploy", "target", "harvest-api", "false")
 
     def test_synthetic_future_pair_uses_immediate_previous_release(self):
         self.future()
