@@ -4,6 +4,8 @@ import { createHash } from "node:crypto"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { selectTestBash } from "./select-test-bash.mjs"
+import "./test-shell-selection.mjs"
 
 
 const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
@@ -83,7 +85,7 @@ const commonValidation = helper.slice(
   helper.indexOf("validate_common_live_state()"),
   helper.indexOf("validate_coordinated_backup()"),
 )
-const bashExecutable = process.env.MFMS_TEST_BASH || "bash"
+const bashExecutable = selectTestBash()
 const shellQuote = (value) => `'${String(value).replaceAll("'", `'"'"'`)}'`
 const renderManifest = (manifest) => `readonly -a production_service_manifest=(\n${manifest
   .map(({ role, container }) => `  ${shellQuote(`${role}|${container}`)}`)

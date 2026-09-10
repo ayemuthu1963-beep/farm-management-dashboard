@@ -191,7 +191,7 @@ assert.doesNotMatch(cleanupFunction, /docker volume/)
 const deployFunction = gate.slice(gate.indexOf("deploy_backend()"), gate.indexOf("credential_cutover_backend()"))
 assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("apply_migrations"))
 assert.ok(deployFunction.indexOf("verify_migrations") < deployFunction.indexOf("start_candidate"))
-assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("docker stop"))
+assert.ok(deployFunction.indexOf("create_production_database_backup") < deployFunction.indexOf("stop_backend_for_transition"))
 assert.match(gate.slice(gate.indexOf("apply_migrations()"), gate.indexOf("verify_migrations()")), /assert_validated_database_backup/)
 
 const dryRunRollbackFunction = gate.slice(
@@ -216,11 +216,16 @@ assert.match(rollbackFunction, /database_backup_operations=none/)
 assert.match(rollbackFunction, /database_migration_operations=none/)
 assert.doesNotMatch(rollbackFunction, /create_production_database_backup|apply_migrations|verify_migrations|pg_dump|pg_restore|DROP\s+(?:TABLE|TRIGGER)|database_backup_file/)
 assert.ok(rollbackFunction.indexOf("start_candidate true false") < rollbackFunction.indexOf('transaction_active=1'))
-assert.ok(rollbackFunction.indexOf('transaction_active=1') < rollbackFunction.indexOf('docker stop --time 30 "$backend_live_container"'))
+assert.ok(rollbackFunction.indexOf('transaction_active=1') < rollbackFunction.indexOf('stop_backend_for_transition "$backend_live_container" source'))
 assert.match(restoreOriginalFunction, /docker rename "\$transaction_backup" "\$backend_live_container"/)
 assert.match(restoreOriginalFunction, /ensure_production_network_ip "\$backend_live_container" "\$approved_production_ipv4"/)
-assert.match(restoreOriginalFunction, /docker start "\$backend_live_container"/)
+assert.match(restoreOriginalFunction, /start_backend_for_transition "\$backend_live_container" source/)
 assert.match(restoreOriginalFunction, /automatic_restore_result="pass"/)
+assert.ok(restoreOriginalFunction.indexOf("rollback_record restore-ready") < restoreOriginalFunction.indexOf("stop_backend_for_transition"))
+assert.ok(restoreOriginalFunction.indexOf("rollback_record replacement-ready") < restoreOriginalFunction.indexOf("stop_backend_for_transition"))
+const retainedNetworkFunction = gate.slice(gate.indexOf("ensure_production_network_ip()"), gate.indexOf("assert_production_ipam_contract()"))
+assert.match(retainedNetworkFunction, /rollback_record network-state "\$container" running/)
+assert.doesNotMatch(retainedNetworkFunction, /network disconnect|disconnect_production_network|sleep/)
 assert.match(gate.slice(gate.indexOf("on_exit()"), gate.indexOf("deploy_backend()")), /transaction_active.*restore_original_backend/s)
 assert.match(deployFunction, /validate_release_descriptor[\s\S]*?verify_migrations[\s\S]*?apply_migrations[\s\S]*?start_candidate/)
 assert.doesNotMatch(deployFunction, /start_candidate true false/)
@@ -242,6 +247,11 @@ const rollbackRecordTests = spawnSync(pythonBinary, ["tests/test_production_back
   encoding: "utf8",
 })
 assert.equal(rollbackRecordTests.status, 0, rollbackRecordTests.stdout + rollbackRecordTests.stderr)
+
+for (const testFile of ["tests/test_production_backend_network_state.py", "tests/test_docker_inspect_evidence.py"]) {
+  const focused = spawnSync(pythonBinary, [testFile], { encoding: "utf8" })
+  assert.equal(focused.status, 0, focused.stdout + focused.stderr)
+}
 
 const readinessTests = spawnSync(pythonBinary, ["tests/test_production_backup_restore_readiness.py"], {
   encoding: "utf8",

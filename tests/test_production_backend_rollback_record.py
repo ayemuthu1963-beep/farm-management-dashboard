@@ -34,9 +34,9 @@ def artifacts(revision, digit, *, running):
     env = ["MFMS_ENV=production", "MFMS_TARGET_DATABASE=mfms_server_prod", "DATABASE_URL=postgresql://test-only.invalid/mfms_server_prod", "MFMS_GIT_COMMIT=" + revision]
     item = {
         "Id": digit * 64, "Image": image_id, "Config": {"Env": env},
-        "HostConfig": {"NetworkMode": "harvest-net", "PortBindings": {"8000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8001"}]}, "RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}},
+        "HostConfig": {"OomKillDisable": False, "NetworkMode": "harvest-net", "PortBindings": {"8000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8001"}]}, "RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}},
         "Mounts": [{"Type": t, "Source": s, "Destination": d, "RW": rw} for t, s, d, rw in MODULE.BASE_MOUNTS],
-        "State": {"Running": running}, "RestartCount": 0,
+        "State": {"Running": running, "Paused": False, "Restarting": False, "Dead": False}, "RestartCount": 0,
         "NetworkSettings": {"Networks": {"harvest-net": {"IPAddress": "172.19.0.2"}} if running else {}},
     }
     image = {"Id": image_id, "Config": {"Labels": {"org.opencontainers.image.revision": revision, "com.muthufarms.mfms.environment": "Production"}}}
@@ -66,7 +66,66 @@ class RecordTests(unittest.TestCase):
 
     def inspect(self, name):
         item, image = self.containers[name]
-        return MODULE.snapshot(copy.deepcopy(item), copy.deepcopy(image))
+        result = MODULE.snapshot(copy.deepcopy(item), copy.deepcopy(image))
+        # This record-only adapter never inspects Docker. Raw lifecycle/endpoint
+        # proof is independently exercised by the network-state fixtures.
+        result["production_address_owners"] = sorted({value[0]["Id"] for value in self.containers.values()
+                                                     if value[0]["State"]["Running"] is True})
+        return result
+
+    def test_signed_transition_role_and_lifecycle_are_exact(self):
+        self.enroll()
+        self.records.transition_ready(IDENTITY, "rollback", "source", "harvest-api", "true")
+        for role, name, running in (("target", "harvest-api", "true"), ("source", TARGET, "false"),
+                                    ("source", "harvest-api", "false"), ("target", TARGET, "false")):
+            with self.subTest(role=role, name=name, running=running), self.assertRaises(MODULE.Refused):
+                self.records.transition_ready(IDENTITY, "rollback", role, name, running)
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.records.transition_ready(IDENTITY, "rollback", "source", "harvest-api", "false")
+        self.records.transition_ready(IDENTITY, "rollback", "target", TARGET, "false")
+
+    def test_preflight_fingerprint_binds_full_config_and_exact_original(self):
+        item, image = copy.deepcopy(self.live)
+        network = {"Name": "harvest-net", "Driver": "bridge", "Id": "a" * 64,
+                   "IPAM": {"Config": [{"Subnet": "172.19.0.0/16", "IPRange": "172.19.128.0/17", "Gateway": "172.19.0.1"}]},
+                   "Containers": {item["Id"]: {"IPv4Address": "172.19.0.2/16", "EndpointID": "b" * 64}}}
+        item["NetworkSettings"]["Networks"]["harvest-net"].update(
+            NetworkID=network["Id"], EndpointID="b" * 64, IPAMConfig={"IPv4Address": "172.19.0.2"})
+        def capture(value, identity=item["Id"], image_id=item["Image"], revision=CURRENT):
+            return MODULE.source_fingerprint(value, image, network, {value["Id"]: value}, identity, image_id, revision)
+        baseline = capture(item)
+        reordered = copy.deepcopy(item)
+        reordered["Mounts"].reverse()
+        self.assertEqual(capture(reordered), baseline)
+        for mutate in (lambda x: x["Config"].update(Cmd=["changed"]),
+                       lambda x: x["Config"].update(Entrypoint=["changed"]),
+                       lambda x: x["Config"]["Env"].reverse(),
+                       lambda x: x["Mounts"][0].update(UnknownStableField="changed"),
+                       lambda x: x["HostConfig"].update(UnknownStableField="changed")):
+            changed = copy.deepcopy(item)
+            mutate(changed)
+            self.assertNotEqual(capture(changed), baseline)
+        for identity, image_id, revision in (("f" * 64, item["Image"], CURRENT),
+                                            (item["Id"], "sha256:" + "f" * 64, CURRENT),
+                                            (item["Id"], item["Image"], FUTURE)):
+            with self.assertRaises(MODULE.Refused):
+                capture(item, identity, image_id, revision)
+
+    def test_signed_owner_cardinality_and_lifecycle_cannot_be_waived(self):
+        self.enroll()
+        self.records.restore_ready(IDENTITY, "rollback", "harvest-api")
+        self.records.replacement_ready(IDENTITY, "rollback", TARGET)
+        original = self.inspect
+        for owners in (["f" * 64], [self.live[0]["Id"], self.previous[0]["Id"]],
+                       [self.live[0]["Id"], self.live[0]["Id"]], [], None):
+            def altered(name, owners=owners):
+                result = original(name)
+                result["production_address_owners"] = owners
+                return result
+            with self.subTest(owners=owners), mock.patch.object(self.records, "inspect", altered):
+                with self.assertRaises(MODULE.Refused):
+                    self.records.restore_ready(IDENTITY, "rollback", "harvest-api")
 
     def enroll(self):
         self.records.stage(IDENTITY, CURRENT, self.live[0]["Image"], TARGET, "999", "20260909T090000Z", enrollment_hash=self.records.state()[1])
@@ -93,6 +152,68 @@ class RecordTests(unittest.TestCase):
         # A separate Records instance has no in-transaction restoration state.
         fresh = MODULE.Records(self.root, inspect=self.inspect)
         self.assertEqual(fresh.verify(CURRENT)["status"], "ready")
+
+    def test_real_first_start_oom_transition_preserves_signed_record_bytes(self):
+        self.enroll()
+        candidate = artifacts(FUTURE, "3", running=False)
+        self.records.stage(FUTURE_ID, FUTURE, candidate[0]["Image"], FUTURE_TARGET, "1000", "20260909T100000Z")
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.containers[FUTURE_TARGET] = self.live
+        self.containers["harvest-api"] = candidate
+        self.records.finalize(FUTURE_ID, "future-tag", "current-tag")
+        path = self.records.path(FUTURE_ID, "deployment")
+        signed_before = path.read_bytes()
+        recorded = self.records.deployment(FUTURE_ID)[0]["current"]
+        candidate[0]["State"]["Running"] = True
+        candidate[0]["NetworkSettings"]["Networks"] = {"harvest-net": {"IPAddress": "172.19.0.2"}}
+        candidate[0]["HostConfig"]["OomKillDisable"] = None
+        # The old exact raw-hash check rejects the demonstrated Docker transition.
+        self.assertNotEqual(self.inspect("harvest-api")["static"], recorded)
+        self.records.activate(FUTURE_ID)
+        self.assertEqual(path.read_bytes(), signed_before)
+        self.assertEqual(self.records.verify(FUTURE)["status"], "ready")
+        with self.assertRaises(MODULE.Refused):
+            self.records.activate(FUTURE_ID)
+
+    def test_oom_compatibility_rejects_other_changes_and_wrong_types(self):
+        candidate = self.future()
+        candidate[0]["HostConfig"]["OomKillDisable"] = None
+        self.assertEqual(self.records.verify(FUTURE)["status"], "ready")
+        for key, value in (("FutureUnreviewedField", False), ("Memory", 128), ("OomKillDisable", True),
+                           ("OomKillDisable", 0), ("OomKillDisable", "false"), ("OomKillDisable", [])):
+            with self.subTest(key=key, value=value):
+                saved = copy.deepcopy(candidate[0]["HostConfig"])
+                candidate[0]["HostConfig"][key] = value
+                with self.assertRaises(MODULE.Refused):
+                    self.records.verify(FUTURE)
+                candidate[0]["HostConfig"] = saved
+        del candidate[0]["HostConfig"]["OomKillDisable"]
+        with self.assertRaises(MODULE.Refused):
+            self.records.verify(FUTURE)
+
+    def test_oom_compatibility_is_directional_and_full_hash_bound(self):
+        item, image = artifacts(CURRENT, "1", running=True)
+        item["HostConfig"]["OomKillDisable"] = None
+        after = MODULE.snapshot(item, image)
+        item["HostConfig"]["OomKillDisable"] = False
+        before = MODULE.snapshot(item, image)
+        MODULE.Records.match(after, before["static"], running=True)
+        with self.assertRaises(MODULE.Refused):
+            MODULE.Records.match(before, after["static"], running=True)
+        expected = dict(before["static"], host_config_sha256="0" * 64)
+        with self.assertRaises(MODULE.Refused):
+            MODULE.Records.match(after, expected, running=True)
+
+    def test_restore_ready_validates_signed_artifact_before_start(self):
+        self.enroll()
+        self.records.stage(FUTURE_ID, FUTURE, "sha256:" + "3" * 64, FUTURE_TARGET, "1000", "20260909T100000Z")
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.records.restore_ready(FUTURE_ID, "deploy", "harvest-api")
+        self.live[0]["HostConfig"]["Memory"] = 42
+        with self.assertRaises(MODULE.Refused):
+            self.records.restore_ready(FUTURE_ID, "deploy", "harvest-api")
 
     def test_synthetic_future_pair_uses_immediate_previous_release(self):
         self.future()
@@ -185,14 +306,17 @@ class RecordTests(unittest.TestCase):
             "MacAddress": "3e:fd:2d:68:40:70",
             "NetworkID": "6327f4a8da1cd862d74776049e808fbd4cd1a2125055d73f7db42382a368005f",
         }
-        network = {"Name": "harvest-net", "Driver": "bridge", "Id": endpoint["NetworkID"], "IPAM": {"Config": [{"Subnet": "172.19.0.0/16", "IPRange": "172.19.128.0/17", "Gateway": "172.19.0.1"}]}}
+        network = {"Name": "harvest-net", "Driver": "bridge", "Id": endpoint["NetworkID"], "IPAM": {"Config": [{"Subnet": "172.19.0.0/16", "IPRange": "172.19.128.0/17", "Gateway": "172.19.0.1"}]},
+                   "Containers": {"05fb88f88251cc79954f9212b07e6484c71c15c6e21da74445122292f5d0c4fe": {
+                       "Name": "harvest-api", "EndpointID": endpoint["EndpointID"], "IPv4Address": "172.19.0.2/16",
+                       "IPv6Address": "", "MacAddress": endpoint["MacAddress"]}}}
         self.live[0]["Id"] = "05fb88f88251cc79954f9212b07e6484c71c15c6e21da74445122292f5d0c4fe"
         self.live[0]["NetworkSettings"]["Networks"] = {"harvest-net": endpoint}
         self.previous[0]["Id"] = "b7de813c314274c043fb4e5f5220ad764a5dbda034fe233c3936fdcdf080b09a"
         self.previous[0]["NetworkSettings"]["Networks"] = {}
         captured = MODULE.snapshot(*self.live, network)
         self.assertEqual(captured["ip"], "172.19.0.2")
-        self.assertEqual(MODULE.snapshot(*self.previous, network)["ip"], "")
+        self.assertEqual(MODULE.snapshot(*self.previous, network, owner_items={self.live[0]["Id"]: self.live[0]})["ip"], "")
         for empty in [None, []]:
             endpoint["IPAMConfig"]["LinkLocalIPs"] = empty
             self.assertEqual(MODULE.snapshot(*self.live, network), captured)
@@ -342,9 +466,30 @@ class ControllerTests(unittest.TestCase):
             for contents, status, expected_calls in [("", 0, 0), ("a|b\nc|d\n", 0, 2), ("a|b\nc|d\n", 7, 1)]:
                 plan.write_text(contents)
                 harness = f"set +e\nmigration_plan='{plan.as_posix()}'\nproduction_network=fixture\nenvironment_file=fixture\nnew_image=fixture\nblocked() {{ return 1; }}\ndocker() {{ [[ \"$*\" == *--verify ]] || exit 99; echo verify; return {status}; }}\n"
-                result = self.bash(harness + shell_function("verify_migrations") + "\nverify_migrations || exit 7\n")
+                harness += "assert_preflight_source_ownership() { return 0; }\n"
+                result = self.bash(harness + shell_function("docker_run_with_source_ownership") + "\n" + shell_function("verify_migrations") + "\nverify_migrations || exit 7\n")
                 self.assertEqual(result.stdout.count("verify"), expected_calls)
                 self.assertEqual(result.returncode == 0, bool(contents) and status == 0)
+
+    def test_runner_guard_preserves_arguments_error_and_direct_errexit(self):
+        for failure_guard, docker_status, expected in ((1, 0, (1, 0, 1)), (0, 7, (7, 1, 2)),
+                                                      (2, 0, (1, 1, 2)), (0, 0, (0, 1, 2))):
+            with self.subTest(failure_guard=failure_guard, docker_status=docker_status):
+                script = f'''set -euo pipefail
+guards=0
+assert_preflight_source_ownership() {{ guards=$((guards+1)); echo GUARD >&2; [[ "$guards" != {failure_guard} ]]; }}
+docker() {{
+  [[ "$#" == 6 && "$1" == run && "$2" == --rm && "$3" == --network && "$4" == fixture && "$5" == image && "$6" == 'argument with spaces' ]] || return 99
+  echo RUN >&2
+  return {docker_status}
+}}
+'''
+                script += shell_function("docker_run_with_source_ownership")
+                script += "\ndocker_run_with_source_ownership --rm --network fixture image 'argument with spaces'\necho CONTINUED\n"
+                result = self.bash(script)
+                self.assertEqual((result.returncode, result.stderr.count("RUN"), result.stderr.count("GUARD")), expected,
+                                 result.stdout + result.stderr)
+                self.assertEqual("CONTINUED" in result.stdout, expected[0] == 0)
 
     def test_candidate_mount_selection_uses_each_exact_recorded_profile(self):
         for contract, expected in [("base", ""), ("intelligence", "readonly"), ("wrong", None)]:
@@ -403,7 +548,7 @@ class ControllerTests(unittest.TestCase):
                 function = shell_function(name)
                 self.assertLess(function.index("stage_backend_rollback_record"), function.index("start_candidate"))
                 self.assertLess(function.index("docker create"), function.index("rollback_record finalize"))
-                self.assertLess(function.index("rollback_record finalize"), function.index('docker start "$backend_live_container"'))
+                self.assertLess(function.index("rollback_record finalize"), function.index('start_backend_for_transition "$backend_live_container" target'))
                 self.assertLess(function.index("rollback_record activate"), function.index("transaction_active=0"))
 
     def test_rollback_and_dry_run_share_pair_check_after_workflow(self):
@@ -439,9 +584,12 @@ python3() {{ echo UNSAFE_EXECUTION; return 0; }}
             self.assertNotIn("UNSAFE", result.stdout)
 
     def test_stopped_static_endpoint_is_released_and_restored_before_start(self):
-        functions = "\n".join(shell_function(name) for name in ["network_ip_for_container", "network_attached_for_container", "network_static_ip_for_container", "disconnect_production_network", "ensure_production_network_ip"])
+        functions = "\n".join(shell_function(name) for name in ["network_ip_for_container", "network_attached_for_container", "network_static_ip_for_container", "assert_transition_ownership", "stop_backend_for_transition", "start_backend_for_transition", "disconnect_production_network", "ensure_production_network_ip"])
         harness = '''set -euo pipefail
 production_network=harvest-net
+deployment_id=test-only
+operation=deploy
+approved_production_ipv4=172.19.0.2
 declare -A fixture_attached=([source]=true [target]=false)
 declare -A fixture_runtime_ip=([source]='' [target]='')
 declare -A fixture_static_ip=([source]=172.19.0.2 [target]='')
@@ -449,6 +597,24 @@ declare -A fixture_running=([source]=false [target]=false)
 disconnects=0
 connects=0
 sleep() { :; }
+rollback_record() {
+  if [[ "$1" == transition-ready ]]; then
+    [[ "$2" == test-only && "$3" == deploy && "$4" == "$5" && "${fixture_running[$5]}" == "$6" ]] || return 98
+    local peer
+    for peer in source target; do
+      [[ "$peer" == "$5" || "${fixture_running[$peer]}" == false ]] || return 99
+    done
+    return 0
+  fi
+  [[ "$1" == network-state ]] || return 90
+  case "$3" in
+    attached) echo "${fixture_attached[$2]}";;
+    ip) echo "${fixture_runtime_ip[$2]}";;
+    static_ip) echo "${fixture_static_ip[$2]}";;
+    running) echo "${fixture_running[$2]}";;
+    *) return 90;;
+  esac
+}
 docker() {
   local name template other
   case "$1 $2" in
@@ -480,25 +646,28 @@ docker() {
       name=$2
       [[ "${fixture_attached[$name]}" == true && "${fixture_static_ip[$name]}" == 172.19.0.2 ]] || return 96
       fixture_running[$name]=true; fixture_runtime_ip[$name]=172.19.0.2;;
-    'stop source'|'stop target')
-      name=$2; fixture_running[$name]=false; fixture_runtime_ip[$name]='';;
+    'stop --time')
+      [[ "$3" == 30 ]] || return 96
+      name=$4; fixture_running[$name]=false; fixture_runtime_ip[$name]='';;
     *) return 97;;
   esac
 }
 '''
         actions = '''
+ensure_production_network_ip source 172.19.0.2
+[[ "$disconnects" == 0 && "$connects" == 0 ]]
 disconnect_production_network source
 [[ "${fixture_attached[source]}" == false && -z "${fixture_static_ip[source]}" ]]
-ensure_production_network_ip target 172.19.0.2
+ensure_production_network_ip target 172.19.0.2 target
 [[ "${fixture_attached[target]}" == true && -z "${fixture_runtime_ip[target]}" ]]
-ensure_production_network_ip target 172.19.0.2
+ensure_production_network_ip target 172.19.0.2 target
 [[ "$connects" == 1 ]]
-docker start target
+start_backend_for_transition target target
 # Simulate a failed target's health check and restore the original source.
-docker stop target
-disconnect_production_network target
+stop_backend_for_transition target target
+disconnect_production_network target target
 ensure_production_network_ip source 172.19.0.2
-docker start source
+start_backend_for_transition source source
 [[ "${fixture_runtime_ip[source]}" == 172.19.0.2 && "${fixture_attached[target]}" == false ]]
 [[ "$disconnects" == 2 && "$connects" == 2 ]]
 echo STOPPED_ENDPOINT_ROLLBACK_AND_RESTORE=PASS
@@ -516,7 +685,7 @@ echo STOPPED_ENDPOINT_ROLLBACK_AND_RESTORE=PASS
             ('network_attached_for_container() { echo false; return 7; }', 'ensure_production_network_ip source 172.19.0.2'),
         ]:
             with self.subTest(stubs=stubs):
-                result = self.bash('set +e\n' + stubs + '\n' + functions + '\n' + command + ' || exit 7\necho UNSAFE_PASS\n')
+                result = self.bash('set +e\napproved_production_ipv4=172.19.0.2\nassert_transition_ownership() { return 0; }\n' + stubs + '\n' + functions + '\n' + command + ' || exit 7\necho UNSAFE_PASS\n')
                 self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
                 self.assertNotIn("UNSAFE_PASS", result.stdout)
 
@@ -559,6 +728,9 @@ assert_candidate_port_available() {{ :; }}
 start_candidate() {{ echo candidate >> "$trace"; }}
 assert_database_target() {{ :; }}
 remove_candidate() {{ :; }}
+assert_transition_ownership() {{ echo "ownership $*" >> "$trace"; }}
+stop_backend_for_transition() {{ echo "stop $*" >> "$trace"; }}
+start_backend_for_transition() {{ echo "start $*" >> "$trace"; }}
 disconnect_production_network() {{ :; }}
 ensure_production_network_ip() {{ :; }}
 assert_live_contract() {{ echo protected-check >> "$trace"; }}
@@ -599,7 +771,9 @@ state_file='{active.as_posix()}'
 approved_production_ipv4=172.19.0.2
 container_exists() {{ return 0; }}
 docker() {{ echo original-id; }}
+container_running() {{ return 1; }}
 ensure_production_network_ip() {{ return 0; }}
+start_backend_for_transition() {{ [[ "$1" == harvest-api && "$2" == source ]]; }}
 assert_live_contract() {{ [[ "$3" == true && "$4" == false ]] && {validation}; }}
 rollback_record() {{ return 0; }}
 '''
@@ -607,6 +781,59 @@ rollback_record() {{ return 0; }}
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(active.read_text(), "original-state\n")
                 self.assertIn("RESTORE=" + ("pass" if validation == "true" else "failed"), result.stdout)
+
+    def test_restore_preflight_rejections_cause_zero_service_mutation(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests") as directory:
+            trace = Path(directory) / "mutations"
+            for failure in ("source-id", "restore-ready", "replacement-ready"):
+                with self.subTest(failure=failure):
+                    trace.write_text("")
+                    harness = f'''set +e
+backend_live_container=harvest-api
+transaction_backup=harvest-api-pre-test
+original_container_id=original-id
+original_image_id=original-image
+original_revision={CURRENT}
+deployment_id={IDENTITY}
+operation=deploy
+container_exists() {{ return 0; }}
+container_running() {{ return 1; }}
+rollback_record() {{ [[ "$1" != '{failure}' ]]; }}
+docker() {{
+  if [[ "$1 $2" == 'inspect --format' ]]; then
+    if [[ "$4" == "$transaction_backup" ]]; then
+      echo {'wrong-id' if failure == 'source-id' else 'original-id'}
+    else
+      echo replacement-id
+    fi
+  else
+    echo "$*" >> '{trace.as_posix()}'
+  fi
+}}
+'''
+                    result = self.bash(harness + shell_function("restore_original_backend") + '\nrestore_original_backend || exit 7\necho UNSAFE_PASS\n')
+                    self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+                    self.assertEqual(trace.read_text(), "")
+                    self.assertNotIn("UNSAFE_PASS", result.stdout)
+
+    def test_already_running_signed_original_restoration_is_noop(self):
+        harness = f'''set -e
+backend_live_container=harvest-api
+transaction_backup=''
+original_container_id=original-id
+original_image_id=original-image
+original_revision={CURRENT}
+deployment_id={IDENTITY}
+operation=deploy
+container_exists() {{ return 0; }}
+container_running() {{ return 0; }}
+rollback_record() {{ [[ "$1" == restore-ready || "$1" == restored ]]; }}
+assert_transition_ownership() {{ [[ "$1" == harvest-api && "$2" == source && "$3" == true ]]; }}
+assert_live_contract() {{ return 0; }}
+docker() {{ [[ "$1 $2" == 'inspect --format' ]] || return 91; echo original-id; }}
+'''
+        result = self.bash(harness + shell_function("restore_original_backend") + '\nrestore_original_backend\n[[ "$automatic_restore_result" == pass ]]\n')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_protected_snapshot_rejects_endpoint_mount_and_restart_drift(self):
         item, _ = artifacts(CURRENT, "1", running=True)
