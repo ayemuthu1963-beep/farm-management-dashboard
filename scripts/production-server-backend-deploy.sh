@@ -183,9 +183,7 @@ container_running() {
 }
 
 network_ip_for_container() {
-  docker inspect \
-    --format "{{with index .NetworkSettings.Networks \"$production_network\"}}{{.IPAddress}}{{end}}" \
-    "$1"
+  rollback_record network-state "$1" ip
 }
 
 mount_contract_for_container() {
@@ -248,68 +246,98 @@ write_application_only_environment() {
 }
 
 network_attached_for_container() {
-  docker inspect --format \
-    "{{if index .NetworkSettings.Networks \"$production_network\"}}true{{else}}false{{end}}" "$1"
+  rollback_record network-state "$1" attached
 }
 
 network_static_ip_for_container() {
-  docker inspect --format \
-    "{{with index .NetworkSettings.Networks \"$production_network\"}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}" "$1"
+  rollback_record network-state "$1" static_ip
+}
+
+assert_transition_ownership() {
+  rollback_record transition-ready "$deployment_id" "$operation" "$2" "$1" "$3"
+}
+
+assert_preflight_source_ownership() {
+  local observed
+  [[ "${original_source_fingerprint:-}" =~ ^[0-9a-f]{64}$ ]] || return 1
+  observed=$(rollback_record source-fingerprint "$backend_live_container" \
+    "$original_container_id" "$original_image_id" "$original_revision") || return 1
+  [[ "$observed" == "$original_source_fingerprint" ]]
+}
+
+docker_run_with_source_ownership() {
+  local status=0
+  assert_preflight_source_ownership || return 1
+  docker run "$@" || status=$?
+  assert_preflight_source_ownership || return 1
+  return "$status"
+}
+
+stop_backend_for_transition() {
+  local container=$1 role=$2 mutation_target=${3:-$1} running status=0
+  [[ "$mutation_target" == "$container" || "$mutation_target" =~ ^[0-9a-f]{64}$ ]] || return 1
+  running=$(rollback_record network-state "$container" running) || return 1
+  assert_transition_ownership "$container" "$role" "$running" || return 1
+  if [[ "$running" == "true" ]]; then
+    docker stop --time 30 "$mutation_target" >/dev/null || status=$?
+  fi
+  assert_transition_ownership "$container" "$role" false || return 1
+  [[ "$status" -eq 0 ]]
+}
+
+start_backend_for_transition() {
+  local container=$1 role=$2 status=0
+  assert_transition_ownership "$container" "$role" false || return 1
+  docker start "$container" >/dev/null || status=$?
+  assert_transition_ownership "$container" "$role" true || return 1
+  [[ "$status" -eq 0 ]]
 }
 
 disconnect_production_network() {
-  local container=$1 attached
+  local container=$1 role=${2:-source} mutation_target=${3:-$1} attached status=0
+  [[ "$mutation_target" == "$container" || "$mutation_target" =~ ^[0-9a-f]{64}$ ]] || return 1
   attached=$(network_attached_for_container "$container") || return 1
   [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
+  assert_transition_ownership "$container" "$role" false || return 1
   if [[ "$attached" == "true" ]]; then
     # A stopped container can have a blank runtime IP while its endpoint still
     # reserves the static address. Remove that exact endpoint before reclaiming it.
-    docker network disconnect --force "$production_network" "$container" || return 1
+    docker network disconnect --force "$production_network" "$mutation_target" || status=$?
+    assert_transition_ownership "$container" "$role" false || return 1
     attached=$(network_attached_for_container "$container") || return 1
     [[ "$attached" == "false" ]] || return 1
   fi
+  [[ "$status" -eq 0 ]]
 }
 
 ensure_production_network_ip() {
-  local container=$1 expected_ip=$2 current_ip configured_ip attached running attempt
-  for attempt in $(seq 1 30); do
-    attached=$(network_attached_for_container "$container") || return 1
-    [[ "$attached" == "true" || "$attached" == "false" ]] || return 1
-    current_ip=$(network_ip_for_container "$container") || return 1
-    configured_ip=$(network_static_ip_for_container "$container") || return 1
-    if [[ "$attached" == "true" ]]; then
-      if [[ "$current_ip" == "$expected_ip" && ( -z "$configured_ip" || "$configured_ip" == "$expected_ip" ) ]]; then
-        return 0
-      fi
-      running=$(docker inspect --format '{{.State.Running}}' "$container") || return 1
-      # Connecting a stopped target reserves the correct address but does not
-      # necessarily populate IPAddress until docker start. Do not connect twice.
-      if [[ "$running" == "false" && -z "$current_ip" && "$configured_ip" == "$expected_ip" ]]; then
-        return 0
-      fi
-      [[ "$running" == "true" || "$running" == "false" ]] || return 1
-      disconnect_production_network "$container" || return 1
-    fi
-    docker network connect --ip "$expected_ip" "$production_network" "$container" \
-      >/dev/null 2>&1 || {
-        sleep 1
-        continue
-      }
-  done
-  return 1
+  local container=$1 expected_ip=$2 role=${3:-source} current_ip configured_ip attached running status=0
+  [[ "$expected_ip" == "$approved_production_ipv4" ]] || return 1
+  # The helper inspects JSON, validates the entire Production artifact and exact
+  # network/IPAM contract, and rejects occupied, malformed or unverified IPs.
+  attached=$(network_attached_for_container "$container") || return 1
+  current_ip=$(network_ip_for_container "$container") || return 1
+  configured_ip=$(network_static_ip_for_container "$container") || return 1
+  running=$(rollback_record network-state "$container" running) || return 1
+  assert_transition_ownership "$container" "$role" "$running" || return 1
+  if [[ "$attached" == "true" ]]; then
+    [[ "$configured_ip" == "$expected_ip" ]] || return 1
+    [[ "$running" == "true" && "$current_ip" == "$expected_ip" ]] && return 0
+    [[ "$running" == "false" && -z "$current_ip" ]] && return 0
+    return 1
+  fi
+  [[ "$attached" == "false" && "$running" == "false" && -z "$current_ip" && -z "$configured_ip" ]] || return 1
+  # Only a verified missing attachment needs one connection. A retained stopped
+  # attachment already declares the correct static address; never disconnect it.
+  docker network connect --ip "$expected_ip" "$production_network" "$container" || status=$?
+  assert_transition_ownership "$container" "$role" false || return 1
+  [[ "$(network_attached_for_container "$container")" == "true" ]] || return 1
+  [[ "$(network_static_ip_for_container "$container")" == "$expected_ip" ]] || return 1
+  [[ "$status" -eq 0 ]]
 }
 
 ensure_production_network_attachment() {
-  local container=$1 current_ip attempt
-  for attempt in $(seq 1 30); do
-    current_ip=$(network_ip_for_container "$container")
-    [[ -n "$current_ip" ]] && return 0
-    docker network connect "$production_network" "$container" >/dev/null 2>&1 || true
-    current_ip=$(network_ip_for_container "$container")
-    [[ -n "$current_ip" ]] && return 0
-    sleep 1
-  done
-  return 1
+  ensure_production_network_ip "$1" "$approved_production_ipv4" "${2:-source}"
 }
 
 assert_production_ipam_contract() {
@@ -601,6 +629,10 @@ validate_common_live_state() {
     assert_database_target "$backend_live_container"
   fi
   snapshot_unrelated_containers > "$before_unrelated"
+  if [[ "$operation" == deploy || "$operation" == credential-cutover ]]; then
+    original_source_fingerprint=$(rollback_record source-fingerprint "$backend_live_container" \
+      "$original_container_id" "$original_image_id" "$original_revision") || return 1
+  fi
 }
 
 rollback_record() {
@@ -1619,7 +1651,7 @@ apply_migrations() {
   while IFS='|' read -r path checksum; do
     [[ -n "$path" && -n "$checksum" ]] \
       || blocked "Production migration plan entry is incomplete"
-    docker run --rm \
+    docker_run_with_source_ownership --rm \
       --network "$production_network" \
       --env-file "$environment_file" \
       "$new_image" \
@@ -1637,7 +1669,7 @@ verify_migrations() {
   while IFS='|' read -r path checksum; do
     [[ -n "$path" && -n "$checksum" ]] \
       || { blocked "Production migration verification entry is incomplete"; return 1; }
-    docker run --rm \
+    docker_run_with_source_ownership --rm \
       --network "$production_network" \
       --env-file "$environment_file" \
       "$new_image" \
@@ -1651,8 +1683,10 @@ verify_migrations() {
 
 start_candidate() {
   local require_version_endpoint=${1:-true}
-  local require_openapi_plan=${2:-true}
+  local require_openapi_plan=${2:-true} status=0
+  candidate_source_running=$(rollback_record network-state "$backend_live_container" running) || return 1
   candidate_container="$backend_live_container-candidate-$run_id-$timestamp"
+  assert_transition_ownership "$backend_live_container" source "$candidate_source_running" || return 1
   docker run -d \
     --name "$candidate_container" \
     --network "$production_network" \
@@ -1665,7 +1699,9 @@ start_candidate() {
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     "${candidate_extra_mount_args[@]}" \
     --env-file "$environment_file" \
-    "$new_image" >/dev/null
+    "$new_image" >/dev/null || status=$?
+  assert_transition_ownership "$backend_live_container" source "$candidate_source_running" || return 1
+  [[ "$status" == 0 ]] || return 1
   wait_for_health "http://127.0.0.1:$candidate_port" \
     || blocked "backend candidate health endpoint failed"
   if [[ "$require_version_endpoint" == "true" ]]; then
@@ -1690,8 +1726,12 @@ PY
 }
 
 remove_candidate() {
+  local status=0
   if [[ -n "$candidate_container" ]] && container_exists "$candidate_container"; then
-    docker rm -f "$candidate_container" >/dev/null
+    assert_transition_ownership "$backend_live_container" source "$candidate_source_running" || return 1
+    docker rm -f "$candidate_container" >/dev/null || status=$?
+    assert_transition_ownership "$backend_live_container" source "$candidate_source_running" || return 1
+    [[ "$status" == 0 ]] || return 1
   fi
   candidate_container=""
 }
@@ -1743,32 +1783,63 @@ assert_live_contract() {
 }
 
 restore_original_backend() {
-  local live_id="" recovery_name="" require_same_network_ip=true
+  local live_id="" replacement_id="" recovery_name="" source_name="" require_same_network_ip=true
   automatic_restore_result="failed"
+  if [[ -n "$transaction_backup" ]] && container_exists "$transaction_backup"; then
+    source_name=$transaction_backup
+  elif container_exists "$backend_live_container"; then
+    source_name=$backend_live_container
+  else
+    return 1
+  fi
+  [[ "$(docker inspect --format '{{.Id}}' "$source_name")" == "$original_container_id" ]] || return 1
+  # Authenticate the retained source and release state before any stop, network
+  # mutation or rename. An already-running exact original needs no lifecycle action.
+  rollback_record restore-ready "$deployment_id" "$operation" "$source_name" || return 1
+  if [[ "$source_name" == "$backend_live_container" ]] && container_running "$source_name"; then
+    assert_transition_ownership "$source_name" source true || return 1
+    assert_live_contract "$original_revision" "$original_image_id" true false || return 1
+    rollback_record restored "$deployment_id" "$operation" || return 1
+    automatic_restore_result="pass"
+    return 0
+  fi
+  if container_exists "$backend_live_container"; then
+    live_id=$(docker inspect --format '{{.Id}}' "$backend_live_container") || return 1
+    if [[ "$live_id" != "$original_container_id" ]]; then
+      replacement_id=$(rollback_record replacement-ready "$deployment_id" "$operation" "$backend_live_container") \
+        || return 1
+      [[ "$replacement_id" =~ ^[0-9a-f]{64}$ && "$replacement_id" == "$live_id" ]] || return 1
+    fi
+  fi
   if container_exists "$backend_live_container"; then
     live_id=$(docker inspect --format '{{.Id}}' "$backend_live_container")
     if [[ "$live_id" != "$original_container_id" ]]; then
-      docker stop --time 30 "$backend_live_container" >/dev/null 2>&1 || true
-      disconnect_production_network "$backend_live_container" >/dev/null 2>&1 || true
+      [[ -n "$replacement_id" && "$live_id" == "$replacement_id" ]] || return 1
+      stop_backend_for_transition "$backend_live_container" target "$replacement_id" || return 1
+      disconnect_production_network "$backend_live_container" target "$replacement_id" || return 1
+      [[ "$(docker inspect --format '{{.Id}}' "$backend_live_container")" == "$replacement_id" ]] || return 1
       if [[ -n "$replacement_origin" ]]; then
-        docker rename "$backend_live_container" "$replacement_origin" >/dev/null 2>&1 || {
-          recovery_name="$replacement_origin-recovery-$timestamp"
-          docker rename "$backend_live_container" "$recovery_name" >/dev/null 2>&1 \
-            || docker rm -f "$backend_live_container" >/dev/null 2>&1 \
-            || true
-        }
+        assert_transition_ownership "$backend_live_container" target false || return 1
+        docker rename "$replacement_id" "$replacement_origin" >/dev/null 2>&1 || return 1
+        assert_transition_ownership "$replacement_origin" target false || return 1
       else
-        docker rm -f "$backend_live_container" >/dev/null 2>&1 || true
+        assert_transition_ownership "$backend_live_container" target false || return 1
+        docker rm -f "$replacement_id" >/dev/null 2>&1 || return 1
+        assert_transition_ownership "$source_name" source false || return 1
       fi
     fi
   fi
   if [[ -n "$transaction_backup" ]] && container_exists "$transaction_backup"; then
+    assert_transition_ownership "$transaction_backup" source false || return 1
     docker rename "$transaction_backup" "$backend_live_container" >/dev/null 2>&1 || return 1
+    assert_transition_ownership "$backend_live_container" source false || return 1
   fi
   if container_exists "$backend_live_container"; then
+    [[ "$(docker inspect --format '{{.Id}}' "$backend_live_container")" == "$original_container_id" ]] || return 1
+    rollback_record restore-ready "$deployment_id" "$operation" "$backend_live_container" || return 1
     ensure_production_network_ip "$backend_live_container" "$approved_production_ipv4" \
       >/dev/null 2>&1 || return 1
-    docker start "$backend_live_container" >/dev/null 2>&1 || return 1
+    start_backend_for_transition "$backend_live_container" source || return 1
     [[ "$(docker inspect --format '{{.Id}}' "$backend_live_container")" == "$original_container_id" ]] || return 1
     if [[ -f "$previous_state" ]]; then
       local restored_state
@@ -1834,6 +1905,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 deploy_backend() {
+  local create_status=0
   validate_common_live_state
   assert_candidate_port_available
   prepare_backend_source
@@ -1861,9 +1933,10 @@ deploy_backend() {
   remove_candidate
 
   transaction_active=1
-  docker stop --time 30 "$backend_live_container" >/dev/null
+  stop_backend_for_transition "$backend_live_container" source
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
+  assert_transition_ownership "$transaction_backup" source false
   docker create \
     --name "$backend_live_container" \
     --network "$production_network" \
@@ -1877,9 +1950,11 @@ deploy_backend() {
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     "${candidate_extra_mount_args[@]}" \
     --env-file "$environment_file" \
-    "$new_image" >/dev/null
+    "$new_image" >/dev/null || create_status=$?
+  assert_transition_ownership "$transaction_backup" source false
+  [[ "$create_status" == 0 ]] || return "$create_status"
   rollback_record finalize "$deployment_id" "$new_image" "$original_image_tag"
-  docker start "$backend_live_container" >/dev/null
+  start_backend_for_transition "$backend_live_container" target
 
   assert_live_contract "$candidate_revision" "$new_image_id"
   trap '' HUP INT TERM
@@ -1924,6 +1999,7 @@ deploy_backend() {
 }
 
 credential_cutover_backend() {
+  local create_status=0
   validate_common_live_state
   [[ "$original_revision" == "$expected_current_revision" ]] \
     || blocked "current Production backend revision does not match the database-role cutover input"
@@ -1941,9 +2017,10 @@ credential_cutover_backend() {
   remove_candidate
 
   transaction_active=1
-  docker stop --time 30 "$backend_live_container" >/dev/null
+  stop_backend_for_transition "$backend_live_container" source
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
+  assert_transition_ownership "$transaction_backup" source false
   docker create \
     --name "$backend_live_container" \
     --network "$production_network" \
@@ -1957,9 +2034,11 @@ credential_cutover_backend() {
     --mount "type=bind,source=$approved_temp_mount_source,target=$approved_temp_mount_target" \
     "${candidate_extra_mount_args[@]}" \
     --env-file "$environment_file" \
-    "$original_image_id" >/dev/null
+    "$original_image_id" >/dev/null || create_status=$?
+  assert_transition_ownership "$transaction_backup" source false
+  [[ "$create_status" == 0 ]] || return "$create_status"
   rollback_record finalize "$deployment_id" "$original_image_tag" "$original_image_tag"
-  docker start "$backend_live_container" >/dev/null
+  start_backend_for_transition "$backend_live_container" target
 
   assert_live_contract "$original_revision" "$original_image_id"
   trap '' HUP INT TERM
@@ -2082,15 +2161,15 @@ rollback_backend() {
   transaction_backup="$backend_live_container-pre-rollback-$run_id-$timestamp"
   replacement_origin="$rollback_container"
   transaction_active=1
-  if container_running "$backend_live_container"; then
-    docker stop --time 30 "$backend_live_container" >/dev/null
-  fi
+  stop_backend_for_transition "$backend_live_container" source
   disconnect_production_network "$backend_live_container"
   docker rename "$backend_live_container" "$transaction_backup"
+  assert_transition_ownership "$transaction_backup" source false
+  assert_transition_ownership "$rollback_container" target false
   docker rename "$rollback_container" "$backend_live_container"
-  ensure_production_network_ip "$backend_live_container" "$approved_production_ipv4" \
+  ensure_production_network_ip "$backend_live_container" "$approved_production_ipv4" target \
     || blocked "backend rollback could not restore fixed Production address $approved_production_ipv4"
-  docker start "$backend_live_container" >/dev/null
+  start_backend_for_transition "$backend_live_container" target
   replacement_id=$(docker inspect --format '{{.Image}}' "$backend_live_container")
 
   assert_live_contract "$rollback_revision" "$replacement_id" false false
