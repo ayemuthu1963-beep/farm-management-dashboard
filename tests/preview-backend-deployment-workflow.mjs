@@ -1,6 +1,16 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
 
@@ -9,6 +19,172 @@ const rollbackWorkflow = readText(".github/workflows/preview-backend-rollback.ym
 const deployScript = readText("scripts/preview-server-backend-deploy.sh")
 const bootstrapScript = readText("scripts/bootstrap-preview-backend-state.sh")
 const setupGuide = readText("docs/PREVIEW_BACKEND_RELEASE_SETUP.md")
+
+const loaderPath = "scripts/load_worker_v2_uat_fixture.py"
+
+function run(command, commandArguments, options = {}) {
+  const result = spawnSync(command, commandArguments, {
+    encoding: "utf8",
+    ...options,
+  })
+  assert.equal(result.error, undefined, `${command} must be available`)
+  return result
+}
+
+function git(repository, ...gitArguments) {
+  const result = run("git", ["-C", repository, ...gitArguments])
+  assert.equal(result.status, 0, result.stderr)
+  return result.stdout.trim()
+}
+
+function write(repository, relativePath, contents) {
+  const fullPath = join(repository, ...relativePath.split("/"))
+  mkdirSync(join(fullPath, ".."), { recursive: true })
+  writeFileSync(fullPath, contents, { encoding: "utf8" })
+}
+
+function commit(repository, message) {
+  git(repository, "add", "-A")
+  git(repository, "commit", "-m", message)
+  return git(repository, "rev-parse", "HEAD")
+}
+
+const validatorStart = deployScript.indexOf(
+  "<<'PY'\n",
+  deployScript.indexOf("validate_release_descriptor()"),
+)
+const validatorEnd = deployScript.indexOf("\nPY\n}", validatorStart)
+assert.notEqual(validatorStart, -1, "release descriptor validator must be embedded")
+assert.notEqual(validatorEnd, -1, "release descriptor validator must have a complete heredoc")
+const descriptorValidator = deployScript.slice(validatorStart + "<<'PY'\n".length, validatorEnd)
+
+function baseDescriptor(approval = undefined) {
+  const descriptor = {
+    schema_version: 1,
+    environment: "Preview",
+    target_database: "mfms_server_uat",
+    repository: "ayemuthu1963-beep/muthu-harvest-dashboard",
+    release_branch: "preview-release",
+    deployment_kind: "backend-with-forward-only-migrations",
+    protected_invariants: {
+      production: "unchanged",
+      frontend: "unchanged",
+      odk: "unchanged",
+      schedules: "unchanged",
+      proxy_configuration: "unchanged",
+      database: "preview-migrations-only",
+    },
+    migrations: [],
+    required_openapi_paths: ["/health"],
+  }
+  if (approval !== undefined) {
+    descriptor.content_addressed_deletion_approvals = approval
+  }
+  return descriptor
+}
+
+function writeDescriptor(repository, descriptor) {
+  write(repository, "deploy/preview-backend-release.json", `${JSON.stringify(descriptor, null, 2)}\n`)
+}
+
+function runDescriptorValidator(testCase, descriptor = testCase.descriptor) {
+  writeDescriptor(testCase.repository, descriptor)
+  const migrationPlan = join(testCase.repository, "migrations.plan")
+  const openapiPlan = join(testCase.repository, "openapi.plan")
+  return run(
+    "python3",
+    [
+      "-",
+      join(testCase.repository, "deploy", "preview-backend-release.json"),
+      testCase.repository,
+      testCase.current,
+      testCase.candidate,
+      migrationPlan,
+      openapiPlan,
+    ],
+    { input: descriptorValidator },
+  )
+}
+
+function createDeletionCase() {
+  const repository = mkdtempSync(join(tmpdir(), "mfms-preview-deletion-guard-"))
+  git(repository, "init")
+  git(repository, "config", "user.name", "Preview Guard Test")
+  git(repository, "config", "user.email", "preview-guard@example.invalid")
+  write(repository, "README.md", "baseline\n")
+  write(repository, loaderPath, "print('operational loader')\n")
+  const current = commit(repository, "base with loader")
+  const baseBlob = git(repository, "rev-parse", `${current}:${loaderPath}`)
+  const baseBytes = run("git", ["-C", repository, "cat-file", "blob", baseBlob], {
+    encoding: null,
+  }).stdout
+  git(repository, "rm", loaderPath)
+  const removal = commit(repository, "remove loader")
+  const approval = {
+    operation: "delete",
+    path: loaderPath,
+    base_revision: current,
+    base_git_blob: baseBlob,
+    base_sha256: createHash("sha256").update(baseBytes).digest("hex"),
+    removal_revision: removal,
+  }
+  writeDescriptor(repository, baseDescriptor([approval]))
+  const candidate = commit(repository, "approve exact deletion")
+  return {
+    repository,
+    current,
+    removal,
+    candidate,
+    approval,
+    descriptor: baseDescriptor([approval]),
+  }
+}
+
+function withDeletionCase(callback) {
+  const testCase = createDeletionCase()
+  try {
+    callback(testCase)
+  } finally {
+    rmSync(testCase.repository, { recursive: true, force: true })
+  }
+}
+
+function createContentCase() {
+  const repository = mkdtempSync(join(tmpdir(), "mfms-preview-content-guard-"))
+  git(repository, "init")
+  git(repository, "config", "user.name", "Preview Guard Test")
+  git(repository, "config", "user.email", "preview-guard@example.invalid")
+  write(repository, "README.md", "baseline\n")
+  write(repository, loaderPath, "print('old verifier')\n")
+  const current = commit(repository, "base with old verifier")
+  write(repository, loaderPath, "print('reviewed verifier')\n")
+  const sourceRevision = commit(repository, "reviewed verifier")
+  const blob = git(repository, "rev-parse", `${sourceRevision}:${loaderPath}`)
+  const bytes = run("git", ["-C", repository, "cat-file", "blob", blob], {
+    encoding: null,
+  }).stdout
+  const approval = {
+    repository: "ayemuthu1963-beep/muthu-harvest-dashboard",
+    source_revision: sourceRevision,
+    path: loaderPath,
+    git_blob: blob,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  }
+  const descriptor = baseDescriptor()
+  descriptor.content_addressed_path_approvals = [approval]
+  writeDescriptor(repository, descriptor)
+  const candidate = commit(repository, "approve reviewed verifier")
+  return { repository, current, sourceRevision, candidate, approval, descriptor }
+}
+
+function withContentCase(callback) {
+  const testCase = createContentCase()
+  try {
+    callback(testCase)
+  } finally {
+    rmSync(testCase.repository, { recursive: true, force: true })
+  }
+}
 
 function pythonFullmatch(pattern, value) {
   const result = spawnSync(
@@ -89,6 +265,11 @@ for (const path of [
 }
 assert.equal(pythonFullmatch(allowedPattern, ".github/workflows/preview-backend-deploy.yml"), false)
 assert.equal(pythonFullmatch(allowedPattern, "db/rollbacks/drop_everything.sql"), false)
+assert.equal(
+  pythonFullmatch(allowedPattern, loaderPath),
+  false,
+  "the operational loader must not be added to the standard approved-path expression",
+)
 
 assert.match(deployScript, /NEXT_PUBLIC_API_BASE_URL/)
 assert.match(
@@ -291,5 +472,232 @@ assert.match(setupGuide, /Allow write access.*unchecked/)
 assert.match(setupGuide, /Worker Management release-control update/)
 assert.match(setupGuide, /database_backup_verified=true/)
 assert.match(setupGuide, /server-local/)
+
+assert.match(deployScript, /content_addressed_deletion_approvals/)
+assert.match(deployScript, /content_addressed_path_approvals/)
+assert.match(deployScript, /may contain at most 1 entry/)
+assert.match(deployScript, /content-addressed deletion approvals are Preview-only/)
+assert.match(deployScript, /authoritative backend checkout does not contain complete Git history/)
+
+withDeletionCase((testCase) => {
+  const result = runDescriptorValidator(testCase)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, new RegExp(`content_addressed_deletion_approved=${loaderPath}`))
+})
+
+withContentCase((testCase) => {
+  const result = runDescriptorValidator(testCase)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, new RegExp(`content_addressed_path_approved=${loaderPath}`))
+})
+
+withContentCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "content-mode-to-executable", testCase.candidate)
+  git(testCase.repository, "update-index", "--chmod=+x", loaderPath)
+  git(testCase.repository, "commit", "-m", "make approved content executable")
+  testCase.candidate = git(testCase.repository, "rev-parse", "HEAD")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "100644 to 100755 content mode change must fail")
+  assert.match(result.stderr, /Git file mode changed/)
+})
+
+withContentCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "executable-content-source", testCase.sourceRevision)
+  git(testCase.repository, "update-index", "--chmod=+x", loaderPath)
+  git(testCase.repository, "commit", "-m", "approve executable content")
+  testCase.descriptor.content_addressed_path_approvals[0].source_revision = git(
+    testCase.repository,
+    "rev-parse",
+    "HEAD",
+  )
+  git(testCase.repository, "update-index", "--chmod=-x", loaderPath)
+  git(testCase.repository, "commit", "-m", "remove approved executable mode")
+  testCase.candidate = git(testCase.repository, "rev-parse", "HEAD")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "100755 to 100644 content mode change must fail")
+  assert.match(result.stderr, /Git file mode changed/)
+})
+
+for (const [field, value, expected] of [
+  ["source_revision", "0".repeat(40), /Git verification failed/],
+  ["git_blob", "0".repeat(40), /Git blob changed/],
+  ["sha256", "0".repeat(64), /SHA-256 changed/],
+]) {
+  withContentCase((testCase) => {
+    const descriptor = structuredClone(testCase.descriptor)
+    descriptor.content_addressed_path_approvals[0][field] = value
+    const result = runDescriptorValidator(testCase, descriptor)
+    assert.notEqual(result.status, 0, `${field} mismatch must fail`)
+    assert.match(result.stderr, expected)
+  })
+}
+
+withContentCase((testCase) => {
+  const descriptor = structuredClone(testCase.descriptor)
+  descriptor.content_addressed_path_approvals[0].path = "scripts/*.py"
+  const result = runDescriptorValidator(testCase, descriptor)
+  assert.notEqual(result.status, 0, "wildcard content approval must fail")
+  assert.match(result.stderr, /invalid content-addressed deletion path/)
+})
+
+withContentCase((testCase) => {
+  const descriptor = structuredClone(testCase.descriptor)
+  descriptor.environment = "Production"
+  descriptor.target_database = "mfms_server_prod"
+  descriptor.release_branch = "production-release"
+  const result = runDescriptorValidator(testCase, descriptor)
+  assert.notEqual(result.status, 0, "Production content approval must fail")
+  assert.match(result.stderr, /not Preview|Preview-only/)
+})
+
+withContentCase((testCase) => {
+  const result = runDescriptorValidator(testCase, baseDescriptor())
+  assert.notEqual(result.status, 0, "removing the content approval must preserve standard rejection")
+  assert.match(result.stderr, /backend candidate contains an unapproved path/)
+})
+
+withContentCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "changed-content", testCase.candidate)
+  write(testCase.repository, loaderPath, "print('changed after approval')\n")
+  testCase.candidate = commit(testCase.repository, "change approved content")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "changed candidate content must fail")
+  assert.match(result.stderr, /Git blob changed/)
+})
+
+for (const [field, value, expected] of [
+  ["base_revision", "0".repeat(40), /Git verification failed/],
+  ["base_git_blob", "0".repeat(40), /base Git blob changed/],
+  ["base_sha256", "0".repeat(64), /base SHA-256 changed/],
+  ["removal_revision", "0".repeat(40), /Git verification failed/],
+]) {
+  withDeletionCase((testCase) => {
+    const approval = { ...testCase.approval, [field]: value }
+    const result = runDescriptorValidator(testCase, baseDescriptor([approval]))
+    assert.notEqual(result.status, 0, `${field} mismatch must fail`)
+    assert.match(result.stderr, expected)
+  })
+}
+
+withDeletionCase((testCase) => {
+  const approval = { ...testCase.approval, path: "scripts/*.py" }
+  const result = runDescriptorValidator(testCase, baseDescriptor([approval]))
+  assert.notEqual(result.status, 0, "wildcard deletion approval must fail")
+  assert.match(result.stderr, /invalid content-addressed deletion path/)
+})
+
+withDeletionCase((testCase) => {
+  const descriptor = baseDescriptor([testCase.approval])
+  descriptor.environment = "Production"
+  descriptor.target_database = "mfms_server_prod"
+  descriptor.release_branch = "production-release"
+  const result = runDescriptorValidator(testCase, descriptor)
+  assert.notEqual(result.status, 0, "Production deletion approval must fail")
+  assert.match(result.stderr, /not Preview|Preview-only/)
+})
+
+withDeletionCase((testCase) => {
+  const descriptor = baseDescriptor([testCase.approval, { ...testCase.approval }])
+  const result = runDescriptorValidator(testCase, descriptor)
+  assert.notEqual(result.status, 0, "a second deletion approval must fail")
+  assert.match(result.stderr, /at most 1/)
+})
+
+withDeletionCase((testCase) => {
+  const result = runDescriptorValidator(testCase, baseDescriptor())
+  assert.notEqual(result.status, 0, "absence of the approval must preserve the old rejection")
+  assert.match(result.stderr, /backend candidate contains an unapproved path/)
+})
+
+for (const replacement of ["restored", "directory", "case-variant", "renamed"]) {
+  withDeletionCase((testCase) => {
+    git(testCase.repository, "checkout", "-B", `replacement-${replacement}`, testCase.removal)
+    if (replacement === "restored") {
+      write(testCase.repository, loaderPath, "print('restored loader')\n")
+    } else if (replacement === "directory") {
+      write(testCase.repository, `${loaderPath}/child.txt`, "replacement\n")
+    } else if (replacement === "case-variant") {
+      write(testCase.repository, "scripts/Load_worker_v2_uat_fixture.py", "replacement\n")
+    } else {
+      const bytes = run(
+        "git",
+        ["-C", testCase.repository, "cat-file", "blob", testCase.approval.base_git_blob],
+        { encoding: null },
+      ).stdout
+      const renamed = join(testCase.repository, "scripts", "renamed_worker_v2_uat_fixture.py")
+      mkdirSync(join(renamed, ".."), { recursive: true })
+      writeFileSync(renamed, bytes)
+    }
+    writeDescriptor(testCase.repository, testCase.descriptor)
+    testCase.candidate = commit(testCase.repository, `${replacement} replacement`)
+    const result = runDescriptorValidator(testCase)
+    assert.notEqual(result.status, 0, `${replacement} replacement must fail`)
+  })
+}
+
+if (process.platform !== "win32") {
+  withDeletionCase((testCase) => {
+    git(testCase.repository, "checkout", "-B", "replacement-symlink", testCase.removal)
+    const target = join(testCase.repository, ...loaderPath.split("/"))
+    mkdirSync(join(target, ".."), { recursive: true })
+    symlinkSync("../README.md", target)
+    writeDescriptor(testCase.repository, testCase.descriptor)
+    testCase.candidate = commit(testCase.repository, "symlink replacement")
+    const result = runDescriptorValidator(testCase)
+    assert.notEqual(result.status, 0, "symlink replacement must fail")
+  })
+}
+
+withDeletionCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "replacement-submodule", testCase.removal)
+  writeDescriptor(testCase.repository, testCase.descriptor)
+  git(testCase.repository, "add", "deploy/preview-backend-release.json")
+  git(
+    testCase.repository,
+    "update-index",
+    "--add",
+    "--cacheinfo",
+    `160000,${testCase.current},${loaderPath}`,
+  )
+  git(testCase.repository, "commit", "-m", "submodule replacement")
+  testCase.candidate = git(testCase.repository, "rev-parse", "HEAD")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "submodule replacement must fail")
+})
+
+withDeletionCase((testCase) => {
+  git(testCase.repository, "checkout", "-B", "replayed-deletion", testCase.removal)
+  write(testCase.repository, loaderPath, "print('replayed loader')\n")
+  commit(testCase.repository, "restore after approved removal")
+  git(testCase.repository, "rm", loaderPath)
+  writeDescriptor(testCase.repository, testCase.descriptor)
+  testCase.candidate = commit(testCase.repository, "delete replayed loader")
+  const result = runDescriptorValidator(testCase)
+  assert.notEqual(result.status, 0, "restoration and replay after removal must fail")
+  assert.match(result.stderr, /reintroduced/)
+})
+
+{
+  const repository = mkdtempSync(join(tmpdir(), "mfms-preview-standard-path-"))
+  try {
+    git(repository, "init")
+    git(repository, "config", "user.name", "Preview Guard Test")
+    git(repository, "config", "user.email", "preview-guard@example.invalid")
+    writeDescriptor(repository, baseDescriptor())
+    write(repository, "README.md", "baseline\n")
+    const current = commit(repository, "standard base")
+    write(repository, "README.md", "allowed standard change\n")
+    const candidate = commit(repository, "standard allowed change")
+    const result = runDescriptorValidator({
+      repository,
+      current,
+      candidate,
+      descriptor: baseDescriptor(),
+    })
+    assert.equal(result.status, 0, result.stderr)
+  } finally {
+    rmSync(repository, { recursive: true, force: true })
+  }
+}
 
 console.log("Preview backend deployment and rollback workflow tests passed.")
