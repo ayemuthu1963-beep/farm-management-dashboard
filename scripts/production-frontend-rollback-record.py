@@ -21,12 +21,20 @@ import tempfile
 
 
 class Refused(RuntimeError):
-    pass
+    def __init__(self, message, reason_code="VALIDATION_FAILED"):
+        require_reason_code(reason_code)
+        super().__init__(message)
+        self.reason_code = reason_code
 
 
-def require(condition, message):
+def require_reason_code(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", value):
+        raise RuntimeError("invalid internal reason code")
+
+
+def require(condition, message, reason_code="VALIDATION_FAILED"):
     if not condition:
-        raise Refused(message)
+        raise Refused(message, reason_code)
 
 
 def digest(value):
@@ -37,10 +45,15 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
+def blocked_line(reason_code):
+    require_reason_code(reason_code)
+    return f"PRODUCTION_FRONTEND_ROLLBACK_RECORD=BLOCKED reason={reason_code}"
+
+
 def unique_object(pairs):
     result = {}
     for key, value in pairs:
-        require(key not in result, "duplicate JSON field")
+        require(key not in result, "duplicate JSON field", "RECORD_CANONICALIZATION_INVALID")
         result[key] = value
     return result
 
@@ -173,6 +186,13 @@ def snapshot(item, image, network=None):
         require(network["Name"] == "harvest-net" and network["Driver"] == "bridge", "wrong Production network")
         require(network["IPAM"]["Config"] == [{"Subnet": "172.19.0.0/16", "IPRange": "172.19.128.0/17", "Gateway": "172.19.0.1"}], "wrong Production IPAM")
         require(not endpoint.get("NetworkID") or endpoint["NetworkID"] == network["Id"], "endpoint network identity mismatch")
+    require("OomKillDisable" in host and (host["OomKillDisable"] is False or host["OomKillDisable"] is None),
+            "invalid OOM kill-disable setting", "HOST_CONFIG_OOM_KILL_DISABLE_INVALID")
+    oom_false_host_config_sha256 = None
+    if host["OomKillDisable"] is None:
+        false_variant = dict(host)
+        false_variant["OomKillDisable"] = False
+        oom_false_host_config_sha256 = digest(canonical(false_variant))
     static = {
         "container_id": item["Id"], "revision": revision, "image_id": item["Image"],
         "environment_sha256": digest(("\n".join(sorted(entries)) + "\n").encode()),
@@ -182,7 +202,14 @@ def snapshot(item, image, network=None):
         "network_id": network["Id"] if network is not None else "hermetic-fixture",
         "restart_count": item["RestartCount"],
     }
-    return {"static": static, "running": item["State"]["Running"], "ip": ip}
+    return {
+        "static": static, "running": item["State"]["Running"], "ip": ip,
+        # Docker 27 serializes this field as false after create and null after
+        # first start. This derived hash is never persisted or signed; it only
+        # proves the observed null differs from the signed HostConfig by that
+        # one exact, one-way lifecycle transition.
+        "oom_false_host_config_sha256": oom_false_host_config_sha256,
+    }
 
 
 class Records:
@@ -225,11 +252,14 @@ class Records:
 
     def load(self, identity, kind):
         envelope = parse_json(read_safe(self.path(identity, kind), mode=0o400))
-        require(set(envelope) == {"payload", "signature"}, "invalid record envelope")
+        require(isinstance(envelope, dict) and set(envelope) == {"payload", "signature"},
+                "invalid record envelope", "RECORD_ENVELOPE_INVALID")
         expected = hmac.new(self.key(), canonical(envelope["payload"]), hashlib.sha256).hexdigest()
-        require(isinstance(envelope["signature"], str) and hmac.compare_digest(expected, envelope["signature"]), "record signature mismatch")
+        require(isinstance(envelope["signature"], str) and hmac.compare_digest(expected, envelope["signature"]),
+                "record signature mismatch", "RECORD_SIGNATURE_MISMATCH")
         payload = envelope["payload"]
-        require(payload.get("deployment_id") == identity and payload.get("kind") == kind, "record binding mismatch")
+        require(isinstance(payload, dict) and payload.get("deployment_id") == identity and payload.get("kind") == kind,
+                "record binding mismatch", "RECORD_BINDING_MISMATCH")
         return payload
 
     def state(self):
@@ -238,21 +268,51 @@ class Records:
         return parse_state(raw), digest(raw)
 
     @staticmethod
-    def match(actual, expected, *, running):
-        require(actual["static"] == expected, "container/image/environment/configuration drift")
-        require(actual["running"] == running, "container running state mismatch")
-        require(actual["ip"] == ("172.19.128.7" if running else ""), "container network attachment mismatch")
+    def static_match(actual, expected, *, ignore_restart=False):
+        require(isinstance(expected.get("host_config_sha256"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", expected["host_config_sha256"]),
+                "invalid recorded host configuration hash", "RECORDED_HOST_CONFIG_HASH_INVALID")
+        observed, recorded = dict(actual["static"]), dict(expected)
+        if ignore_restart:
+            observed.pop("restart_count")
+            recorded.pop("restart_count")
+        if observed == recorded:
+            return "exact"
+        observed_host_hash = observed.pop("host_config_sha256", None)
+        recorded_host_hash = recorded.pop("host_config_sha256", None)
+        compatible = (
+            observed == recorded
+            and observed_host_hash != recorded_host_hash
+            and actual.get("oom_false_host_config_sha256") is not None
+            and hmac.compare_digest(actual["oom_false_host_config_sha256"], recorded_host_hash or "")
+        )
+        return "oom-kill-disable-false-to-null" if compatible else None
 
-    @staticmethod
-    def match_source(actual, expected):
+    @classmethod
+    def match(cls, actual, expected, *, running, reason_prefix="CONTAINER"):
+        compatibility = cls.static_match(actual, expected)
+        require(compatibility is not None, "container/image/environment/configuration drift",
+                reason_prefix + "_STATIC_MISMATCH")
+        require(actual["running"] == running, "container running state mismatch",
+                reason_prefix + "_RUNNING_STATE_MISMATCH")
+        require(actual["ip"] == ("172.19.128.7" if running else ""), "container network attachment mismatch",
+                reason_prefix + "_NETWORK_ATTACHMENT_MISMATCH")
+        return compatibility
+
+    @classmethod
+    def match_source(cls, actual, expected):
         observed, recorded = dict(actual["static"]), dict(expected)
         observed_restarts = observed.pop("restart_count")
         recorded_restarts = recorded.pop("restart_count")
-        require(observed == recorded, "source container/image/environment/configuration drift")
-        require(isinstance(observed_restarts, int) and observed_restarts >= recorded_restarts, "invalid source restart history")
+        comparable = {**actual, "static": observed}
+        require(cls.static_match(comparable, recorded) is not None,
+                "source container/image/environment/configuration drift", "SOURCE_STATIC_MISMATCH")
+        require(isinstance(observed_restarts, int) and observed_restarts >= recorded_restarts,
+                "invalid source restart history", "SOURCE_RESTART_HISTORY_INVALID")
         # Crash-loop counters and running state may change after the deployment
         # workflow exits. They must not disable restoration of the exact artifact.
-        require(actual["ip"] in {"", "172.19.128.7"}, "source network attachment mismatch")
+        require(actual["ip"] in {"", "172.19.128.7"}, "source network attachment mismatch",
+                "SOURCE_NETWORK_ATTACHMENT_MISMATCH")
 
     def stage(self, identity, revision, image_id, target_name, run_id, timestamp, *, enrollment_hash=None):
         require(identity.startswith(f"{run_id}-{timestamp}-"), "deployment ID/run binding mismatch")
@@ -302,16 +362,28 @@ class Records:
     def deployment(self, identity):
         record = self.load(identity, "deployment")
         preparation = self.load(identity, "prepare")
-        require(record["preparation_sha256"] == digest(canonical(preparation)), "preparation link mismatch")
-        require(record["previous"] == preparation["previous"], "adjacent target link mismatch")
+        require(record["preparation_sha256"] == digest(canonical(preparation)), "preparation link mismatch",
+                "PREPARATION_HASH_LINK_MISMATCH")
+        require(record["previous"] == preparation["previous"], "adjacent target link mismatch",
+                "PREDECESSOR_LINK_MISMATCH")
         return record, preparation
 
     def activate(self, identity):
         record, preparation = self.deployment(identity)
-        require(self.state()[1] == preparation["source_state_sha256"], "release state changed before commit")
-        self.match(self.inspect("mfms-v0-preview-web"), record["current"], running=True)
-        self.match(self.inspect(record["target_name"]), record["previous"], running=False)
-        atomic_write(self.state_path, state_bytes(record["committed_state"]))
+        require(self.state()[1] == preparation["source_state_sha256"], "release state changed before commit",
+                "ACTIVATE_SOURCE_STATE_MISMATCH")
+        compatibility = self.match(self.inspect("mfms-v0-preview-web"), record["current"], running=True,
+                                   reason_prefix="ACTIVATE_CANDIDATE")
+        self.match(self.inspect(record["target_name"]), record["previous"], running=False,
+                   reason_prefix="ACTIVATE_PREDECESSOR")
+        try:
+            atomic_write(self.state_path, state_bytes(record["committed_state"]))
+        except Refused as error:
+            raise Refused("state commit validation failed", "ACTIVATE_STATE_COMMIT_VALIDATION_FAILED") from error
+        except OSError as error:
+            raise Refused("state commit I/O failed", "ACTIVATE_STATE_COMMIT_IO_FAILED") from error
+        if compatibility != "exact":
+            print("PRODUCTION_FRONTEND_ROLLBACK_RECORD_COMPATIBILITY=OOM_KILL_DISABLE_FALSE_TO_NULL")
 
     def verify(self, expected_revision):
         state, _ = self.state()
@@ -393,5 +465,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (Refused, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        raise SystemExit("PRODUCTION_FRONTEND_ROLLBACK_RECORD=BLOCKED (record, artifact or configuration validation failed)")
+    except Refused as error:
+        raise SystemExit(blocked_line(error.reason_code)) from None
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        raise SystemExit(blocked_line("UNEXPECTED_OPERATION_FAILURE")) from None
