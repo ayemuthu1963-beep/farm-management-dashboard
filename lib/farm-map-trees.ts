@@ -13,7 +13,7 @@ export interface FarmMapTree {
 export const CROP_STYLES: Record<FarmCrop, { colour: string; count: number }> = {
   Coconut: { colour: "#0f766e", count: 2117 },
   Jackfruit: { colour: "#f97316", count: 623 },
-  Nutmeg: { colour: "#9333ea", count: 693 },
+  Nutmeg: { colour: "#db2777", count: 693 },
 }
 
 export const FARM_TREE_SOURCES: ReadonlyArray<{
@@ -22,7 +22,7 @@ export const FARM_TREE_SOURCES: ReadonlyArray<{
   url: string
   count: number
 }> = [
-  { crop: "Coconut", plot: "Plot 1", url: "/map-data/vector/plot1-coconut-trees-v1.geojson", count: 954 },
+  { crop: "Coconut", plot: "Plot 1", url: "/map-data/vector/plot1-coconut-trees-affine-20260812.geojson", count: 954 },
   { crop: "Coconut", plot: "Plot 2", url: "/map-data/vector/plot2-coconut-trees-v1.geojson", count: 1163 },
   { crop: "Jackfruit", url: "/map-data/vector/jackfruit-trees-ffbcd4efe04a955b.geojson", count: 623 },
   { crop: "Nutmeg", url: "/map-data/vector/nutmeg-trees-92968dc1573b3b2e.geojson", count: 693 },
