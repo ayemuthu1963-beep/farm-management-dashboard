@@ -291,7 +291,7 @@ assert.equal(
   "Restore the approved affine-corrected Plot 1 coconut coordinates and use a distinct pink marker colour for nutmeg trees",
 )
 assert.equal(manifest.base_commit, "8f6d08cf306c0161ced355d3da2359fb55183657")
-assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
+assert.equal(manifest.matched_backend_commit, "c5d8e4855be5c4ca76b14d278c04a16a7f311ac4")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
