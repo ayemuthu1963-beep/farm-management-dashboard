@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 
 const definitions = [
   {
     plot: "Plot 1",
-    path: "public/map-data/vector/plot1-coconut-trees-v1.geojson",
+    path: "public/map-data/vector/plot1-coconut-trees-affine-20260812.geojson",
+    expectedSha256: "f9973718059e08ea8415be31ab0e782b2028954362284b0294f0b5bc3d1872dd",
     expectedCount: 954,
     expectedDecimals: 9,
     bounds: {
@@ -17,6 +19,7 @@ const definitions = [
   {
     plot: "Plot 2",
     path: "public/map-data/vector/plot2-coconut-trees-v1.geojson",
+    expectedSha256: "9663d1f0f30220590202bf4c05d2dcf55aa0e7ac743f83ef85c12a900f48bab3",
     expectedCount: 1163,
     expectedDecimals: 6,
     bounds: {
@@ -32,7 +35,9 @@ const allTreeNumbers = new Set()
 const decimalTreeNumbersByPlot = new Map()
 
 for (const definition of definitions) {
-  const collection = JSON.parse(await readFile(definition.path, "utf8"))
+  const bytes = await readFile(definition.path)
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), definition.expectedSha256)
+  const collection = JSON.parse(bytes.toString("utf8"))
   assert.equal(collection.type, "FeatureCollection")
   assert.equal(collection.features.length, definition.expectedCount)
 
@@ -96,6 +101,8 @@ assert.match(mapClient, /"Bench Player": \{ background: "#b91c1c"/)
 assert.match(mapClient, /"Future Better": \{ background: "#7e22ce"/)
 const mapTrees = await readFile("lib/farm-map-trees.ts", "utf8")
 assert.match(mapTrees, /Coconut: \{ colour: "#0f766e", count: 2117 \}/)
+assert.match(mapTrees, /Nutmeg: \{ colour: "#db2777", count: 693 \}/)
+assert.match(mapTrees, /plot1-coconut-trees-affine-20260812\.geojson/)
 assert.match(mapClient, /classifications\.current\.get\(entry\.tree\.treeNo\)/)
 assert.match(mapClient, /Tree Classification Colour Legend/)
 assert.match(mapClient, /Plot 1: Tree numbers 1 to 999/)
