@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Patch shared frontend dependencies for current security advisories while preserving the accepted 3433-tree Farm Map and tile assets",
+  "Restore the approved affine-corrected Plot 1 coconut coordinates and use a distinct pink marker colour for nutmeg trees",
 )
-assert.equal(manifest.base_commit, "4f3780d564a4490dcee9841d9fa145fec6e5afe1")
+assert.equal(manifest.base_commit, "8f6d08cf306c0161ced355d3da2359fb55183657")
 assert.equal(manifest.matched_backend_commit, "0f8f8a0f7482f99f7826f9baf4b7afcc630f0c99")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -303,9 +303,8 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 const expectedReleasePaths = [
   "deploy/preview-release-manifest.json",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
+  "lib/farm-map-trees.ts",
+  "public/map-data/vector/plot1-coconut-trees-affine-20260812.geojson",
   "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
