@@ -29,12 +29,12 @@ FUTURE_ID = "1000-20260909T100000Z-" + "b" * 16
 RECEIPT_ID = "1001-20260909T110000Z-" + "c" * 16
 
 
-def artifacts(revision, digit, *, running):
+def artifacts(revision, digit, *, running, oom_kill_disable=None):
     image_id = "sha256:" + digit * 64
     env = ["NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_prod", "HARVEST_API_BASE_URL=http://harvest-api:8000", "MFMS_ENV=production", "MFMS_TARGET_DATABASE=mfms_server_prod", "DATABASE_URL=postgresql://test-only.invalid/mfms_server_prod", "MFMS_GIT_COMMIT=" + revision]
     item = {
         "Id": digit * 64, "Image": image_id, "Config": {"Env": env},
-        "HostConfig": {"NetworkMode": "harvest-net", "PortBindings": {"3000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "3014"}]}, "RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}},
+        "HostConfig": {"NetworkMode": "harvest-net", "PortBindings": {"3000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "3014"}]}, "RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}, "OomKillDisable": oom_kill_disable},
         "Mounts": [{"Type": t, "Source": s, "Destination": d, "RW": rw} for t, s, d, rw in []],
         "State": {"Running": running}, "RestartCount": 0,
         "NetworkSettings": {"Networks": {"harvest-net": {"IPAddress": "172.19.128.7"}} if running else {}},
@@ -75,7 +75,7 @@ class RecordTests(unittest.TestCase):
 
     def future(self):
         self.enroll()
-        candidate = artifacts(FUTURE, "3", running=False)
+        candidate = artifacts(FUTURE, "3", running=False, oom_kill_disable=False)
         self.records.stage(FUTURE_ID, FUTURE, candidate[0]["Image"], FUTURE_TARGET, "1000", "20260909T100000Z")
         self.live[0]["State"]["Running"] = False
         self.live[0]["NetworkSettings"]["Networks"] = {}
@@ -83,9 +83,107 @@ class RecordTests(unittest.TestCase):
         self.containers["mfms-v0-preview-web"] = candidate
         self.records.finalize(FUTURE_ID, "future-tag", "current-tag")
         candidate[0]["State"]["Running"] = True
+        candidate[0]["HostConfig"]["OomKillDisable"] = None
         candidate[0]["NetworkSettings"]["Networks"] = {"harvest-net": {"IPAddress": "172.19.128.7"}}
-        self.records.activate(FUTURE_ID)
+        with mock.patch("builtins.print") as output:
+            self.records.activate(FUTURE_ID)
+        output.assert_called_once_with("PRODUCTION_FRONTEND_ROLLBACK_RECORD_COMPATIBILITY=OOM_KILL_DISABLE_FALSE_TO_NULL")
         return candidate
+
+    def test_oom_compatibility_is_one_way_one_field_and_hash_bound(self):
+        candidate = self.future()
+        record, _ = self.records.deployment(FUTURE_ID)
+        actual = self.inspect("mfms-v0-preview-web")
+        self.assertEqual(self.records.static_match(actual, record["current"]), "oom-kill-disable-false-to-null")
+
+        candidate[0]["Config"]["Env"].append("SECOND_FIELD_DRIFT=1")
+        self.assertIsNone(self.records.static_match(self.inspect("mfms-v0-preview-web"), record["current"]))
+        candidate[0]["Config"]["Env"].pop()
+
+        candidate[0]["HostConfig"]["FutureUnreviewedField"] = False
+        self.assertIsNone(self.records.static_match(self.inspect("mfms-v0-preview-web"), record["current"]))
+        candidate[0]["HostConfig"].pop("FutureUnreviewedField")
+
+        for invalid in [True, 0, "false", [], {}]:
+            with self.subTest(invalid_oom_value=invalid):
+                candidate[0]["HostConfig"]["OomKillDisable"] = invalid
+                with self.assertRaises(MODULE.Refused) as caught:
+                    self.inspect("mfms-v0-preview-web")
+                self.assertEqual(caught.exception.reason_code, "HOST_CONFIG_OOM_KILL_DISABLE_INVALID")
+        del candidate[0]["HostConfig"]["OomKillDisable"]
+        with self.assertRaises(MODULE.Refused) as caught:
+            self.inspect("mfms-v0-preview-web")
+        self.assertEqual(caught.exception.reason_code, "HOST_CONFIG_OOM_KILL_DISABLE_INVALID")
+
+        # The reverse null-to-false direction is not a permitted compatibility.
+        candidate[0]["HostConfig"]["OomKillDisable"] = None
+        expected_null = copy.deepcopy(actual["static"])
+        candidate[0]["HostConfig"]["OomKillDisable"] = False
+        self.assertIsNone(self.records.static_match(self.inspect("mfms-v0-preview-web"), expected_null))
+
+    def test_activation_reason_codes_are_specific_and_secret_free(self):
+        self.enroll()
+        candidate = artifacts(FUTURE, "3", running=False, oom_kill_disable=False)
+        self.records.stage(FUTURE_ID, FUTURE, candidate[0]["Image"], FUTURE_TARGET, "1000", "20260909T100000Z")
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.containers[FUTURE_TARGET] = self.live
+        self.containers["mfms-v0-preview-web"] = candidate
+        self.records.finalize(FUTURE_ID, "future-tag", "current-tag")
+        candidate[0]["State"]["Running"] = True
+        candidate[0]["HostConfig"]["OomKillDisable"] = None
+        candidate[0]["NetworkSettings"]["Networks"] = {"harvest-net": {"IPAddress": "172.19.128.7"}}
+        candidate[0]["Config"]["Env"].append("PRIVATE_SENTINEL=must-never-print")
+        with self.assertRaises(MODULE.Refused) as caught:
+            self.records.activate(FUTURE_ID)
+        self.assertEqual(caught.exception.reason_code, "ACTIVATE_CANDIDATE_STATIC_MISMATCH")
+        line = MODULE.blocked_line(caught.exception.reason_code)
+        self.assertEqual(line, "PRODUCTION_FRONTEND_ROLLBACK_RECORD=BLOCKED reason=ACTIVATE_CANDIDATE_STATIC_MISMATCH")
+        self.assertNotIn("PRIVATE_SENTINEL", line)
+
+        candidate[0]["Config"]["Env"].pop()
+        self.live[0]["Id"] = "9" * 64
+        with self.assertRaises(MODULE.Refused) as caught:
+            self.records.activate(FUTURE_ID)
+        self.assertEqual(caught.exception.reason_code, "ACTIVATE_PREDECESSOR_STATIC_MISMATCH")
+
+        self.live[0]["Id"] = "1" * 64
+        changed_state = self.records.state()[0]
+        changed_state["updated_at"] = "20260909T100001Z"
+        MODULE.atomic_write(self.records.state_path, MODULE.state_bytes(changed_state))
+        with self.assertRaises(MODULE.Refused) as caught:
+            self.records.activate(FUTURE_ID)
+        self.assertEqual(caught.exception.reason_code, "ACTIVATE_SOURCE_STATE_MISMATCH")
+
+    def test_failed_atomic_activation_commit_keeps_whole_previous_state(self):
+        self.enroll()
+        old_state = self.records.state_path.read_bytes()
+        candidate = artifacts(FUTURE, "3", running=False, oom_kill_disable=False)
+        self.records.stage(FUTURE_ID, FUTURE, candidate[0]["Image"], FUTURE_TARGET, "1000", "20260909T100000Z")
+        self.live[0]["State"]["Running"] = False
+        self.live[0]["NetworkSettings"]["Networks"] = {}
+        self.containers[FUTURE_TARGET] = self.live
+        self.containers["mfms-v0-preview-web"] = candidate
+        self.records.finalize(FUTURE_ID, "future-tag", "current-tag")
+        candidate[0]["State"]["Running"] = True
+        candidate[0]["HostConfig"]["OomKillDisable"] = None
+        candidate[0]["NetworkSettings"]["Networks"] = {"harvest-net": {"IPAddress": "172.19.128.7"}}
+        with mock.patch.object(MODULE.os, "replace", side_effect=OSError("PRIVATE_SENTINEL")):
+            with self.assertRaises(MODULE.Refused) as caught:
+                self.records.activate(FUTURE_ID)
+        self.assertEqual(caught.exception.reason_code, "ACTIVATE_STATE_COMMIT_IO_FAILED")
+        self.assertEqual(self.records.state_path.read_bytes(), old_state)
+        self.assertFalse(list(self.root.glob(".rollback-*")))
+        self.assertNotIn("PRIVATE_SENTINEL", MODULE.blocked_line(caught.exception.reason_code))
+
+    def test_post_replace_fsync_failure_leaves_whole_new_state_not_partial_bytes(self):
+        path = self.root / "atomic-state"
+        MODULE.atomic_write(path, b"old-state\n")
+        with mock.patch.object(MODULE, "fsync_directory", side_effect=OSError("simulated directory fsync failure")):
+            with self.assertRaises(OSError):
+                MODULE.atomic_write(path, b"complete-new-state\n")
+        self.assertEqual(path.read_bytes(), b"complete-new-state\n")
+        self.assertFalse(list(self.root.glob(".rollback-*")))
 
     def test_current_and_future_adjacent_pairs_survive_new_process(self):
         self.enroll()
@@ -120,8 +218,9 @@ class RecordTests(unittest.TestCase):
         path.chmod(0o600)
         path.write_bytes(MODULE.canonical(raw))
         path.chmod(0o400)
-        with self.assertRaisesRegex(MODULE.Refused, "signature"):
+        with self.assertRaisesRegex(MODULE.Refused, "signature") as caught:
             self.records.verify(CURRENT)
+        self.assertEqual(caught.exception.reason_code, "RECORD_SIGNATURE_MISMATCH")
 
     def test_unknown_revision_missing_target_and_state_drift_reject(self):
         self.enroll()
