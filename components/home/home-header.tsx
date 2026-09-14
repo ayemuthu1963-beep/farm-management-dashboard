@@ -11,6 +11,11 @@ const pills = [
   { label: "BETTER YIELD", icon: Leaf },
 ]
 
+const configuredEnvironment = (process.env.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
+const logoutAction = configuredEnvironment === "preview" || configuredEnvironment === "uat"
+  ? "/logout"
+  : "https://auth.muthufarms.com/logout"
+
 export function HomeHeader() {
   const [now, setNow] = useState<Date | null>(null)
 
@@ -68,7 +73,7 @@ export function HomeHeader() {
           <Home className="size-5" aria-hidden="true" />
           Home
         </Link>
-        <form action="https://auth.muthufarms.com/logout" method="post">
+        <form action={logoutAction} method="post">
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-extrabold text-[#082c17] shadow-md transition-colors hover:bg-white/90"
