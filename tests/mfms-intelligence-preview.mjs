@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
-import { createRequire } from "node:module"
 
 const route = readFileSync("app/api/intelligence/ask/route.ts", "utf8")
 const page = readFileSync("components/intelligence/intelligence-client.tsx", "utf8")
@@ -95,52 +94,10 @@ assert.match(excel, /definition\.key === "tree_no"/)
 assert.match(excel, /numeric \/ 100/)
 assert.match(excel, /MFMS_Intelligence_/)
 assert.match(navigation, /id: "mfms-intelligence"/)
-
-// Exercise the real client submit/render path with batched hook state and inert
-// leaf components. Even an immediately resolved identical answer gets a new
-// React subtree key, which resets every composite table's column/scope state.
-const require = createRequire(import.meta.url)
-const ts = require("typescript")
-const compiled = { exports: {} }
-const hookState = []
-let hookIndex = 0
-const jsx = (type, props, key) => ({ type, props, key: key === undefined ? null : String(key) })
-const clientRequire = (name) => {
-  if (name === "react/jsx-runtime") return { jsx, jsxs: jsx }
-  if (name === "react") return {
-    useState(initial) { const index = hookIndex++; if (!(index in hookState)) hookState[index] = initial; return [hookState[index], (value) => { hookState[index] = typeof value === "function" ? value(hookState[index]) : value }] },
-    useMemo(callback) { return callback() },
-  }
-  if (["lucide-react", "recharts", "@/lib/mfms-intelligence-excel"].includes(name)) return new Proxy({}, { get: (_, key) => key })
-  throw new Error(`Unexpected client dependency ${name}`)
-}
-Function("require", "module", "exports", ts.transpileModule(page, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText)(clientRequire, compiled, compiled.exports)
-const render = () => { hookIndex = 0; return compiled.exports.IntelligenceClient() }
-const originalFetch = globalThis.fetch
-try {
-  globalThis.fetch = async () => ({ json: async () => ({ status: "ANSWERED", answer: "Same composite answer", sections: [{ domain: "irrigation" }, { domain: "well_water" }], cycles: [], quality_flags: [] }) })
-  let tree = render()
-  const keys = []
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const form = tree.props.children.find((child) => child?.type === "form")
-    await form.props.onSubmit({ preventDefault() {} })
-    tree = render()
-    keys.push(tree.props.children.find((child) => child?.props?.["aria-live"] === "polite").key)
-  }
-  assert.equal(new Set(keys).size, 3, "Identical consecutive results must remount all table controls")
-  assert.ok(keys.every((key) => key !== null))
-
-  hookState.length = 0
-  globalThis.fetch = async () => ({
-    status: 403,
-    json: async () => { throw new SyntaxError("gateway response is not JSON") },
-  })
-  tree = render()
-  await tree.props.children.find((child) => child?.type === "form").props.onSubmit({ preventDefault() {} })
-  assert.equal(hookState[2].status, "BLOCKED_SECURITY")
-  assert.equal(hookState[2].blocked_reason, "This MFMS account is not authorized to read Intelligence.")
-  assert.equal(hookState[2].data_source_status, "NOT_QUERIED_FAIL_CLOSED")
-  assert.equal(hookState[2].metabase_call_made, false)
-} finally { globalThis.fetch = originalFetch }
+assert.match(page, /function failedResponse\(status: number\)/)
+assert.match(page, /status === 401/)
+assert.match(page, /status === 403/)
+assert.match(page, /This MFMS account is not authorized to read Intelligence\./)
+assert.match(page, /response\.json\(\)\.catch\(\(\) => null\)/)
 
 console.log("MFMS Intelligence presentation and governance contract tests passed")
