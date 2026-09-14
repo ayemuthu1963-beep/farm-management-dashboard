@@ -288,9 +288,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Restore the approved affine-corrected Plot 1 coconut coordinates and use a distinct pink marker colour for nutmeg trees",
+  "Add a full-screen Farm Map control with Escape-key exit while preserving the current map view and layers",
 )
-assert.equal(manifest.base_commit, "8f6d08cf306c0161ced355d3da2359fb55183657")
+assert.equal(manifest.base_commit, "ed0e73fd6c481219f1c23cf9a6fc58dedd509efe")
 assert.equal(manifest.matched_backend_commit, "c5d8e4855be5c4ca76b14d278c04a16a7f311ac4")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -303,8 +303,10 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 const expectedReleasePaths = [
   "deploy/preview-release-manifest.json",
-  "lib/farm-map-trees.ts",
-  "public/map-data/vector/plot1-coconut-trees-affine-20260812.geojson",
+  "components/maps/farm-map-client.tsx",
+  "components/maps/farm-map-orthomosaic.tsx",
+  "package.json",
+  "tests/farm-map-fullscreen-control.mjs",
   "tests/preview-deployment-workflow.mjs"
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
