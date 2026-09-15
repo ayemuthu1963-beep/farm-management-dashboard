@@ -633,7 +633,7 @@ docker() {{
                 migrations.append({"path": relative, "sha256": hashlib.sha256(content).hexdigest()})
             descriptor = {"schema_version": 1, "environment": "Production", "target_database": "mfms_server_prod", "repository": "ayemuthu1963-beep/muthu-harvest-dashboard", "release_branch": "production-release", "deployment_kind": "backend-application-only", "runtime_profile": "production-intelligence-v1", "migrations": migrations, "required_openapi_paths": ["/health", "/api/intelligence/ask"], "protected_invariants": dict(database="read-only-verification-only", frontend="unchanged", odk="unchanged", schedules="unchanged", proxy_configuration="unchanged", test="unchanged", preview="unchanged")}
             path = root / "descriptor.json"
-            args = ["controller", str(path), str(root), CURRENT, FUTURE, str(root / "migrations.plan"), str(root / "openapi.plan"), "application-only"]
+            args = ["controller", str(path), str(root), CURRENT, FUTURE, "sha256:" + "1" * 64, str(root / "migrations.plan"), str(root / "openapi.plan"), "application-only"]
             for case in ["valid", "wrong-mode", "wrong-profile", "new-pin", "missing-pin", "checksum", "runner", "sql", "missing-intelligence", "missing-core"]:
                 with self.subTest(case=case):
                     data = copy.deepcopy(descriptor)

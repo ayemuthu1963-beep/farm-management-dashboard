@@ -811,7 +811,7 @@ validate_release_descriptor() {
   local descriptor="$source_dir/deploy/production-backend-release.json"
   [[ -f "$descriptor" ]] || blocked "Production backend release descriptor is missing"
   python3 - "$descriptor" "$source_dir" "$original_revision" "$candidate_revision" \
-    "$migration_plan" "$openapi_plan" "$deployment_mode" <<'PY'
+    "$original_image_id" "$migration_plan" "$openapi_plan" "$deployment_mode" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -819,7 +819,7 @@ import re
 import sys
 import subprocess
 
-descriptor_path, source_text, current, candidate, migrations_output, openapi_output, mode = sys.argv[1:]
+descriptor_path, source_text, current, candidate, current_image, migrations_output, openapi_output, mode = sys.argv[1:]
 source = pathlib.Path(source_text).resolve()
 data = json.loads(pathlib.Path(descriptor_path).read_text(encoding="utf-8"))
 
@@ -937,6 +937,29 @@ release_specific = {
     },
 }
 
+# PR #117 intentionally carries the complete, previously reviewed analytics
+# history needed by the application-only Intelligence release.  Keep that
+# exceptional path set fail-closed by binding it to the exact live base and
+# image, merge commit and authorized tree instead of widening the general
+# allowlist.  The tree object cryptographically commits every path, mode and
+# blob, so any added, removed, renamed or modified file changes this value.
+def combined_intelligence_release_is_exact(current, candidate, tree, current_image, mode):
+    return (
+        current == "6572f3c2ba1d52503ef69b46fb42309a2829a9c3"
+        and candidate == "e4c7768f9bd30d7524a67d1fdaeec7846bafffb3"
+        and tree == "d7f8b7e2b50023c0b68153ba008f07db047ea99f"
+        and current_image == "sha256:916bc49d2aea9b1405cf11d36002311393ce9fe2c9099ffe15932e15386611ca"
+        and mode == "application-only"
+    )
+
+
+candidate_tree = subprocess.check_output(
+    ["git", "-C", str(source), "rev-parse", f"{candidate}^{{tree}}"], text=True
+).strip()
+combined_intelligence_release_approved = combined_intelligence_release_is_exact(
+    current, candidate, candidate_tree, current_image, mode
+)
+
 
 def release_specific_path_approved(path):
     approval = release_specific.get(path)
@@ -963,7 +986,11 @@ if not changed:
 for path in changed:
     if mode == "application-only" and (path.startswith("db/") or path == "scripts/apply_production_migrations.py"):
         raise SystemExit("application-only release cannot change database artifacts or the verified migration runner")
-    if allowed.fullmatch(path) or release_specific_path_approved(path):
+    if (
+        allowed.fullmatch(path)
+        or release_specific_path_approved(path)
+        or combined_intelligence_release_approved
+    ):
         continue
     raise SystemExit(f"backend candidate contains an unapproved path: {path}")
 

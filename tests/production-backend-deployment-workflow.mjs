@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import {
   chmodSync,
   mkdirSync,
@@ -412,9 +413,59 @@ assert.match(gate, /approval is None or candidate != approval\["candidate"\]/)
 assert.match(gate, /if tree != release_specific_tree:/)
 assert.match(gate, /if blob != approval\["blob"\]/)
 assert.match(gate, /hashlib\.sha256\(content\)\.hexdigest\(\) == approval\["sha256"\]/)
-assert.match(gate, /if allowed\.fullmatch\(path\) or release_specific_path_approved\(path\):/)
+assert.match(gate, /allowed\.fullmatch\(path\)/)
+assert.match(gate, /or release_specific_path_approved\(path\)/)
+
+const combinedIntelligenceReleaseApproval = {
+  current: "6572f3c2ba1d52503ef69b46fb42309a2829a9c3",
+  candidate: "e4c7768f9bd30d7524a67d1fdaeec7846bafffb3",
+  tree: "d7f8b7e2b50023c0b68153ba008f07db047ea99f",
+  currentImage: "sha256:916bc49d2aea9b1405cf11d36002311393ce9fe2c9099ffe15932e15386611ca",
+  mode: "application-only",
+}
+const combinedApprovalFunction = gate.match(
+  /def combined_intelligence_release_is_exact\([\s\S]*?\n    \)/,
+)?.[0]
+assert.ok(combinedApprovalFunction, "Missing exact combined Intelligence release decision")
+const combinedApprovalRoot = mkdtempSync(join(tmpdir(), "mfms-combined-release-approval-"))
+const combinedApprovalPath = join(combinedApprovalRoot, "approval.py")
+writeFileSync(combinedApprovalPath, `${combinedApprovalFunction}\n\nimport json, sys\np = json.loads(sys.argv[1])\nraise SystemExit(0 if combined_intelligence_release_is_exact(p["current"], p["candidate"], p["tree"], p["currentImage"], p["mode"]) else 1)\n`, "utf8")
+const exactCombinedReleaseDecision = (payload) => runPython(combinedApprovalPath, [JSON.stringify(payload)])
+try {
+  assert.equal(exactCombinedReleaseDecision(combinedIntelligenceReleaseApproval).status, 0)
+  for (const key of ["current", "candidate", "tree", "currentImage", "mode"]) {
+    assert.notEqual(exactCombinedReleaseDecision({
+      ...combinedIntelligenceReleaseApproval,
+      [key]: key === "currentImage"
+        ? `sha256:${"0".repeat(64)}`
+        : key === "mode" ? "forward-only-migrations" : "0".repeat(40),
+    }).status, 0)
+  }
+  for (const fileChange of ["added", "removed", "renamed", "modified"]) {
+    assert.notEqual(exactCombinedReleaseDecision({
+      ...combinedIntelligenceReleaseApproval,
+      tree: createHash("sha1").update(fileChange).digest("hex"),
+    }).status, 0, `${fileChange} file unexpectedly retained the authorized tree`)
+  }
+  assert.notEqual(exactCombinedReleaseDecision({
+    ...combinedIntelligenceReleaseApproval,
+    current: combinedIntelligenceReleaseApproval.candidate,
+  }).status, 0, "one-time exception remained reusable after deployment")
+} finally {
+  rmSync(combinedApprovalRoot, { recursive: true, force: true })
+}
+for (const value of Object.values(combinedIntelligenceReleaseApproval)) {
+  assert.match(gate, new RegExp(value))
+}
+assert.match(gate, /or combined_intelligence_release_approved/)
+assert.match(gate, /combined_intelligence_release_is_exact\([\s\S]*?current, candidate, candidate_tree, current_image, mode/)
 
 const generalAllowlist = gate.match(/allowed = re\.compile\([\s\S]*?\n\)/)?.[0] ?? ""
+assert.equal(
+  createHash("sha256").update(generalAllowlist).digest("hex"),
+  "df9469c7ea1ed8a96174d6260cbb5d51fa4023bfa4b1776896465e1788884567",
+  "general Production backend path allowlist changed",
+)
 assert.doesNotMatch(generalAllowlist, /\\?\.env|dotfile/)
 assert.doesNotMatch(generalAllowlist, /docker-compose|verify_production_deployment_contract/)
 assert.match(generalAllowlist, /docs\/PRODUCTION_COCONUT_COUNTING_SESSION_CLOSURE_ROLLBACK\\\.md/)
