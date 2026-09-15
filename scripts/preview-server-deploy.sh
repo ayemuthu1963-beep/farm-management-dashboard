@@ -31,10 +31,15 @@ readonly preview_login_url="$preview_url/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
 readonly network_reclaim_attempts="180"
+readonly orthomosaic_host_dir="/home/muthu/mfms-preview-map-data/orthomosaic"
+readonly orthomosaic_container_dir="/app/public/map-data/orthomosaic"
+readonly orthomosaic_archive="Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles"
+readonly orthomosaic_sha256="0db33c684af256b0c121201c449125c2becb109a6d1f83ec40e1acb259a12849"
 readonly state_dir="/home/muthu/.local/state/mfms-preview-github"
 readonly state_file="$state_dir/last-successful-frontend-switch"
 readonly lock_file="$state_dir/deployment.lock"
 readonly worker_secret_file="$state_dir/worker-management-signing.env"
+readonly installed_deploy_script="/home/muthu/bin/mfms-preview-github-deploy"
 
 [[ "$preview_url" == "https://preview.muthufarms.com" ]] \
   || blocked "the public target is not Preview"
@@ -243,7 +248,7 @@ wait_for_version() {
   for attempt in $(seq 1 60); do
     if payload=$(curl -fsS --max-time 10 "$base_url/api/version" 2>/dev/null); then
       if python3 -c \
-        'import json,sys; data=json.load(sys.stdin); raise SystemExit(0 if data.get("git_commit")==sys.argv[1] and data.get("environment")=="Preview" else 1)' \
+        'import json,sys; data=json.load(sys.stdin); valid=(data.get("git_commit")==sys.argv[1] and data.get("environment")=="Preview" and data.get("public_environment")=="preview" and data.get("database")=="mfms_server_uat"); raise SystemExit(0 if valid else 1)' \
         "$expected_revision" <<<"$payload"; then
         return 0
       fi
@@ -251,6 +256,50 @@ wait_for_version() {
     sleep 2
   done
   return 1
+}
+
+orthomosaic_mount_for_container() {
+  docker inspect --format \
+    '{{range .Mounts}}{{if eq .Destination "/app/public/map-data/orthomosaic"}}{{.Type}}|{{.Source}}|{{.Destination}}|{{.RW}}{{end}}{{end}}' \
+    "$1"
+}
+
+assert_pmtiles_range() {
+  local base_url=$1 headers result
+  headers=$(mktemp "$work_dir/pmtiles-range.XXXXXX")
+  result=$(curl -sS --max-time 20 \
+    -H 'Range: bytes=0-511' \
+    -D "$headers" \
+    -o /dev/null \
+    -w '%{http_code}|%{size_download}' \
+    "$base_url/map-data/orthomosaic/$orthomosaic_archive") || {
+      rm -f "$headers"
+      return 1
+    }
+  if [[ "$result" != "206|512" ]] \
+    || ! grep -Eiq '^Accept-Ranges:[[:space:]]*bytes[[:space:]]*$' "$headers" \
+    || ! grep -Eiq '^Content-Range:[[:space:]]*bytes[[:space:]]+0-511/[0-9]+[[:space:]]*$' "$headers"; then
+    rm -f "$headers"
+    return 1
+  fi
+  rm -f "$headers"
+}
+
+assert_preview_environment_banner() {
+  local base_url=$1 body
+  body=$(mktemp "$work_dir/environment-banner.XXXXXX")
+  if ! curl -fsS --max-time 20 "$base_url/worker-management/query" -o "$body"; then
+    rm -f "$body"
+    return 1
+  fi
+  if ! grep -Fq 'data-mfms-environment="preview"' "$body" \
+    || ! grep -Fq 'data-mfms-database="mfms_server_uat"' "$body" \
+    || ! grep -Fq 'PREVIEW / UAT - Database: mfms_server_uat - TEST DATA / TEST ACTIONS ONLY' "$body" \
+    || grep -Fq 'CONFIGURATION MISMATCH' "$body"; then
+    rm -f "$body"
+    return 1
+  fi
+  rm -f "$body"
 }
 
 wait_for_public_preview_guard() {
@@ -395,22 +444,30 @@ write_environment_file() {
     || blocked "frontend environment is not Preview"
   grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_uat' "$environment_file" \
     || blocked "frontend database target is not UAT"
+  grep -Fqx 'NEXT_PUBLIC_MFMS_ENV=preview' "$environment_file" \
+    || blocked "public frontend environment is not Preview"
+  grep -Fqx 'NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat' "$environment_file" \
+    || blocked "public frontend database label is not UAT"
 }
 
 start_candidate() {
   local image=$1 revision=$2
   candidate_container="$live_container-candidate-$run_id-$timestamp"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$candidate_container" \
     --network "$preview_network" \
     --restart no \
     -p "127.0.0.1:$candidate_port:3000" \
+    --mount "type=bind,src=$orthomosaic_host_dir,dst=$orthomosaic_container_dir,readonly" \
     --env-file "$environment_file" \
     "$image" >/dev/null
   wait_for_version "http://127.0.0.1:$candidate_port" "$revision" \
     || blocked "candidate /api/version did not report the approved revision"
   smoke_routes "http://127.0.0.1:$candidate_port" \
     || blocked "candidate route smoke test failed"
+  assert_pmtiles_range "http://127.0.0.1:$candidate_port" \
+    || blocked "candidate PMTiles range request failed"
 }
 
 remove_candidate() {
@@ -439,8 +496,11 @@ assert_live_contract() {
   [[ "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$live_container")" == \
       '{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3015"}]}' ]] \
     || blocked "Preview frontend host port changed"
-  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "0" ]] \
-    || blocked "Preview frontend mounts changed"
+  [[ "$(docker inspect --format '{{len .Mounts}}' "$live_container")" == "1" ]] \
+    || blocked "Preview frontend mount count changed"
+  [[ "$(orthomosaic_mount_for_container "$live_container")" == \
+      "bind|$orthomosaic_host_dir|$orthomosaic_container_dir|false" ]] \
+    || blocked "Preview orthomosaic mount changed"
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$live_container" \
     | grep -Fqx 'MFMS_TARGET_DATABASE=mfms_server_uat' \
     || blocked "Preview frontend no longer targets the UAT database"
@@ -531,6 +591,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 validate_common_live_state() {
+  local live_mount_count
   container_exists "$live_container" || blocked "Preview frontend container is missing"
   container_running "$live_container" || blocked "Preview frontend container is not running"
   container_exists "$backend_container" || blocked "Preview backend container is missing"
@@ -545,6 +606,21 @@ validate_common_live_state() {
     || blocked "live frontend is not bound to the approved Preview port"
   [[ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^mfms-pilot-web-candidate-' || true)" -eq 0 ]] \
     || blocked "a stale Preview candidate container exists"
+  [[ -f "$orthomosaic_host_dir/$orthomosaic_archive" ]] \
+    || blocked "approved Preview PMTiles archive is missing"
+  [[ "$(sha256sum "$orthomosaic_host_dir/$orthomosaic_archive" | awk '{print $1}')" == \
+      "$orthomosaic_sha256" ]] \
+    || blocked "approved Preview PMTiles hash changed"
+  live_mount_count=$(docker inspect --format '{{len .Mounts}}' "$live_container")
+  if [[ "$live_mount_count" == "1" ]]; then
+    [[ "$(orthomosaic_mount_for_container "$live_container")" == \
+        "bind|$orthomosaic_host_dir|$orthomosaic_container_dir|false" ]] \
+      || blocked "live frontend orthomosaic mount is invalid"
+  elif [[ "$operation" == "deploy" && "$live_mount_count" == "0" ]]; then
+    echo "PREVIEW_PM_TILES_REPAIR=required"
+  else
+    blocked "live frontend mount count is invalid"
+  fi
 
   original_container_id=$(docker inspect --format '{{.Id}}' "$live_container")
   original_image_id=$(docker inspect --format '{{.Image}}' "$live_container")
@@ -572,7 +648,6 @@ import sys
 address = ipaddress.ip_address(sys.argv[1])
 raise SystemExit(0 if address.version == 4 and not address.is_unspecified else 1)
 PY
-
   backend_id_before=$(docker inspect --format '{{.Id}}' "$backend_container")
   backend_image_before=$(docker inspect --format '{{.Image}}' "$backend_container")
   cron_digest_before=$(cron_digest)
@@ -677,7 +752,7 @@ read_state_value() {
 }
 
 deploy_preview() {
-  local remote_release new_image new_image_id
+  local remote_release new_image new_image_id matched_backend_revision
   remote_release=$(git ls-remote "$repo_url" "$release_ref" | awk 'NR == 1 {print $1}')
   [[ "$remote_release" == "$candidate_revision" ]] \
     || blocked "candidate is not the exact preview-release head"
@@ -692,7 +767,16 @@ deploy_preview() {
   git -C "$source_dir" merge-base --is-ancestor "$original_revision" "$candidate_revision" \
     || blocked "candidate does not contain the live Preview baseline"
   [[ -z "$(git -C "$source_dir" status --short)" ]] || blocked "candidate checkout is not clean"
+  cmp -s "$installed_deploy_script" "$source_dir/scripts/preview-server-deploy.sh" \
+    || blocked "installed Preview deploy script does not match the approved candidate"
   validate_release_manifest
+  matched_backend_revision=$(python3 -c \
+    'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["matched_backend_commit"])' \
+    "$source_dir/deploy/preview-release-manifest.json")
+  [[ "$matched_backend_revision" =~ ^[0-9a-f]{40}$ ]] \
+    || blocked "manifest matched backend revision is invalid"
+  [[ "$(image_revision_for_container "$backend_container")" == "$matched_backend_revision" ]] \
+    || blocked "live Preview backend does not match the frontend release manifest"
 
   new_image="mfms-v0-preview:github-${candidate_revision:0:7}-$timestamp"
   docker build \
@@ -701,6 +785,9 @@ deploy_preview() {
     --build-arg "MFMS_GIT_COMMIT=$candidate_revision" \
     --build-arg "MFMS_BUILD_TIMESTAMP=$timestamp" \
     --build-arg "MFMS_BUILD_ENVIRONMENT=Preview" \
+    --build-arg "NEXT_PUBLIC_MFMS_ENV=preview" \
+    --build-arg "NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL=mfms_server_uat" \
+    --build-arg "NEXT_PUBLIC_MFMS_WORKER_V2_ENABLED=true" \
     --tag "$new_image" \
     "$source_dir" >/dev/null
   new_image_id=$(docker image inspect --format '{{.Id}}' "$new_image")
@@ -711,6 +798,8 @@ deploy_preview() {
 
   write_environment_file "$live_container" "$candidate_revision" "$timestamp"
   start_candidate "$new_image" "$candidate_revision"
+  assert_preview_environment_banner "http://127.0.0.1:$candidate_port" \
+    || blocked "candidate Preview environment banner is invalid"
   remove_candidate
 
   transaction_backup="$live_container-pre-github-$run_id-$timestamp"
@@ -719,11 +808,13 @@ deploy_preview() {
   disconnect_preview_network "$live_container"
   docker rename "$live_container" "$transaction_backup"
   docker run -d \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
     --name "$live_container" \
     --network "$preview_network" \
     --ip "$original_network_ip" \
     --restart unless-stopped \
     -p "127.0.0.1:$live_port:3000" \
+    --mount "type=bind,src=$orthomosaic_host_dir,dst=$orthomosaic_container_dir,readonly" \
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 
@@ -733,6 +824,10 @@ deploy_preview() {
   wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
     || blocked "replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
+  assert_pmtiles_range "http://127.0.0.1:$live_port" \
+    || blocked "replacement PMTiles range request failed"
+  assert_preview_environment_banner "http://127.0.0.1:$live_port" \
+    || blocked "replacement Preview environment banner is invalid"
   wait_for_public_preview_guard || blocked "public Preview authentication guard failed"
   assert_live_contract "$candidate_revision" "$new_image_id" "$before_unrelated"
 
