@@ -290,7 +290,7 @@ assert.equal(
   manifest.release_note,
   "Show Harvest Cycle and Plot in Coconut Counting and support APK-selected session metadata",
 )
-assert.equal(manifest.base_commit, "01a7108780e0e3753ce81580a1bc8e64c3e3c9d6")
+assert.equal(manifest.base_commit, "e353b9104baf31b092d0655c2c9e0c7c98cd5f02")
 assert.equal(manifest.matched_backend_commit, "82ce4c0c78d938c09b0efe06ff4e21151cf6ce04")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
