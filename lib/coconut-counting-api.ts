@@ -16,6 +16,8 @@ export interface CoconutCountingSummary {
 export interface CoconutCountingSession {
   session_uuid: string
   session_date: string
+  harvest_cycle: number | null
+  plot: 1 | 2 | null
   start_time: string
   end_time: string | null
   total_grade_a: CoconutNumeric
