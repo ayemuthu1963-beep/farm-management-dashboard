@@ -54,6 +54,7 @@ assert.deepEqual(
     "weather-history",
     "farm-reports",
     "worker-management",
+    "mfms-intelligence",
     "inventory-management",
     "admin-console",
   ],

@@ -9,7 +9,7 @@ const navigation = readFileSync("lib/mfms-navigation.ts", "utf8")
 
 assert.match(route, /fields\.length !== 1/)
 assert.match(route, /MAX_QUESTION_CHARACTERS = 500/)
-assert.match(route, /getAuthenticatedUserAssertionHeaders/)
+assert.match(route, /getIntelligenceActorAssertionHeaders/)
 assert.match(route, /cache: "no-store"/)
 assert.match(route, /value\.rows\.length > 50/)
 assert.match(route, /isSafePlan/)
@@ -66,6 +66,9 @@ assert.match(page, /displayedRows\.map/)
 assert.match(page, /selectedColumns\.map/)
 assert.match(page, /GovernedChart/)
 assert.match(page, /Data source status/)
+assert.match(page, /failedResponse\(response\.status\)/)
+assert.match(page, /An authenticated MFMS session is required/)
+assert.match(page, /not authorized to read Intelligence/)
 assert.match(page, /Quality flags/)
 assert.match(page, /Current Harvest Trees considered/)
 assert.match(page, /Excluded for incomplete history/)
@@ -125,6 +128,18 @@ try {
   }
   assert.equal(new Set(keys).size, 3, "Identical consecutive results must remount all table controls")
   assert.ok(keys.every((key) => key !== null))
+
+  hookState.length = 0
+  globalThis.fetch = async () => ({
+    status: 403,
+    json: async () => { throw new SyntaxError("gateway response is not JSON") },
+  })
+  tree = render()
+  await tree.props.children.find((child) => child?.type === "form").props.onSubmit({ preventDefault() {} })
+  assert.equal(hookState[2].status, "BLOCKED_SECURITY")
+  assert.equal(hookState[2].blocked_reason, "This MFMS account is not authorized to read Intelligence.")
+  assert.equal(hookState[2].data_source_status, "NOT_QUERIED_FAIL_CLOSED")
+  assert.equal(hookState[2].metabase_call_made, false)
 } finally { globalThis.fetch = originalFetch }
 
 console.log("MFMS Intelligence presentation and governance contract tests passed")
