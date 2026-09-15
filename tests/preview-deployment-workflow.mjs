@@ -288,10 +288,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Add a full-screen Farm Map control with Escape-key exit while preserving the current map view and layers",
+  "Show Harvest Cycle and Plot in Coconut Counting and support APK-selected session metadata",
 )
-assert.equal(manifest.base_commit, "ed0e73fd6c481219f1c23cf9a6fc58dedd509efe")
-assert.equal(manifest.matched_backend_commit, "c5d8e4855be5c4ca76b14d278c04a16a7f311ac4")
+assert.equal(manifest.base_commit, "01a7108780e0e3753ce81580a1bc8e64c3e3c9d6")
+assert.equal(manifest.matched_backend_commit, "82ce4c0c78d938c09b0efe06ff4e21151cf6ce04")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -301,13 +301,14 @@ assert.deepEqual(manifest.protected_invariants, {
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
+// Exact live-to-candidate path set for the Coconut Cycle/Plot Preview release.
 const expectedReleasePaths = [
+  "app/coconut-counting/page.tsx",
   "deploy/preview-release-manifest.json",
-  "components/maps/farm-map-client.tsx",
-  "components/maps/farm-map-orthomosaic.tsx",
+  "lib/coconut-counting-api.ts",
   "package.json",
-  "tests/farm-map-fullscreen-control.mjs",
-  "tests/preview-deployment-workflow.mjs"
+  "tests/coconut-counting-cycle-plot.mjs",
+  "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
 
