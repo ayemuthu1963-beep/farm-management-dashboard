@@ -47,7 +47,7 @@ readonly preview_id=f28448290a62dec3d9fe2d6d36b54e7a0328b9d81ae42317d7671380a002
 readonly nginx_container=central-nginx-1
 readonly nginx_id=2a8b67f1de23a44510f6d6906af7eae5e7e53fd7c17506b0cc0be623f67bb23a
 readonly nginx_image=sha256:bec890a488322edffce9d88a98103ca68ba9fc865c528fc3b2fa1ec13ff92091
-readonly nginx_effective_sha=939a8124990cdd48c8e3091dfc4a87355edadb8e8a04f3507d83bab6fb275448
+readonly nginx_effective_sha=6a2dc3abc45a94d099e929b0878cce451874155d1168f80d4d6494a2b76784e9
 readonly production_auth_include_sha=4f51ccb9d1c6f7bbb5fbc06cf5e190a8e505ad4a74c3259fa67996ffa62447b3
 readonly preview_auth_include_sha=134a306a48014a14a216ecfbd82edfd36d7b4b174a22c119c252baf2d59d8ba9
 readonly data_dir=/home/muthu/mfms_data/auth
@@ -118,7 +118,9 @@ assert_shared_invariants() {
   [[ "$(docker inspect --format '{{.Id}}|{{.Image}}|{{.State.Health.Status}}|{{.RestartCount}}' "$nginx_container")" \
       == "$nginx_id|$nginx_image|healthy|0" ]] \
     || blocked "Nginx identity or health drifted"
-  [[ "$(docker exec "$nginx_container" nginx -T 2>&1 | sha256sum | awk '{print $1}')" == "$nginx_effective_sha" ]] \
+  # nginx writes diagnostics to stderr and the effective configuration to stdout.
+  # Docker's multiplexing may reorder the two streams, so hash stdout only.
+  [[ "$(docker exec "$nginx_container" nginx -T 2>/dev/null | sha256sum | awk '{print $1}')" == "$nginx_effective_sha" ]] \
     || blocked "effective Nginx configuration drifted"
   [[ "$(docker exec "$nginx_container" sha256sum /etc/nginx/auth/mfms-auth-server.conf | awk '{print $1}')" == "$production_auth_include_sha" ]] \
     || blocked "Production auth routing drifted"
@@ -145,7 +147,7 @@ assert_current_auth() {
     || blocked "current Production auth revision drifted"
   [[ "$(docker inspect "$live_container" | jq -r '.[0].NetworkSettings.Networks["harvest-net"].IPAddress')" == "$production_ip" ]] \
     || blocked "current Production auth network address drifted"
-  [[ "$(docker inspect "$live_container" | jq -c '.[0].Mounts|map({Type,Source,Destination,RW})')" \
+  [[ "$(docker inspect "$live_container" | jq -c '.[0].Mounts|map({Type,Source,Destination,RW})|sort_by(.Destination,.Source,.Type,.RW)')" \
       == '[{"Type":"bind","Source":"/home/muthu/mfms_data/auth","Destination":"/data","RW":true},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-phase6-20260808T150451Z/auth-request-secret","Destination":"/run/secrets/auth-request-secret","RW":false},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-rich-admin/password-vault-key","Destination":"/run/secrets/password-vault-key","RW":false}]' ]] \
     || blocked "current Production auth mounts drifted"
 }
@@ -160,8 +162,8 @@ assert_target_auth() {
   [[ "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.LogConfig.Type}}|{{index .HostConfig.LogConfig.Config "max-size"}}|{{index .HostConfig.LogConfig.Config "max-file"}}' "$container")" \
       == 'unless-stopped|json-file|20m|5' ]] \
     || blocked "target Production auth runtime policy drifted"
-  [[ "$(docker inspect "$container" | jq -c '.[0].Mounts|map({Type,Source,Destination,RW})')" \
-      == '[{"Type":"bind","Source":"/home/muthu/mfms_data/auth","Destination":"/data","RW":true},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-phase6-20260808T150451Z/auth-request-secret","Destination":"/run/secrets/auth-request-secret","RW":false},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-rich-admin/password-vault-key","Destination":"/run/secrets/password-vault-key","RW":false},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-production-intelligence-aa1a345-20260915/browser-session-signing-key","Destination":"/run/secrets/browser-session-signing-key","RW":false}]' ]] \
+  [[ "$(docker inspect "$container" | jq -c '.[0].Mounts|map({Type,Source,Destination,RW})|sort_by(.Destination,.Source,.Type,.RW)')" \
+      == '[{"Type":"bind","Source":"/home/muthu/mfms_data/auth","Destination":"/data","RW":true},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-phase6-20260808T150451Z/auth-request-secret","Destination":"/run/secrets/auth-request-secret","RW":false},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-production-intelligence-aa1a345-20260915/browser-session-signing-key","Destination":"/run/secrets/browser-session-signing-key","RW":false},{"Type":"bind","Source":"/home/muthu/mfms_secrets/auth-rich-admin/password-vault-key","Destination":"/run/secrets/password-vault-key","RW":false}]' ]] \
     || blocked "target Production auth mounts drifted"
   while IFS='=' read -r key value; do
     [[ "$(container_env "$container" "$key")" == "$value" ]] \

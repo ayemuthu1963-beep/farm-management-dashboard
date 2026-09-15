@@ -9,7 +9,9 @@ import { selectTestBash } from "./select-test-bash.mjs"
 const readText = path => readFileSync(path, "utf8").replace(/\r\n/g, "\n")
 const sha256 = value => createHash("sha256").update(value).digest("hex")
 const controller = readText("scripts/production-server-auth-deploy.sh")
-const guard = readFileSync("scripts/production-auth-session-guard.py")
+// Git stores the executable helper with LF endings; normalize Windows checkouts
+// before checking the reviewed Linux deployment bytes.
+const guard = Buffer.from(readText("scripts/production-auth-session-guard.py"), "utf8")
 const backendController = readText("scripts/production-server-backend-deploy.sh")
 const bash = selectTestBash()
 const python = process.env.MFMS_TEST_PYTHON || (process.platform === "win32" ? "python" : "python3")
@@ -49,6 +51,12 @@ assert.match(controller, /AUTH_LEGACY_PRODUCTION_DATA_DIR=\/data/)
 assert.match(controller, /AUTH_SESSION_SIGNING_KEY_FILE=\/run\/secrets\/browser-session-signing-key/)
 assert.match(controller, /Preview auth identity or health drifted/)
 assert.match(controller, /effective Nginx configuration drifted/)
+assert.match(controller, /nginx -T 2>\/dev\/null \| sha256sum/)
+assert.doesNotMatch(controller, /nginx -T 2>&1 \| sha256sum/)
+assert.equal(
+  (controller.match(/Mounts\|map\(\{Type,Source,Destination,RW\}\)\|sort_by\(\.Destination,\.Source,\.Type,\.RW\)/g) || []).length,
+  2,
+)
 assert.match(controller, /Production user store drifted/)
 assert.match(controller, /--require-active-user harsha/)
 assert.match(controller, /failed_evidence_changed=0/)
