@@ -9,8 +9,10 @@
   "allowed_paths": [
     "app/coconut-counting/page.tsx",
     "deploy/preview-release-manifest.json",
+    "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
     "lib/coconut-counting-api.ts",
     "package.json",
+    "scripts/preview-server-deploy.sh",
     "tests/coconut-counting-cycle-plot.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],

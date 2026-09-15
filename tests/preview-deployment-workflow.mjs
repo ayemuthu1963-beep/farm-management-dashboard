@@ -189,10 +189,8 @@ for (const prohibited of [
 }
 
 assert.match(deployScript, /readonly preview_url="https:\/\/preview\.muthufarms\.com"/)
-assert.match(
-  deployScript,
-  /readonly central_login_url="https:\/\/auth\.muthufarms\.com\/login"/,
-)
+assert.match(deployScript, /readonly preview_login_url="\$preview_url\/login"/)
+assert.doesNotMatch(deployScript, /central_login_url/)
 assert.doesNotMatch(deployScript, /https:\/\/muthufarms\.com(?:\/|['"])/)
 assert.match(deployScript, /readonly release_ref="refs\/heads\/preview-release"/)
 assert.match(deployScript, /readonly live_container="mfms-pilot-web"/)
@@ -208,14 +206,32 @@ assert.match(deployScript, /candidate does not contain the live Preview baseline
 assert.match(deployScript, /Preview candidate port \$candidate_port is already allocated/)
 assert.match(deployScript, /--ip "\$original_network_ip"/)
 assert.match(deployScript, /Preview frontend network address changed/)
+assert.match(deployScript, /docker network disconnect -f "\$preview_network" "\$container"/)
+assert.match(deployScript, /readonly network_reclaim_attempts="180"/)
+assert.match(deployScript, /seq 1 "\$network_reclaim_attempts"/)
+assert.match(deployScript, /--format '\{\{json \.NetworkSettings\.Networks\}\}'/)
+assert.match(deployScript, /network\.get\("IPAddress"\) or ipam\.get\("IPv4Address"\)/)
+assert.match(deployScript, /announce_preview_network_identity\(\)/)
+assert.match(deployScript, /--network "container:\$live_container"/)
+assert.match(deployScript, /gratuitous_arp=PASS/)
+assert.equal(
+  (deployScript.match(/announce_preview_network_identity(?:\s|$)/g) || []).length,
+  3,
+)
 assert.match(deployScript, /AUTOMATIC_RESTORE=/)
 assert.match(deployScript, /wait_for_public_preview_guard/)
 assert.match(deployScript, /public Preview authentication guard is unavailable/)
 assert.match(deployScript, /public Preview authentication guard failed/)
 assert.match(deployScript, /public Preview rollback authentication guard failed/)
-assert.match(deployScript, /parsed\.netloc == login\.netloc == "auth\.muthufarms\.com"/)
-assert.match(deployScript, /parse_qsl\(parsed\.query, keep_blank_values=True\)/)
-assert.match(deployScript, /public_guard_result="303-central-login"/)
+assert.match(deployScript, /\[\[ "\$status" == "401" \]\]/)
+assert.match(deployScript, /\[\[ "\$status" == "303" \]\]/)
+assert.match(deployScript, /parsed\.netloc == login\.netloc == "preview\.muthufarms\.com"/)
+assert.match(deployScript, /parse_qsl\(parsed\.query, keep_blank_values=True\) == \[\("next", expected_return\)\]/)
+assert.match(deployScript, /login_status=\$\(curl -sS -o \/dev\/null -D "\$login_headers" -w '%\{http_code\}'/)
+assert.match(deployScript, /--max-time 10 "\$location"/)
+assert.match(deployScript, /"\$login_status" == "200"/)
+assert.match(deployScript, /"\$login_content_type" == text\/html\*/)
+assert.match(deployScript, /public_guard_result="303-preview-login"/)
 assert.match(deployScript, /public_preview_guard=\$public_guard_result/)
 assert.match(deployScript, /assert_preview_environment_banner/)
 assert.match(deployScript, /candidate Preview environment banner is invalid/)
@@ -263,7 +279,6 @@ assert.match(deployScript, /orthomosaic_host_dir="\/home\/muthu\/mfms-preview-ma
 assert.match(deployScript, /orthomosaic_sha256="0db33c684af256b0c121201c449125c2becb109a6d1f83ec40e1acb259a12849"/)
 assert.match(deployScript, /--mount "type=bind,src=\$orthomosaic_host_dir,dst=\$orthomosaic_container_dir,readonly"/)
 assert.match(deployScript, /assert_pmtiles_range "http:\/\/127\.0\.0\.1:\$candidate_port"/)
-assert.match(deployScript, /docker network disconnect "\$preview_network" "\$container"/)
 
 assert.equal(
   (previewDockerfile.match(/ARG NEXT_PUBLIC_MFMS_ENV=preview/g) ?? []).length,
@@ -305,8 +320,10 @@ assert.deepEqual(manifest.protected_invariants, {
 const expectedReleasePaths = [
   "app/coconut-counting/page.tsx",
   "deploy/preview-release-manifest.json",
+  "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
   "lib/coconut-counting-api.ts",
   "package.json",
+  "scripts/preview-server-deploy.sh",
   "tests/coconut-counting-cycle-plot.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
