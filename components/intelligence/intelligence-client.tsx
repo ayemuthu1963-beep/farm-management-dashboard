@@ -64,6 +64,16 @@ const EMPTY_FAILURE: IntelligenceResponse = {
   provider_call_made: false,
 }
 
+function failedResponse(status: number): IntelligenceResponse {
+  if (status === 401) {
+    return { ...EMPTY_FAILURE, status: "BLOCKED_SECURITY", blocked_reason: "An authenticated MFMS session is required." }
+  }
+  if (status === 403) {
+    return { ...EMPTY_FAILURE, status: "BLOCKED_SECURITY", blocked_reason: "This MFMS account is not authorized to read Intelligence." }
+  }
+  return EMPTY_FAILURE
+}
+
 function renderCell(value: TableCell, format: TableColumn["format"], key: string) {
   if (value === null) return "—"
   if (format === "flags" && Array.isArray(value)) {
@@ -217,7 +227,8 @@ export function IntelligenceClient() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: question.trim() }),
       })
-      setResult((await response.json()) as IntelligenceResponse)
+      const payload = await response.json().catch(() => null)
+      setResult(payload && typeof payload === "object" ? payload as IntelligenceResponse : failedResponse(response.status))
     } catch { setResult(EMPTY_FAILURE) } finally { setLoading(false) }
   }
 

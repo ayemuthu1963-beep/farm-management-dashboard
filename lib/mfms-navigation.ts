@@ -239,7 +239,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     dashboardIcon: "/mfms/icons/farm-reports.png",
     description: "Ask governed questions about verified harvest, irrigation, and well-water analytics",
     status: "active",
-    showOnDashboard: false,
+    showOnDashboard: true,
     showInSidebar: true,
     order: 13.5,
     ctaLabel: "Ask MFMS Intelligence",

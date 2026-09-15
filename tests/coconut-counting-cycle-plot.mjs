@@ -10,15 +10,26 @@ test("Coconut Counting contract exposes nullable Cycle and Plot metadata", () =>
   assert.match(api, /plot: 1 \| 2 \| null/)
 })
 
-test("desktop session table starts with Cycle, Plot, then Harvest date", () => {
+test("desktop session table uses the requested Cycle and Plot column order", () => {
   const tableHead = page.slice(page.indexOf("<thead"), page.indexOf("</thead>"))
-  const cycle = tableHead.indexOf(">Cycle</th>")
-  const plot = tableHead.indexOf(">Plot</th>")
-  const harvestDate = tableHead.indexOf(">Harvest date</th>")
+  const headings = [...tableHead.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/g)].map((match) =>
+    match[1].replace(/<[^>]+>/g, "").trim(),
+  )
 
-  assert.ok(cycle >= 0)
-  assert.ok(cycle < plot)
-  assert.ok(plot < harvestDate)
+  assert.deepEqual(headings.slice(0, 11), [
+    "Cycle",
+    "Plot",
+    "Harvest date",
+    "Status",
+    "Entries",
+    "Grade A",
+    "Grade B",
+    "Combined",
+    "Physical",
+    "Harvested",
+    "Last sync",
+  ])
+  assert.equal(headings[11], "View")
   assert.match(page, /formatNumber\(session\.harvest_cycle\)/)
   assert.match(page, /formatNumber\(session\.plot\)/)
 })

@@ -27,9 +27,10 @@ readonly backend_container="harvest-api-pilot"
 readonly proxy_container="central-nginx-1"
 readonly preview_network="harvest-net"
 readonly preview_url="https://preview.muthufarms.com"
-readonly central_login_url="https://auth.muthufarms.com/login"
+readonly preview_login_url="$preview_url/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
+readonly network_reclaim_attempts="180"
 readonly orthomosaic_host_dir="/home/muthu/mfms-preview-map-data/orthomosaic"
 readonly orthomosaic_container_dir="/app/public/map-data/orthomosaic"
 readonly orthomosaic_archive="Muthu_Farms_Full_Orthomosaic_2026_WebMercator_Z16-Z22_WebP88.pmtiles"
@@ -103,39 +104,100 @@ container_running() {
 }
 
 network_ip_for_container() {
+  local container=$1
+  # A stopped container has no runtime IPAddress even after a successful
+  # static network attachment. Docker records the requested address in
+  # IPAMConfig until the container starts. Parse Docker's JSON because its Go
+  # template formatter renders that stopped-container value as "invalid IP".
   docker inspect \
-    --format "{{with index .NetworkSettings.Networks \"$preview_network\"}}{{.IPAddress}}{{end}}" \
-    "$1"
+    --format '{{json .NetworkSettings.Networks}}' \
+    "$container" \
+    | python3 -c '
+import json
+import sys
+
+networks = json.load(sys.stdin)
+network = networks.get(sys.argv[1]) or {}
+ipam = network.get("IPAMConfig") or {}
+print(network.get("IPAddress") or ipam.get("IPv4Address") or "")
+' "$preview_network"
 }
 
 disconnect_preview_network() {
   local container=$1
-  # A stopped container can retain a network endpoint while Docker reports an
-  # empty IP address. Always request disconnection so the fixed Preview IP is
-  # released before a replacement is attached.
-  docker network disconnect "$preview_network" "$container" >/dev/null 2>&1 || true
+  docker network disconnect -f "$preview_network" "$container" >/dev/null 2>&1 || true
 }
 
 ensure_preview_network_ip() {
   local container=$1 expected_ip=$2 current_ip attempt
-  for attempt in $(seq 1 30); do
+  # Docker's bridge IPAM can retain a just-disconnected static address for
+  # longer than 30 seconds. Keep the transaction locked and retry for up to
+  # three minutes so rollback and automatic restoration do not fail during
+  # that eventual-consistency window.
+  for attempt in $(seq 1 "$network_reclaim_attempts"); do
     current_ip=$(network_ip_for_container "$container")
-    if [[ -n "$current_ip" && "$current_ip" != "$expected_ip" ]]; then
-      docker network disconnect "$preview_network" "$container" >/dev/null 2>&1 || true
-      current_ip=""
-    fi
-    if [[ -z "$current_ip" ]]; then
-      docker network connect --ip "$expected_ip" "$preview_network" "$container" \
-        >/dev/null 2>&1 || {
-          sleep 1
-          continue
-        }
-      current_ip=$(network_ip_for_container "$container")
-    fi
+    [[ "$current_ip" == "$expected_ip" ]] && return 0
+    # Historical containers can retain a stale endpoint record even when
+    # Docker reports no active IP. Clear it before reclaiming the established
+    # address used by the shared nginx upstream.
+    docker network disconnect -f "$preview_network" "$container" >/dev/null 2>&1 || true
+    docker network connect --ip "$expected_ip" "$preview_network" "$container" \
+      >/dev/null 2>&1 || {
+        sleep 1
+        continue
+      }
+    current_ip=$(network_ip_for_container "$container")
     [[ "$current_ip" == "$expected_ip" ]] && return 0
     sleep 1
   done
   return 1
+}
+
+announce_preview_network_identity() {
+  local helper_image
+  helper_image=$(docker inspect --format '{{.Image}}' "$backend_container")
+  docker run --rm -i \
+    --network "container:$live_container" \
+    --entrypoint python \
+    "$helper_image" - <<'PY'
+import fcntl
+import socket
+import struct
+import time
+
+interface = "eth0"
+with open(f"/sys/class/net/{interface}/address", encoding="ascii") as handle:
+    mac_text = handle.read().strip()
+mac = bytes.fromhex(mac_text.replace(":", ""))
+
+probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    address = fcntl.ioctl(
+        probe.fileno(),
+        0x8915,
+        struct.pack("256s", interface.encode("ascii")[:15]),
+    )[20:24]
+finally:
+    probe.close()
+
+ethernet = b"\xff" * 6 + mac + struct.pack("!H", 0x0806)
+arp_prefix = struct.pack("!HHBB", 1, 0x0800, 6, 4)
+zero_mac = b"\x00" * 6
+request = ethernet + arp_prefix + struct.pack("!H", 1) + mac + address + zero_mac + address
+reply = ethernet + arp_prefix + struct.pack("!H", 2) + mac + address + b"\xff" * 6 + address
+
+raw = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+try:
+    raw.bind((interface, 0))
+    for _ in range(3):
+        raw.send(request)
+        raw.send(reply)
+        time.sleep(0.2)
+finally:
+    raw.close()
+
+print(f"gratuitous_arp=PASS ip={socket.inet_ntoa(address)} mac={mac_text}")
+PY
 }
 
 image_revision_for_container() {
@@ -241,15 +303,16 @@ assert_preview_environment_banner() {
 }
 
 wait_for_public_preview_guard() {
-  local headers status location attempt
+  local headers login_headers status location login_status login_content_type attempt
   headers=$(mktemp "$work_dir/public-preview-guard.XXXXXX")
+  login_headers=$(mktemp "$work_dir/public-preview-login.XXXXXX")
   for attempt in $(seq 1 30); do
     : > "$headers"
     status=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' --max-time 10 \
       "$preview_url/api/version" 2>/dev/null || true)
     if [[ "$status" == "401" ]]; then
       public_guard_result="401"
-      rm -f "$headers"
+      rm -f "$headers" "$login_headers"
       return 0
     fi
     if [[ "$status" == "303" ]]; then
@@ -261,7 +324,7 @@ wait_for_public_preview_guard() {
           exit
         }
       ' "$headers")
-      if python3 - "$location" "$central_login_url" "$preview_url/api/version" <<'PY'
+      if python3 - "$location" "$preview_login_url" "$preview_url/api/version" <<'PY'
 import sys
 from urllib.parse import parse_qsl, urlsplit
 
@@ -270,7 +333,7 @@ parsed = urlsplit(location)
 login = urlsplit(expected_login)
 valid = (
     parsed.scheme == login.scheme == "https"
-    and parsed.netloc == login.netloc == "auth.muthufarms.com"
+    and parsed.netloc == login.netloc == "preview.muthufarms.com"
     and parsed.path == login.path == "/login"
     and parsed.fragment == ""
     and parse_qsl(parsed.query, keep_blank_values=True) == [("next", expected_return)]
@@ -278,14 +341,27 @@ valid = (
 raise SystemExit(0 if valid else 1)
 PY
       then
-        public_guard_result="303-central-login"
-        rm -f "$headers"
-        return 0
+        : > "$login_headers"
+        login_status=$(curl -sS -o /dev/null -D "$login_headers" -w '%{http_code}' \
+          --max-time 10 "$location" 2>/dev/null || true)
+        login_content_type=$(awk '
+          tolower(substr($0, 1, 13)) == "content-type:" {
+            sub(/^[^:]*:[[:space:]]*/, "")
+            sub(/\r$/, "")
+            print tolower($0)
+            exit
+          }
+        ' "$login_headers")
+        if [[ "$login_status" == "200" && "$login_content_type" == text/html* ]]; then
+          public_guard_result="303-preview-login"
+          rm -f "$headers" "$login_headers"
+          return 0
+        fi
       fi
     fi
     sleep 2
   done
-  rm -f "$headers"
+  rm -f "$headers" "$login_headers"
   return 1
 }
 
@@ -472,6 +548,7 @@ restore_original_frontend() {
     ensure_preview_network_ip "$live_container" "$original_network_ip" \
       >/dev/null 2>&1 || return 1
     docker start "$live_container" >/dev/null 2>&1 || return 1
+    announce_preview_network_identity >/dev/null 2>&1 || return 1
     if wait_for_version "http://127.0.0.1:$live_port" "$original_reported_revision" \
       && smoke_routes "http://127.0.0.1:$live_port" \
       && wait_for_public_preview_guard; then
@@ -741,6 +818,9 @@ deploy_preview() {
     --env-file "$environment_file" \
     "$new_image" >/dev/null
 
+  announce_preview_network_identity \
+    || blocked "replacement could not announce the Preview network identity"
+
   wait_for_version "http://127.0.0.1:$live_port" "$candidate_revision" \
     || blocked "replacement /api/version failed"
   smoke_routes "http://127.0.0.1:$live_port" || blocked "replacement local smoke test failed"
@@ -838,6 +918,8 @@ rollback_preview() {
   ensure_preview_network_ip "$live_container" "$original_network_ip" \
     || blocked "rollback replacement could not preserve the Preview network address"
   docker start "$live_container" >/dev/null
+  announce_preview_network_identity \
+    || blocked "rollback replacement could not announce the Preview network identity"
   replacement_id=$(docker inspect --format '{{.Image}}' "$live_container")
 
   wait_for_version "http://127.0.0.1:$live_port" "$rollback_reported_revision" \

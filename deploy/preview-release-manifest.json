@@ -4,13 +4,15 @@
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
   "release_note": "Show Harvest Cycle and Plot in Coconut Counting and support APK-selected session metadata",
-  "base_commit": "01a7108780e0e3753ce81580a1bc8e64c3e3c9d6",
+  "base_commit": "e353b9104baf31b092d0655c2c9e0c7c98cd5f02",
   "matched_backend_commit": "82ce4c0c78d938c09b0efe06ff4e21151cf6ce04",
   "allowed_paths": [
     "app/coconut-counting/page.tsx",
     "deploy/preview-release-manifest.json",
+    "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
     "lib/coconut-counting-api.ts",
     "package.json",
+    "scripts/preview-server-deploy.sh",
     "tests/coconut-counting-cycle-plot.mjs",
     "tests/preview-deployment-workflow.mjs"
   ],

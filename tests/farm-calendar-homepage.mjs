@@ -11,6 +11,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 const homePage = read("app/page.tsx")
 const calendarCard = read("components/home/farm-calendar-card.tsx")
 const calendarConfig = read("lib/farm-calendar.ts")
+const homeHeader = read("components/home/home-header.tsx")
 
 const weatherIndex = homePage.indexOf("<WeatherCard")
 const calendarIndex = homePage.indexOf("<FarmCalendarCard")
@@ -35,6 +36,9 @@ assert.match(calendarCard, /aria-label="Open Farm Calendar in a new tab"/)
 assert.match(calendarCard, />\s*Farm Calendar\s*</)
 assert.match(calendarCard, />\s*Open Farm Calendar\s*/)
 assert.match(calendarCard, /CalendarDays/)
+assert.match(homeHeader, /configuredEnvironment === "preview" \|\| configuredEnvironment === "uat"/)
+assert.match(homeHeader, /\? "\/logout"/)
+assert.match(homeHeader, /: "https:\/\/auth\.muthufarms\.com\/logout"/)
 
 assert.deepEqual(
   homepageNavigationItems
@@ -54,6 +58,7 @@ assert.deepEqual(
     "weather-history",
     "farm-reports",
     "worker-management",
+    "mfms-intelligence",
     "inventory-management",
     "admin-console",
   ],

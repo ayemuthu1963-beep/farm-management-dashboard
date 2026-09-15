@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
-import { createHmac } from "node:crypto"
+import { createHash, createHmac } from "node:crypto"
 import {
   getAuthenticatedUserAssertionHeaders,
+  getIntelligenceActorAssertionHeaders,
   MfmsAdminIdentityError,
   resolveMfmsAdminUsername,
+  resolveMfmsIntelligenceActor,
 } from "../lib/mfms-admin-identity.ts"
 import { getAdminTargetSafetyErrors } from "../lib/preview-admin-write-safety.ts"
 
@@ -48,6 +50,71 @@ assert.equal(
   createHmac("sha256", "test-signing-secret").update(canonical, "utf8").digest("hex"),
 )
 assert.equal(signed["X-MFMS-Authenticated-User"], "farm-admin")
+
+const previewIntelligenceEnvironment = {
+  MFMS_ENV: "preview",
+  MFMS_TRUST_PROXY_ACTOR_HEADERS: "true",
+  HARVEST_API_PASSWORD: "test-signing-secret",
+  MFMS_ACTOR_ASSERTION_SECRET: "preview-actor-assertion-secret-for-tests",
+}
+const viewerHeaders = new Headers({
+  "x-mfms-user": "Edward",
+  "x-mfms-role": "viewer",
+  "x-mfms-environment": "preview",
+  "x-mfms-permission": "read",
+  "x-mfms-authenticated-role": "admin",
+  "x-mfms-authenticated-signature": "f".repeat(64),
+})
+assert.deepEqual(resolveMfmsIntelligenceActor(viewerHeaders, previewIntelligenceEnvironment), {
+  username: "Edward",
+  role: "viewer",
+  environment: "preview",
+})
+const intelligenceTarget = new URL("http://harvest-api-pilot:8000/api/intelligence/ask")
+const intelligenceBody = JSON.stringify({ question: "How many beetles were caught on 17 August?" })
+const intelligenceSigned = getIntelligenceActorAssertionHeaders({
+  requestHeaders: viewerHeaders,
+  method: "POST",
+  target: intelligenceTarget,
+  body: intelligenceBody,
+  environment: previewIntelligenceEnvironment,
+  timestamp: "1789344000",
+})
+const bodySha256 = createHash("sha256").update(intelligenceBody).digest("hex")
+const actorCanonical = [
+  "1789344000",
+  "POST",
+  "/api/intelligence/ask",
+  bodySha256,
+  "Edward",
+  "viewer",
+  "preview",
+].join("\n")
+assert.equal(intelligenceSigned["X-MFMS-Authenticated-Role"], "viewer")
+assert.equal(intelligenceSigned["X-MFMS-Authenticated-Environment"], "preview")
+assert.equal(intelligenceSigned["X-MFMS-Authenticated-Body-SHA256"], bodySha256)
+assert.equal(
+  intelligenceSigned["X-MFMS-Authenticated-Signature"],
+  createHmac("sha256", previewIntelligenceEnvironment.MFMS_ACTOR_ASSERTION_SECRET).update(actorCanonical).digest("hex"),
+)
+assert.notEqual(intelligenceSigned["X-MFMS-Authenticated-Signature"], "f".repeat(64))
+assert.equal(resolveMfmsIntelligenceActor(new Headers({
+  "x-mfms-user": "owner",
+  "x-mfms-role": "owner",
+  "x-mfms-environment": "preview",
+  "x-mfms-permission": "read",
+}), previewIntelligenceEnvironment).role, "admin")
+for (const rejectedHeaders of [
+  new Headers({ "x-mfms-role": "viewer", "x-mfms-environment": "preview", "x-mfms-permission": "read" }),
+  new Headers({ "x-mfms-user": "Edward", "x-mfms-role": "viewer", "x-mfms-environment": "production", "x-mfms-permission": "read" }),
+  new Headers({ "x-mfms-user": "Edward", "x-mfms-role": "viewer", "x-mfms-environment": "preview", "x-mfms-permission": "write" }),
+  new Headers({ "x-mfms-user": "Edward", "x-mfms-role": "tester", "x-mfms-environment": "preview", "x-mfms-permission": "read" }),
+]) {
+  assert.throws(
+    () => resolveMfmsIntelligenceActor(rejectedHeaders, previewIntelligenceEnvironment),
+    (error) => error instanceof MfmsAdminIdentityError && [401, 403].includes(error.status),
+  )
+}
 
 const productionTarget = {
   MFMS_ENV: "production",
