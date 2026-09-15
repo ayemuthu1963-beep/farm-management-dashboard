@@ -301,6 +301,7 @@ assert.deepEqual(manifest.protected_invariants, {
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
+// Exact live-to-candidate path set for the Coconut Cycle/Plot Preview release.
 const expectedReleasePaths = [
   "app/coconut-counting/page.tsx",
   "deploy/preview-release-manifest.json",
