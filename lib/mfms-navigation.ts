@@ -155,7 +155,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     label: "Farm Map",
     href: "/farm-map",
     icon: MapPinned,
-    dashboardIcon: "/mfms/icons/pipeline-layout-inspection.png",
+    dashboardIcon: "/mfms/icons/farm-map.svg",
     description: "Combined drone orthomosaic view of the farm",
     status: "active",
     showOnDashboard: true,
