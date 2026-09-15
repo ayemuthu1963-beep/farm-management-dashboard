@@ -3,16 +3,15 @@
   "environment": "Preview",
   "target_url": "https://preview.muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Add a full-screen Farm Map control with Escape-key exit while preserving the current map view and layers",
-  "base_commit": "ed0e73fd6c481219f1c23cf9a6fc58dedd509efe",
-  "matched_backend_commit": "c5d8e4855be5c4ca76b14d278c04a16a7f311ac4",
+  "release_note": "Show Harvest Cycle and Plot in Coconut Counting and support APK-selected session metadata",
+  "base_commit": "01a7108780e0e3753ce81580a1bc8e64c3e3c9d6",
+  "matched_backend_commit": "82ce4c0c78d938c09b0efe06ff4e21151cf6ce04",
   "allowed_paths": [
+    "app/coconut-counting/page.tsx",
     "deploy/preview-release-manifest.json",
-    "components/maps/farm-map-client.tsx",
-    "components/maps/farm-map-orthomosaic.tsx",
+    "lib/coconut-counting-api.ts",
     "package.json",
-    "tests/farm-map-fullscreen-control.mjs",
-    "tests/preview-deployment-workflow.mjs"
+    "tests/coconut-counting-cycle-plot.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
