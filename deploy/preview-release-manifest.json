@@ -11,7 +11,8 @@
     "deploy/preview-release-manifest.json",
     "lib/coconut-counting-api.ts",
     "package.json",
-    "tests/coconut-counting-cycle-plot.mjs"
+    "tests/coconut-counting-cycle-plot.mjs",
+    "tests/preview-deployment-workflow.mjs"
   ],
   "protected_invariants": {
     "production": "unchanged",
