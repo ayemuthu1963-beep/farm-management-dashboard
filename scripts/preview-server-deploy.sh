@@ -27,7 +27,7 @@ readonly backend_container="harvest-api-pilot"
 readonly proxy_container="central-nginx-1"
 readonly preview_network="harvest-net"
 readonly preview_url="https://preview.muthufarms.com"
-readonly central_login_url="https://auth.muthufarms.com/login"
+readonly preview_login_url="$preview_url/login"
 readonly live_port="3015"
 readonly candidate_port="3016"
 readonly network_reclaim_attempts="180"
@@ -254,15 +254,16 @@ wait_for_version() {
 }
 
 wait_for_public_preview_guard() {
-  local headers status location attempt
+  local headers login_headers status location login_status login_content_type attempt
   headers=$(mktemp "$work_dir/public-preview-guard.XXXXXX")
+  login_headers=$(mktemp "$work_dir/public-preview-login.XXXXXX")
   for attempt in $(seq 1 30); do
     : > "$headers"
     status=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' --max-time 10 \
       "$preview_url/api/version" 2>/dev/null || true)
     if [[ "$status" == "401" ]]; then
       public_guard_result="401"
-      rm -f "$headers"
+      rm -f "$headers" "$login_headers"
       return 0
     fi
     if [[ "$status" == "303" ]]; then
@@ -274,7 +275,7 @@ wait_for_public_preview_guard() {
           exit
         }
       ' "$headers")
-      if python3 - "$location" "$central_login_url" "$preview_url/api/version" <<'PY'
+      if python3 - "$location" "$preview_login_url" "$preview_url/api/version" <<'PY'
 import sys
 from urllib.parse import parse_qsl, urlsplit
 
@@ -283,7 +284,7 @@ parsed = urlsplit(location)
 login = urlsplit(expected_login)
 valid = (
     parsed.scheme == login.scheme == "https"
-    and parsed.netloc == login.netloc == "auth.muthufarms.com"
+    and parsed.netloc == login.netloc == "preview.muthufarms.com"
     and parsed.path == login.path == "/login"
     and parsed.fragment == ""
     and parse_qsl(parsed.query, keep_blank_values=True) == [("next", expected_return)]
@@ -291,14 +292,27 @@ valid = (
 raise SystemExit(0 if valid else 1)
 PY
       then
-        public_guard_result="303-central-login"
-        rm -f "$headers"
-        return 0
+        : > "$login_headers"
+        login_status=$(curl -sS -o /dev/null -D "$login_headers" -w '%{http_code}' \
+          --max-time 10 "$location" 2>/dev/null || true)
+        login_content_type=$(awk '
+          tolower(substr($0, 1, 13)) == "content-type:" {
+            sub(/^[^:]*:[[:space:]]*/, "")
+            sub(/\r$/, "")
+            print tolower($0)
+            exit
+          }
+        ' "$login_headers")
+        if [[ "$login_status" == "200" && "$login_content_type" == text/html* ]]; then
+          public_guard_result="303-preview-login"
+          rm -f "$headers" "$login_headers"
+          return 0
+        fi
       fi
     fi
     sleep 2
   done
-  rm -f "$headers"
+  rm -f "$headers" "$login_headers"
   return 1
 }
 
