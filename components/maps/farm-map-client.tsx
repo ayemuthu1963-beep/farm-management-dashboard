@@ -468,7 +468,6 @@ export function FarmMapClient() {
       layer={farmMapLayer}
       fitInitialBounds
       preferCanvas
-      enableFullscreen
       mapTitle="Drone Orthomosaic Map"
       onMapReady={handleMapReady}
       note="Coconut, Jackfruit and Nutmeg trees share the full-farm orthophoto. Search includes all crops, including hidden layers. Coconut Harvest information loads when a tree is selected."

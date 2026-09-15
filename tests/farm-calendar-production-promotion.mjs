@@ -9,14 +9,19 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const farmMapVerifiedFiles = [
-  "lib/farm-map-trees.ts",
-  "public/map-data/vector/plot1-coconut-trees-affine-20260812.geojson",
+const intelligenceVerifiedFiles = [
+  "lib/mfms-admin-identity.ts",
+  "tests/navigation-consistency.mjs",
 ]
-const farmMapProductionAdaptations = [
+const intelligenceProductionAdaptations = [
+  "app/api/intelligence/ask/route.ts",
+  "components/intelligence/intelligence-client.tsx",
   "deploy/production-release-manifest.json",
+  "lib/mfms-navigation.ts",
+  "tests/farm-calendar-homepage.mjs",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/farm-map-coconut-trees.mjs",
+  "tests/mfms-intelligence-contract.mjs",
+  "tests/mfms-intelligence-route.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -27,15 +32,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Restore the Preview-verified affine-corrected Plot 1 coconut coordinates and distinguish nutmeg trees with pink markers",
+  "Expose MFMS Intelligence to authorized Production readers and preserve 401/403 responses",
 )
-assert.equal(manifest.base_commit, "cef207d9ef4a7a9acbbe29a3fa174ee05be9af6b")
+assert.equal(manifest.base_commit, "4a5d7a074ef21059b364d8503f5e8ee275143e32")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "ed0e73fd6c481219f1c23cf9a6fc58dedd509efe",
-  image_id: "sha256:9af261faf3b7a63830342fc1608faef409ea198dd985e83948764f64e7fc75f2",
-  feature_revision: "94838dcd88625fb742a04dabd03c89d541ecb4f9",
-  verified_files: farmMapVerifiedFiles,
-  production_adaptations: farmMapProductionAdaptations,
+  revision: "e353b9104baf31b092d0655c2c9e0c7c98cd5f02",
+  image_id: "sha256:2c563e1a4b4f8fc808bbd6376be91f640884a767656de291e6c7abaa96754046",
+  feature_revision: "3c342b1c895fff52bc3347ae19fd2beed12d0ede",
+  verified_files: intelligenceVerifiedFiles,
+  production_adaptations: intelligenceProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -49,8 +54,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...farmMapVerifiedFiles,
-    ...farmMapProductionAdaptations,
+    ...intelligenceVerifiedFiles,
+    ...intelligenceProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
