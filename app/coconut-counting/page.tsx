@@ -183,7 +183,9 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
               </div>
               <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${statusClass(session.status)}`}>{session.status}</span>
             </div>
-            <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-6">
+              <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Cycle</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.harvest_cycle)}</dd></div>
+              <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Plot</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.plot)}</dd></div>
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Entries</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.number_of_entries)}</dd></div>
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Combined</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.combined_total)}</dd></div>
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Physical</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.physical_nuts_counted)}</dd></div>
@@ -199,21 +201,25 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
         <table className="w-full table-fixed text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="w-[12%] px-3 py-3">Harvest date</th>
-              <th className="w-[11%] px-3 py-3">Status</th>
-              <th className="w-[7%] px-3 py-3 text-right">Entries</th>
-              <th className="w-[8%] px-3 py-3 text-right">Grade A</th>
-              <th className="w-[8%] px-3 py-3 text-right">Grade B</th>
-              <th className="w-[9%] px-3 py-3 text-right">Combined</th>
-              <th className="w-[11%] px-3 py-3 text-right">Physical</th>
-              <th className="w-[11%] px-3 py-3 text-right">Harvested</th>
+              <th className="w-[5%] px-2 py-3 text-right">Cycle</th>
+              <th className="w-[5%] px-2 py-3 text-right">Plot</th>
+              <th className="w-[11%] px-3 py-3">Harvest date</th>
+              <th className="w-[9%] px-3 py-3">Status</th>
+              <th className="w-[6%] px-3 py-3 text-right">Entries</th>
+              <th className="w-[7%] px-3 py-3 text-right">Grade A</th>
+              <th className="w-[7%] px-3 py-3 text-right">Grade B</th>
+              <th className="w-[8%] px-3 py-3 text-right">Combined</th>
+              <th className="w-[9%] px-3 py-3 text-right">Physical</th>
+              <th className="w-[9%] px-3 py-3 text-right">Harvested</th>
               <th className="w-[15%] px-3 py-3">Last sync</th>
-              <th className="w-[8%] px-3 py-3"><span className="sr-only">View</span></th>
+              <th className="w-[9%] px-3 py-3"><span className="sr-only">View</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {data.sessions.map((session) => (
               <tr key={session.session_uuid} className="hover:bg-muted/40">
+                <td className="px-2 py-3 text-right font-semibold tabular-nums">{formatNumber(session.harvest_cycle)}</td>
+                <td className="px-2 py-3 text-right font-semibold tabular-nums">{formatNumber(session.plot)}</td>
                 <td className="px-3 py-3 font-semibold text-foreground">{formatDate(session.session_date)}</td>
                 <td className="px-3 py-3"><span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-bold ${statusClass(session.status)}`}>{session.status}</span></td>
                 <td className="px-3 py-3 text-right tabular-nums">{formatNumber(session.number_of_entries)}</td>
@@ -282,6 +288,8 @@ function DetailFieldGrid({ fields }: { fields: DetailField[] }) {
 function CompleteSessionData({ session }: { session: CoconutCountingSession }) {
   const fields: DetailField[] = [
     { label: "Session UUID", value: session.session_uuid },
+    { label: "Cycle", value: formatNumber(session.harvest_cycle) },
+    { label: "Plot", value: formatNumber(session.plot) },
     { label: "Harvest date", value: formatDate(session.session_date) },
     { label: "Start time", value: session.start_time },
     { label: "End time", value: session.end_time },
@@ -373,6 +381,7 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-primary">Selected session</p>
           <h2 id="session-detail-heading" className="mt-1 text-xl font-black text-foreground">{formatDate(session.session_date)}</h2>
+          <p className="mt-1 text-sm font-bold text-foreground">Cycle {formatNumber(session.harvest_cycle)} · Plot {formatNumber(session.plot)}</p>
           <p className="mt-1 text-xs text-muted-foreground">Session {session.session_uuid}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
