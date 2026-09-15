@@ -40,10 +40,13 @@ remain deliberate manual operations.
   reloaded.
 - The candidate port must be unused before the build begins. The deployment
   stops safely if another process has already bound `127.0.0.1:3016`.
-- The public Preview endpoint is intentionally HTTP-auth protected. Deployment
-  verifies the expected anonymous `401` boundary while candidate revision and
-  route smoke tests run locally; no browser credential is stored or sent by
-  GitHub.
+- The public Preview endpoint is intentionally authentication protected.
+  Deployment accepts the legacy anonymous `401` boundary or verifies the exact
+  anonymous `303` redirect to Preview's isolated same-host `/login` endpoint,
+  including the single expected return URL, then requires that exact login
+  endpoint to return an HTML page without following another redirect. Candidate
+  revision and route smoke tests run locally; no browser credential is stored
+  or sent by GitHub.
 - Any failed switch retries restoration of the original Preview network address,
   then re-tests the original frontend. The immediately previous frontend is
   retained for manual rollback.
