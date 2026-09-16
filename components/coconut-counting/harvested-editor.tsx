@@ -9,6 +9,8 @@ import {
   type CoconutCountingReconciliationPlot,
 } from "@/lib/coconut-counting-reconciliation"
 
+const HARVESTED_SAVE_TIMEOUT_MS = 15_000
+
 export function CoconutCountingHarvestedEditor({
   summary,
   onSaved,
@@ -52,6 +54,7 @@ export function CoconutCountingHarvestedEditor({
             expected_revision: summary.harvested_revision,
             reason: reason.trim() || null,
           }),
+          signal: AbortSignal.timeout(HARVESTED_SAVE_TIMEOUT_MS),
         },
       )
       const payload = (await response.json().catch(() => ({}))) as { error?: string; detail?: string }
@@ -60,7 +63,12 @@ export function CoconutCountingHarvestedEditor({
       setReason("")
       setEditing(false)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Harvested total could not be saved.")
+      const timedOut = caught instanceof Error && (caught.name === "TimeoutError" || caught.name === "AbortError")
+      if (timedOut) {
+        setError("Saving Harvested timed out after 15 seconds. The save outcome may be unknown; Refresh the harvest table before retrying.")
+      } else {
+        setError(caught instanceof Error ? caught.message : "Harvested total could not be saved.")
+      }
     } finally {
       setSaving(false)
     }

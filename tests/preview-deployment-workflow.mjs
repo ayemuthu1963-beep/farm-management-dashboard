@@ -303,7 +303,7 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Allow safe manual Harvested writes during the dedicated flag rollout",
+  "Make Coconut Counting reconciliation deterministic with environment-bound manual Harvested writes",
 )
 assert.equal(manifest.base_commit, "56258e77a6b388724d83c22a0fef7a0dbb3959cf")
 assert.equal(manifest.matched_backend_commit, "a7eca253788e8d1e5cd8527968c4935fd3872281")
@@ -319,8 +319,15 @@ assert.deepEqual(manifest.protected_invariants, {
 // Exact live-to-candidate path set for the incremental Harvested write-gate release.
 const expectedReleasePaths = [
   "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
+  "app/api/coconut-counting/reconciliation/route.ts",
+  "app/coconut-counting/page.tsx",
+  "components/coconut-counting/harvested-editor.tsx",
+  "components/coconut-counting/reconciliation-table.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/coconut-counting-reconciliation-api.ts",
+  "lib/coconut-counting-reconciliation.ts",
   "lib/coconut-counting-write-gate.ts",
+  "lib/coconut-counting-write-policy.ts",
   "tests/coconut-counting-reconciliation.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
