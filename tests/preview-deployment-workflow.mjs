@@ -303,10 +303,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Show Harvest Cycle and Plot in Coconut Counting and support APK-selected session metadata",
+  "Replace Cycle View harvest history with permanent Excel-format Cycle and Plot reconciliation",
 )
-assert.equal(manifest.base_commit, "e353b9104baf31b092d0655c2c9e0c7c98cd5f02")
-assert.equal(manifest.matched_backend_commit, "82ce4c0c78d938c09b0efe06ff4e21151cf6ce04")
+assert.equal(manifest.base_commit, "8e43c7180024330879ffee796dd78562606cdaff")
+assert.equal(manifest.matched_backend_commit, "c558ed6d9474d1c4c303e070f613faa980930993")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -316,15 +316,16 @@ assert.deepEqual(manifest.protected_invariants, {
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
-// Exact live-to-candidate path set for the Coconut Cycle/Plot Preview release.
+// Exact live-to-candidate path set for the Excel-format reconciliation Preview release.
 const expectedReleasePaths = [
-  "app/coconut-counting/page.tsx",
+  "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
+  "app/api/coconut-harvest/cycle-reconciliation/route.ts",
+  "app/coconut-harvest/cycle-view/page.tsx",
+  "components/coconut/cycle-reconciliation-table.tsx",
   "deploy/preview-release-manifest.json",
-  "docs/PREVIEW_GITHUB_ACTIONS_SETUP.md",
-  "lib/coconut-counting-api.ts",
+  "lib/coconut-counting-reconciliation.ts",
   "package.json",
-  "scripts/preview-server-deploy.sh",
-  "tests/coconut-counting-cycle-plot.mjs",
+  "tests/cycle-view-reconciliation.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
 assert.deepEqual(manifest.allowed_paths, expectedReleasePaths)
