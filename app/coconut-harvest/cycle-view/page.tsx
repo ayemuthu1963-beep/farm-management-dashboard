@@ -186,6 +186,7 @@ export default function CycleViewPage() {
   const summaryRequestInFlight = useRef(false)
   const detailRequestInFlight = useRef<number | null>(null)
   const detailExportInFlight = useRef(false)
+  const cycleSelectionTouched = useRef(false)
   const allCyclesPanelRef = useRef<HTMLDivElement>(null)
   const detailPanelRef = useRef<HTMLDivElement>(null)
   const { harvestCycleRows, harvestCycleOptions } = cycleViewData
@@ -200,6 +201,13 @@ export default function CycleViewPage() {
   const selectedCycleRow = useMemo(
     () => harvestCycleRows.find((row) => String(row.cycle) === cycle),
     [cycle, harvestCycleRows],
+  )
+  const odkOnlyCycleRows = useMemo(
+    () => harvestCycleRows.filter((row) => (
+      (tableCycle === null || row.cycle === tableCycle)
+      && !reconciliationCycleOptions.includes(row.cycle)
+    )),
+    [harvestCycleRows, reconciliationCycleOptions, tableCycle],
   )
   const defaultCycleSummary = useMemo(
     () =>
@@ -219,7 +227,6 @@ export default function CycleViewPage() {
     setReconciliationCycleOptions((current) => (
       [...new Set([...current, ...cycles])].sort((a, b) => b - a)
     ))
-    setCycle((current) => current || String(cycles[0] ?? ""))
   }, [])
 
   async function loadCycleData() {
@@ -233,7 +240,6 @@ export default function CycleViewPage() {
       const data = (await response.json()) as CycleViewData
       if (data.harvestCycleRows.length > 0) {
         setCycleViewData(data)
-        setCycle((current) => current || String(data.harvestCycleOptions[0]))
         setDisplaySummary(data.cycleSummary)
         setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
         setDataStatus("real")
@@ -249,6 +255,12 @@ export default function CycleViewPage() {
   useEffect(() => {
     loadCycleData()
   }, [])
+
+  useEffect(() => {
+    if (!cycleSelectionTouched.current && allCycleOptions.length > 0) {
+      setCycle(String(allCycleOptions[0]))
+    }
+  }, [allCycleOptions])
 
   useEffect(() => {
     setDisplaySummary(defaultCycleSummary)
@@ -323,6 +335,7 @@ export default function CycleViewPage() {
 
   function handleCycleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    cycleSelectionTouched.current = true
     const cycleNumber = Number(cycle)
     setTableCycle(cycleNumber)
     setSelectedDetailCycle(null)
@@ -476,7 +489,10 @@ export default function CycleViewPage() {
                 <select
                   id="cycle"
                   value={cycle}
-                  onChange={(e) => setCycle(e.target.value)}
+                  onChange={(e) => {
+                    cycleSelectionTouched.current = true
+                    setCycle(e.target.value)
+                  }}
                   onKeyDown={submitParentFormFromSelect}
                   className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
                 >
@@ -600,6 +616,19 @@ export default function CycleViewPage() {
         {!selectedDetailCycle ? (
           <div ref={allCyclesPanelRef}>
           <Panel title={tableCycle === null ? "All Harvest Cycles" : `Harvest Cycle ${tableCycle}`} icon={RotateCw}>
+            {odkOnlyCycleRows.length > 0 ? (
+              <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">ODK tree records</p>
+                <p className="mt-1 text-xs text-muted-foreground">These cycles have ODK harvest records but no APK reconciliation rows.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {odkOnlyCycleRows.map((row) => (
+                    <button key={row.cycle} type="button" onClick={() => loadCycleDetails(row)} className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-primary hover:bg-accent">
+                      View Cycle {row.cycle} tree records
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <CycleReconciliationTable
               cycle={tableCycle}
               onCyclesLoaded={handleReconciliationCyclesLoaded}
