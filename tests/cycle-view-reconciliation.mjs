@@ -81,7 +81,10 @@ test("cycle changes cannot be overwritten by stale requests or stale ODK summari
   assert.match(component, /requestGeneration\.current \+= 1/)
   assert.match(page, /summaryUnavailableCycle/)
   assert.match(page, /ODK summary is unavailable for Cycle/)
-  assert.match(page, /setSummaryUnavailableCycle\(null\)/)
+  assert.match(
+    page,
+    /setTableCycle\(null\)[\s\S]*setSummaryUnavailableCycle\(null\)[\s\S]*setDisplaySummary\(defaultCycleSummary\)/,
+  )
 })
 
 test("counts and Excel percentages format without hiding discrepancies", () => {
