@@ -122,11 +122,21 @@ jobs:
           grep -Fqx "previous_revision=$EXPECTED_CURRENT_REVISION" "$report"
           grep -Fqx "deployed_revision=$CANDIDATE_REVISION" "$report"
           grep -Eq '^deployed_image_id=sha256:[0-9a-f]{64}$' "$report"
-          grep -Eq '^preview_approved_revision=[0-9a-f]{40}$' "$report"
-          grep -Eq '^preview_approved_image_id=sha256:[0-9a-f]{64}$' "$report"
-          grep -Eq '^preview_feature_revision=[0-9a-f]{40}$' "$report"
-          grep -Eq '^preview_verified_file_count=[1-9][0-9]*$' "$report"
-          grep -Fqx 'production_source_matches_preview=true' "$report"
+          if grep -Fqx 'production_direct_reviewed=true' "$report"; then
+            [[ "$CANDIDATE_REVISION" == "f44d46ee14a3cd86df6711963560dea2ef5a4dbf" ]]
+            grep -Fqx "direct_reviewed_candidate_revision=$CANDIDATE_REVISION" "$report"
+            grep -Fqx 'direct_reviewed_candidate_tree=a7c117df6617e9bae5cc1e303e6d44a4cced1793' "$report"
+            grep -Fqx 'direct_reviewed_file_count=5' "$report"
+            grep -Fqx 'production_source_matches_preview=false' "$report"
+            ! grep -Eq '^preview_approved_' "$report"
+          else
+            grep -Fqx 'production_direct_reviewed=false' "$report"
+            grep -Eq '^preview_approved_revision=[0-9a-f]{40}$' "$report"
+            grep -Eq '^preview_approved_image_id=sha256:[0-9a-f]{64}$' "$report"
+            grep -Eq '^preview_feature_revision=[0-9a-f]{40}$' "$report"
+            grep -Eq '^preview_verified_file_count=[1-9][0-9]*$' "$report"
+            grep -Fqx 'production_source_matches_preview=true' "$report"
+          fi
           grep -Eq '^rollback_container=mfms-v0-preview-web-pre-github-[0-9]+-[0-9]{8}T[0-9]{6}Z$' "$report"
           grep -Fqx 'backend_unchanged=true' "$report"
           grep -Fqx 'database_unchanged=true' "$report"
