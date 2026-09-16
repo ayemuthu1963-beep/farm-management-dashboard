@@ -2,22 +2,28 @@
   "schema_version": 1,
   "environment": "Production",
   "target_url": "https://muthufarms.com",
-  "deployment_kind": "frontend-only-direct-reviewed",
-  "release_note": "Give Cycle View Plot 1 and Plot 2 rows distinct light backgrounds",
-  "base_commit": "f44d46ee14a3cd86df6711963560dea2ef5a4dbf",
-  "direct_review": {
-    "owner_instruction": "Deploy directly to Production and do not deploy to Preview",
-    "scope": "Cycle View plot-row background colours only",
-    "reviewed_files": [
+  "deployment_kind": "frontend-only",
+  "release_note": "Replace Cycle View harvest history with permanent Excel-format Cycle and Plot reconciliation",
+  "base_commit": "e166016b12b4faf2a51bd94f4791cb91ac68072c",
+  "preview_approved": {
+    "revision": "4656d01e867eb9cb9f47242716071834db729d6c",
+    "image_id": "sha256:07a4863b254223e1773edbfb91065e5a57bba764656eb365d461c4419eee6f8c",
+    "feature_revision": "6d3bb7cb54c86c96d8b701080bcd3025db491058",
+    "verified_files": [
+      "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
+      "app/api/coconut-harvest/cycle-reconciliation/route.ts",
       "app/coconut-harvest/cycle-view/page.tsx",
-      "tests/cycle-view-plot-breakdown.mjs"
+      "components/coconut/cycle-reconciliation-table.tsx",
+      "lib/coconut-counting-reconciliation.ts",
+      "tests/cycle-view-reconciliation.mjs"
     ],
-    "verification": {
-      "independent_reviews": 1,
-      "targeted_tests": 8,
-      "full_test_suite": "passed",
-      "typescript": "passed"
-    }
+    "production_adaptations": [
+      "deploy/production-release-manifest.json",
+      "lib/coconut-harvest-api.ts",
+      "lib/coconut-harvest-data.ts",
+      "package.json",
+      "tests/farm-calendar-production-promotion.mjs"
+    ]
   },
   "protected_invariants": {
     "preview": "unchanged",
@@ -29,9 +35,16 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
+    "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
+    "app/api/coconut-harvest/cycle-reconciliation/route.ts",
     "app/coconut-harvest/cycle-view/page.tsx",
+    "components/coconut/cycle-reconciliation-table.tsx",
     "deploy/production-release-manifest.json",
-    "tests/cycle-view-plot-breakdown.mjs",
+    "lib/coconut-counting-reconciliation.ts",
+    "lib/coconut-harvest-api.ts",
+    "lib/coconut-harvest-data.ts",
+    "package.json",
+    "tests/cycle-view-reconciliation.mjs",
     "tests/farm-calendar-production-promotion.mjs"
   ]
 }

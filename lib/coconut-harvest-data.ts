@@ -105,6 +105,7 @@ export const cycleSummary: CycleSummary = {
 
 export type CycleStatus = "Locked" | "Open"
 
+/** @deprecated Cycle View now uses Coconut Counting reconciliation groups. */
 export interface HarvestCyclePlotRow {
   plot: "Plot 1" | "Plot 2"
   startDate: string
@@ -127,7 +128,7 @@ export interface HarvestCycleRow {
   salePrice: number
   /** Total sale value for the cycle, in Rupees */
   totalSale: number
-  /** Plot rows are shown only for the specifically requested cycles. */
+  /** @deprecated Retained for compatibility with reviewed historical release code. */
   plotRows?: HarvestCyclePlotRow[]
 }
 

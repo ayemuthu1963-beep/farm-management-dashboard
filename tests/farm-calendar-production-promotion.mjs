@@ -9,12 +9,19 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const cycleViewReviewedFiles = [
+const cycleViewVerifiedFiles = [
+  "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
+  "app/api/coconut-harvest/cycle-reconciliation/route.ts",
   "app/coconut-harvest/cycle-view/page.tsx",
-  "tests/cycle-view-plot-breakdown.mjs",
+  "components/coconut/cycle-reconciliation-table.tsx",
+  "lib/coconut-counting-reconciliation.ts",
+  "tests/cycle-view-reconciliation.mjs",
 ]
 const cycleViewProductionAdaptations = [
   "deploy/production-release-manifest.json",
+  "lib/coconut-harvest-api.ts",
+  "lib/coconut-harvest-data.ts",
+  "package.json",
   "tests/farm-calendar-production-promotion.mjs",
 ]
 
@@ -23,22 +30,18 @@ const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
 assert.equal(manifest.schema_version, 1)
 assert.equal(manifest.environment, "Production")
 assert.equal(manifest.target_url, "https://muthufarms.com")
-assert.equal(manifest.deployment_kind, "frontend-only-direct-reviewed")
+assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Give Cycle View Plot 1 and Plot 2 rows distinct light backgrounds",
+  "Replace Cycle View harvest history with permanent Excel-format Cycle and Plot reconciliation",
 )
-assert.equal(manifest.base_commit, "f44d46ee14a3cd86df6711963560dea2ef5a4dbf")
-assert.deepEqual(manifest.direct_review, {
-  owner_instruction: "Deploy directly to Production and do not deploy to Preview",
-  scope: "Cycle View plot-row background colours only",
-  reviewed_files: cycleViewReviewedFiles,
-  verification: {
-    independent_reviews: 1,
-    targeted_tests: 8,
-    full_test_suite: "passed",
-    typescript: "passed",
-  },
+assert.equal(manifest.base_commit, "e166016b12b4faf2a51bd94f4791cb91ac68072c")
+assert.deepEqual(manifest.preview_approved, {
+  revision: "4656d01e867eb9cb9f47242716071834db729d6c",
+  image_id: "sha256:07a4863b254223e1773edbfb91065e5a57bba764656eb365d461c4419eee6f8c",
+  feature_revision: "6d3bb7cb54c86c96d8b701080bcd3025db491058",
+  verified_files: cycleViewVerifiedFiles,
+  production_adaptations: cycleViewProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -52,7 +55,7 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...cycleViewReviewedFiles,
+    ...cycleViewVerifiedFiles,
     ...cycleViewProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
