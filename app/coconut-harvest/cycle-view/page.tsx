@@ -258,9 +258,25 @@ export default function CycleViewPage() {
 
   useEffect(() => {
     if (!cycleSelectionTouched.current && allCycleOptions.length > 0) {
-      setCycle(String(allCycleOptions[0]))
+      const newestCycle = allCycleOptions[0]
+      const newestCycleRow = harvestCycleRows.find((row) => row.cycle === newestCycle)
+      setCycle(String(newestCycle))
+      setSummaryLabel(`Cycle ${newestCycle}`)
+      if (newestCycleRow) {
+        setSummaryUnavailableCycle(null)
+        setDisplaySummary({
+          totalHarvests: newestCycleRow.trees,
+          totalBunches: newestCycleRow.bunches,
+          totalNuts: newestCycleRow.nuts,
+          averageNuts: newestCycleRow.trees > 0 ? newestCycleRow.nuts / newestCycleRow.trees : 0,
+          lifetimeSale: newestCycleRow.totalSale,
+        })
+      } else if (reconciliationCycleOptions.includes(newestCycle)) {
+        setSummaryUnavailableCycle(newestCycle)
+        setDisplaySummary(emptySummary)
+      }
     }
-  }, [allCycleOptions])
+  }, [allCycleOptions, harvestCycleRows, reconciliationCycleOptions])
 
   useEffect(() => {
     setDisplaySummary(defaultCycleSummary)
