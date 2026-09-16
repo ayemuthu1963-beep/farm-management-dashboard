@@ -72,9 +72,9 @@ readonly coordinated_verification_actor="production-release-verification"
 readonly coordinated_preview_revision="00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"
 readonly coordinated_preview_feature_revision="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
 readonly coordinated_preview_merge_base="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
-readonly direct_reviewed_candidate_revision="f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
-readonly direct_reviewed_candidate_tree="a7c117df6617e9bae5cc1e303e6d44a4cced1793"
-readonly direct_reviewed_baseline_revision="5863d891c0cc6b9054376ae210ee74799bc6cc6a"
+readonly direct_reviewed_candidate_revision="e166016b12b4faf2a51bd94f4791cb91ac68072c"
+readonly direct_reviewed_candidate_tree="b411d3325b3753a136e59529dcb4e40918c38c2e"
+readonly direct_reviewed_baseline_revision="f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
 
 [[ "$production_url" == "https://muthufarms.com" ]] \
   || blocked "the public target is not Production"
@@ -1531,19 +1531,15 @@ approved_production_adaptations = [
     "deploy/production-release-manifest.json",
     "tests/farm-calendar-production-promotion.mjs",
 ]
-approved_direct_candidate = "f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
-approved_direct_tree = "a7c117df6617e9bae5cc1e303e6d44a4cced1793"
-approved_direct_baseline = "5863d891c0cc6b9054376ae210ee74799bc6cc6a"
+approved_direct_candidate = "e166016b12b4faf2a51bd94f4791cb91ac68072c"
+approved_direct_tree = "b411d3325b3753a136e59529dcb4e40918c38c2e"
+approved_direct_baseline = "f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
 approved_direct_reviewed_files = [
     "app/coconut-harvest/cycle-view/page.tsx",
-    "lib/coconut-harvest-api.ts",
-    "lib/coconut-harvest-data.ts",
-    "lib/cycle-view-plot-breakdown.ts",
     "tests/cycle-view-plot-breakdown.mjs",
 ]
 approved_direct_adaptations = [
     "deploy/production-release-manifest.json",
-    "package.json",
     "tests/farm-calendar-production-promotion.mjs",
 ]
 approved_direct_allowed_paths = sorted(
@@ -1551,10 +1547,10 @@ approved_direct_allowed_paths = sorted(
 )
 approved_direct_review = {
     "owner_instruction": "Deploy directly to Production and do not deploy to Preview",
-    "scope": "Cycle View cycles 19 and 20 only",
+    "scope": "Cycle View plot-row background colours only",
     "reviewed_files": approved_direct_reviewed_files,
     "verification": {
-        "independent_reviews": 2,
+        "independent_reviews": 1,
         "targeted_tests": 8,
         "full_test_suite": "passed",
         "typescript": "passed",
@@ -1699,7 +1695,7 @@ PY_RELEASE_MANIFEST
     [[ "${preview_contract_lines[3]}" == "direct-review" ]] \
       || blocked "direct-reviewed release marker is invalid"
     direct_reviewed_file_count=$((${#preview_contract_lines[@]} - 4))
-    [[ "$direct_reviewed_file_count" -eq 5 ]] \
+    [[ "$direct_reviewed_file_count" -eq 2 ]] \
       || blocked "direct-reviewed file count changed"
     direct_reviewed_release=1
     return 0

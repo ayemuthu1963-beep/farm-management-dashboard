@@ -123,10 +123,10 @@ jobs:
           grep -Fqx "deployed_revision=$CANDIDATE_REVISION" "$report"
           grep -Eq '^deployed_image_id=sha256:[0-9a-f]{64}$' "$report"
           if grep -Fqx 'production_direct_reviewed=true' "$report"; then
-            [[ "$CANDIDATE_REVISION" == "f44d46ee14a3cd86df6711963560dea2ef5a4dbf" ]]
+            [[ "$CANDIDATE_REVISION" == "e166016b12b4faf2a51bd94f4791cb91ac68072c" ]]
             grep -Fqx "direct_reviewed_candidate_revision=$CANDIDATE_REVISION" "$report"
-            grep -Fqx 'direct_reviewed_candidate_tree=a7c117df6617e9bae5cc1e303e6d44a4cced1793' "$report"
-            grep -Fqx 'direct_reviewed_file_count=5' "$report"
+            grep -Fqx 'direct_reviewed_candidate_tree=b411d3325b3753a136e59529dcb4e40918c38c2e' "$report"
+            grep -Fqx 'direct_reviewed_file_count=2' "$report"
             grep -Fqx 'production_source_matches_preview=false' "$report"
             ! grep -Eq '^preview_approved_' "$report"
           else
