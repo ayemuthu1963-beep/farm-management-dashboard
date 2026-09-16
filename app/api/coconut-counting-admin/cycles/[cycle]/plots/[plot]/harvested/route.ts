@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { isHarvestCycleWriteAllowed } from "@/lib/coconut-counting-write-gate"
 import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
 import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
@@ -10,8 +11,11 @@ export const runtime = "nodejs"
 type RouteContext = { params: Promise<{ cycle: string; plot: string }> }
 
 function writesEnabled(): boolean {
-  const explicitFlag = (process.env.MFMS_HARVEST_CYCLE_WRITES_ENABLED ?? "").trim().toLowerCase()
-  return explicitFlag === "true" && getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
+  const targetSafetyErrors = getAdminTargetSafetyErrors(process.env, getApiBaseUrl())
+  return isHarvestCycleWriteAllowed(
+    process.env.MFMS_HARVEST_CYCLE_WRITES_ENABLED,
+    targetSafetyErrors,
+  )
 }
 
 function parseInteger(value: unknown): number | null {

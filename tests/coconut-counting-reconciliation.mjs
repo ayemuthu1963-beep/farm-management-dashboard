@@ -7,6 +7,8 @@ import {
   formatReconciliationNumber,
   formatReconciliationPercent,
 } from "../lib/coconut-counting-reconciliation.ts"
+import { isHarvestCycleWriteAllowed } from "../lib/coconut-counting-write-gate.ts"
+import { getAdminTargetSafetyErrors } from "../lib/preview-admin-write-safety.ts"
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const component = read("components/coconut-counting/reconciliation-table.tsx")
@@ -16,6 +18,18 @@ const readRoute = read("app/api/coconut-counting/reconciliation/route.ts")
 const writeRoute = read("app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts")
 const cycleView = read("app/coconut-harvest/cycle-view/page.tsx")
 const harvestApi = read("lib/coconut-harvest-api.ts")
+
+const safePreviewWriteEnvironment = {
+  MFMS_ENV: "preview",
+  NEXT_PUBLIC_MFMS_ENV: "preview",
+  MFMS_ENABLE_LOCAL_WRITE_GUARD: "true",
+  MFMS_TARGET_DATABASE: "mfms_server_uat",
+  MFMS_LOCAL_WRITE_DATABASE: "mfms_server_uat",
+  MFMS_LOCAL_WRITE_BACKEND_HOST: "harvest-api-pilot",
+  MFMS_LOCAL_WRITE_BACKEND_PORT: "8000",
+  MFMS_ALLOWED_BACKEND_HOSTS: "harvest-api-pilot",
+  MFMS_ALLOWED_BACKEND_PORT: "8000",
+}
 
 test("workbook table has Cycle selector and exactly twelve Excel columns", () => {
   const tableHead = component.slice(component.indexOf("<thead>"), component.indexOf("</thead>"))
@@ -84,6 +98,29 @@ test("manual Harvested is Cycle/Plot scoped, audited and collision-safe", () => 
   assert.match(writeRoute, /MFMS_HARVEST_CYCLE_WRITES_ENABLED/)
   assert.doesNotMatch(writeRoute, /MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES/)
   assert.match(writeRoute, /expectedRevision > 0 && !reason/)
+})
+
+test("manual Harvested rollout gate defaults safely when the dedicated flag is absent", () => {
+  const safeTargetErrors = getAdminTargetSafetyErrors(
+    safePreviewWriteEnvironment,
+    "http://harvest-api-pilot:8000",
+  )
+  assert.deepEqual(safeTargetErrors, [])
+  assert.equal(isHarvestCycleWriteAllowed(undefined, safeTargetErrors), true)
+  assert.equal(isHarvestCycleWriteAllowed("true", safeTargetErrors), true)
+  assert.equal(isHarvestCycleWriteAllowed(" TRUE ", safeTargetErrors), true)
+
+  for (const explicitKillSwitch of ["false", "enabled", "1", ""]) {
+    assert.equal(isHarvestCycleWriteAllowed(explicitKillSwitch, safeTargetErrors), false)
+  }
+
+  const unsafeTargetErrors = getAdminTargetSafetyErrors(
+    { ...safePreviewWriteEnvironment, MFMS_LOCAL_WRITE_DATABASE: "mfms_server_prod" },
+    "http://harvest-api-pilot:8000",
+  )
+  assert.ok(unsafeTargetErrors.length > 0)
+  assert.equal(isHarvestCycleWriteAllowed(undefined, unsafeTargetErrors), false)
+  assert.equal(isHarvestCycleWriteAllowed("true", unsafeTargetErrors), false)
 })
 
 test("filtered session history remains separate and Cycle View remains restored", () => {
