@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
   CalendarRange,
@@ -671,42 +671,71 @@ export default function CycleViewPage() {
                 </thead>
                 <tbody>
                   {sortedHarvestCycleRows.map((r) => (
-                    <tr
-                      key={r.cycle}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Open Harvest Cycle ${r.cycle} details`}
-                      onClick={() => handleCycleRowClick(r)}
-                      onKeyDown={(event) => handleCycleRowKeyDown(event, r)}
-                      className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    >
-                      <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{r.cycle}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.startDate}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.endDate}</td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className={cn(
-                            "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
-                            r.status === "Locked"
-                              ? "bg-secondary text-secondary-foreground"
-                              : "bg-chart-2/15 text-chart-2",
-                          )}
+                    <Fragment key={r.cycle}>
+                      <tr
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open Harvest Cycle ${r.cycle} details`}
+                        onClick={() => handleCycleRowClick(r)}
+                        onKeyDown={(event) => handleCycleRowKeyDown(event, r)}
+                        className="cursor-pointer border-b border-border transition-colors hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      >
+                        <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{r.cycle}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.startDate}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.endDate}</td>
+                        <td className="px-3 py-2.5">
+                          <span
+                            className={cn(
+                              "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                              r.status === "Locked"
+                                ? "bg-secondary text-secondary-foreground"
+                                : "bg-chart-2/15 text-chart-2",
+                            )}
+                          >
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.trees.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{r.bunches.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.nuts.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRupees(r.salePrice, 2)}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-foreground">{formatRupees(r.totalSale)}</td>
+                      </tr>
+                      {r.plotRows?.map((plotRow) => (
+                        <tr
+                          key={`${r.cycle}-${plotRow.plot}`}
+                          aria-label={`Harvest Cycle ${r.cycle} ${plotRow.plot} summary`}
+                          className="border-b border-border bg-muted/20"
                         >
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-foreground">{r.trees.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-2.5 text-right text-muted-foreground">{r.bunches.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-2.5 text-right text-foreground">{r.nuts.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRupees(r.salePrice, 2)}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold text-foreground">{formatRupees(r.totalSale)}</td>
-                    </tr>
+                          <th scope="row" className="whitespace-nowrap px-3 py-2.5 text-left font-semibold text-foreground">{plotRow.plot}</th>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{plotRow.startDate || "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{plotRow.endDate || "—"}</td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className={cn(
+                                "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                r.status === "Locked"
+                                  ? "bg-secondary text-secondary-foreground"
+                                  : "bg-chart-2/15 text-chart-2",
+                              )}
+                            >
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-foreground">{plotRow.trees.toLocaleString("en-IN")}</td>
+                          <td className="px-3 py-2.5 text-right text-muted-foreground">{plotRow.bunches.toLocaleString("en-IN")}</td>
+                          <td className="px-3 py-2.5 text-right text-foreground">{plotRow.nuts.toLocaleString("en-IN")}</td>
+                          <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRupees(r.salePrice, 2)}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-foreground">{formatRupees(plotRow.totalSale)}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Click a harvest cycle row, or focus it and press Enter or Space, to view the full records for that cycle.
+              Click a harvest cycle total row, or focus it and press Enter or Space, to view the full records for that cycle.
             </p>
           </Panel>
           </div>

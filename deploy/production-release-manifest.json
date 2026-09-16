@@ -2,23 +2,25 @@
   "schema_version": 1,
   "environment": "Production",
   "target_url": "https://muthufarms.com",
-  "deployment_kind": "frontend-only",
-  "release_note": "Add Preview-verified Cycle and Plot columns to Coconut Counting",
-  "base_commit": "15c3ceb89c349245f8f790d2e2ed0dd7a8ffb923",
-  "preview_approved": {
-    "revision": "8e43c7180024330879ffee796dd78562606cdaff",
-    "image_id": "sha256:c078f99b38f2d6de9bdf0094a03dd5fff70399ea8cf61af007cf407c9a35f18e",
-    "feature_revision": "56e7ae9d3045b1c212ff6a67675991db47c448e7",
-    "verified_files": [
-      "app/coconut-counting/page.tsx",
-      "lib/coconut-counting-api.ts",
-      "tests/coconut-counting-cycle-plot.mjs"
+  "deployment_kind": "frontend-only-direct-reviewed",
+  "release_note": "Add Plot 1 and Plot 2 breakdowns to Cycle View for cycles 19 and 20",
+  "base_commit": "5863d891c0cc6b9054376ae210ee74799bc6cc6a",
+  "direct_review": {
+    "owner_instruction": "Deploy directly to Production and do not deploy to Preview",
+    "scope": "Cycle View cycles 19 and 20 only",
+    "reviewed_files": [
+      "app/coconut-harvest/cycle-view/page.tsx",
+      "lib/coconut-harvest-api.ts",
+      "lib/coconut-harvest-data.ts",
+      "lib/cycle-view-plot-breakdown.ts",
+      "tests/cycle-view-plot-breakdown.mjs"
     ],
-    "production_adaptations": [
-      "deploy/production-release-manifest.json",
-      "package.json",
-      "tests/farm-calendar-production-promotion.mjs"
-    ]
+    "verification": {
+      "independent_reviews": 2,
+      "targeted_tests": 8,
+      "full_test_suite": "passed",
+      "typescript": "passed"
+    }
   },
   "protected_invariants": {
     "preview": "unchanged",
@@ -30,11 +32,13 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/coconut-counting/page.tsx",
+    "app/coconut-harvest/cycle-view/page.tsx",
     "deploy/production-release-manifest.json",
-    "lib/coconut-counting-api.ts",
+    "lib/coconut-harvest-api.ts",
+    "lib/coconut-harvest-data.ts",
+    "lib/cycle-view-plot-breakdown.ts",
     "package.json",
-    "tests/coconut-counting-cycle-plot.mjs",
+    "tests/cycle-view-plot-breakdown.mjs",
     "tests/farm-calendar-production-promotion.mjs"
   ]
 }
