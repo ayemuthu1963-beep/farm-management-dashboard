@@ -303,10 +303,10 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Replace Cycle View harvest history with permanent Excel-format Cycle and Plot reconciliation",
+  "Preserve ODK-only tree access and deterministic newest-cycle selection",
 )
-assert.equal(manifest.base_commit, "8e43c7180024330879ffee796dd78562606cdaff")
-assert.equal(manifest.matched_backend_commit, "c558ed6d9474d1c4c303e070f613faa980930993")
+assert.equal(manifest.base_commit, "4656d01e867eb9cb9f47242716071834db729d6c")
+assert.equal(manifest.matched_backend_commit, "a7eca253788e8d1e5cd8527968c4935fd3872281")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
   production: "unchanged",
@@ -318,13 +318,8 @@ assert.deepEqual(manifest.protected_invariants, {
 })
 // Exact live-to-candidate path set for the Excel-format reconciliation Preview release.
 const expectedReleasePaths = [
-  "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
-  "app/api/coconut-harvest/cycle-reconciliation/route.ts",
   "app/coconut-harvest/cycle-view/page.tsx",
-  "components/coconut/cycle-reconciliation-table.tsx",
   "deploy/preview-release-manifest.json",
-  "lib/coconut-counting-reconciliation.ts",
-  "package.json",
   "tests/cycle-view-reconciliation.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
