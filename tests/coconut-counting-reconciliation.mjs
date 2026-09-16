@@ -4,6 +4,7 @@ import test from "node:test"
 
 import {
   calculateWorkbookValues,
+  createRequestAbortScope,
   formatReconciliationNumber,
   formatReconciliationPercent,
   reconciliationDataResult,
@@ -22,6 +23,7 @@ const editor = read("components/coconut-counting/harvested-editor.tsx")
 const page = read("app/coconut-counting/page.tsx")
 const readRoute = read("app/api/coconut-counting/reconciliation/route.ts")
 const serverApi = read("lib/coconut-counting-reconciliation-api.ts")
+const reconciliationLibrary = read("lib/coconut-counting-reconciliation.ts")
 const writeRoute = read("app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts")
 const cycleView = read("app/coconut-harvest/cycle-view/page.tsx")
 const harvestApi = read("lib/coconut-harvest-api.ts")
@@ -152,15 +154,16 @@ test("server initial data and bounded refresh requests prevent an indefinite loa
   assert.match(page, /initialResult=\{reconciliation\}/)
   assert.match(component, /reconciliationInitialState\(initialResult\)/)
   assert.doesNotMatch(component, /void discoverCycles\(null\)/)
-  assert.match(component, /signal: AbortSignal\.any\(\[/)
-  assert.match(component, /AbortSignal\.timeout\(RECONCILIATION_REQUEST_TIMEOUT_MS\)/)
+  assert.match(component, /createRequestAbortScope\(RECONCILIATION_REQUEST_TIMEOUT_MS, workflowSignal\)/)
+  assert.match(component, /signal: abortScope\.signal/)
   assert.match(component, /RECONCILIATION_REQUEST_TIMEOUT_MS = 15_000/)
   assert.match(component, /requestController\.current\?\.abort\(\)/)
   assert.match(component, /const \{ controller, requestId \} = beginRequest\(\)/)
   assert.match(component, /if \(requestId !== requestGeneration\.current\) return/)
   assert.match(component, /No Cycle\/Plot APK records are available\./)
   assert.match(component, /data\.unassigned_session_count\.toLocaleString/)
-  assert.match(editor, /signal: AbortSignal\.timeout\(HARVESTED_SAVE_TIMEOUT_MS\)/)
+  assert.match(editor, /createRequestAbortScope\(HARVESTED_SAVE_TIMEOUT_MS\)/)
+  assert.match(editor, /signal: abortScope\.signal/)
   assert.match(editor, /HARVESTED_SAVE_TIMEOUT_MS = 15_000/)
   assert.match(editor, /Saving Harvested timed out after 15 seconds/)
   assert.match(editor, /save outcome may be unknown; Refresh the harvest table before retrying/)
@@ -168,6 +171,50 @@ test("server initial data and bounded refresh requests prevent an indefinite loa
   assert.match(writeRoute, /save outcome may be unknown; Refresh the harvest table before retrying/)
   assert.match(readRoute, /getCoconutCountingReconciliation\(requestedCycle \?\? undefined\)/)
   assert.doesNotMatch(readRoute, /getApiBaseUrl|getBasicAuthHeader/)
+})
+
+test("client requests compose cancellation and timeouts without newer AbortSignal APIs", async () => {
+  const waitForTimers = () => new Promise((resolve) => setTimeout(resolve, 10))
+
+  assert.doesNotMatch(component, /AbortSignal\.(?:any|timeout)\(/)
+  assert.doesNotMatch(editor, /AbortSignal\.(?:any|timeout)\(/)
+  assert.match(reconciliationLibrary, /new AbortController\(\)/)
+  assert.match(reconciliationLibrary, /workflowSignal\.addEventListener\("abort", abortFromWorkflow/)
+  assert.match(reconciliationLibrary, /workflowSignal\.removeEventListener\("abort", abortFromWorkflow\)/)
+  assert.match(reconciliationLibrary, /clearTimeout\(timeoutId\)/)
+
+  const workflowController = new AbortController()
+  const cancelledScope = createRequestAbortScope(1, workflowController.signal)
+  workflowController.abort()
+  await waitForTimers()
+  assert.equal(cancelledScope.signal.aborted, true)
+  assert.equal(cancelledScope.didTimeout(), false)
+  cancelledScope.cleanup()
+
+  const timedScope = createRequestAbortScope(1)
+  await waitForTimers()
+  assert.equal(timedScope.signal.aborted, true)
+  assert.equal(timedScope.didTimeout(), true)
+  timedScope.cleanup()
+
+  let addedListener = null
+  let removedListener = null
+  const observedWorkflowSignal = {
+    aborted: false,
+    addEventListener(event, listener) {
+      assert.equal(event, "abort")
+      addedListener = listener
+    },
+    removeEventListener(event, listener) {
+      assert.equal(event, "abort")
+      removedListener = listener
+    },
+  }
+  const cleanedScope = createRequestAbortScope(1, observedWorkflowSignal)
+  cleanedScope.cleanup()
+  await waitForTimers()
+  assert.equal(removedListener, addedListener)
+  assert.equal(cleanedScope.signal.aborted, false)
 })
 
 test("Excel formulas, blank subtotal Entries and percentages are explicit", () => {

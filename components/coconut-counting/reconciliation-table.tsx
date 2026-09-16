@@ -7,6 +7,7 @@ import { ChevronRight, RefreshCw } from "lucide-react"
 import { CoconutCountingHarvestedEditor } from "@/components/coconut-counting/harvested-editor"
 import { HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import {
+  createRequestAbortScope,
   formatReconciliationNumber,
   formatReconciliationPercent,
   reconciliationInitialState,
@@ -136,7 +137,7 @@ interface CoconutCountingReconciliationTableProps {
 }
 
 function requestError(error: unknown, fallback: string): string {
-  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+  if (error instanceof Error && error.name === "TimeoutError") {
     return "The Coconut Counting request timed out after 15 seconds."
   }
   return error instanceof Error ? error.message : fallback
@@ -147,16 +148,25 @@ async function requestReconciliation(
   workflowSignal: AbortSignal,
   fallbackError: string,
 ): Promise<CoconutCountingReconciliationResponse> {
-  const response = await fetch(path, {
-    cache: "no-store",
-    signal: AbortSignal.any([
-      workflowSignal,
-      AbortSignal.timeout(RECONCILIATION_REQUEST_TIMEOUT_MS),
-    ]),
-  })
-  const payload = (await response.json().catch(() => ({}))) as CoconutCountingReconciliationResponse & { error?: string }
-  if (!response.ok) throw new Error(payload.error ?? fallbackError)
-  return payload
+  const abortScope = createRequestAbortScope(RECONCILIATION_REQUEST_TIMEOUT_MS, workflowSignal)
+  try {
+    const response = await fetch(path, {
+      cache: "no-store",
+      signal: abortScope.signal,
+    })
+    const payload = (await response.json().catch(() => ({}))) as CoconutCountingReconciliationResponse & { error?: string }
+    if (!response.ok) throw new Error(payload.error ?? fallbackError)
+    return payload
+  } catch (caught) {
+    if (abortScope.didTimeout()) {
+      const timeoutError = new Error("The Coconut Counting request timed out after 15 seconds.")
+      timeoutError.name = "TimeoutError"
+      throw timeoutError
+    }
+    throw caught
+  } finally {
+    abortScope.cleanup()
+  }
 }
 
 export function CoconutCountingReconciliationTable({

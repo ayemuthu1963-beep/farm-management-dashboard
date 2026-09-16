@@ -72,6 +72,61 @@ export interface CoconutCountingWorkbookValues {
   physical: number
 }
 
+export interface RequestAbortScope {
+  signal: AbortSignal
+  didTimeout: () => boolean
+  cleanup: () => void
+}
+
+export function createRequestAbortScope(
+  timeoutMs: number,
+  workflowSignal?: AbortSignal,
+): RequestAbortScope {
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let listeningForWorkflowAbort = false
+  let timedOut = false
+  let cleaned = false
+
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    if (workflowSignal && listeningForWorkflowAbort) {
+      workflowSignal.removeEventListener("abort", abortFromWorkflow)
+      listeningForWorkflowAbort = false
+    }
+  }
+
+  function abortFromWorkflow() {
+    cleanup()
+    controller.abort()
+  }
+
+  if (workflowSignal?.aborted) {
+    controller.abort()
+  } else {
+    if (workflowSignal) {
+      workflowSignal.addEventListener("abort", abortFromWorkflow, { once: true })
+      listeningForWorkflowAbort = true
+    }
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      cleanup()
+      controller.abort()
+    }, timeoutMs)
+  }
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup,
+  }
+}
+
 export function reconciliationDataResult(
   data: CoconutCountingReconciliationResponse,
 ): CoconutCountingReconciliationInitialResult {
