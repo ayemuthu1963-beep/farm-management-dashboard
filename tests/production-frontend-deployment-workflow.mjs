@@ -40,8 +40,8 @@ assert.match(deploy, /DEPLOY PRODUCTION FRONTEND ONLY/)
 assert.match(deploy, /deploy-production-frontend \$CANDIDATE_REVISION \$EXPECTED_CURRENT_REVISION \$GITHUB_RUN_ID/)
 assert.match(deploy, /production_source_matches_preview=true/)
 assert.match(deploy, /production_source_matches_preview=false/)
-assert.match(deploy, /f44d46ee14a3cd86df6711963560dea2ef5a4dbf/)
-assert.match(deploy, /a7c117df6617e9bae5cc1e303e6d44a4cced1793/)
+assert.match(deploy, /e166016b12b4faf2a51bd94f4791cb91ac68072c/)
+assert.match(deploy, /b411d3325b3753a136e59529dcb4e40918c38c2e/)
 assert.match(deploy, /preview_approved_image_id=sha256/)
 assert.match(deploy, /production_frontend_touched=1/)
 assert.match(rollback, /ROLL BACK PRODUCTION FRONTEND/)
@@ -53,7 +53,7 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.equal(helperSha256, "91d71d1d8bd23bfde9f6e61cef9feb5a3fdd43b9b5165327b5384ee2890f1e90")
+assert.equal(helperSha256, "062a87ad79cb001132215fa1a10a8a82f79a6ec9d7819c5f74f9c554a87e52ad")
 assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
 assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
 
@@ -550,9 +550,9 @@ assert.match(helper, /Production source differs from Preview-approved file/)
 assert.match(helper, /preview_feature_revision/)
 assert.match(helper, /production_source_matches_preview=true/)
 assert.match(helper, /production_source_matches_preview=false/)
-assert.match(helper, /readonly direct_reviewed_candidate_revision="f44d46ee14a3cd86df6711963560dea2ef5a4dbf"/)
-assert.match(helper, /readonly direct_reviewed_candidate_tree="a7c117df6617e9bae5cc1e303e6d44a4cced1793"/)
-assert.match(helper, /readonly direct_reviewed_baseline_revision="5863d891c0cc6b9054376ae210ee74799bc6cc6a"/)
+assert.match(helper, /readonly direct_reviewed_candidate_revision="e166016b12b4faf2a51bd94f4791cb91ac68072c"/)
+assert.match(helper, /readonly direct_reviewed_candidate_tree="b411d3325b3753a136e59529dcb4e40918c38c2e"/)
+assert.match(helper, /readonly direct_reviewed_baseline_revision="f44d46ee14a3cd86df6711963560dea2ef5a4dbf"/)
 assert.match(helper, /coordinated-frontend-after-backend/)
 assert.match(helper, /readonly coordinated_preview_revision="00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"/)
 assert.match(helper, /readonly coordinated_preview_feature_revision="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"/)
@@ -763,23 +763,16 @@ try {
     preview_approved: { ...manifest.preview_approved, production_adaptations: approvedProductionAdaptations.slice(0, -1) },
   }).status, 0)
 
-  const directCandidate = "f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
-  const directTree = "a7c117df6617e9bae5cc1e303e6d44a4cced1793"
-  const directBaseline = "5863d891c0cc6b9054376ae210ee74799bc6cc6a"
+  const directCandidate = "e166016b12b4faf2a51bd94f4791cb91ac68072c"
+  const directTree = "b411d3325b3753a136e59529dcb4e40918c38c2e"
+  const directBaseline = "f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
   const directReviewedFiles = [
     "app/coconut-harvest/cycle-view/page.tsx",
-    "lib/coconut-harvest-api.ts",
-    "lib/coconut-harvest-data.ts",
-    "lib/cycle-view-plot-breakdown.ts",
     "tests/cycle-view-plot-breakdown.mjs",
   ]
   const directAllowedPaths = [
     "app/coconut-harvest/cycle-view/page.tsx",
     "deploy/production-release-manifest.json",
-    "lib/coconut-harvest-api.ts",
-    "lib/coconut-harvest-data.ts",
-    "lib/cycle-view-plot-breakdown.ts",
-    "package.json",
     "tests/cycle-view-plot-breakdown.mjs",
     "tests/farm-calendar-production-promotion.mjs",
   ]
@@ -788,14 +781,14 @@ try {
     environment: "Production",
     target_url: "https://muthufarms.com",
     deployment_kind: "frontend-only-direct-reviewed",
-    release_note: "Add Plot 1 and Plot 2 breakdowns to Cycle View for cycles 19 and 20",
+    release_note: "Give Cycle View Plot 1 and Plot 2 rows distinct light backgrounds",
     base_commit: directBaseline,
     direct_review: {
       owner_instruction: "Deploy directly to Production and do not deploy to Preview",
-      scope: "Cycle View cycles 19 and 20 only",
+      scope: "Cycle View plot-row background colours only",
       reviewed_files: directReviewedFiles,
       verification: {
-        independent_reviews: 2,
+        independent_reviews: 1,
         targeted_tests: 8,
         full_test_suite: "passed",
         typescript: "passed",
