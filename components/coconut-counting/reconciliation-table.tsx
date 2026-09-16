@@ -7,15 +7,21 @@ import { ChevronRight, RefreshCw } from "lucide-react"
 import { CoconutCountingHarvestedEditor } from "@/components/coconut-counting/harvested-editor"
 import { HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import {
+  createRequestAbortScope,
   formatReconciliationNumber,
   formatReconciliationPercent,
+  reconciliationInitialState,
   reconciliationNumber,
   type CoconutCountingCycleReconciliation,
+  type CoconutCountingReconciliationInitialResult,
   type CoconutCountingReconciliationPlot,
   type CoconutCountingReconciliationResponse,
   type CoconutCountingReconciliationSession,
+  type CoconutCountingReconciliationStatus,
 } from "@/lib/coconut-counting-reconciliation"
 import { cn } from "@/lib/utils"
+
+const RECONCILIATION_REQUEST_TIMEOUT_MS = 15_000
 
 function formatHarvestDate(value: string): string {
   const parsed = new Date(`${value.slice(0, 10)}T12:00:00Z`)
@@ -126,65 +132,145 @@ function MobilePlot({
   )
 }
 
-export function CoconutCountingReconciliationTable() {
-  const [data, setData] = useState<CoconutCountingReconciliationResponse | null>(null)
-  const [cycleOptions, setCycleOptions] = useState<number[]>([])
-  const [selectedCycle, setSelectedCycle] = useState<number | null>(null)
-  const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading")
-  const [error, setError] = useState("")
+interface CoconutCountingReconciliationTableProps {
+  initialResult: CoconutCountingReconciliationInitialResult
+}
+
+function requestError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return "The Coconut Counting request timed out after 15 seconds."
+  }
+  return error instanceof Error ? error.message : fallback
+}
+
+async function requestReconciliation(
+  path: string,
+  workflowSignal: AbortSignal,
+  fallbackError: string,
+): Promise<CoconutCountingReconciliationResponse> {
+  const abortScope = createRequestAbortScope(RECONCILIATION_REQUEST_TIMEOUT_MS, workflowSignal)
+  try {
+    const response = await fetch(path, {
+      cache: "no-store",
+      signal: abortScope.signal,
+    })
+    const payload = (await response.json().catch(() => ({}))) as CoconutCountingReconciliationResponse & { error?: string }
+    if (!response.ok) throw new Error(payload.error ?? fallbackError)
+    return payload
+  } catch (caught) {
+    if (abortScope.didTimeout()) {
+      const timeoutError = new Error("The Coconut Counting request timed out after 15 seconds.")
+      timeoutError.name = "TimeoutError"
+      throw timeoutError
+    }
+    throw caught
+  } finally {
+    abortScope.cleanup()
+  }
+}
+
+export function CoconutCountingReconciliationTable({
+  initialResult,
+}: CoconutCountingReconciliationTableProps) {
+  const [initialState] = useState(() => reconciliationInitialState(initialResult))
+  const [data, setData] = useState<CoconutCountingReconciliationResponse | null>(initialState.data)
+  const [cycleOptions, setCycleOptions] = useState<number[]>(initialState.cycleOptions)
+  const [selectedCycle, setSelectedCycle] = useState<number | null>(initialState.selectedCycle)
+  const [status, setStatus] = useState<CoconutCountingReconciliationStatus>(initialState.status)
+  const [error, setError] = useState(initialState.error)
+  const selectedCycleRef = useRef(initialState.selectedCycle)
   const requestGeneration = useRef(0)
+  const requestController = useRef<AbortController | null>(null)
+
+  const beginRequest = useCallback(() => {
+    requestController.current?.abort()
+    const controller = new AbortController()
+    requestController.current = controller
+    return { controller, requestId: ++requestGeneration.current }
+  }, [])
 
   const loadCycle = useCallback(async (cycle: number) => {
-    const requestId = ++requestGeneration.current
+    const { controller, requestId } = beginRequest()
     setStatus("loading")
     setError("")
     try {
-      const response = await fetch(`/api/coconut-counting/reconciliation?cycle=${cycle}`, { cache: "no-store" })
-      const payload = (await response.json().catch(() => ({}))) as CoconutCountingReconciliationResponse & { error?: string }
-      if (!response.ok) throw new Error(payload.error ?? "Unable to load Coconut Counting reconciliation data.")
+      const payload = await requestReconciliation(
+        `/api/coconut-counting/reconciliation?cycle=${cycle}`,
+        controller.signal,
+        "Unable to load Coconut Counting reconciliation data.",
+      )
       if (requestId !== requestGeneration.current) return
       setData(payload)
       setStatus(payload.cycles.length > 0 ? "ready" : "empty")
     } catch (caught) {
       if (requestId !== requestGeneration.current) return
-      setError(caught instanceof Error ? caught.message : "Unable to load Coconut Counting reconciliation data.")
+      setError(requestError(caught, "Unable to load Coconut Counting reconciliation data."))
       setStatus("error")
+    } finally {
+      if (requestId === requestGeneration.current && requestController.current === controller) {
+        requestController.current = null
+      }
     }
-  }, [])
+  }, [beginRequest])
 
   const discoverCycles = useCallback(async (preferredCycle: number | null) => {
+    const { controller, requestId } = beginRequest()
     setStatus("loading")
     setError("")
     try {
-      const response = await fetch("/api/coconut-counting/reconciliation", { cache: "no-store" })
-      const payload = (await response.json().catch(() => ({}))) as CoconutCountingReconciliationResponse & { error?: string }
-      if (!response.ok) throw new Error(payload.error ?? "Unable to discover harvest cycles.")
-      const cycles = payload.cycles.map((item) => item.harvest_cycle)
+      const discovered = await requestReconciliation(
+        "/api/coconut-counting/reconciliation",
+        controller.signal,
+        "Unable to discover harvest cycles.",
+      )
+      if (requestId !== requestGeneration.current) return
+      const cycles = discovered.cycles.map((item) => item.harvest_cycle)
       setCycleOptions(cycles)
       const nextCycle = preferredCycle !== null && cycles.includes(preferredCycle)
         ? preferredCycle
         : (cycles[0] ?? null)
+      selectedCycleRef.current = nextCycle
       setSelectedCycle(nextCycle)
       if (nextCycle === null) {
-        setData(payload)
+        setData(discovered)
         setStatus("empty")
       } else {
-        await loadCycle(nextCycle)
+        const selected = await requestReconciliation(
+          `/api/coconut-counting/reconciliation?cycle=${nextCycle}`,
+          controller.signal,
+          "Unable to load Coconut Counting reconciliation data.",
+        )
+        if (requestId !== requestGeneration.current) return
+        setData(selected)
+        setStatus(selected.cycles.length > 0 ? "ready" : "empty")
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to discover harvest cycles.")
+      if (requestId !== requestGeneration.current) return
+      setError(requestError(caught, "Unable to discover harvest cycles."))
       setStatus("error")
+    } finally {
+      if (requestId === requestGeneration.current && requestController.current === controller) {
+        requestController.current = null
+      }
     }
+  }, [beginRequest])
+
+  const reloadSavedCycle = useCallback((savedCycle: number) => {
+    // Saving belongs to the Cycle/Plot that opened the editor. If the user
+    // navigated while PATCH was in flight, that older completion must not
+    // abort or replace the newer Cycle request.
+    if (selectedCycleRef.current !== savedCycle) return Promise.resolve()
+    return loadCycle(savedCycle)
   }, [loadCycle])
 
   useEffect(() => {
-    void discoverCycles(null)
     return () => {
+      requestController.current?.abort()
       requestGeneration.current += 1
     }
-  }, [discoverCycles])
+  }, [])
 
-  const cycleData = data?.cycles[0] ?? null
+  const cycleData = data?.cycles.find((cycle) => cycle.harvest_cycle === selectedCycle) ?? null
 
   return (
     <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm" aria-labelledby="harvest-reconciliation-heading">
@@ -200,6 +286,7 @@ export function CoconutCountingReconciliationTable() {
               value={selectedCycle ?? ""}
               onChange={(event) => {
                 const cycle = Number(event.target.value)
+                selectedCycleRef.current = cycle
                 setSelectedCycle(cycle)
                 void loadCycle(cycle)
               }}
@@ -222,9 +309,19 @@ export function CoconutCountingReconciliationTable() {
 
       {status === "loading" ? <div className="p-4"><HarvestRequestState tone="loading" message="Loading Coconut Counting harvest records..." /></div> : null}
       {status === "error" ? <div className="p-4"><HarvestRequestState tone="error" message="Unable to load the harvest table." detail={error} onRetry={() => discoverCycles(selectedCycle)} /></div> : null}
-      {status === "empty" ? <div className="p-4"><HarvestRequestState tone="empty" message="No APK records are available for the selected cycle." /></div> : null}
+      {status === "empty" ? (
+        <div className="p-4">
+          <HarvestRequestState
+            tone="empty"
+            message="No Cycle/Plot APK records are available."
+            detail={data && data.unassigned_session_count > 0
+              ? `${data.unassigned_session_count.toLocaleString("en-IN")} legacy session(s) have no Cycle or Plot and remain available in Filtered session records below.`
+              : "New harvest cycles will appear automatically after APK sync."}
+          />
+        </div>
+      ) : null}
 
-      {data && data.unassigned_session_count > 0 ? (
+      {status !== "empty" && data && data.unassigned_session_count > 0 ? (
         <p className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900">
           {data.unassigned_session_count.toLocaleString("en-IN")} legacy session(s) have no Cycle or Plot. They remain available in Filtered session records below.
         </p>
@@ -234,7 +331,7 @@ export function CoconutCountingReconciliationTable() {
         <>
           <div className="space-y-4 p-3 xl:hidden">
             {cycleData.plots.map((summary) => (
-              <MobilePlot key={summary.plot} cycle={cycleData} summary={summary} onReload={() => loadCycle(cycleData.harvest_cycle)} />
+              <MobilePlot key={summary.plot} cycle={cycleData} summary={summary} onReload={() => reloadSavedCycle(cycleData.harvest_cycle)} />
             ))}
           </div>
 
@@ -286,7 +383,7 @@ export function CoconutCountingReconciliationTable() {
                       <td className="px-3 py-3 text-right tabular-nums">{formatReconciliationNumber(summary.combined)}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{formatReconciliationNumber(summary.physical)}</td>
                       <td className={cn("px-3 py-3 text-right tabular-nums", rejectionClass(summary.rejection))}>{formatReconciliationNumber(summary.rejection)}</td>
-                      <td className="px-3 py-3 text-right align-top"><CoconutCountingHarvestedEditor summary={summary} onSaved={() => loadCycle(cycleData.harvest_cycle)} idPrefix="desktop" /></td>
+                      <td className="px-3 py-3 text-right align-top"><CoconutCountingHarvestedEditor summary={summary} onSaved={() => reloadSavedCycle(cycleData.harvest_cycle)} idPrefix="desktop" /></td>
                       <td className="px-3 py-3"> </td>
                     </tr>
                     <tr className="border-b-2 border-primary/20 bg-muted/35 text-xs font-semibold text-muted-foreground">

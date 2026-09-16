@@ -28,6 +28,14 @@ import {
   type CoconutCountingSessionDetail,
   type CoconutNumeric,
 } from "@/lib/coconut-counting-api"
+import {
+  CoconutCountingReconciliationApiError,
+  getCoconutCountingReconciliation,
+} from "@/lib/coconut-counting-reconciliation-api"
+import {
+  reconciliationDataResult,
+  type CoconutCountingReconciliationInitialResult,
+} from "@/lib/coconut-counting-reconciliation"
 
 export const dynamic = "force-dynamic"
 
@@ -482,6 +490,16 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
   const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const filters: CoconutCountingFilters = { fromDate, toDate, status, limit: 50, offset: (page - 1) * 50 }
   const selectedSession = single(params.session)
+  const reconciliationRequest: Promise<CoconutCountingReconciliationInitialResult> =
+    getCoconutCountingReconciliation().then(
+      reconciliationDataResult,
+      (error: unknown) => ({
+        status: "error",
+        error: error instanceof CoconutCountingReconciliationApiError
+          ? error.message
+          : "Unable to load Coconut Counting reconciliation data.",
+      }),
+    )
 
   let dashboard: CoconutCountingDashboardData | null = null
   let detail: CoconutCountingSessionDetail | null = null
@@ -506,12 +524,16 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
     }
   }
 
+  const reconciliation = await reconciliationRequest
+
   return (
     <DashboardShell>
       <div className="mx-auto flex min-w-0 max-w-[1600px] flex-col gap-5 overflow-x-hidden p-3 sm:p-5">
         <Header />
         <CoconutCountingPageHeader />
-        <CoconutCountingReconciliationTable />
+        <CoconutCountingReconciliationTable
+          initialResult={reconciliation}
+        />
 
         <section className="space-y-3" aria-labelledby="filtered-session-records-heading">
           <div>

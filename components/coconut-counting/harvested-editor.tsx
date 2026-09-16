@@ -5,9 +5,12 @@ import { Pencil, Save, X } from "lucide-react"
 
 import { HarvestButtonSpinner } from "@/components/coconut/harvest-request-state"
 import {
+  createRequestAbortScope,
   formatReconciliationNumber,
   type CoconutCountingReconciliationPlot,
 } from "@/lib/coconut-counting-reconciliation"
+
+const HARVESTED_SAVE_TIMEOUT_MS = 15_000
 
 export function CoconutCountingHarvestedEditor({
   summary,
@@ -41,6 +44,7 @@ export function CoconutCountingHarvestedEditor({
 
     setSaving(true)
     setError("")
+    const abortScope = createRequestAbortScope(HARVESTED_SAVE_TIMEOUT_MS)
     try {
       const response = await fetch(
         `/api/coconut-counting-admin/cycles/${summary.harvest_cycle}/plots/${summary.plot}/harvested`,
@@ -52,6 +56,7 @@ export function CoconutCountingHarvestedEditor({
             expected_revision: summary.harvested_revision,
             reason: reason.trim() || null,
           }),
+          signal: abortScope.signal,
         },
       )
       const payload = (await response.json().catch(() => ({}))) as { error?: string; detail?: string }
@@ -60,8 +65,13 @@ export function CoconutCountingHarvestedEditor({
       setReason("")
       setEditing(false)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Harvested total could not be saved.")
+      if (abortScope.didTimeout()) {
+        setError("Saving Harvested timed out after 15 seconds. The save outcome may be unknown; Refresh the harvest table before retrying.")
+      } else {
+        setError(caught instanceof Error ? caught.message : "Harvested total could not be saved.")
+      }
     } finally {
+      abortScope.cleanup()
       setSaving(false)
     }
   }

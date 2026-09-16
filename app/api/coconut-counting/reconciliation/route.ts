@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import {
+  CoconutCountingReconciliationApiError,
+  getCoconutCountingReconciliation,
+} from "@/lib/coconut-counting-reconciliation-api"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -18,31 +21,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Harvest cycle must be an integer from 1 to 100." }, { status: 400 })
   }
 
-  const authHeader = getBasicAuthHeader()
-  if (!authHeader) {
-    return NextResponse.json({ error: "Harvest API credentials are not configured." }, { status: 500 })
-  }
-
-  const target = new URL(`${getApiBaseUrl()}/api/coconut-counting/reconciliation`)
-  if (requestedCycle !== null) target.searchParams.set("harvest_cycle", String(requestedCycle))
-
   try {
-    const response = await fetch(target, {
-      headers: { Authorization: authHeader, Accept: "application/json" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (!response.ok) {
-      const error = typeof payload.detail === "string" ? payload.detail : `Harvest API returned ${response.status}.`
-      return NextResponse.json({ error }, { status: response.status })
-    }
-
+    const payload = await getCoconutCountingReconciliation(requestedCycle ?? undefined)
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
-    const message = error instanceof Error && error.name === "TimeoutError"
-      ? "The Coconut Counting service timed out."
-      : "The Coconut Counting service is unavailable."
-    return NextResponse.json({ error: message }, { status: 503 })
+    const message = error instanceof CoconutCountingReconciliationApiError
+      ? error.message
+      : "The Coconut Counting reconciliation service is unavailable."
+    const status = error instanceof CoconutCountingReconciliationApiError
+      ? (error.status ?? 503)
+      : 503
+    return NextResponse.json({ error: message }, { status })
   }
 }

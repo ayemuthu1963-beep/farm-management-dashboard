@@ -49,12 +49,113 @@ export interface CoconutCountingReconciliationResponse {
   unassigned_session_count: number
 }
 
+export type CoconutCountingReconciliationStatus = "loading" | "ready" | "empty" | "error"
+
+export type CoconutCountingReconciliationInitialResult =
+  | { status: "ready"; data: CoconutCountingReconciliationResponse }
+  | { status: "empty"; data: CoconutCountingReconciliationResponse }
+  | { status: "error"; error: string }
+
+export interface CoconutCountingReconciliationInitialState {
+  data: CoconutCountingReconciliationResponse | null
+  cycleOptions: number[]
+  selectedCycle: number | null
+  status: Exclude<CoconutCountingReconciliationStatus, "loading">
+  error: string
+}
+
 export interface CoconutCountingWorkbookValues {
   gradeA: number
   countB: number
   gradeB: number
   combined: number
   physical: number
+}
+
+export interface RequestAbortScope {
+  signal: AbortSignal
+  didTimeout: () => boolean
+  cleanup: () => void
+}
+
+export function createRequestAbortScope(
+  timeoutMs: number,
+  workflowSignal?: AbortSignal,
+): RequestAbortScope {
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let listeningForWorkflowAbort = false
+  let timedOut = false
+  let cleaned = false
+
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    if (workflowSignal && listeningForWorkflowAbort) {
+      workflowSignal.removeEventListener("abort", abortFromWorkflow)
+      listeningForWorkflowAbort = false
+    }
+  }
+
+  function abortFromWorkflow() {
+    cleanup()
+    controller.abort()
+  }
+
+  if (workflowSignal?.aborted) {
+    controller.abort()
+  } else {
+    if (workflowSignal) {
+      workflowSignal.addEventListener("abort", abortFromWorkflow, { once: true })
+      listeningForWorkflowAbort = true
+    }
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      cleanup()
+      controller.abort()
+    }, timeoutMs)
+  }
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup,
+  }
+}
+
+export function reconciliationDataResult(
+  data: CoconutCountingReconciliationResponse,
+): CoconutCountingReconciliationInitialResult {
+  return data.cycles.length > 0
+    ? { status: "ready", data }
+    : { status: "empty", data }
+}
+
+export function reconciliationInitialState(
+  result: CoconutCountingReconciliationInitialResult,
+): CoconutCountingReconciliationInitialState {
+  if (result.status === "error") {
+    return {
+      data: null,
+      cycleOptions: [],
+      selectedCycle: null,
+      status: "error",
+      error: result.error,
+    }
+  }
+
+  const cycleOptions = result.data.cycles.map((cycle) => cycle.harvest_cycle)
+  return {
+    data: result.data,
+    cycleOptions,
+    selectedCycle: cycleOptions[0] ?? null,
+    status: result.status,
+    error: "",
+  }
 }
 
 export function reconciliationNumber(value: ReconciliationNumeric | CoconutNumeric | null | undefined): number | null {
