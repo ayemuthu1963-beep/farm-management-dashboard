@@ -176,6 +176,7 @@ export default function CycleViewPage() {
   const [dataStatus, setDataStatus] = useState<"loading" | "real" | "empty" | "error">("loading")
   const [errorMessage, setErrorMessage] = useState("")
   const [isSummaryLoading, setIsSummaryLoading] = useState(false)
+  const [summaryUnavailableCycle, setSummaryUnavailableCycle] = useState<number | null>(null)
   const [selectedDetailCycle, setSelectedDetailCycle] = useState<HarvestCycleRow | null>(null)
   const [cycleDetailRows, setCycleDetailRows] = useState<CycleDetailRow[]>([])
   const [cycleDetailStatus, setCycleDetailStatus] = useState<CycleDetailStatus>("idle")
@@ -215,7 +216,9 @@ export default function CycleViewPage() {
   )
   const [displaySummary, setDisplaySummary] = useState<CycleSummary>(emptySummary)
   const handleReconciliationCyclesLoaded = useCallback((cycles: number[]) => {
-    setReconciliationCycleOptions(cycles)
+    setReconciliationCycleOptions((current) => (
+      [...new Set([...current, ...cycles])].sort((a, b) => b - a)
+    ))
     setCycle((current) => current || String(cycles[0] ?? ""))
   }, [])
 
@@ -257,6 +260,7 @@ export default function CycleViewPage() {
     }
 
     summaryRequestInFlight.current = true
+    setSummaryUnavailableCycle(null)
     setIsSummaryLoading(true)
     setErrorMessage("")
     try {
@@ -289,6 +293,7 @@ export default function CycleViewPage() {
     }
 
     summaryRequestInFlight.current = true
+    setSummaryUnavailableCycle(null)
     setIsSummaryLoading(true)
     setErrorMessage("")
     try {
@@ -318,9 +323,17 @@ export default function CycleViewPage() {
 
   function handleCycleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setTableCycle(Number(cycle))
+    const cycleNumber = Number(cycle)
+    setTableCycle(cycleNumber)
     setSelectedDetailCycle(null)
-    if (selectedCycleRow) loadCycleSummary()
+    if (selectedCycleRow) {
+      void loadCycleSummary()
+    } else {
+      setSummaryUnavailableCycle(cycleNumber)
+      setDisplaySummary(emptySummary)
+      setSummaryLabel(`Cycle ${cycleNumber}`)
+      setErrorMessage("")
+    }
   }
 
   function handleDateRangeSubmit(event: FormEvent<HTMLFormElement>) {
@@ -523,6 +536,9 @@ export default function CycleViewPage() {
               onClick={() => {
                 setTableCycle(null)
                 setSelectedDetailCycle(null)
+                setSummaryUnavailableCycle(null)
+                setDisplaySummary(defaultCycleSummary)
+                setSummaryLabel(selectedCycleRow ? `Cycle ${selectedCycleRow.cycle}` : "Latest harvest cycle")
               }}
               disabled={tableCycle === null && !selectedDetailCycle}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-5 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
@@ -539,15 +555,22 @@ export default function CycleViewPage() {
                 <HarvestRequestState tone="loading" message="Calculating harvest summary..." compact />
               </div>
             ) : null}
-            {dataStatus === "real" ? (
+            {summaryUnavailableCycle !== null ? (
+              <HarvestRequestState
+                tone="empty"
+                message={`ODK summary is unavailable for Cycle ${summaryUnavailableCycle}. The APK reconciliation table is shown below.`}
+                compact
+              />
+            ) : null}
+            {dataStatus === "real" && summaryUnavailableCycle === null ? (
               <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
                 Real PostgreSQL data loaded: {summaryLabel}.
               </p>
             ) : null}
-            {dataStatus === "empty" ? (
+            {dataStatus === "empty" && summaryUnavailableCycle === null ? (
               <HarvestRequestState tone="empty" message="No harvest cycle records found." compact />
             ) : null}
-            {dataStatus === "error" ? (
+            {dataStatus === "error" && summaryUnavailableCycle === null ? (
               <HarvestRequestState
                 tone="error"
                 message="Unable to load harvest data."
@@ -563,7 +586,7 @@ export default function CycleViewPage() {
           <Panel title="Harvest Summary" icon={Sigma}>
             <HarvestRequestState tone="loading" message="Loading harvest data..." />
           </Panel>
-        ) : dataStatus === "real" || harvestCycleRows.length > 0 ? (
+        ) : summaryUnavailableCycle === null && (dataStatus === "real" || harvestCycleRows.length > 0) ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
             <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
