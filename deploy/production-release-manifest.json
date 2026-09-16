@@ -3,25 +3,21 @@
   "environment": "Production",
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
-  "release_note": "Expose MFMS Intelligence to authorized Production readers and preserve 401/403 responses",
+  "release_note": "Add Preview-verified Cycle and Plot columns to Coconut Counting",
   "base_commit": "4a5d7a074ef21059b364d8503f5e8ee275143e32",
   "preview_approved": {
-    "revision": "e353b9104baf31b092d0655c2c9e0c7c98cd5f02",
-    "image_id": "sha256:2c563e1a4b4f8fc808bbd6376be91f640884a767656de291e6c7abaa96754046",
-    "feature_revision": "3c342b1c895fff52bc3347ae19fd2beed12d0ede",
+    "revision": "8e43c7180024330879ffee796dd78562606cdaff",
+    "image_id": "sha256:c078f99b38f2d6de9bdf0094a03dd5fff70399ea8cf61af007cf407c9a35f18e",
+    "feature_revision": "56e7ae9d3045b1c212ff6a67675991db47c448e7",
     "verified_files": [
-      "lib/mfms-admin-identity.ts",
-      "tests/navigation-consistency.mjs"
+      "app/coconut-counting/page.tsx",
+      "lib/coconut-counting-api.ts",
+      "tests/coconut-counting-cycle-plot.mjs"
     ],
     "production_adaptations": [
-      "app/api/intelligence/ask/route.ts",
-      "components/intelligence/intelligence-client.tsx",
       "deploy/production-release-manifest.json",
-      "lib/mfms-navigation.ts",
-      "tests/farm-calendar-homepage.mjs",
-      "tests/farm-calendar-production-promotion.mjs",
-      "tests/mfms-intelligence-contract.mjs",
-      "tests/mfms-intelligence-route.mjs"
+      "package.json",
+      "tests/farm-calendar-production-promotion.mjs"
     ]
   },
   "protected_invariants": {
@@ -34,15 +30,11 @@
     "proxy_configuration": "unchanged"
   },
   "allowed_paths": [
-    "app/api/intelligence/ask/route.ts",
-    "components/intelligence/intelligence-client.tsx",
+    "app/coconut-counting/page.tsx",
     "deploy/production-release-manifest.json",
-    "lib/mfms-admin-identity.ts",
-    "lib/mfms-navigation.ts",
-    "tests/farm-calendar-homepage.mjs",
-    "tests/farm-calendar-production-promotion.mjs",
-    "tests/mfms-intelligence-contract.mjs",
-    "tests/mfms-intelligence-route.mjs",
-    "tests/navigation-consistency.mjs"
+    "lib/coconut-counting-api.ts",
+    "package.json",
+    "tests/coconut-counting-cycle-plot.mjs",
+    "tests/farm-calendar-production-promotion.mjs"
   ]
 }

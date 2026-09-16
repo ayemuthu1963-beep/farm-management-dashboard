@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
-import { createHash, createHmac } from "node:crypto"
+import { createHmac } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { NextRequest, NextResponse } from "next/server.js"
 import * as api from "../lib/api.ts"
 import * as identity from "../lib/mfms-admin-identity.ts"
-import { homepageNavigationItems, isNavigationItemActive, mfmsNavigationItems, sidebarNavigationItems } from "../lib/mfms-navigation.ts"
+import { isNavigationItemActive, mfmsNavigationItems, sidebarNavigationItems } from "../lib/mfms-navigation.ts"
 
 // Execute the actual route with the real Next request/response and shared signing
 // helpers; only network IO is replaced. No live credentials or service are used.
@@ -24,12 +24,11 @@ const routeRequire = (specifier) => {
 }
 Function("require", "module", "exports", output)(routeRequire, compiled, compiled.exports)
 const { POST } = compiled.exports
-const environmentKeys = ["MFMS_ENV", "MFMS_TARGET_DATABASE", "NEXT_PUBLIC_MFMS_ENV", "NEXT_PUBLIC_MFMS_TARGET_DATABASE", "NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL", "MFMS_TRUST_PROXY_ACTOR_HEADERS", "MFMS_ACTOR_ASSERTION_SECRET", "HARVEST_API_BASE_URL", "HARVEST_API_USERNAME", "HARVEST_API_PASSWORD"]
+const environmentKeys = ["MFMS_ENV", "MFMS_TARGET_DATABASE", "NEXT_PUBLIC_MFMS_ENV", "NEXT_PUBLIC_MFMS_TARGET_DATABASE", "NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL", "MFMS_TRUST_PROXY_ACTOR_HEADERS", "HARVEST_API_BASE_URL", "HARVEST_API_USERNAME", "HARVEST_API_PASSWORD"]
 const originalEnvironment = Object.fromEntries(environmentKeys.map((key) => [key, process.env[key]]))
 const originalFetch = globalThis.fetch
 const originalTimeout = AbortSignal.timeout
 const signingSecret = "intelligence-test-signing-secret-only"
-const actorSigningSecret = "intelligence-test-actor-signing-secret-only"
 const validResponse = {
   answer: "302302 coconuts across 19760 harvested tree-cycle records.", status: "ANSWERED",
   data_as_of: "2026-09-09T07:45:33Z", period: "Latest 10 completed harvest cycles", period_start: "2025-01-01", period_end: "2026-08-04",
@@ -48,7 +47,6 @@ function configure(overrides = {}) {
     MFMS_ENV: "production", MFMS_TARGET_DATABASE: "mfms_server_prod",
     NEXT_PUBLIC_MFMS_ENV: "production", NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL: "mfms_server_prod",
     MFMS_TRUST_PROXY_ACTOR_HEADERS: "true", HARVEST_API_BASE_URL: "http://harvest-api:8000",
-    MFMS_ACTOR_ASSERTION_SECRET: actorSigningSecret,
     HARVEST_API_USERNAME: "test-backend", HARVEST_API_PASSWORD: signingSecret,
     ...Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== undefined)),
   })
@@ -61,16 +59,8 @@ function configure(overrides = {}) {
   AbortSignal.timeout = (milliseconds) => { timeoutCalls.push(milliseconds); return originalTimeout(milliseconds) }
 }
 async function ask({ body = JSON.stringify({ question: " Latest ten completed harvest cycles " }), headers = {}, authenticated = true } = {}) {
-  const configuredEnvironment = process.env.MFMS_ENV
-  const gatewayEnvironment = configuredEnvironment === "uat" ? "preview" : configuredEnvironment
-  const gatewayHeaders = authenticated ? {
-    "x-mfms-user": "verified-owner",
-    "x-mfms-role": "owner",
-    "x-mfms-environment": gatewayEnvironment,
-    "x-mfms-permission": "read",
-  } : {}
   return POST(new NextRequest("https://muthufarms.com/api/intelligence/ask", {
-    method: "POST", body, headers: { "content-type": "application/json", ...gatewayHeaders, ...headers },
+    method: "POST", body, headers: { "content-type": "application/json", ...(authenticated ? { "x-mfms-user": "verified-owner" } : {}), ...headers },
     ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
   }))
 }
@@ -104,11 +94,6 @@ try {
     assert.match(timestamp, /^\d+$/)
     assert.equal(init.headers["X-MFMS-Authenticated-User"], "verified-owner")
     assert.equal(init.headers["X-MFMS-Authenticated-User-Signature"], createHmac("sha256", signingSecret).update([timestamp, "POST", "/api/intelligence/ask", "verified-owner"].join("\n")).digest("hex"))
-    const bodySha256 = createHash("sha256").update(init.body).digest("hex")
-    assert.equal(init.headers["X-MFMS-Authenticated-Role"], "admin")
-    assert.equal(init.headers["X-MFMS-Authenticated-Environment"], environment)
-    assert.equal(init.headers["X-MFMS-Authenticated-Body-SHA256"], bodySha256)
-    assert.equal(init.headers["X-MFMS-Authenticated-Signature"], createHmac("sha256", actorSigningSecret).update([timestamp, "POST", "/api/intelligence/ask", bodySha256, "verified-owner", "admin", environment].join("\n")).digest("hex"))
     assert.ok(!JSON.stringify(init.headers).includes("mfms-preview-backend"), "Private identity is owned by the environment-validated backend")
     assert.equal(result.headers.get("cache-control"), "no-store, max-age=0")
     cases++
@@ -126,33 +111,9 @@ try {
   configure({ MFMS_ENV: "preview", MFMS_TARGET_DATABASE: "mfms_server_uat", NEXT_PUBLIC_MFMS_ENV: "preview", NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL: "mfms_server_uat", HARVEST_API_BASE_URL: "http://harvest-api:8000" }); await rejected(403)
   configure({ HARVEST_API_BASE_URL: "http://harvest-api:8000/" })
   assert.equal((await ask()).status, 200); assert.equal(requests[0].target, "http://harvest-api:8000/api/intelligence/ask"); cases++
-  for (const [gatewayRole, signedRole] of [["owner", "admin"], ["admin", "admin"], ["manager", "manager"], ["viewer", "viewer"]]) {
-    configure()
-    const response = await ask({ headers: { "x-mfms-user": `verified-${gatewayRole}`, "x-mfms-role": gatewayRole } })
-    assert.equal(response.status, 200)
-    assert.deepEqual(await response.json(), validResponse)
-    assert.equal(requests[0].init.headers["X-MFMS-Authenticated-User"], `verified-${gatewayRole}`)
-    assert.equal(requests[0].init.headers["X-MFMS-Authenticated-Role"], signedRole)
-    cases++
-  }
-  configure()
-  const forged = await ask({ headers: {
-    "x-mfms-user": "verified-viewer", "x-mfms-role": "viewer",
-    "x-mfms-authenticated-user": "forged-owner", "x-mfms-authenticated-role": "admin",
-    "x-mfms-authenticated-signature": "f".repeat(64),
-  } })
-  assert.equal(forged.status, 200)
-  assert.equal(requests[0].init.headers["X-MFMS-Authenticated-User"], "verified-viewer")
-  assert.equal(requests[0].init.headers["X-MFMS-Authenticated-Role"], "viewer")
-  assert.notEqual(requests[0].init.headers["X-MFMS-Authenticated-Signature"], "f".repeat(64))
-  cases++
   configure(); await rejected(401, { authenticated: false })
   configure(); await rejected(401, { authenticated: false, headers: { authorization: `Basic ${Buffer.from("spoof:password").toString("base64")}` } })
   configure({ MFMS_TRUST_PROXY_ACTOR_HEADERS: "false" }); await rejected(503)
-  configure(); await rejected(403, { headers: { "x-mfms-environment": "preview" } })
-  configure(); await rejected(403, { headers: { "x-mfms-permission": "write" } })
-  configure(); await rejected(403, { headers: { "x-mfms-role": "tester" } })
-  configure({ MFMS_ACTOR_ASSERTION_SECRET: undefined }); await rejected(503)
   configure({ HARVEST_API_PASSWORD: undefined }); await rejected(503)
   configure(); await rejected(401, { headers: { "x-mfms-user": "x".repeat(129) } })
   for (const body of ["{", "null", "[]", "{}", '{"question":42}', '{"question":"hello","service_id":"mfms-production-backend"}', '{"question":"hello","sql":"SELECT 1"}']) {
@@ -244,16 +205,8 @@ try {
     const response = await ask({ body: JSON.stringify({ question: "Recommend a treatment" }) })
     assert.equal(response.status, upstreamStatus); assert.equal((await response.json()).status, status); cases++
   }
-  for (const status of [401, 403]) {
-    configure(); globalThis.fetch = async () => Response.json({ detail: signingSecret }, { status })
-    const denied = await ask()
-    assert.equal(denied.status, status)
-    const payload = await denied.json()
-    assert.equal(payload.status, "BLOCKED_SECURITY")
-    assert.equal(payload.data_source_status, "NOT_QUERIED_FAIL_CLOSED")
-    assert.ok(!JSON.stringify(payload).includes(signingSecret))
-    cases++
-  }
+  configure(); globalThis.fetch = async () => Response.json({ detail: signingSecret }, { status: 401 })
+  assert.equal((await ask()).status, 502); cases++
   configure(); globalThis.fetch = async () => { throw new Error(signingSecret) }
   const unavailable = await ask(); assert.equal(unavailable.status, 503); assert.ok(!(await unavailable.text()).includes(signingSecret)); cases++
   configure(); globalThis.fetch = async () => new Response("not JSON", { status: 500 })
@@ -268,8 +221,6 @@ try {
   const entry = mfmsNavigationItems.find((item) => item.id === "mfms-intelligence")
   assert.ok(entry); assert.equal(entry.href, "/intelligence"); assert.equal(entry.status, "active")
   assert.equal(sidebarNavigationItems.filter((item) => item.id === entry.id).length, 1)
-  assert.equal(homepageNavigationItems.filter((item) => item.id === entry.id).length, 1)
-  assert.strictEqual(homepageNavigationItems.find((item) => item.id === entry.id), entry, "Homepage and sidebar must project the same central module entry")
   assert.equal(isNavigationItemActive("/intelligence", entry), true)
   assert.equal(isNavigationItemActive("/intelligence-extra", entry), false)
   for (const path of ["app/intelligence/page.tsx", "components/intelligence/intelligence-client.tsx"]) assert.doesNotMatch(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"), /\b(?:preview|uat)\b/i)

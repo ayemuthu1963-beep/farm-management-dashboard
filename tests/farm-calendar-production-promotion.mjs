@@ -9,19 +9,15 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const intelligenceVerifiedFiles = [
-  "lib/mfms-admin-identity.ts",
-  "tests/navigation-consistency.mjs",
+const coconutCountingVerifiedFiles = [
+  "app/coconut-counting/page.tsx",
+  "lib/coconut-counting-api.ts",
+  "tests/coconut-counting-cycle-plot.mjs",
 ]
-const intelligenceProductionAdaptations = [
-  "app/api/intelligence/ask/route.ts",
-  "components/intelligence/intelligence-client.tsx",
+const coconutCountingProductionAdaptations = [
   "deploy/production-release-manifest.json",
-  "lib/mfms-navigation.ts",
-  "tests/farm-calendar-homepage.mjs",
+  "package.json",
   "tests/farm-calendar-production-promotion.mjs",
-  "tests/mfms-intelligence-contract.mjs",
-  "tests/mfms-intelligence-route.mjs",
 ]
 
 const manifest = JSON.parse(read("deploy/production-release-manifest.json"))
@@ -32,15 +28,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Expose MFMS Intelligence to authorized Production readers and preserve 401/403 responses",
+  "Add Preview-verified Cycle and Plot columns to Coconut Counting",
 )
 assert.equal(manifest.base_commit, "4a5d7a074ef21059b364d8503f5e8ee275143e32")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "e353b9104baf31b092d0655c2c9e0c7c98cd5f02",
-  image_id: "sha256:2c563e1a4b4f8fc808bbd6376be91f640884a767656de291e6c7abaa96754046",
-  feature_revision: "3c342b1c895fff52bc3347ae19fd2beed12d0ede",
-  verified_files: intelligenceVerifiedFiles,
-  production_adaptations: intelligenceProductionAdaptations,
+  revision: "8e43c7180024330879ffee796dd78562606cdaff",
+  image_id: "sha256:c078f99b38f2d6de9bdf0094a03dd5fff70399ea8cf61af007cf407c9a35f18e",
+  feature_revision: "56e7ae9d3045b1c212ff6a67675991db47c448e7",
+  verified_files: coconutCountingVerifiedFiles,
+  production_adaptations: coconutCountingProductionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -54,8 +50,8 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...intelligenceVerifiedFiles,
-    ...intelligenceProductionAdaptations,
+    ...coconutCountingVerifiedFiles,
+    ...coconutCountingProductionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
@@ -123,4 +119,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Intelligence release and preserved Production promotion contracts: PASS")
+console.log("Coconut Counting Cycle/Plot release and preserved Production promotion contracts: PASS")

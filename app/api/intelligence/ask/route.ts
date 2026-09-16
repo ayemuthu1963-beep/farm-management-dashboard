@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getBasicAuthHeader } from "@/lib/api"
-import { getIntelligenceActorAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
+import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -23,9 +23,8 @@ const PERIOD_KINDS = new Set(["latest_irrigation_dates", "last_calendar_days", "
 const BEETLE_PERIOD_KINDS = new Set(["latest_inspection_dates", "last_calendar_days", "relative_day", "current_month", "previous_month", "date_range", "all_available"])
 
 function safeError(status: number, message: string) {
-  const blockedStatus = status === 401 || status === 403 ? "BLOCKED_SECURITY" : "BLOCKED_NOT_YET_SUPPORTED"
   return NextResponse.json({
-    answer: "", status: blockedStatus, data_as_of: "", period: null,
+    answer: "", status: "BLOCKED_NOT_YET_SUPPORTED", data_as_of: "", period: null,
     period_start: null, period_end: null, cycles: [], denominator: null, quality_flags: [],
     data_source_status: "NOT_QUERIED_FAIL_CLOSED", analysis_plan: null, table: null, chart: null,
     blocked_reason: message, metabase_call_made: false, provider_call_made: false,
@@ -290,28 +289,22 @@ export async function POST(request: NextRequest) {
   if (fields.length !== 1 || fields[0] !== "question" || typeof question !== "string") return safeError(400, "Only the question field is accepted.")
   const normalizedQuestion = question.trim()
   if (!normalizedQuestion || normalizedQuestion.length > MAX_QUESTION_CHARACTERS) return safeError(422, `Question must contain 1 to ${MAX_QUESTION_CHARACTERS} characters.`)
-  const body = JSON.stringify({ question: normalizedQuestion })
 
   const authHeader = getBasicAuthHeader()
   if (!authHeader) return safeError(503, "The MFMS backend is not configured.")
   let actorHeaders: Record<string, string>
   try {
-    actorHeaders = getIntelligenceActorAssertionHeaders({ requestHeaders: request.headers, method: "POST", target, body })
+    actorHeaders = getAuthenticatedUserAssertionHeaders({ requestHeaders: request.headers, method: "POST", target })
   } catch (error) {
     const code = error instanceof MfmsAdminIdentityError ? error.status : 503
-    const message = code === 403
-      ? "This MFMS account is not authorized to read Intelligence."
-      : "An authenticated MFMS session is required."
-    return safeError(code, message)
+    return safeError(code, "An authenticated MFMS session is required.")
   }
   try {
     const response = await fetch(target, {
       method: "POST", headers: { Authorization: authHeader, Accept: "application/json", "Content-Type": "application/json", ...actorHeaders },
-      body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+      body: JSON.stringify({ question: normalizedQuestion }), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     })
     const payload: unknown = await response.json().catch(() => null)
-    if (response.status === 401) return safeError(401, "An authenticated MFMS session is required.")
-    if (response.status === 403) return safeError(403, "This MFMS account is not authorized to read Intelligence.")
     if (!isSafeResponse(payload)) return safeError(502, "MFMS Intelligence returned an invalid response.")
     return NextResponse.json(payload, { status: response.status, headers: NO_STORE_HEADERS })
   } catch {
