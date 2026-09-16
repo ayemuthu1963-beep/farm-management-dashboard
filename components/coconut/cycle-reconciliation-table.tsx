@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { Pencil, RefreshCw, Save, X } from "lucide-react"
 
 import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
@@ -261,8 +261,10 @@ export function CycleReconciliationTable({
   const [data, setData] = useState<CoconutCountingReconciliationResponse | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading")
   const [error, setError] = useState("")
+  const requestGeneration = useRef(0)
 
   const load = useCallback(async () => {
+    const requestId = ++requestGeneration.current
     setStatus("loading")
     setError("")
     try {
@@ -272,10 +274,12 @@ export function CycleReconciliationTable({
       const response = await fetch(`/api/coconut-harvest/cycle-reconciliation${suffix}`, { cache: "no-store" })
       const payload = (await response.json().catch(() => ({}))) as CoconutCountingReconciliationResponse & { error?: string }
       if (!response.ok) throw new Error(payload.error ?? "Unable to load Coconut Counting reconciliation data.")
+      if (requestId !== requestGeneration.current) return
       setData(payload)
       onCyclesLoaded?.(payload.cycles.map((item) => item.harvest_cycle))
       setStatus(payload.cycles.length > 0 ? "ready" : "empty")
     } catch (caught) {
+      if (requestId !== requestGeneration.current) return
       setError(caught instanceof Error ? caught.message : "Unable to load Coconut Counting reconciliation data.")
       setStatus("error")
     }
@@ -283,6 +287,9 @@ export function CycleReconciliationTable({
 
   useEffect(() => {
     void load()
+    return () => {
+      requestGeneration.current += 1
+    }
   }, [load])
 
   if (status === "loading") return <HarvestRequestState tone="loading" message="Loading Coconut Counting harvest records..." />
