@@ -55,19 +55,33 @@ test("Harvested is editable only on each Cycle and Plot total with concurrency p
   assert.match(writeRoute, /getAuthenticatedUserAssertionHeaders/)
   assert.match(writeRoute, /expectedRevision > 0 && !reason/)
   assert.match(writeRoute, /AbortSignal\.timeout\(15_000\)/)
+  assert.match(writeRoute, /MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES/)
+  assert.doesNotMatch(writeRoute, /MFMS_HARVEST_CYCLE_WRITES_ENABLED/)
 })
 
 test("Cycle filter and all-future-cycle modes use the backend reconciliation endpoint", () => {
   assert.match(page, /cycle=\{tableCycle\}/)
-  assert.match(page, /setTableCycle\(Number\(cycle\)\)/)
+  assert.match(page, /const cycleNumber = Number\(cycle\)/)
+  assert.match(page, /setTableCycle\(cycleNumber\)/)
   assert.match(page, /setTableCycle\(null\)/)
   assert.match(page, /reconciliationCycleOptions, \.\.\.harvestCycleOptions/)
   assert.match(page, /onCyclesLoaded=\{handleReconciliationCyclesLoaded\}/)
+  assert.match(page, /new Set\(\[\.\.\.current, \.\.\.cycles\]\)/)
   assert.match(component, /payload\.cycles\.map\(\(item\) => item\.harvest_cycle\)/)
   assert.match(readRoute, /api\/coconut-counting\/reconciliation/)
   assert.match(readRoute, /target\.searchParams\.set\("harvest_cycle"/)
   assert.doesNotMatch(component, /harvest_cycle === 20|cycle === 20|Cycle 20/)
   assert.doesNotMatch(harvestApi, /applyCyclePlotBreakdown|fetchCyclePlotSourceRows/)
+})
+
+test("cycle changes cannot be overwritten by stale requests or stale ODK summaries", () => {
+  assert.match(component, /const requestGeneration = useRef\(0\)/)
+  assert.match(component, /const requestId = \+\+requestGeneration\.current/)
+  assert.match(component, /requestId !== requestGeneration\.current/)
+  assert.match(component, /requestGeneration\.current \+= 1/)
+  assert.match(page, /summaryUnavailableCycle/)
+  assert.match(page, /ODK summary is unavailable for Cycle/)
+  assert.match(page, /setSummaryUnavailableCycle\(null\)/)
 })
 
 test("counts and Excel percentages format without hiding discrepancies", () => {
