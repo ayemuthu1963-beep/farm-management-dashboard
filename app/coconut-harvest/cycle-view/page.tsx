@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
   CalendarRange,
@@ -19,7 +19,6 @@ import { Header } from "@/components/farm/header"
 import { Panel } from "@/components/farm/panel"
 import { StatCard } from "@/components/farm/stat-card"
 import { CoconutSubheader } from "@/components/coconut/coconut-subheader"
-import { CycleReconciliationTable } from "@/components/coconut/cycle-reconciliation-table"
 import { HarvestButtonSpinner, HarvestRequestState } from "@/components/coconut/harvest-request-state"
 import {
   formatRupees,
@@ -27,6 +26,7 @@ import {
   type HarvestCycleRow,
 } from "@/lib/coconut-harvest-data"
 import type { HarvestSummaryData } from "@/lib/coconut-harvest-api"
+import { cn } from "@/lib/utils"
 
 interface CycleViewData {
   cycleSummary: CycleSummary
@@ -43,6 +43,16 @@ const emptySummary: CycleSummary = {
 }
 
 type SortDirection = "asc" | "desc"
+type CycleSortKey = keyof Pick<
+  HarvestCycleRow,
+  "cycle" | "startDate" | "endDate" | "status" | "trees" | "bunches" | "nuts" | "salePrice" | "totalSale"
+>
+
+interface CycleSortConfig {
+  key: CycleSortKey
+  direction: SortDirection
+}
+
 interface CycleDetailRow {
   treeNo: string
   harvestDate: string
@@ -98,6 +108,37 @@ function sortIndicator(direction: SortDirection | undefined) {
   return <ChevronsUpDown className="size-3.5 text-primary/45" aria-hidden="true" />
 }
 
+function CycleSortableHeader({
+  label,
+  sortKey,
+  align = "left",
+  sortConfig,
+  onSort,
+}: {
+  label: string
+  sortKey: CycleSortKey
+  align?: "left" | "right"
+  sortConfig: CycleSortConfig | null
+  onSort: (key: CycleSortKey) => void
+}) {
+  const direction = sortConfig?.key === sortKey ? sortConfig.direction : undefined
+
+  return (
+    <th className="px-3 py-2.5" scope="col" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full cursor-pointer items-center gap-1.5 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          align === "right" ? "justify-end text-right" : "justify-start text-left"
+        }`}
+      >
+        <span>{label}</span>
+        {sortIndicator(direction)}
+      </button>
+    </th>
+  )
+}
+
 function CycleDetailSortableHeader({
   label,
   sortKey,
@@ -127,6 +168,29 @@ function CycleDetailSortableHeader({
       </button>
     </th>
   )
+}
+
+function compareCycles(a: HarvestCycleRow, b: HarvestCycleRow, key: CycleSortKey) {
+  if (key === "startDate" || key === "endDate") {
+    return a[key].localeCompare(b[key])
+  }
+
+  if (key === "status") {
+    return a.status.localeCompare(b.status)
+  }
+
+  return a[key] - b[key]
+}
+
+function sortCycles(rows: HarvestCycleRow[], sortConfig: CycleSortConfig | null) {
+  if (!sortConfig) {
+    return rows
+  }
+
+  return [...rows].sort((a, b) => {
+    const comparison = compareCycles(a, b, sortConfig.key)
+    return sortConfig.direction === "asc" ? comparison : -comparison
+  })
 }
 
 function compareCycleDetails(a: CycleDetailRow, b: CycleDetailRow, key: CycleDetailSortKey) {
@@ -170,13 +234,12 @@ export default function CycleViewPage() {
   const [cycle, setCycle] = useState("")
   const [startDate, setStartDate] = useState("2026-01-01")
   const [endDate, setEndDate] = useState("2026-07-02")
-  const [tableCycle, setTableCycle] = useState<number | null>(null)
-  const [reconciliationCycleOptions, setReconciliationCycleOptions] = useState<number[]>([])
+  const [showAll, setShowAll] = useState(true)
   const [summaryLabel, setSummaryLabel] = useState("Latest harvest cycle")
   const [dataStatus, setDataStatus] = useState<"loading" | "real" | "empty" | "error">("loading")
   const [errorMessage, setErrorMessage] = useState("")
   const [isSummaryLoading, setIsSummaryLoading] = useState(false)
-  const [summaryUnavailableCycle, setSummaryUnavailableCycle] = useState<number | null>(null)
+  const [cycleSortConfig, setCycleSortConfig] = useState<CycleSortConfig | null>(null)
   const [selectedDetailCycle, setSelectedDetailCycle] = useState<HarvestCycleRow | null>(null)
   const [cycleDetailRows, setCycleDetailRows] = useState<CycleDetailRow[]>([])
   const [cycleDetailStatus, setCycleDetailStatus] = useState<CycleDetailStatus>("idle")
@@ -186,13 +249,12 @@ export default function CycleViewPage() {
   const summaryRequestInFlight = useRef(false)
   const detailRequestInFlight = useRef<number | null>(null)
   const detailExportInFlight = useRef(false)
-  const cycleSelectionTouched = useRef(false)
   const allCyclesPanelRef = useRef<HTMLDivElement>(null)
   const detailPanelRef = useRef<HTMLDivElement>(null)
   const { harvestCycleRows, harvestCycleOptions } = cycleViewData
-  const allCycleOptions = useMemo(
-    () => [...new Set([...reconciliationCycleOptions, ...harvestCycleOptions])].sort((a, b) => b - a),
-    [harvestCycleOptions, reconciliationCycleOptions],
+  const sortedHarvestCycleRows = useMemo(
+    () => sortCycles(harvestCycleRows, cycleSortConfig),
+    [harvestCycleRows, cycleSortConfig],
   )
   const sortedCycleDetailRows = useMemo(
     () => sortCycleDetails(cycleDetailRows, cycleDetailSortConfig),
@@ -201,13 +263,6 @@ export default function CycleViewPage() {
   const selectedCycleRow = useMemo(
     () => harvestCycleRows.find((row) => String(row.cycle) === cycle),
     [cycle, harvestCycleRows],
-  )
-  const odkOnlyCycleRows = useMemo(
-    () => harvestCycleRows.filter((row) => (
-      (tableCycle === null || row.cycle === tableCycle)
-      && !reconciliationCycleOptions.includes(row.cycle)
-    )),
-    [harvestCycleRows, reconciliationCycleOptions, tableCycle],
   )
   const defaultCycleSummary = useMemo(
     () =>
@@ -223,11 +278,6 @@ export default function CycleViewPage() {
     [cycleViewData.cycleSummary, selectedCycleRow],
   )
   const [displaySummary, setDisplaySummary] = useState<CycleSummary>(emptySummary)
-  const handleReconciliationCyclesLoaded = useCallback((cycles: number[]) => {
-    setReconciliationCycleOptions((current) => (
-      [...new Set([...current, ...cycles])].sort((a, b) => b - a)
-    ))
-  }, [])
 
   async function loadCycleData() {
     setDataStatus("loading")
@@ -240,6 +290,7 @@ export default function CycleViewPage() {
       const data = (await response.json()) as CycleViewData
       if (data.harvestCycleRows.length > 0) {
         setCycleViewData(data)
+        setCycle(String(data.harvestCycleOptions[0]))
         setDisplaySummary(data.cycleSummary)
         setSummaryLabel(`Cycle ${data.harvestCycleOptions[0]}`)
         setDataStatus("real")
@@ -257,28 +308,6 @@ export default function CycleViewPage() {
   }, [])
 
   useEffect(() => {
-    if (!cycleSelectionTouched.current && allCycleOptions.length > 0) {
-      const newestCycle = allCycleOptions[0]
-      const newestCycleRow = harvestCycleRows.find((row) => row.cycle === newestCycle)
-      setCycle(String(newestCycle))
-      setSummaryLabel(`Cycle ${newestCycle}`)
-      if (newestCycleRow) {
-        setSummaryUnavailableCycle(null)
-        setDisplaySummary({
-          totalHarvests: newestCycleRow.trees,
-          totalBunches: newestCycleRow.bunches,
-          totalNuts: newestCycleRow.nuts,
-          averageNuts: newestCycleRow.trees > 0 ? newestCycleRow.nuts / newestCycleRow.trees : 0,
-          lifetimeSale: newestCycleRow.totalSale,
-        })
-      } else if (reconciliationCycleOptions.includes(newestCycle)) {
-        setSummaryUnavailableCycle(newestCycle)
-        setDisplaySummary(emptySummary)
-      }
-    }
-  }, [allCycleOptions, harvestCycleRows, reconciliationCycleOptions])
-
-  useEffect(() => {
     setDisplaySummary(defaultCycleSummary)
   }, [defaultCycleSummary])
 
@@ -288,7 +317,6 @@ export default function CycleViewPage() {
     }
 
     summaryRequestInFlight.current = true
-    setSummaryUnavailableCycle(null)
     setIsSummaryLoading(true)
     setErrorMessage("")
     try {
@@ -321,7 +349,6 @@ export default function CycleViewPage() {
     }
 
     summaryRequestInFlight.current = true
-    setSummaryUnavailableCycle(null)
     setIsSummaryLoading(true)
     setErrorMessage("")
     try {
@@ -351,23 +378,22 @@ export default function CycleViewPage() {
 
   function handleCycleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    cycleSelectionTouched.current = true
-    const cycleNumber = Number(cycle)
-    setTableCycle(cycleNumber)
-    setSelectedDetailCycle(null)
-    if (selectedCycleRow) {
-      void loadCycleSummary()
-    } else {
-      setSummaryUnavailableCycle(cycleNumber)
-      setDisplaySummary(emptySummary)
-      setSummaryLabel(`Cycle ${cycleNumber}`)
-      setErrorMessage("")
-    }
+    loadCycleSummary()
   }
 
   function handleDateRangeSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     loadDateRangeSummary()
+  }
+
+  function handleCycleSort(key: CycleSortKey) {
+    setCycleSortConfig((current) => {
+      if (current?.key === key) {
+        return { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      }
+
+      return { key, direction: "asc" }
+    })
   }
 
   function handleCycleDetailSort(key: CycleDetailSortKey) {
@@ -414,9 +440,13 @@ export default function CycleViewPage() {
     }
   }
 
-  function handleViewTreeRecords(cycleNumber: number) {
-    const row = harvestCycleRows.find((candidate) => candidate.cycle === cycleNumber)
-    if (row) loadCycleDetails(row)
+  function handleCycleRowClick(row: HarvestCycleRow) {
+    const selectedText = window.getSelection()?.toString().trim()
+    if (selectedText) {
+      return
+    }
+
+    loadCycleDetails(row)
   }
 
   async function exportCycleDetailsToCsv() {
@@ -488,6 +518,15 @@ export default function CycleViewPage() {
     requestAnimationFrame(() => allCyclesPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
   }
 
+  function handleCycleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: HarvestCycleRow) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return
+    }
+
+    event.preventDefault()
+    loadCycleDetails(row)
+  }
+
   return (
     <DashboardShell>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 p-3 sm:p-5">
@@ -505,14 +544,11 @@ export default function CycleViewPage() {
                 <select
                   id="cycle"
                   value={cycle}
-                  onChange={(e) => {
-                    cycleSelectionTouched.current = true
-                    setCycle(e.target.value)
-                  }}
+                  onChange={(e) => setCycle(e.target.value)}
                   onKeyDown={submitParentFormFromSelect}
                   className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
                 >
-                  {allCycleOptions.map((c) => (
+                  {harvestCycleOptions.map((c) => (
                     <option key={c} value={c}>
                       Cycle {c}
                     </option>
@@ -565,17 +601,10 @@ export default function CycleViewPage() {
             </form>
             <button
               type="button"
-              onClick={() => {
-                setTableCycle(null)
-                setSelectedDetailCycle(null)
-                setSummaryUnavailableCycle(null)
-                setDisplaySummary(defaultCycleSummary)
-                setSummaryLabel(selectedCycleRow ? `Cycle ${selectedCycleRow.cycle}` : "Latest harvest cycle")
-              }}
-              disabled={tableCycle === null && !selectedDetailCycle}
+              onClick={() => setShowAll((v) => !v)}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-5 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
             >
-              Show All Harvests
+              {showAll ? "Hide All Harvests" : "Show All Harvests"}
             </button>
           </div>
           <div className="mt-3">
@@ -587,22 +616,15 @@ export default function CycleViewPage() {
                 <HarvestRequestState tone="loading" message="Calculating harvest summary..." compact />
               </div>
             ) : null}
-            {summaryUnavailableCycle !== null ? (
-              <HarvestRequestState
-                tone="empty"
-                message={`ODK summary is unavailable for Cycle ${summaryUnavailableCycle}. The APK reconciliation table is shown below.`}
-                compact
-              />
-            ) : null}
-            {dataStatus === "real" && summaryUnavailableCycle === null ? (
+            {dataStatus === "real" ? (
               <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
                 Real PostgreSQL data loaded: {summaryLabel}.
               </p>
             ) : null}
-            {dataStatus === "empty" && summaryUnavailableCycle === null ? (
+            {dataStatus === "empty" ? (
               <HarvestRequestState tone="empty" message="No harvest cycle records found." compact />
             ) : null}
-            {dataStatus === "error" && summaryUnavailableCycle === null ? (
+            {dataStatus === "error" ? (
               <HarvestRequestState
                 tone="error"
                 message="Unable to load harvest data."
@@ -618,7 +640,7 @@ export default function CycleViewPage() {
           <Panel title="Harvest Summary" icon={Sigma}>
             <HarvestRequestState tone="loading" message="Loading harvest data..." />
           </Panel>
-        ) : summaryUnavailableCycle === null && (dataStatus === "real" || harvestCycleRows.length > 0) ? (
+        ) : dataStatus === "real" || harvestCycleRows.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <StatCard icon={Sigma} label="Total Trees Harvested" value={displaySummary.totalHarvests.toLocaleString("en-IN")} accent="bg-chart-2/15 text-chart-2" />
             <StatCard icon={Layers} label="Total Bunches" value={displaySummary.totalBunches.toLocaleString("en-IN")} accent="bg-primary/10 text-primary" />
@@ -628,29 +650,98 @@ export default function CycleViewPage() {
           </div>
         ) : null}
 
-        {/* Coconut Counting reconciliation table */}
-        {!selectedDetailCycle ? (
+        {/* All harvest cycles table */}
+        {showAll && harvestCycleRows.length > 0 && !selectedDetailCycle ? (
           <div ref={allCyclesPanelRef}>
-          <Panel title={tableCycle === null ? "All Harvest Cycles" : `Harvest Cycle ${tableCycle}`} icon={RotateCw}>
-            {odkOnlyCycleRows.length > 0 ? (
-              <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">ODK tree records</p>
-                <p className="mt-1 text-xs text-muted-foreground">These cycles have ODK harvest records but no APK reconciliation rows.</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {odkOnlyCycleRows.map((row) => (
-                    <button key={row.cycle} type="button" onClick={() => loadCycleDetails(row)} className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-primary hover:bg-accent">
-                      View Cycle {row.cycle} tree records
-                    </button>
+          <Panel title="All Harvest Cycles" icon={RotateCw}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
+                    <CycleSortableHeader label="Cycle" sortKey="cycle" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Start Date" sortKey="startDate" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="End Date" sortKey="endDate" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Status" sortKey="status" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Trees" sortKey="trees" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Bunches" sortKey="bunches" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Nuts" sortKey="nuts" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Sale Price" sortKey="salePrice" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                    <CycleSortableHeader label="Total Sale" sortKey="totalSale" align="right" sortConfig={cycleSortConfig} onSort={handleCycleSort} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedHarvestCycleRows.map((r) => (
+                    <Fragment key={r.cycle}>
+                      <tr
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open Harvest Cycle ${r.cycle} details`}
+                        onClick={() => handleCycleRowClick(r)}
+                        onKeyDown={(event) => handleCycleRowKeyDown(event, r)}
+                        className="cursor-pointer border-b border-border transition-colors hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      >
+                        <td className="whitespace-nowrap px-3 py-2.5 font-medium text-foreground">{r.cycle}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.startDate}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.endDate}</td>
+                        <td className="px-3 py-2.5">
+                          <span
+                            className={cn(
+                              "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                              r.status === "Locked"
+                                ? "bg-secondary text-secondary-foreground"
+                                : "bg-chart-2/15 text-chart-2",
+                            )}
+                          >
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.trees.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{r.bunches.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{r.nuts.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRupees(r.salePrice, 2)}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-foreground">{formatRupees(r.totalSale)}</td>
+                      </tr>
+                      {r.plotRows?.map((plotRow) => (
+                        <tr
+                          key={`${r.cycle}-${plotRow.plot}`}
+                          aria-label={`Harvest Cycle ${r.cycle} ${plotRow.plot} summary`}
+                          className={cn(
+                            "border-b border-border",
+                            plotRow.plot === "Plot 1"
+                              ? "bg-emerald-50/70 dark:bg-emerald-950/25"
+                              : "bg-sky-50/70 dark:bg-sky-950/25",
+                          )}
+                        >
+                          <th scope="row" className="whitespace-nowrap px-3 py-2.5 text-left font-semibold text-foreground">{plotRow.plot}</th>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{plotRow.startDate || "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{plotRow.endDate || "—"}</td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className={cn(
+                                "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                r.status === "Locked"
+                                  ? "bg-secondary text-secondary-foreground"
+                                  : "bg-chart-2/15 text-chart-2",
+                              )}
+                            >
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-foreground">{plotRow.trees.toLocaleString("en-IN")}</td>
+                          <td className="px-3 py-2.5 text-right text-muted-foreground">{plotRow.bunches.toLocaleString("en-IN")}</td>
+                          <td className="px-3 py-2.5 text-right text-foreground">{plotRow.nuts.toLocaleString("en-IN")}</td>
+                          <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRupees(r.salePrice, 2)}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-foreground">{formatRupees(plotRow.totalSale)}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
-                </div>
-              </div>
-            ) : null}
-            <CycleReconciliationTable
-              cycle={tableCycle}
-              onCyclesLoaded={handleReconciliationCyclesLoaded}
-              onViewTreeRecords={handleViewTreeRecords}
-              treeRecordCycles={harvestCycleRows.map((row) => row.cycle)}
-            />
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Click a harvest cycle total row, or focus it and press Enter or Space, to view the full records for that cycle.
+            </p>
           </Panel>
           </div>
         ) : null}

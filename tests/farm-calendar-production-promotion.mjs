@@ -9,19 +9,22 @@ const sha256 = (path) => createHash("sha256")
   .update(read(path).replace(/\r\n/g, "\n"))
   .digest("hex")
 
-const cycleViewVerifiedFiles = [
+const previewVerifiedFiles = [
   "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
-  "app/api/coconut-harvest/cycle-reconciliation/route.ts",
-  "app/coconut-harvest/cycle-view/page.tsx",
-  "components/coconut/cycle-reconciliation-table.tsx",
+  "app/api/coconut-counting/reconciliation/route.ts",
+  "app/coconut-counting/page.tsx",
+  "components/coconut-counting/harvested-editor.tsx",
+  "components/coconut-counting/reconciliation-table.tsx",
+  "lib/coconut-counting-reconciliation-api.ts",
   "lib/coconut-counting-reconciliation.ts",
-  "tests/cycle-view-reconciliation.mjs",
+  "lib/coconut-counting-write-gate.ts",
+  "tests/coconut-counting-cycle-plot.mjs",
 ]
-const cycleViewProductionAdaptations = [
+const productionAdaptations = [
   "deploy/production-release-manifest.json",
-  "lib/coconut-harvest-api.ts",
-  "lib/coconut-harvest-data.ts",
+  "lib/coconut-counting-write-policy.ts",
   "package.json",
+  "tests/coconut-counting-reconciliation.mjs",
   "tests/farm-calendar-production-promotion.mjs",
 ]
 
@@ -33,15 +36,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Replace Cycle View harvest history with permanent Excel-format Cycle and Plot reconciliation",
+  "Deploy deterministic Coconut Counting reconciliation and preserve the restored Cycle View",
 )
 assert.equal(manifest.base_commit, "e166016b12b4faf2a51bd94f4791cb91ac68072c")
 assert.deepEqual(manifest.preview_approved, {
-  revision: "f45641e6b9800d4d7d2feda53328251970c0dd68",
-  image_id: "sha256:350e2285db5249003c1fc78703a674220b431fbd6c371a52dbe9d0db584066c8",
-  feature_revision: "f45641e6b9800d4d7d2feda53328251970c0dd68",
-  verified_files: cycleViewVerifiedFiles,
-  production_adaptations: cycleViewProductionAdaptations,
+  revision: "ed727cc9f5fc89c8fdb2fdd667111a1be2433fff",
+  image_id: "sha256:99bd923b7524ec22f40f51f630440f025b691262331b21da223b4b728fd011c2",
+  feature_revision: "ed727cc9f5fc89c8fdb2fdd667111a1be2433fff",
+  verified_files: previewVerifiedFiles,
+  production_adaptations: productionAdaptations,
 })
 assert.deepEqual(manifest.protected_invariants, {
   preview: "unchanged",
@@ -55,11 +58,39 @@ assert.deepEqual(manifest.protected_invariants, {
 assert.deepEqual(
   manifest.allowed_paths,
   [...new Set([
-    ...cycleViewVerifiedFiles,
-    ...cycleViewProductionAdaptations,
+    ...previewVerifiedFiles,
+    ...productionAdaptations,
   ])].sort(),
   "The Production release allowlist must exactly match the verified files and adaptations",
 )
+
+const harvestedWritePolicy = read("lib/coconut-counting-write-policy.ts")
+assert.match(
+  harvestedWritePolicy,
+  /COCONUT_COUNTING_PRODUCTION_WRITE_APPROVAL\s*=\s*\n\s*"APPROVE_MFMS_COCONUT_COUNTING_HARVESTED_WRITES_V1" as const/,
+  "Production must carry the exact reviewed source approval for Harvested writes",
+)
+assert.doesNotMatch(
+  harvestedWritePolicy,
+  /PREVIEW_SOURCE_POLICY__PRODUCTION_HARVESTED_WRITES_DISABLED/,
+  "Production must not retain Preview's disabled write-policy marker",
+)
+
+const preservedCycleViewSha256 = {
+  "app/coconut-harvest/cycle-view/page.tsx": "52d30349241a198664219eaadb01d3bc69d54ae79c3181ea8c9ab722adc4abb6",
+  "lib/coconut-harvest-api.ts": "d05788fd536c442e50260212739bb0a9fbe42aff05b564bbf3b2ae1c455adba6",
+  "lib/coconut-harvest-data.ts": "433af9a7b3dd28f60270b3713ac1cd5197ef9d25f24dc06a8724853fb52a4bb3",
+  "lib/cycle-view-plot-breakdown.ts": "43243e17681cab0f2eb9fce3824301c2166bc401eddbac80979bf91f7b7cb1e6",
+  "tests/cycle-view-plot-breakdown.mjs": "fe5b3eb4c3138b5f14e46d3037aa7b31609e86634c30727892ba1785c5654788",
+}
+for (const [path, expected] of Object.entries(preservedCycleViewSha256)) {
+  assert.equal(sha256(path), expected, `The restored Cycle View contract changed: ${path}`)
+  assert.equal(
+    manifest.allowed_paths.includes(path),
+    false,
+    `The Coconut Counting release must not allow changes to Cycle View: ${path}`,
+  )
+}
 
 const vercel = JSON.parse(read("vercel.json"))
 assert.deepEqual(vercel.git.deploymentEnabled, {
@@ -124,4 +155,4 @@ assert.doesNotMatch(page, /uses only non-expired eligible stock/)
 assert.doesNotMatch(page, /Expired, inactive, and zero-balance batches are excluded/)
 assert.doesNotMatch(page, /Insufficient eligible stock/)
 
-console.log("Cycle View plot breakdown release and preserved Production promotion contracts: PASS")
+console.log("Coconut Counting reconciliation release and restored Cycle View contracts: PASS")

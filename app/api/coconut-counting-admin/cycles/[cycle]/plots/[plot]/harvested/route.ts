@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
+import { isHarvestCycleWriteAllowed } from "@/lib/coconut-counting-write-gate"
+import { COCONUT_COUNTING_PRODUCTION_WRITE_APPROVAL } from "@/lib/coconut-counting-write-policy"
 import { getAuthenticatedUserAssertionHeaders, MfmsAdminIdentityError } from "@/lib/mfms-admin-identity"
 import { getAdminTargetSafetyErrors } from "@/lib/preview-admin-write-safety"
 
@@ -10,10 +12,19 @@ export const runtime = "nodejs"
 type RouteContext = { params: Promise<{ cycle: string; plot: string }> }
 
 function writesEnabled(): boolean {
-  const flag = (process.env.MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES ?? "").trim().toLowerCase()
-  const environment = (process.env.MFMS_ENV ?? process.env.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
-  const featureEnabled = flag === "true" || environment === "production" || environment === "prod"
-  return featureEnabled && getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
+  const targetSafetyErrors = getAdminTargetSafetyErrors(process.env, getApiBaseUrl())
+  return isHarvestCycleWriteAllowed({
+    explicitFlagValue: process.env.MFMS_HARVEST_CYCLE_WRITES_ENABLED,
+    targetSafetyErrors,
+    sourceProductionApproval: COCONUT_COUNTING_PRODUCTION_WRITE_APPROVAL,
+    runtime: {
+      MFMS_ENV: process.env.MFMS_ENV,
+      NEXT_PUBLIC_MFMS_ENV: process.env.NEXT_PUBLIC_MFMS_ENV,
+      NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL: process.env.NEXT_PUBLIC_MFMS_ENV_DATABASE_LABEL,
+      MFMS_BUILD_ENVIRONMENT: process.env.MFMS_BUILD_ENVIRONMENT,
+      MFMS_GIT_COMMIT: process.env.MFMS_GIT_COMMIT,
+    },
+  })
 }
 
 function parseInteger(value: unknown): number | null {
@@ -65,16 +76,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Harvest API credentials are not configured." }, { status: 500 })
   }
 
-  const target = new URL(
-    `${getApiBaseUrl()}/api/coconut-counting/cycles/${cycle}/plots/${plot}/harvested`,
-  )
+  const target = new URL(`${getApiBaseUrl()}/api/coconut-counting/cycles/${cycle}/plots/${plot}/harvested`)
   let actorHeaders: Record<string, string>
   try {
-    actorHeaders = getAuthenticatedUserAssertionHeaders({
-      requestHeaders: request.headers,
-      method: "PATCH",
-      target,
-    })
+    actorHeaders = getAuthenticatedUserAssertionHeaders({ requestHeaders: request.headers, method: "PATCH", target })
   } catch (error) {
     const status = error instanceof MfmsAdminIdentityError ? error.status : 503
     const message = error instanceof Error ? error.message : "MFMS administrator authentication is required."
@@ -103,11 +108,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       const error = typeof payload.detail === "string" ? payload.detail : `Harvest API returned ${response.status}.`
       return NextResponse.json({ error }, { status: response.status })
     }
-
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     const message = error instanceof Error && error.name === "TimeoutError"
-      ? "The Harvested total update timed out."
+      ? "The Harvested total update timed out. The save outcome may be unknown; Refresh the harvest table before retrying."
       : "The Harvested total could not be saved."
     return NextResponse.json({ error: message }, { status: 503 })
   }
