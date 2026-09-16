@@ -105,6 +105,16 @@ export const cycleSummary: CycleSummary = {
 
 export type CycleStatus = "Locked" | "Open"
 
+export interface HarvestCyclePlotRow {
+  plot: "Plot 1" | "Plot 2"
+  startDate: string
+  endDate: string
+  trees: number
+  bunches: number
+  nuts: number
+  totalSale: number
+}
+
 export interface HarvestCycleRow {
   cycle: number
   startDate: string
@@ -117,6 +127,8 @@ export interface HarvestCycleRow {
   salePrice: number
   /** Total sale value for the cycle, in Rupees */
   totalSale: number
+  /** Plot rows are shown only for the specifically requested cycles. */
+  plotRows?: HarvestCyclePlotRow[]
 }
 
 /** All harvest cycles (newest first). */
