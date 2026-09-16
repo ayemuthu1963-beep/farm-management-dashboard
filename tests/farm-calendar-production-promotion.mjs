@@ -11,14 +11,10 @@ const sha256 = (path) => createHash("sha256")
 
 const cycleViewReviewedFiles = [
   "app/coconut-harvest/cycle-view/page.tsx",
-  "lib/coconut-harvest-api.ts",
-  "lib/coconut-harvest-data.ts",
-  "lib/cycle-view-plot-breakdown.ts",
   "tests/cycle-view-plot-breakdown.mjs",
 ]
 const cycleViewProductionAdaptations = [
   "deploy/production-release-manifest.json",
-  "package.json",
   "tests/farm-calendar-production-promotion.mjs",
 ]
 
@@ -30,15 +26,15 @@ assert.equal(manifest.target_url, "https://muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only-direct-reviewed")
 assert.equal(
   manifest.release_note,
-  "Add Plot 1 and Plot 2 breakdowns to Cycle View for cycles 19 and 20",
+  "Give Cycle View Plot 1 and Plot 2 rows distinct light backgrounds",
 )
-assert.equal(manifest.base_commit, "5863d891c0cc6b9054376ae210ee74799bc6cc6a")
+assert.equal(manifest.base_commit, "f44d46ee14a3cd86df6711963560dea2ef5a4dbf")
 assert.deepEqual(manifest.direct_review, {
   owner_instruction: "Deploy directly to Production and do not deploy to Preview",
-  scope: "Cycle View cycles 19 and 20 only",
+  scope: "Cycle View plot-row background colours only",
   reviewed_files: cycleViewReviewedFiles,
   verification: {
-    independent_reviews: 2,
+    independent_reviews: 1,
     targeted_tests: 8,
     full_test_suite: "passed",
     typescript: "passed",

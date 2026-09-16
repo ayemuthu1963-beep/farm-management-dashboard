@@ -138,5 +138,8 @@ test("plot rows remain subordinate row headers and only total rows are interacti
   assert.match(cycleViewPage, /<Fragment key=\{r\.cycle\}>/)
   assert.match(childRows, /<th scope="row"/)
   assert.match(childRows, /\{plotRow\.plot\}/)
+  assert.match(childRows, /plotRow\.plot === "Plot 1"/)
+  assert.match(childRows, /bg-emerald-50\/70 dark:bg-emerald-950\/25/)
+  assert.match(childRows, /bg-sky-50\/70 dark:bg-sky-950\/25/)
   assert.doesNotMatch(childRows, /role="button"|tabIndex=|onClick=|onKeyDown=/)
 })
