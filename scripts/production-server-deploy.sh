@@ -72,6 +72,9 @@ readonly coordinated_verification_actor="production-release-verification"
 readonly coordinated_preview_revision="00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"
 readonly coordinated_preview_feature_revision="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
 readonly coordinated_preview_merge_base="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"
+readonly direct_reviewed_candidate_revision="f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
+readonly direct_reviewed_candidate_tree="a7c117df6617e9bae5cc1e303e6d44a4cced1793"
+readonly direct_reviewed_baseline_revision="5863d891c0cc6b9054376ae210ee74799bc6cc6a"
 
 [[ "$production_url" == "https://muthufarms.com" ]] \
   || blocked "the public target is not Production"
@@ -153,6 +156,8 @@ preview_approved_image_id=""
 preview_feature_revision=""
 preview_verified_file_count=""
 preview_deployment_kind=""
+direct_reviewed_release=0
+direct_reviewed_file_count=""
 candidate_tree=""
 coordinated_database_before="$work_dir/coordinated-database.before.json"
 coordinated_database_after_read="$work_dir/coordinated-database.after-read.json"
@@ -1526,6 +1531,35 @@ approved_production_adaptations = [
     "deploy/production-release-manifest.json",
     "tests/farm-calendar-production-promotion.mjs",
 ]
+approved_direct_candidate = "f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
+approved_direct_tree = "a7c117df6617e9bae5cc1e303e6d44a4cced1793"
+approved_direct_baseline = "5863d891c0cc6b9054376ae210ee74799bc6cc6a"
+approved_direct_reviewed_files = [
+    "app/coconut-harvest/cycle-view/page.tsx",
+    "lib/coconut-harvest-api.ts",
+    "lib/coconut-harvest-data.ts",
+    "lib/cycle-view-plot-breakdown.ts",
+    "tests/cycle-view-plot-breakdown.mjs",
+]
+approved_direct_adaptations = [
+    "deploy/production-release-manifest.json",
+    "package.json",
+    "tests/farm-calendar-production-promotion.mjs",
+]
+approved_direct_allowed_paths = sorted(
+    approved_direct_reviewed_files + approved_direct_adaptations
+)
+approved_direct_review = {
+    "owner_instruction": "Deploy directly to Production and do not deploy to Preview",
+    "scope": "Cycle View cycles 19 and 20 only",
+    "reviewed_files": approved_direct_reviewed_files,
+    "verification": {
+        "independent_reviews": 2,
+        "targeted_tests": 8,
+        "full_test_suite": "passed",
+        "typescript": "passed",
+    },
+}
 
 if data.get("schema_version") != 1:
     raise SystemExit("invalid manifest schema")
@@ -1539,6 +1573,17 @@ deployment_kind = data.get("deployment_kind")
 if deployment_kind == "frontend-only":
     if data.get("protected_invariants") != frontend_only_invariants:
         raise SystemExit("frontend-only manifest protected invariants are incomplete")
+elif deployment_kind == "frontend-only-direct-reviewed":
+    if candidate != approved_direct_candidate or candidate_tree != approved_direct_tree:
+        raise SystemExit("direct-reviewed mode is not approved for this candidate and tree")
+    if current != approved_direct_baseline:
+        raise SystemExit("direct-reviewed Production baseline differs from approval")
+    if data.get("protected_invariants") != frontend_only_invariants:
+        raise SystemExit("direct-reviewed manifest protected invariants are incomplete")
+    if data.get("direct_review") != approved_direct_review:
+        raise SystemExit("direct-reviewed evidence differs from approval")
+    if "preview_approved" in data:
+        raise SystemExit("direct-reviewed manifest must not claim Preview approval")
 elif deployment_kind == "coordinated-frontend-after-backend":
     if candidate != approved_coordinated_candidate or candidate_tree != approved_coordinated_tree:
         raise SystemExit("coordinated frontend mode is not approved for this candidate and tree")
@@ -1547,26 +1592,32 @@ elif deployment_kind == "coordinated-frontend-after-backend":
 else:
     raise SystemExit("manifest deployment kind is invalid")
 
-preview = data.get("preview_approved")
-if not isinstance(preview, dict):
-    raise SystemExit("Preview approval contract is missing")
-preview_revision = preview.get("revision")
-preview_image_id = preview.get("image_id")
-feature_revision = preview.get("feature_revision")
-verified_files = preview.get("verified_files")
-if not isinstance(preview_revision, str) or re.fullmatch(r"[0-9a-f]{40}", preview_revision) is None:
-    raise SystemExit("Preview approval revision is invalid")
-if not isinstance(preview_image_id, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", preview_image_id) is None:
-    raise SystemExit("Preview approval image ID is invalid")
-if not isinstance(feature_revision, str) or re.fullmatch(r"[0-9a-f]{40}", feature_revision) is None:
-    raise SystemExit("Preview feature revision is invalid")
-if not isinstance(verified_files, list) or not verified_files:
-    raise SystemExit("Preview verified file list is empty")
-if len(verified_files) != len(set(verified_files)):
-    raise SystemExit("Preview verified file list contains duplicates")
-for path in verified_files:
-    if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
-        raise SystemExit("Preview verified file path is invalid")
+if deployment_kind == "frontend-only-direct-reviewed":
+    preview_revision = None
+    preview_image_id = None
+    feature_revision = None
+    verified_files = approved_direct_reviewed_files
+else:
+    preview = data.get("preview_approved")
+    if not isinstance(preview, dict):
+        raise SystemExit("Preview approval contract is missing")
+    preview_revision = preview.get("revision")
+    preview_image_id = preview.get("image_id")
+    feature_revision = preview.get("feature_revision")
+    verified_files = preview.get("verified_files")
+    if not isinstance(preview_revision, str) or re.fullmatch(r"[0-9a-f]{40}", preview_revision) is None:
+        raise SystemExit("Preview approval revision is invalid")
+    if not isinstance(preview_image_id, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", preview_image_id) is None:
+        raise SystemExit("Preview approval image ID is invalid")
+    if not isinstance(feature_revision, str) or re.fullmatch(r"[0-9a-f]{40}", feature_revision) is None:
+        raise SystemExit("Preview feature revision is invalid")
+    if not isinstance(verified_files, list) or not verified_files:
+        raise SystemExit("Preview verified file list is empty")
+    if len(verified_files) != len(set(verified_files)):
+        raise SystemExit("Preview verified file list contains duplicates")
+    for path in verified_files:
+        if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
+            raise SystemExit("Preview verified file path is invalid")
 
 if deployment_kind == "coordinated-frontend-after-backend":
     if preview_revision != approved_preview_revision:
@@ -1606,6 +1657,8 @@ for path in allowed:
             raise SystemExit(f"path is outside the approved Production frontend source scope: {path}")
 
 actual = [line for line in pathlib.Path(actual_path).read_text(encoding="utf-8").splitlines() if line]
+if deployment_kind == "frontend-only-direct-reviewed" and allowed != approved_direct_allowed_paths:
+    raise SystemExit("direct-reviewed allowed paths differ from approval")
 unexpected = sorted(set(actual) - set(allowed))
 missing = sorted(set(allowed) - set(actual))
 if unexpected or missing:
@@ -1617,12 +1670,19 @@ if unexpected or missing:
     raise SystemExit(1)
 
 if not set(verified_files).issubset(set(actual)):
+    if deployment_kind == "frontend-only-direct-reviewed":
+        raise SystemExit("direct-reviewed files must be changed by the Production candidate")
     raise SystemExit("Preview verified files must be changed by the Production candidate")
 
 print(deployment_kind)
-print(preview_revision)
-print(preview_image_id)
-print(feature_revision)
+if deployment_kind == "frontend-only-direct-reviewed":
+    print(candidate)
+    print(candidate_tree)
+    print("direct-review")
+else:
+    print(preview_revision)
+    print(preview_image_id)
+    print(feature_revision)
 for path in verified_files:
     print(path)
 PY_RELEASE_MANIFEST
@@ -1631,6 +1691,19 @@ PY_RELEASE_MANIFEST
   [[ "${#preview_contract_lines[@]}" -ge 5 ]] \
     || blocked "Preview approval contract is incomplete"
   preview_deployment_kind=${preview_contract_lines[0]}
+  if [[ "$preview_deployment_kind" == "frontend-only-direct-reviewed" ]]; then
+    [[ "${preview_contract_lines[1]}" == "$direct_reviewed_candidate_revision" ]] \
+      || blocked "direct-reviewed candidate revision contract changed"
+    [[ "${preview_contract_lines[2]}" == "$direct_reviewed_candidate_tree" ]] \
+      || blocked "direct-reviewed candidate tree contract changed"
+    [[ "${preview_contract_lines[3]}" == "direct-review" ]] \
+      || blocked "direct-reviewed release marker is invalid"
+    direct_reviewed_file_count=$((${#preview_contract_lines[@]} - 4))
+    [[ "$direct_reviewed_file_count" -eq 5 ]] \
+      || blocked "direct-reviewed file count changed"
+    direct_reviewed_release=1
+    return 0
+  fi
   preview_approved_revision=${preview_contract_lines[1]}
   preview_approved_image_id=${preview_contract_lines[2]}
   preview_feature_revision=${preview_contract_lines[3]}
@@ -1768,10 +1841,15 @@ preflight_production() {
   echo "preflight_backend_revision=$backend_revision"
   echo "preflight_backend_container=$backend_id_before"
   echo "preflight_backend_image=$backend_image_before"
-  echo "preflight_preview_approved_revision=$preview_approved_revision"
-  echo "preflight_preview_approved_image_id=$preview_approved_image_id"
-  echo "preflight_preview_feature_revision=$preview_feature_revision"
-  echo "preflight_preview_verified_file_count=$preview_verified_file_count"
+  if [[ "$direct_reviewed_release" -eq 1 ]]; then
+    echo "preflight_direct_reviewed=true"
+    echo "preflight_direct_reviewed_file_count=$direct_reviewed_file_count"
+  else
+    echo "preflight_preview_approved_revision=$preview_approved_revision"
+    echo "preflight_preview_approved_image_id=$preview_approved_image_id"
+    echo "preflight_preview_feature_revision=$preview_feature_revision"
+    echo "preflight_preview_verified_file_count=$preview_verified_file_count"
+  fi
   echo "database_writes=none"
   echo "backend_replacement=none"
   echo "traffic_switch=not-performed"
@@ -1862,11 +1940,20 @@ deploy_production() {
   echo "deployed_revision=$candidate_revision"
   echo "deployed_image=$new_image"
   echo "deployed_image_id=$new_image_id"
-  echo "preview_approved_revision=$preview_approved_revision"
-  echo "preview_approved_image_id=$preview_approved_image_id"
-  echo "preview_feature_revision=$preview_feature_revision"
-  echo "preview_verified_file_count=$preview_verified_file_count"
-  echo "production_source_matches_preview=true"
+  if [[ "$direct_reviewed_release" -eq 1 ]]; then
+    echo "production_direct_reviewed=true"
+    echo "direct_reviewed_candidate_revision=$candidate_revision"
+    echo "direct_reviewed_candidate_tree=$candidate_tree"
+    echo "direct_reviewed_file_count=$direct_reviewed_file_count"
+    echo "production_source_matches_preview=false"
+  else
+    echo "production_direct_reviewed=false"
+    echo "preview_approved_revision=$preview_approved_revision"
+    echo "preview_approved_image_id=$preview_approved_image_id"
+    echo "preview_feature_revision=$preview_feature_revision"
+    echo "preview_verified_file_count=$preview_verified_file_count"
+    echo "production_source_matches_preview=true"
+  fi
   if [[ "$candidate_revision" == "$coordinated_candidate_revision" ]]; then
     echo "deployment_kind=coordinated-frontend-after-backend"
     echo "coordinated_backend_verified=true"

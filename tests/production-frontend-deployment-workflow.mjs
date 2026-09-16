@@ -39,6 +39,9 @@ for (const workflow of [deploy, rollback]) {
 assert.match(deploy, /DEPLOY PRODUCTION FRONTEND ONLY/)
 assert.match(deploy, /deploy-production-frontend \$CANDIDATE_REVISION \$EXPECTED_CURRENT_REVISION \$GITHUB_RUN_ID/)
 assert.match(deploy, /production_source_matches_preview=true/)
+assert.match(deploy, /production_source_matches_preview=false/)
+assert.match(deploy, /f44d46ee14a3cd86df6711963560dea2ef5a4dbf/)
+assert.match(deploy, /a7c117df6617e9bae5cc1e303e6d44a4cced1793/)
 assert.match(deploy, /preview_approved_image_id=sha256/)
 assert.match(deploy, /production_frontend_touched=1/)
 assert.match(rollback, /ROLL BACK PRODUCTION FRONTEND/)
@@ -50,7 +53,7 @@ assert.match(helper, /readonly preview_container="mfms-pilot-web"/)
 assert.match(helper, /readonly backend_container="harvest-api"/)
 assert.match(helper, /readonly live_port="3014"/)
 assert.match(helper, /readonly candidate_port="3013"/)
-assert.equal(helperSha256, "0c6b22ae61cf3b24ae7c84f8b949a053f6742bc3da8af6df30652ac66d138c27")
+assert.equal(helperSha256, "91d71d1d8bd23bfde9f6e61cef9feb5a3fdd43b9b5165327b5384ee2890f1e90")
 assert.doesNotMatch(helper, /expected_running_containers|running container count is not the approved baseline/)
 assert.doesNotMatch(helper, /docker ps -q \| wc -l/)
 
@@ -546,6 +549,10 @@ assert.match(helper, /live Preview image differs from the approved artifact/)
 assert.match(helper, /Production source differs from Preview-approved file/)
 assert.match(helper, /preview_feature_revision/)
 assert.match(helper, /production_source_matches_preview=true/)
+assert.match(helper, /production_source_matches_preview=false/)
+assert.match(helper, /readonly direct_reviewed_candidate_revision="f44d46ee14a3cd86df6711963560dea2ef5a4dbf"/)
+assert.match(helper, /readonly direct_reviewed_candidate_tree="a7c117df6617e9bae5cc1e303e6d44a4cced1793"/)
+assert.match(helper, /readonly direct_reviewed_baseline_revision="5863d891c0cc6b9054376ae210ee74799bc6cc6a"/)
 assert.match(helper, /coordinated-frontend-after-backend/)
 assert.match(helper, /readonly coordinated_preview_revision="00ac7059f2110ea14b44508c5d4e6412d9bd8f1e"/)
 assert.match(helper, /readonly coordinated_preview_feature_revision="a2948d51b6d85a6edc8c8577b52bdd03185cc7f4"/)
@@ -718,6 +725,7 @@ try {
     candidate = coordinatedState.candidate,
     tree = coordinatedState.tree,
     actualPaths = approvedAllowedPaths,
+    current = coordinatedState.frontendRevision,
   ) => {
     writeFileSync(manifestPath, JSON.stringify(payload), "utf8")
     writeFileSync(actualPath, `${actualPaths.join("\n")}\n`, "utf8")
@@ -725,7 +733,7 @@ try {
       validatorPath,
       manifestPath,
       actualPath,
-      coordinatedState.frontendRevision,
+      current,
       candidate,
       tree,
     ], { encoding: "utf8" })
@@ -754,6 +762,86 @@ try {
     ...manifest,
     preview_approved: { ...manifest.preview_approved, production_adaptations: approvedProductionAdaptations.slice(0, -1) },
   }).status, 0)
+
+  const directCandidate = "f44d46ee14a3cd86df6711963560dea2ef5a4dbf"
+  const directTree = "a7c117df6617e9bae5cc1e303e6d44a4cced1793"
+  const directBaseline = "5863d891c0cc6b9054376ae210ee74799bc6cc6a"
+  const directReviewedFiles = [
+    "app/coconut-harvest/cycle-view/page.tsx",
+    "lib/coconut-harvest-api.ts",
+    "lib/coconut-harvest-data.ts",
+    "lib/cycle-view-plot-breakdown.ts",
+    "tests/cycle-view-plot-breakdown.mjs",
+  ]
+  const directAllowedPaths = [
+    "app/coconut-harvest/cycle-view/page.tsx",
+    "deploy/production-release-manifest.json",
+    "lib/coconut-harvest-api.ts",
+    "lib/coconut-harvest-data.ts",
+    "lib/cycle-view-plot-breakdown.ts",
+    "package.json",
+    "tests/cycle-view-plot-breakdown.mjs",
+    "tests/farm-calendar-production-promotion.mjs",
+  ]
+  const directManifest = {
+    schema_version: 1,
+    environment: "Production",
+    target_url: "https://muthufarms.com",
+    deployment_kind: "frontend-only-direct-reviewed",
+    release_note: "Add Plot 1 and Plot 2 breakdowns to Cycle View for cycles 19 and 20",
+    base_commit: directBaseline,
+    direct_review: {
+      owner_instruction: "Deploy directly to Production and do not deploy to Preview",
+      scope: "Cycle View cycles 19 and 20 only",
+      reviewed_files: directReviewedFiles,
+      verification: {
+        independent_reviews: 2,
+        targeted_tests: 8,
+        full_test_suite: "passed",
+        typescript: "passed",
+      },
+    },
+    protected_invariants: {
+      preview: "unchanged",
+      test: "unchanged",
+      backend: "unchanged",
+      database: "unchanged",
+      odk: "unchanged",
+      schedules: "unchanged",
+      proxy_configuration: "unchanged",
+    },
+    allowed_paths: directAllowedPaths,
+  }
+  const validateDirectManifest = (
+    payload,
+    candidate = directCandidate,
+    tree = directTree,
+    actualPaths = directAllowedPaths,
+    current = directBaseline,
+  ) => validateManifest(payload, candidate, tree, actualPaths, current)
+  assert.equal(validateDirectManifest(directManifest).status, 0)
+  assert.notEqual(validateDirectManifest(directManifest, "0".repeat(40)).status, 0)
+  assert.notEqual(validateDirectManifest(directManifest, directCandidate, "0".repeat(40)).status, 0)
+  assert.notEqual(validateDirectManifest(directManifest, directCandidate, directTree, directAllowedPaths, "0".repeat(40)).status, 0)
+  assert.notEqual(validateDirectManifest({
+    ...directManifest,
+    preview_approved: manifest.preview_approved,
+  }).status, 0)
+  assert.notEqual(validateDirectManifest({
+    ...directManifest,
+    direct_review: { ...directManifest.direct_review, scope: "all cycles" },
+  }).status, 0)
+  assert.notEqual(validateDirectManifest({
+    ...directManifest,
+    direct_review: {
+      ...directManifest.direct_review,
+      verification: { ...directManifest.direct_review.verification, targeted_tests: 7 },
+    },
+  }).status, 0)
+  assert.notEqual(validateDirectManifest({
+    ...directManifest,
+    allowed_paths: directAllowedPaths.slice(0, -1),
+  }, directCandidate, directTree, directAllowedPaths.slice(0, -1)).status, 0)
 
   const coconutCountingCandidate = "db2cbecd2a71e7a328409864e121e6ee13ad291f"
   const coconutCountingManifest = {
@@ -878,6 +966,10 @@ const manifestFunction = helper.slice(
   helper.indexOf("validate_release_manifest()"),
   helper.indexOf("write_state()"),
 )
+const directReturnIndex = manifestFunction.indexOf("direct_reviewed_release=1\n    return 0")
+const previewContainerCheckIndex = manifestFunction.indexOf('container_exists "$preview_container"')
+assert.ok(directReturnIndex >= 0 && previewContainerCheckIndex > directReturnIndex)
+assert.match(manifestFunction, /frontend-only-direct-reviewed[\s\S]*?direct_reviewed_release=1\n\s+return 0/)
 assert.match(manifestFunction, /if \[\[ "\$candidate_revision" == "\$coordinated_candidate_revision" \]\]; then\n\s+validate_exact_coordinated_content_provenance\n\s+else\n\s+git -C "\$source_dir" merge-base --is-ancestor/)
 assert.match(helper, /<\(git -C "\$source_dir" cat-file blob "\$preview_blob"\)/)
 assert.match(helper, /<\(git -C "\$source_dir" cat-file blob "\$candidate_blob"\)/)
