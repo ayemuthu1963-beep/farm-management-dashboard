@@ -1,5 +1,10 @@
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHarvestRow } from "@/lib/coconut-harvest-data"
+import {
+  applyCyclePlotBreakdown,
+  parseCyclePlotCsv,
+  type CyclePlotSourceRow,
+} from "@/lib/cycle-view-plot-breakdown"
 import { compareTreeNumbers } from "@/lib/tree-number-options"
 
 interface ApiCycleRow {
@@ -533,7 +538,10 @@ function parseCsvLine(line: string): string[] {
   return cells
 }
 
-async function fetchTreesHarvestedWithNuts(row: HarvestCycleRow, authHeader: string): Promise<number | null> {
+async function fetchCyclePlotSourceRows(
+  row: HarvestCycleRow,
+  authHeader: string,
+): Promise<CyclePlotSourceRow[] | null> {
   const params = new URLSearchParams({
     start_date: row.startDate,
     end_date: row.endDate,
@@ -551,24 +559,7 @@ async function fetchTreesHarvestedWithNuts(row: HarvestCycleRow, authHeader: str
     return null
   }
 
-  const csv = await response.text()
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "")
-
-  if (lines.length <= 1 || lines[0] === "no_records") {
-    return 0
-  }
-
-  const headers = parseCsvLine(lines[0])
-  const totalNutsIndex = headers.indexOf("total_nuts")
-
-  if (totalNutsIndex === -1) {
-    return null
-  }
-
-  return lines.slice(1).reduce((count, line) => {
-    const cells = parseCsvLine(line)
-    return toNumber(cells[totalNutsIndex]) > 0 ? count + 1 : count
-  }, 0)
+  return parseCyclePlotCsv(await response.text(), row.cycle)
 }
 
 export async function fetchCycleViewData(): Promise<CycleViewData> {
@@ -594,8 +585,8 @@ export async function fetchCycleViewData(): Promise<CycleViewData> {
   const initialHarvestCycleRows = apiRows.map(mapCycleRow)
   const harvestCycleRows = await Promise.all(
     initialHarvestCycleRows.map(async (row) => {
-      const treesHarvestedWithNuts = await fetchTreesHarvestedWithNuts(row, authHeader)
-      return treesHarvestedWithNuts === null ? row : { ...row, trees: treesHarvestedWithNuts }
+      const sourceRows = await fetchCyclePlotSourceRows(row, authHeader)
+      return applyCyclePlotBreakdown(row, sourceRows)
     }),
   )
   const latest = harvestCycleRows[0]
@@ -1267,8 +1258,8 @@ function classificationReason(
 function inferPlotFromTreeNumber(treeNo: string): string {
   const baseTreeNo = Number.parseInt(treeNo.split(".", 1)[0] ?? "", 10)
   if (!Number.isFinite(baseTreeNo)) return "Other"
-  if (baseTreeNo >= 1 && baseTreeNo <= 999) return "Plot 2"
-  if (baseTreeNo >= 1001) return "Plot 1"
+  if (baseTreeNo >= 1 && baseTreeNo <= 999) return "Plot 1"
+  if (baseTreeNo >= 1001) return "Plot 2"
   return "Other"
 }
 
