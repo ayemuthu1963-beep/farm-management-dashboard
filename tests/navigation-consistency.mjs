@@ -12,10 +12,10 @@ import {
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
-assert.equal(homepageNavigationItems.length, 17, "Homepage must contain exactly 17 tiles")
+assert.equal(homepageNavigationItems.length, 16, "Homepage must contain exactly 16 tiles")
 assert.equal(
   new Set(homepageNavigationItems.map((item) => item.id)).size,
-  17,
+  16,
   "Homepage tile IDs must be unique",
 )
 
@@ -24,12 +24,6 @@ assert.ok(dashboard)
 assert.equal(dashboard.href, "/")
 assert.equal(dashboard.showOnDashboard, false)
 assert.equal(dashboard.showInSidebar, true)
-
-const intelligence = mfmsNavigationItems.find((item) => item.id === "mfms-intelligence")
-assert.ok(intelligence)
-assert.equal(intelligence.href, "/intelligence")
-assert.equal(intelligence.showOnDashboard, true)
-assert.equal(intelligence.showInSidebar, true)
 
 const sidebarById = new Map(sidebarNavigationItems.map((item) => [item.id, item]))
 for (const tile of homepageNavigationItems.filter((item) => item.showInSidebar)) {
