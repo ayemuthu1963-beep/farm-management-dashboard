@@ -705,7 +705,12 @@ export default function CycleViewPage() {
                         <tr
                           key={`${r.cycle}-${plotRow.plot}`}
                           aria-label={`Harvest Cycle ${r.cycle} ${plotRow.plot} summary`}
-                          className="border-b border-border bg-muted/20"
+                          className={cn(
+                            "border-b border-border",
+                            plotRow.plot === "Plot 1"
+                              ? "bg-emerald-50/70 dark:bg-emerald-950/25"
+                              : "bg-sky-50/70 dark:bg-sky-950/25",
+                          )}
                         >
                           <th scope="row" className="whitespace-nowrap px-3 py-2.5 text-left font-semibold text-foreground">{plotRow.plot}</th>
                           <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{plotRow.startDate || "—"}</td>
