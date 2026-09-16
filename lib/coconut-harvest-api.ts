@@ -1,5 +1,10 @@
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import type { CycleSummary, HarvestCycleRow, CycleStatus, PerformanceRow, TreeHarvestRow } from "@/lib/coconut-harvest-data"
+import {
+  applyCyclePlotBreakdown,
+  parseCyclePlotCsv,
+  type CyclePlotSourceRow,
+} from "@/lib/cycle-view-plot-breakdown"
 import { compareTreeNumbers } from "@/lib/tree-number-options"
 
 interface ApiCycleRow {
@@ -533,6 +538,30 @@ function parseCsvLine(line: string): string[] {
   return cells
 }
 
+async function fetchCyclePlotSourceRows(
+  row: HarvestCycleRow,
+  authHeader: string,
+): Promise<CyclePlotSourceRow[] | null> {
+  const params = new URLSearchParams({
+    start_date: row.startDate,
+    end_date: row.endDate,
+  })
+
+  const response = await fetch(`${getApiBaseUrl()}/api/export/csv?${params.toString()}`, {
+    headers: {
+      Authorization: authHeader,
+      Accept: "text/csv",
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  return parseCyclePlotCsv(await response.text(), row.cycle)
+}
+
 export async function fetchCycleViewData(): Promise<CycleViewData> {
   const authHeader = getBasicAuthHeader()
 
@@ -553,7 +582,13 @@ export async function fetchCycleViewData(): Promise<CycleViewData> {
   }
 
   const apiRows = (await response.json()) as ApiCycleRow[]
-  const harvestCycleRows = apiRows.map(mapCycleRow)
+  const initialHarvestCycleRows = apiRows.map(mapCycleRow)
+  const harvestCycleRows = await Promise.all(
+    initialHarvestCycleRows.map(async (row) => {
+      const sourceRows = await fetchCyclePlotSourceRows(row, authHeader)
+      return applyCyclePlotBreakdown(row, sourceRows)
+    }),
+  )
   const latest = harvestCycleRows[0]
 
   return {
