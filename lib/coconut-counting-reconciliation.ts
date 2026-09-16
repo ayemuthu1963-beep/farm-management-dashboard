@@ -1,3 +1,5 @@
+import type { CoconutCountingSession, CoconutNumeric } from "@/lib/coconut-counting-api"
+
 export type ReconciliationNumeric = number | string
 
 export interface CoconutCountingReconciliationSession {
@@ -47,13 +49,41 @@ export interface CoconutCountingReconciliationResponse {
   unassigned_session_count: number
 }
 
-export function reconciliationNumber(value: ReconciliationNumeric | null): number | null {
-  if (value === null || value === "") return null
+export interface CoconutCountingWorkbookValues {
+  gradeA: number
+  countB: number
+  gradeB: number
+  combined: number
+  physical: number
+}
+
+export function reconciliationNumber(value: ReconciliationNumeric | CoconutNumeric | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export function formatReconciliationNumber(value: ReconciliationNumeric | null): string {
+export function calculateWorkbookValues(
+  gradeAValue: ReconciliationNumeric | CoconutNumeric | null | undefined,
+  countBValue: ReconciliationNumeric | CoconutNumeric | null | undefined,
+): CoconutCountingWorkbookValues {
+  const gradeA = reconciliationNumber(gradeAValue) ?? 0
+  const countB = reconciliationNumber(countBValue) ?? 0
+  const gradeB = countB * 2
+  return {
+    gradeA,
+    countB,
+    gradeB,
+    combined: gradeA + countB,
+    physical: gradeA + gradeB,
+  }
+}
+
+export function workbookValuesForSession(session: CoconutCountingSession): CoconutCountingWorkbookValues {
+  return calculateWorkbookValues(session.total_grade_a, session.total_grade_b)
+}
+
+export function formatReconciliationNumber(value: ReconciliationNumeric | null | undefined): string {
   const number = reconciliationNumber(value)
   return number === null ? "—" : number.toLocaleString("en-IN", { maximumFractionDigits: 2 })
 }

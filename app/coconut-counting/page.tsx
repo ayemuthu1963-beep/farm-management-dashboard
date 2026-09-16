@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { CoconutCountingPageHeader } from "@/components/coconut-counting/page-header"
+import { CoconutCountingReconciliationTable } from "@/components/coconut-counting/reconciliation-table"
 import { CoconutCountingSessionControls } from "@/components/coconut-counting/session-controls"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
@@ -168,8 +169,8 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
     <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm" aria-labelledby="session-history-heading">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
-          <h2 id="session-history-heading" className="font-bold text-foreground">Session history</h2>
-          <p className="text-xs text-muted-foreground">Showing {data.sessions.length} of {data.total} matching sessions</p>
+          <h2 id="session-history-heading" className="font-bold text-foreground">Filtered session records</h2>
+          <p className="text-xs text-muted-foreground">Showing {data.sessions.length} of {data.total} matching sessions for inspection and detail access</p>
         </div>
         <p className="text-xs text-muted-foreground">Newest harvest date first</p>
       </div>
@@ -188,8 +189,8 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Plot</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.plot)}</dd></div>
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Entries</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.number_of_entries)}</dd></div>
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Combined</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.combined_total)}</dd></div>
-              <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Physical</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.physical_nuts_counted)}</dd></div>
-              <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Harvested</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.total_nuts_harvested)}</dd></div>
+              <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Entry physical</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.physical_nuts_counted)}</dd></div>
+              <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">APK recorded harvested</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.total_nuts_harvested)}</dd></div>
             </dl>
             <Link href={selectedSessionHref(filters, session.session_uuid)} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">
               View session <ChevronRight className="size-4" aria-hidden="true" />
@@ -207,10 +208,10 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
               <th className="w-[9%] px-3 py-3">Status</th>
               <th className="w-[6%] px-3 py-3 text-right">Entries</th>
               <th className="w-[7%] px-3 py-3 text-right">Grade A</th>
-              <th className="w-[7%] px-3 py-3 text-right">Grade B</th>
+              <th className="w-[7%] px-3 py-3 text-right">Count B (APK)</th>
               <th className="w-[8%] px-3 py-3 text-right">Combined</th>
-              <th className="w-[9%] px-3 py-3 text-right">Physical</th>
-              <th className="w-[9%] px-3 py-3 text-right">Harvested</th>
+              <th className="w-[9%] px-3 py-3 text-right">Entry physical</th>
+              <th className="w-[9%] px-3 py-3 text-right">APK recorded harvested</th>
               <th className="w-[15%] px-3 py-3">Last sync</th>
               <th className="w-[9%] px-3 py-3"><span className="sr-only">View</span></th>
             </tr>
@@ -294,12 +295,12 @@ function CompleteSessionData({ session }: { session: CoconutCountingSession }) {
     { label: "Start time", value: session.start_time },
     { label: "End time", value: session.end_time },
     { label: "Grade A total", value: formatNumber(session.total_grade_a) },
-    { label: "Grade B total", value: formatNumber(session.total_grade_b) },
+    { label: "Count B (APK) total", value: formatNumber(session.total_grade_b) },
     { label: "Combined total", value: formatNumber(session.combined_total) },
     { label: "Number of entries", value: formatNumber(session.number_of_entries) },
     { label: "Operator identifier", value: session.device_operator_identifier },
     { label: "Status", value: session.status },
-    { label: "Total nuts harvested", value: formatNumber(session.total_nuts_harvested) },
+    { label: "APK recorded harvested", value: formatNumber(session.total_nuts_harvested) },
     { label: "Source device", value: session.source_device_id },
     { label: "APK created", value: formatDateTime(session.event_created_at) },
     { label: "APK updated", value: formatDateTime(session.event_updated_at) },
@@ -342,9 +343,9 @@ function CompleteEntryRecords({ entries }: { entries: CoconutCountingEntry[] }) 
             { label: "Sale half-units", value: formatNumber(entry.sale_equivalent_half_units) },
             { label: "Count rule", value: entry.count_rule },
             { label: "Grade A value", value: formatNumber(entry.grade_a_value) },
-            { label: "Grade B value", value: formatNumber(entry.grade_b_value) },
+            { label: "Count B (APK) value", value: formatNumber(entry.grade_b_value) },
             { label: "Running Grade A", value: formatNumber(entry.running_total_a) },
-            { label: "Running Grade B", value: formatNumber(entry.running_total_b) },
+            { label: "Running Count B (APK)", value: formatNumber(entry.running_total_b) },
             { label: "Running combined", value: formatNumber(entry.running_combined_total) },
             { label: "Latitude", value: entry.latitude },
             { label: "Longitude", value: entry.longitude },
@@ -396,16 +397,16 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard label="Grade A" value={formatNumber(session.total_grade_a)} icon={Sprout} />
-        <SummaryCard label="Grade B" value={formatNumber(session.total_grade_b)} icon={Sprout} />
+        <SummaryCard label="Count B (APK)" value={formatNumber(session.total_grade_b)} icon={Sprout} />
         <SummaryCard label="Combined" value={formatNumber(session.combined_total)} icon={Scale} />
         <SummaryCard label="Physical counted" value={formatNumber(physicalCounted)} icon={Hash} />
-        <SummaryCard label="Total harvested" value={formatNumber(recordedTotal)} icon={Database} />
+        <SummaryCard label="APK recorded harvested" value={formatNumber(recordedTotal)} icon={Database} />
       </div>
 
       {difference !== null && difference !== 0 ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>The recorded harvest total differs from physical counted entries by <strong>{formatNumber(difference)}</strong>. This is an information warning only; it does not invalidate or block the session.</span>
+          <span>The APK-recorded harvest total differs from physical counted entries by <strong>{formatNumber(difference)}</strong>. This is an information warning only; it does not invalidate or block the session.</span>
         </div>
       ) : null}
 
@@ -457,7 +458,7 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
           {detail.harvest_date_revisions.length ? <ul className="divide-y divide-border">{detail.harvest_date_revisions.map((revision) => <li key={revision.revision_uuid} className="space-y-2 px-4 py-3 text-sm"><p><strong>{formatDate(revision.previous_date)}</strong> to <strong>{formatDate(revision.new_date)}</strong></p><dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2"><div><dt className="inline font-bold">Revision:</dt> <dd className="inline">{revision.revision_number} · {revision.revision_uuid}</dd></div><div><dt className="inline font-bold">APK created:</dt> <dd className="inline">{formatDateTime(revision.event_created_at)}</dd></div><div><dt className="inline font-bold">Server received:</dt> <dd className="inline">{formatDateTime(revision.server_received_at)}</dd></div></dl></li>)}</ul> : <p className="px-4 py-6 text-sm text-muted-foreground">No date amendments.</p>}
         </div>
         <div className="overflow-hidden rounded-xl border border-border">
-          <div className="border-b border-border bg-muted/50 px-4 py-3"><h3 className="font-bold">Total nuts amendments</h3></div>
+          <div className="border-b border-border bg-muted/50 px-4 py-3"><h3 className="font-bold">APK total nuts amendments</h3></div>
           {detail.total_nuts_revisions.length ? <ul className="divide-y divide-border">{detail.total_nuts_revisions.map((revision) => <li key={revision.revision_uuid} className="space-y-2 px-4 py-3 text-sm"><p><strong>{formatNumber(revision.previous_total_nuts)}</strong> to <strong>{formatNumber(revision.new_total_nuts)}</strong></p><dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2"><div><dt className="inline font-bold">Adjusted harvest:</dt> <dd className="inline">{formatNumber(revision.adjusted_harvest_total)}</dd></div><div><dt className="inline font-bold">B1 physical:</dt> <dd className="inline">{formatNumber(revision.b1_physical)}</dd></div><div><dt className="inline font-bold">B2 physical:</dt> <dd className="inline">{formatNumber(revision.b2_physical)}</dd></div><div><dt className="inline font-bold">Revision:</dt> <dd className="inline">{revision.revision_number} · {revision.revision_uuid}</dd></div><div><dt className="inline font-bold">APK created:</dt> <dd className="inline">{formatDateTime(revision.event_created_at)}</dd></div><div><dt className="inline font-bold">Server received:</dt> <dd className="inline">{formatDateTime(revision.server_received_at)}</dd></div></dl></li>)}</ul> : <p className="px-4 py-6 text-sm text-muted-foreground">No total amendments.</p>}
         </div>
       </div>
@@ -510,20 +511,28 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
       <div className="mx-auto flex min-w-0 max-w-[1600px] flex-col gap-5 overflow-x-hidden p-3 sm:p-5">
         <Header />
         <CoconutCountingPageHeader />
-        <FilterForm filters={filters} />
+        <CoconutCountingReconciliationTable />
+
+        <section className="space-y-3" aria-labelledby="filtered-session-records-heading">
+          <div>
+            <h2 id="filtered-session-records-heading" className="text-lg font-black text-foreground">Filtered session records and details</h2>
+            <p className="text-xs text-muted-foreground">These filters apply only to the session summary and detail records below. They do not change the complete Cycle/Plot reconciliation table above.</p>
+          </div>
+          <FilterForm filters={filters} />
+        </section>
 
         {errorMessage ? <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"><CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{errorMessage}</div> : null}
 
         {dashboard ? (
           <>
-            <section aria-label="Coconut Counting summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+            <section aria-label="Filtered Coconut Counting summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
               <SummaryCard label="Sessions" value={formatNumber(dashboard.summary.session_count)} icon={CalendarDays} />
               <SummaryCard label="Entries" value={formatNumber(dashboard.summary.entry_count)} icon={Hash} />
               <SummaryCard label="Grade A" value={formatNumber(dashboard.summary.total_grade_a)} icon={Sprout} />
-              <SummaryCard label="Grade B" value={formatNumber(dashboard.summary.total_grade_b)} icon={Sprout} />
+              <SummaryCard label="Count B (APK)" value={formatNumber(dashboard.summary.total_grade_b)} icon={Sprout} />
               <SummaryCard label="Combined" value={formatNumber(dashboard.summary.combined_total)} icon={Scale} />
-              <SummaryCard label="Physical counted" value={formatNumber(dashboard.summary.physical_nuts_counted)} icon={Scale} />
-              <SummaryCard label="Total harvested" value={formatNumber(dashboard.summary.recorded_harvested_nuts)} icon={Database} />
+              <SummaryCard label="Entry physical" value={formatNumber(dashboard.summary.physical_nuts_counted)} icon={Scale} />
+              <SummaryCard label="APK recorded harvested" value={formatNumber(dashboard.summary.recorded_harvested_nuts)} icon={Database} />
             </section>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">

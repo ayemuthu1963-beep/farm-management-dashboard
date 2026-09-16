@@ -303,9 +303,9 @@ assert.equal(manifest.target_url, "https://preview.muthufarms.com")
 assert.equal(manifest.deployment_kind, "frontend-only")
 assert.equal(
   manifest.release_note,
-  "Preserve ODK-only tree access and deterministic newest-cycle selection",
+  "Restore Cycle View and move Excel-format reconciliation to Coconut Counting",
 )
-assert.equal(manifest.base_commit, "4656d01e867eb9cb9f47242716071834db729d6c")
+assert.equal(manifest.base_commit, "f45641e6b9800d4d7d2feda53328251970c0dd68")
 assert.equal(manifest.matched_backend_commit, "a7eca253788e8d1e5cd8527968c4935fd3872281")
 assert.equal(manifest.matched_private_intelligence_commit, undefined)
 assert.deepEqual(manifest.protected_invariants, {
@@ -316,10 +316,24 @@ assert.deepEqual(manifest.protected_invariants, {
   schedules: "unchanged",
   proxy_configuration: "unchanged",
 })
-// Exact live-to-candidate path set for the Excel-format reconciliation Preview release.
+// Exact live-to-candidate path set for the corrected Coconut Counting release.
 const expectedReleasePaths = [
+  "app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts",
+  "app/api/coconut-counting/reconciliation/route.ts",
+  "app/coconut-counting/page.tsx",
   "app/coconut-harvest/cycle-view/page.tsx",
+  "components/coconut-counting/harvested-editor.tsx",
+  "components/coconut-counting/reconciliation-table.tsx",
+  "components/coconut/cycle-reconciliation-table.tsx",
   "deploy/preview-release-manifest.json",
+  "lib/coconut-counting-reconciliation.ts",
+  "lib/coconut-harvest-api.ts",
+  "lib/coconut-harvest-data.ts",
+  "lib/cycle-view-plot-breakdown.ts",
+  "package.json",
+  "tests/coconut-counting-cycle-plot.mjs",
+  "tests/coconut-counting-reconciliation.mjs",
+  "tests/cycle-view-plot-breakdown.mjs",
   "tests/cycle-view-reconciliation.mjs",
   "tests/preview-deployment-workflow.mjs",
 ]
