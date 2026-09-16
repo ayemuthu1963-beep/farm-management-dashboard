@@ -4,7 +4,7 @@
   "target_url": "https://muthufarms.com",
   "deployment_kind": "frontend-only",
   "release_note": "Add Preview-verified Cycle and Plot columns to Coconut Counting",
-  "base_commit": "4a5d7a074ef21059b364d8503f5e8ee275143e32",
+  "base_commit": "15c3ceb89c349245f8f790d2e2ed0dd7a8ffb923",
   "preview_approved": {
     "revision": "8e43c7180024330879ffee796dd78562606cdaff",
     "image_id": "sha256:c078f99b38f2d6de9bdf0094a03dd5fff70399ea8cf61af007cf407c9a35f18e",

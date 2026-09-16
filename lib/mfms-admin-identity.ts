@@ -1,10 +1,20 @@
-import { createHmac } from "node:crypto"
+import { createHash, createHmac } from "node:crypto"
 
 type Environment = Record<string, string | undefined>
 
 const TRUSTED_HEADER_ENVIRONMENTS = new Set(["preview", "uat", "test", "production", "prod"])
 const LOCAL_ENVIRONMENTS = new Set(["local", "development"])
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"])
+const INTELLIGENCE_ENVIRONMENTS = new Set(["preview", "uat", "production"])
+const INTELLIGENCE_ROLES = new Set(["admin", "manager", "viewer"])
+
+export type MfmsIntelligenceRole = "admin" | "manager" | "viewer"
+
+export type MfmsIntelligenceActor = {
+  username: string
+  role: MfmsIntelligenceRole
+  environment: "preview" | "uat" | "production"
+}
 
 export class MfmsAdminIdentityError extends Error {
   readonly status: number
@@ -65,6 +75,43 @@ export function resolveMfmsAdminUsername(
   return username
 }
 
+export function resolveMfmsIntelligenceActor(
+  headers: Headers,
+  environment: Environment = process.env,
+): MfmsIntelligenceActor {
+  const configuredEnvironment = normalise(environment.MFMS_ENV ?? environment.NEXT_PUBLIC_MFMS_ENV)
+  if (!INTELLIGENCE_ENVIRONMENTS.has(configuredEnvironment)) {
+    throw new MfmsAdminIdentityError("This MFMS environment is not approved for Intelligence.", 403)
+  }
+  if (!TRUE_VALUES.has(normalise(environment.MFMS_TRUST_PROXY_ACTOR_HEADERS))) {
+    throw new MfmsAdminIdentityError("Trusted MFMS gateway identity headers are not enabled.", 503)
+  }
+
+  const username = validUsername(headers.get("x-mfms-user"))
+  if (!username) throw new MfmsAdminIdentityError("An authenticated MFMS session is required.", 401)
+
+  const gatewayEnvironment = normalise(headers.get("x-mfms-environment"))
+  const expectedGatewayEnvironment = configuredEnvironment === "uat" ? "preview" : configuredEnvironment
+  if (gatewayEnvironment !== expectedGatewayEnvironment) {
+    throw new MfmsAdminIdentityError("The authenticated MFMS environment does not match Intelligence.", 403)
+  }
+  if (normalise(headers.get("x-mfms-permission")) !== "read") {
+    throw new MfmsAdminIdentityError("The authenticated MFMS session does not have Intelligence read access.", 403)
+  }
+
+  const gatewayRole = normalise(headers.get("x-mfms-role"))
+  const role = gatewayRole === "owner" ? "admin" : gatewayRole
+  if (!INTELLIGENCE_ROLES.has(role)) {
+    throw new MfmsAdminIdentityError("The authenticated MFMS role cannot read Intelligence.", 403)
+  }
+
+  return {
+    username,
+    role: role as MfmsIntelligenceRole,
+    environment: configuredEnvironment as MfmsIntelligenceActor["environment"],
+  }
+}
+
 export function getAuthenticatedUserAssertionHeaders(input: {
   requestHeaders: Headers
   method: string
@@ -86,5 +133,51 @@ export function getAuthenticatedUserAssertionHeaders(input: {
     "X-MFMS-Authenticated-User": username,
     "X-MFMS-Authenticated-User-Timestamp": timestamp,
     "X-MFMS-Authenticated-User-Signature": signature,
+  }
+}
+
+export function getIntelligenceActorAssertionHeaders(input: {
+  requestHeaders: Headers
+  method: string
+  target: URL
+  body: string
+  environment?: Environment
+  timestamp?: string
+}): Record<string, string> {
+  const environment = input.environment ?? process.env
+  const actor = resolveMfmsIntelligenceActor(input.requestHeaders, environment)
+  const timestamp = input.timestamp ?? Math.floor(Date.now() / 1000).toString()
+  const target = `${input.target.pathname}${input.target.search}`
+  const bodySha256 = createHash("sha256").update(input.body, "utf8").digest("hex")
+  const actorSecret = environment.MFMS_ACTOR_ASSERTION_SECRET ?? ""
+  if (actorSecret.length < 32) {
+    throw new MfmsAdminIdentityError("MFMS actor assertion signing is not configured.", 503)
+  }
+  const actorCanonical = [
+    timestamp,
+    input.method.toUpperCase(),
+    target,
+    bodySha256,
+    actor.username,
+    actor.role,
+    actor.environment,
+  ].join("\n")
+  const actorSignature = createHmac("sha256", actorSecret)
+    .update(actorCanonical, "utf8")
+    .digest("hex")
+
+  return {
+    ...getAuthenticatedUserAssertionHeaders({
+      requestHeaders: input.requestHeaders,
+      method: input.method,
+      target: input.target,
+      environment,
+      timestamp,
+    }),
+    "X-MFMS-Authenticated-Role": actor.role,
+    "X-MFMS-Authenticated-Environment": actor.environment,
+    "X-MFMS-Authenticated-Timestamp": timestamp,
+    "X-MFMS-Authenticated-Body-SHA256": bodySha256,
+    "X-MFMS-Authenticated-Signature": actorSignature,
   }
 }
