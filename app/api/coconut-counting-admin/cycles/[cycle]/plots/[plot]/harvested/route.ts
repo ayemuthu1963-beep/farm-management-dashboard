@@ -10,8 +10,10 @@ export const runtime = "nodejs"
 type RouteContext = { params: Promise<{ cycle: string; plot: string }> }
 
 function writesEnabled(): boolean {
-  const flag = (process.env.MFMS_HARVEST_CYCLE_WRITES_ENABLED ?? "").trim().toLowerCase()
-  return flag === "true" && getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
+  const flag = (process.env.MFMS_ENABLE_PREVIEW_HARVEST_CYCLE_WRITES ?? "").trim().toLowerCase()
+  const environment = (process.env.MFMS_ENV ?? process.env.NEXT_PUBLIC_MFMS_ENV ?? "").trim().toLowerCase()
+  const featureEnabled = flag === "true" || environment === "production" || environment === "prod"
+  return featureEnabled && getAdminTargetSafetyErrors(process.env, getApiBaseUrl()).length === 0
 }
 
 function parseInteger(value: unknown): number | null {
