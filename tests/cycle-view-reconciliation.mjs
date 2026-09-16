@@ -67,11 +67,25 @@ test("Cycle filter and all-future-cycle modes use the backend reconciliation end
   assert.match(page, /reconciliationCycleOptions, \.\.\.harvestCycleOptions/)
   assert.match(page, /onCyclesLoaded=\{handleReconciliationCyclesLoaded\}/)
   assert.match(page, /new Set\(\[\.\.\.current, \.\.\.cycles\]\)/)
+  assert.match(page, /const cycleSelectionTouched = useRef\(false\)/)
+  assert.match(page, /!cycleSelectionTouched\.current && allCycleOptions\.length > 0/)
+  assert.match(page, /setCycle\(String\(allCycleOptions\[0\]\)\)/)
+  assert.match(page, /cycleSelectionTouched\.current = true/)
+  assert.doesNotMatch(page, /current \|\| String\(cycles\[0\]/)
+  assert.doesNotMatch(page, /current \|\| String\(data\.harvestCycleOptions\[0\]/)
   assert.match(component, /payload\.cycles\.map\(\(item\) => item\.harvest_cycle\)/)
   assert.match(readRoute, /api\/coconut-counting\/reconciliation/)
   assert.match(readRoute, /target\.searchParams\.set\("harvest_cycle"/)
   assert.doesNotMatch(component, /harvest_cycle === 20|cycle === 20|Cycle 20/)
   assert.doesNotMatch(harvestApi, /applyCyclePlotBreakdown|fetchCyclePlotSourceRows/)
+})
+
+test("ODK-only cycles retain tree-record access when APK reconciliation is empty", () => {
+  assert.match(page, /const odkOnlyCycleRows = useMemo/)
+  assert.match(page, /tableCycle === null \|\| row\.cycle === tableCycle/)
+  assert.match(page, /!reconciliationCycleOptions\.includes\(row\.cycle\)/)
+  assert.match(page, /odkOnlyCycleRows\.map\(\(row\) =>/)
+  assert.match(page, /onClick=\{\(\) => loadCycleDetails\(row\)\}/)
 })
 
 test("cycle changes cannot be overwritten by stale requests or stale ODK summaries", () => {
