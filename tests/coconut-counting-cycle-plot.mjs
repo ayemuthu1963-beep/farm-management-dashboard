@@ -29,7 +29,7 @@ test("filtered detail history preserves Cycle, Plot and legacy APK labels", () =
     "APK recorded harvested",
     "Last sync",
   ])
-  assert.equal(headings[11], "View")
+  assert.equal(headings[11], "Actions")
   assert.match(page, /formatNumber\(session\.harvest_cycle\)/)
   assert.match(page, /formatNumber\(session\.plot\)/)
 })
