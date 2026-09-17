@@ -15,6 +15,8 @@ type HarvestCycleWriteGateInput = {
 
 export const REQUIRED_PRODUCTION_WRITE_APPROVAL =
   "APPROVE_MFMS_COCONUT_COUNTING_HARVESTED_WRITES_V1" as const
+export const REQUIRED_PRODUCTION_SESSION_ASSIGNMENT_APPROVAL =
+  "APPROVE_MFMS_COCONUT_COUNTING_SESSION_ASSIGNMENT_WRITES_V1" as const
 
 const EXACT_GIT_COMMIT = /^[0-9a-f]{40}$/
 
@@ -81,4 +83,42 @@ export function isHarvestCycleWriteAllowed({
   })
   return isExactProduction
     && sourceProductionApproval === REQUIRED_PRODUCTION_WRITE_APPROVAL
+}
+
+export function isSessionAssignmentWriteAllowed({
+  explicitFlagValue,
+  targetSafetyErrors,
+  sourceProductionApproval,
+  runtime,
+}: HarvestCycleWriteGateInput): boolean {
+  if (targetSafetyErrors.length > 0) return false
+  if (
+    explicitFlagValue !== undefined
+    && explicitFlagValue.trim().toLowerCase() !== "true"
+  ) {
+    return false
+  }
+
+  const isExactPreview = hasExactReleaseIdentity(runtime, {
+    serverEnvironment: "preview",
+    publicEnvironment: "preview",
+    databaseLabel: "mfms_server_uat",
+    buildEnvironment: "Preview",
+  })
+  const isExactUat = hasExactReleaseIdentity(runtime, {
+    serverEnvironment: "uat",
+    publicEnvironment: "uat",
+    databaseLabel: "mfms_server_uat",
+    buildEnvironment: "Preview",
+  })
+  if (isExactPreview || isExactUat) return true
+
+  const isExactProduction = hasExactReleaseIdentity(runtime, {
+    serverEnvironment: "production",
+    publicEnvironment: "production",
+    databaseLabel: "mfms_server_prod",
+    buildEnvironment: "Production",
+  })
+  return isExactProduction
+    && sourceProductionApproval === REQUIRED_PRODUCTION_SESSION_ASSIGNMENT_APPROVAL
 }
