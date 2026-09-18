@@ -4,12 +4,18 @@ import { FarmCalendarCard } from "@/components/home/farm-calendar-card"
 import { ModuleCard } from "@/components/home/module-card"
 import { HomeFooter } from "@/components/home/home-footer"
 import { moduleCards, weatherData } from "@/lib/home-data"
+import { headers } from "next/headers"
+import { resolveHomeSession } from "@/lib/home-session"
 
-export default function HomePage() {
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
+export default async function HomePage() {
+  const session = resolveHomeSession(await headers())
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#d5ecca] via-[#e4f2db] to-[#c9e6bb]">
       <div className="mx-auto max-w-[1536px] px-4 py-6 sm:px-6">
-        <HomeHeader />
+        <HomeHeader displayName={session.displayName} csrf={session.csrf} />
 
         <section
           aria-label="Farm modules"

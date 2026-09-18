@@ -11,7 +11,7 @@ const pills = [
   { label: "BETTER YIELD", icon: Leaf },
 ]
 
-export function HomeHeader() {
+export function HomeHeader({ displayName, csrf }: { displayName: string | null; csrf: string | null }) {
   const [now, setNow] = useState<Date | null>(null)
 
   useEffect(() => {
@@ -60,7 +60,13 @@ export function HomeHeader() {
       />
 
       {/* Top-right actions */}
-      <div className="absolute right-4 top-4 z-20 flex gap-3 sm:right-8 sm:top-6">
+      <div data-testid="home-actions" className="relative z-20 flex flex-wrap items-center justify-end gap-3 px-4 pt-4 sm:px-8 sm:pt-6">
+        {displayName && (
+          <>
+            <span data-testid="authenticated-name" className="max-w-64 break-words rounded-lg bg-white px-4 py-2.5 text-base font-extrabold text-[#082c17] shadow-md">{displayName}</span>
+            <span aria-hidden="true">|</span>
+          </>
+        )}
         <Link
           href="/"
           className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-extrabold text-[#082c17] shadow-md transition-colors hover:bg-white/90"
@@ -68,7 +74,11 @@ export function HomeHeader() {
           <Home className="size-5" aria-hidden="true" />
           Home
         </Link>
-        <form action="https://auth.muthufarms.com/logout" method="post">
+        {csrf && (
+          <>
+          <span aria-hidden="true">|</span>
+          <form action="https://auth.muthufarms.com/logout" method="post">
+          <input type="hidden" name="csrf" value={csrf} />
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-base font-extrabold text-[#082c17] shadow-md transition-colors hover:bg-white/90"
@@ -77,11 +87,13 @@ export function HomeHeader() {
             <LogOut className="size-5" aria-hidden="true" />
             Log out
           </button>
-        </form>
+          </form>
+          </>
+        )}
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 flex flex-col gap-6 px-5 pb-6 pt-20 sm:px-9 sm:pt-24 lg:pt-10">
+      <div className="relative z-10 flex flex-col gap-6 px-5 pb-6 pt-6 sm:px-9">
         <div className="flex flex-wrap items-center gap-5 sm:gap-8">
           <Image
             src="/mfms/logo/muthu-farms-drone-tablet-logo.png"

@@ -95,6 +95,9 @@ for (const [path, expected] of Object.entries(preservedCycleViewSha256)) {
 const vercel = JSON.parse(read("vercel.json"))
 assert.deepEqual(vercel.git.deploymentEnabled, {
   "codex/coconut-counting-production-correction-20260831": false,
+  "codex/production-home-session-20260918": false,
+  "codex/production-home-session-controls-20260918": false,
+  "production-release": false,
 })
 
 const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")

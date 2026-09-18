@@ -2,7 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "codex/coconut-counting-production-correction-20260831": false
+      "codex/coconut-counting-production-correction-20260831": false,
+      "codex/production-home-session-20260918": false,
+      "codex/production-home-session-controls-20260918": false,
+      "production-release": false
     }
   }
 }
