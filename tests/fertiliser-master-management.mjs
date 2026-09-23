@@ -50,5 +50,6 @@ assert.match(page, /technical_name: technicalName \|\| null/)
 assert.match(api, /updateFertiliserProductTechnicalName[\s\S]*PATCH/)
 assert.match(api, /technical_name: string \| null/)
 assert.match(productData, /technicalName\?: string \| null/)
+assert.doesNotMatch(page, /duplicateConfirmationNotes|Grosure appears in Insecticide/)
 
 console.log("Fertiliser Product and Category Master management invariants: PASS")

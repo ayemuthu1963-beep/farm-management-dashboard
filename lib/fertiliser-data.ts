@@ -835,10 +835,6 @@ export const fertiliserPurposes = [
 
 export const fertiliserLocations = ["Plot 1", "Plot 2", "Coconut Block", "Jackfruit Block", "Nutmeg Block", "Main Store", "Other"]
 
-export const duplicateConfirmationNotes = [
-  "Grosure appears in Insecticide and NPK Fertilizer. Both entries are retained for later administrator confirmation.",
-]
-
 // Backward-compatible exports for existing static chart/placeholder imports.
 export interface FertiliserSummary {
   label: string

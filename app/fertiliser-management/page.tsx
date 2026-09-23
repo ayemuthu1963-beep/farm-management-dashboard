@@ -31,7 +31,6 @@ import { publicEnvironmentIdentity } from "@/lib/public-environment"
 import { cn } from "@/lib/utils"
 import { formatStockUnitPrice } from "@/lib/fertiliser-price-format"
 import {
-  duplicateConfirmationNotes,
   fertiliserCategories,
   fertiliserLocations,
   fertiliserPurposes,
@@ -1723,9 +1722,6 @@ export default function FertiliserManagementPage() {
             <FilterControls search={search} setSearch={setSearch} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} stockFilter={stockFilter} setStockFilter={setStockFilter} expiryFilter={expiryFilter} setExpiryFilter={setExpiryFilter} categories={categoriesForUi} />
             <Panel title="Complete Product and Stock Register" icon={Boxes} headerRight={<div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={exportingKind === "stock" || dataMode !== "live"} onClick={() => exportFertiliserData("stock")} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">{exportingKind === "stock" ? "Exporting..." : "Export Stock Register"}</button><button type="button" onClick={() => setExpandedCategories(new Set(categoriesForUi))} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted">Expand All</button><button type="button" onClick={() => setExpandedCategories(new Set())} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted">Collapse All</button></div>}>
               <ProductRegister groupedProducts={groupedFilteredProducts} expandedCategories={expandedCategories} toggleCategory={toggleCategory} />
-              <div className="mt-4 rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
-                {duplicateConfirmationNotes.map((note) => <p key={note}>{note}</p>)}
-              </div>
             </Panel>
           </div>
         ) : null}
