@@ -11,6 +11,7 @@ export interface FertiliserProduct {
   excelRow: number
   category: string
   name: string
+  technicalName?: string | null
   quantity: number | null
   unit: string
   quantityText: string

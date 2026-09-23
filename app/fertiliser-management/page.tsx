@@ -62,6 +62,7 @@ import {
   receiveFertiliserStock,
   restoreFertiliserCategory,
   restoreFertiliserProduct,
+  updateFertiliserProductTechnicalName,
   updateFertiliserRequirement,
   type FertiliserAdjustStockResponse,
   type FertiliserAllocationApiRow,
@@ -244,6 +245,7 @@ function mapStockRowsToProducts(rows: FertiliserStockApiRow[]): FertiliserProduc
     excelRow: row.source_row_number ?? row.product_id,
     category: row.category_name,
     name: row.product_name,
+    technicalName: row.technical_name,
     quantity: numberFromApi(row.quantity),
     unit: row.unit ?? "",
     quantityText: formatApiQuantity(row.quantity, row.unit),
@@ -351,7 +353,7 @@ function FilterControls({
     <div className="grid grid-cols-1 gap-3 rounded-xl border border-border bg-card p-4 md:grid-cols-4">
       <label className="block text-sm">
         <span className="mb-1 flex items-center gap-2 font-semibold text-foreground"><Search className="size-4" aria-hidden="true" /> Search</span>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product or category" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product, technical name, or category" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary" />
       </label>
       <label className="block text-sm">
         <span className="mb-1 flex items-center gap-2 font-semibold text-foreground"><Filter className="size-4" aria-hidden="true" /> Category</span>
@@ -403,29 +405,27 @@ function ProductRegister({
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[1320px] table-fixed border-collapse text-sm">
           <colgroup>
+            <col className="w-[14%]" />
             <col className="w-[17%]" />
-            <col className="w-[22%]" />
-            <col className="w-[12%]" />
-            <col className="w-[8%]" />
-            <col className="w-[13%]" />
-            <col className="w-[12%]" />
-            <col className="w-[10%]" />
-            <col className="w-[13%]" />
+            <col className="w-[17%]" />
+            <col className="w-[7%]" />
             <col className="w-[11%]" />
-            <col className="w-[16%]" />
+            <col className="w-[10%]" />
+            <col className="w-[9%]" />
+            <col className="w-[8%]" />
+            <col className="w-[7%]" />
           </colgroup>
           <thead>
             <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
               <th className="px-3 py-2.5">Category</th>
               <th className="px-3 py-2.5">Product Name</th>
-              <th className="px-3 py-2.5">Quantity</th>
+              <th className="px-3 py-2.5">Technical Name</th>
               <th className="px-3 py-2.5">Unit</th>
               <th className="px-3 py-2.5">Expiry Date</th>
               <th className="px-3 py-2.5">Expiry Status</th>
               <th className="px-3 py-2.5">Stock Status</th>
               <th className="px-3 py-2.5">Latest Price / Unit</th>
               <th className="px-3 py-2.5">Latest Purchase</th>
-              <th className="px-3 py-2.5">Last Movement</th>
             </tr>
           </thead>
           <tbody>
@@ -443,7 +443,7 @@ function ProductRegister({
                         <span className="text-xs font-semibold text-muted-foreground">{group.products.length} products</span>
                       </button>
                     </td>
-                    <td colSpan={9} className="px-3 py-3 text-sm text-muted-foreground">Category collapsed</td>
+                    <td colSpan={8} className="px-3 py-3 text-sm text-muted-foreground">Category collapsed</td>
                   </tr>
                 )
               }
@@ -453,8 +453,6 @@ function ProductRegister({
                   {group.products.map((product, itemIndex) => {
                     const stockStatus = product.stockStatus ?? getFertiliserStockStatus(product)
                     const expiryStatus = product.expiryStatus ?? getFertiliserExpiryStatus(product.expiryDate)
-                    const movementLabel = product.lastMovement ? "LIVE MOVEMENT" : undefined
-                    const movementDate = product.lastMovement
 
                     return (
                       <tr key={product.id} data-product-row className="border-b border-border last:border-0 hover:bg-muted/35">
@@ -472,8 +470,13 @@ function ProductRegister({
                         <td className="px-3 py-2.5 font-semibold text-foreground">
                           <span className="block break-words">{product.name}</span>
                           <span className="mt-0.5 block text-xs font-medium text-muted-foreground">S.No {product.sNo}</span>
+                          <details className="mt-1 text-xs font-normal text-muted-foreground">
+                            <summary className="cursor-pointer font-semibold text-primary">Stock details</summary>
+                            <span className="mt-1 block">Quantity: {product.quantityText || formatFertiliserQuantity(product)}</span>
+                            <span className="block">Last movement: {product.lastMovement ?? "Not entered"}</span>
+                          </details>
                         </td>
-                        <td className="px-3 py-2.5 text-muted-foreground">{product.quantityText || formatFertiliserQuantity(product)}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{product.technicalName || "Not entered"}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{product.unit || "—"}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{formatFertiliserExpiry(product.expiryDate)}</td>
                         <td className="px-3 py-2.5"><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></td>
@@ -482,16 +485,6 @@ function ProductRegister({
                           {product.latestPurchaseUnitCost ? `${formatRoundedUpInr(product.latestPurchaseUnitCost)} / ${product.unit}` : "Not entered"}
                         </td>
                         <td className="px-3 py-2.5 text-muted-foreground">{product.latestPurchaseDate ?? "Not entered"}</td>
-                        <td className="px-3 py-2.5 text-muted-foreground">
-                          {movementLabel ? (
-                            <>
-                              <span className="block font-medium text-foreground">{movementLabel}</span>
-                              <span className="block text-xs">{movementDate}</span>
-                            </>
-                          ) : (
-                            "No movement"
-                          )}
-                        </td>
                       </tr>
                     )
                   })}
@@ -530,6 +523,7 @@ function ProductRegister({
                         </div>
                         <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
                           <div><dt className="text-xs text-muted-foreground">Quantity</dt><dd className="font-semibold text-foreground">{product.quantityText || formatFertiliserQuantity(product)}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Technical Name</dt><dd className="font-semibold text-foreground">{product.technicalName || "Not entered"}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Unit</dt><dd className="font-semibold text-foreground">{product.unit || "—"}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry</dt><dd className="font-semibold text-foreground">{formatFertiliserExpiry(product.expiryDate)}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry Status</dt><dd><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></dd></div>
@@ -553,10 +547,12 @@ function ProductMasterTable({
   products,
   actionId,
   onAction,
+  onEdit,
 }: {
   products: FertiliserProductApiRow[]
   actionId: string | null
   onAction: (target: MasterActionTarget) => void
+  onEdit: (product: FertiliserProductApiRow) => void
 }) {
   if (products.length === 0) {
     return <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No Product Master rows are available.</div>
@@ -569,6 +565,7 @@ function ProductMasterTable({
           <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
             <th className="px-3 py-2.5">Category</th>
             <th className="px-3 py-2.5">Product Name</th>
+            <th className="px-3 py-2.5">Technical Name</th>
             <th className="px-3 py-2.5">Default Unit</th>
             <th className="px-3 py-2.5">Minimum Stock</th>
             <th className="px-3 py-2.5">Expiry Required</th>
@@ -582,12 +579,14 @@ function ProductMasterTable({
             <tr key={product.product_id} className="border-b border-border last:border-0 hover:bg-muted/35">
               <td className="px-3 py-2.5 text-muted-foreground">{product.category_name}</td>
               <td className="px-3 py-2.5 font-semibold text-foreground">{product.product_name}</td>
+              <td className="px-3 py-2.5 text-muted-foreground">{product.technical_name || "Not entered"}</td>
               <td className="px-3 py-2.5 text-muted-foreground">{product.default_unit ?? "Not Entered"}</td>
               <td className="px-3 py-2.5 text-muted-foreground">{Number(product.minimum_stock).toLocaleString("en-IN", { maximumFractionDigits: 3 })}</td>
               <td className="px-3 py-2.5 text-muted-foreground">{product.expiry_required ? "Yes" : "No"}</td>
               <td className="px-3 py-2.5"><Badge className={product.is_active ? "bg-chart-2/15 text-chart-2" : "bg-muted text-muted-foreground"}>{product.is_active ? "Active" : "Inactive"}</Badge></td>
               <td className="px-3 py-2.5 text-muted-foreground">{product.source_row_number ?? "Manual"}</td>
               <td className="px-3 py-2.5 text-right">
+                <button type="button" disabled={actionId === `product:${product.product_id}`} onClick={() => onEdit(product)} className="mr-2 inline-flex items-center rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15 disabled:opacity-60">Edit</button>
                 <button
                   type="button"
                   disabled={actionId === `product:${product.product_id}`}
@@ -785,6 +784,7 @@ export default function FertiliserManagementPage() {
   const [exportingKind, setExportingKind] = useState<FertiliserExportKind | null>(null)
   const [exportMessage, setExportMessage] = useState("")
   const [activeModal, setActiveModal] = useState<ModalName>(null)
+  const [editingProduct, setEditingProduct] = useState<FertiliserProductApiRow | null>(null)
   const [liveData, setLiveData] = useState<FertiliserLiveData | null>(null)
   const [dataMode, setDataMode] = useState<"loading" | "live" | "fallback">("loading")
   const [dataError, setDataError] = useState("")
@@ -868,7 +868,7 @@ export default function FertiliserManagementPage() {
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
     return stockProducts.filter((product) => {
-      const matchesSearch = !term || product.name.toLowerCase().includes(term) || product.category.toLowerCase().includes(term) || String(product.sNo).includes(term)
+      const matchesSearch = !term || product.name.toLowerCase().includes(term) || (product.technicalName ?? "").toLowerCase().includes(term) || product.category.toLowerCase().includes(term) || String(product.sNo).includes(term)
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter
       const matchesStock = stockFilter === "all" || (product.stockStatus ?? getFertiliserStockStatus(product)) === stockFilter
       const matchesExpiry = expiryFilter === "all" || (product.expiryStatus ?? getFertiliserExpiryStatus(product.expiryDate)) === expiryFilter
@@ -886,7 +886,7 @@ export default function FertiliserManagementPage() {
     const sourceRows = liveData?.masterProducts ?? []
     const term = search.trim().toLowerCase()
     return sourceRows.filter((product) => {
-      const matchesSearch = !term || product.product_name.toLowerCase().includes(term) || product.category_name.toLowerCase().includes(term) || String(product.source_row_number ?? "").includes(term)
+      const matchesSearch = !term || product.product_name.toLowerCase().includes(term) || (product.technical_name ?? "").toLowerCase().includes(term) || product.category_name.toLowerCase().includes(term) || String(product.source_row_number ?? "").includes(term)
       const matchesCategory = categoryFilter === "all" || product.category_name === categoryFilter
       const matchesStatus = masterStatusFilter === "all" || (masterStatusFilter === "active" ? product.is_active : !product.is_active)
       return matchesSearch && matchesCategory && matchesStatus
@@ -1531,6 +1531,7 @@ export default function FertiliserManagementPage() {
     } else {
       const minimumStock = String(formData.get("minimum_stock") ?? "0").trim()
       if (!String(formData.get("product_name") ?? "").trim()) errors.product_name = "Product name is required"
+      if (String(formData.get("technical_name") ?? "").trim().length > 200) errors.technical_name = "Technical Name must be 200 characters or fewer"
       if (Number(formData.get("category_id")) <= 0) errors.category_id = "Category is required"
       if (!String(formData.get("default_unit") ?? "").trim()) errors.default_unit = "Default unit is required"
       if (!/^\d+(\.\d{1,3})?$/.test(minimumStock)) errors.minimum_stock = "Minimum stock must be zero or greater with up to 3 decimal places"
@@ -1558,6 +1559,7 @@ export default function FertiliserManagementPage() {
         const result = await createFertiliserProduct({
           category_id: Number(formData.get("category_id")),
           product_name: String(formData.get("product_name") ?? "").trim(),
+          technical_name: String(formData.get("technical_name") ?? "").trim() || null,
           default_unit: String(formData.get("default_unit") ?? "").trim(),
           minimum_stock: String(formData.get("minimum_stock") ?? "0").trim(),
           expiry_required: formData.get("expiry_required") === "on",
@@ -1568,6 +1570,30 @@ export default function FertiliserManagementPage() {
       }
       form.reset()
       setActiveModal(null)
+    } catch (error) {
+      const apiError = error as Error & { fieldErrors?: unknown }
+      const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
+      setMasterFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { form: apiError.message })
+    } finally {
+      setMasterSubmitting(false)
+    }
+  }
+
+  const submitTechnicalNameEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingProduct) return
+    const technicalName = String(new FormData(event.currentTarget).get("technical_name") ?? "").trim()
+    if (technicalName.length > 200) {
+      setMasterFormErrors({ technical_name: "Technical Name must be 200 characters or fewer" })
+      return
+    }
+    setMasterFormErrors({})
+    setMasterSubmitting(true)
+    try {
+      await updateFertiliserProductTechnicalName(editingProduct.product_id, { technical_name: technicalName || null })
+      await refreshLiveData()
+      resetMessage(`Technical Name saved for ${editingProduct.product_name}.`)
+      setEditingProduct(null)
     } catch (error) {
       const apiError = error as Error & { fieldErrors?: unknown }
       const apiErrors = apiFieldErrorsToFormErrors(apiError.fieldErrors)
@@ -2075,7 +2101,7 @@ export default function FertiliserManagementPage() {
             </Panel>
             <Panel title="Product Master" icon={Tags}>
               {dataMode === "live" ? (
-                <ProductMasterTable products={productMasterRows} actionId={masterActionId} onAction={openMasterAction} />
+                <ProductMasterTable products={productMasterRows} actionId={masterActionId} onAction={openMasterAction} onEdit={(product) => { setMasterFormErrors({}); setEditingProduct(product) }} />
               ) : (
                 <div className="rounded-xl border border-dashed border-destructive/30 bg-destructive/5 p-6 text-sm font-semibold text-destructive">
                   LIVE FERTILISER DATA UNAVAILABLE. Product Master rows are not shown from mock data.
@@ -2096,6 +2122,7 @@ export default function FertiliserManagementPage() {
                 {activeModal === "product" ? (
                   <>
                     <InputField label="Product name" name="product_name" error={masterFormErrors.product_name} />
+                    <InputField label="Technical Name (optional)" name="technical_name" error={masterFormErrors.technical_name} />
                     <SelectField label="Category" name="category_id" error={masterFormErrors.category_id}><option value="">Select category</option>{(liveData?.categories ?? []).map((category) => <option key={category.category_id} value={category.category_id}>{category.category_name}</option>)}</SelectField>
                     <SelectField label="Default unit" name="default_unit" error={masterFormErrors.default_unit}><option value="">Select unit</option>{fertiliserUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</SelectField>
                     <InputField label="Minimum stock" name="minimum_stock" type="number" min="0" step="0.001" inputMode="decimal" defaultValue="0" error={masterFormErrors.minimum_stock} />
@@ -2111,6 +2138,23 @@ export default function FertiliserManagementPage() {
                 {masterFormErrors.form ? <div className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{masterFormErrors.form}</div> : null}
                 <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">The new record will be saved only to the configured {fertiliserDatabaseDescription} and will appear in the master tables immediately.</div>
                 <SubmitRow label={activeModal === "product" ? "Save Product" : "Save Category"} submitting={masterSubmitting} />
+              </form>
+            </div>
+          </div>
+        ) : null}
+
+        {editingProduct ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label={`Edit ${editingProduct.product_name}`}>
+            <div className="w-full max-w-xl rounded-xl border border-border bg-card p-5 shadow-xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-foreground">Edit Technical Name: {editingProduct.product_name}</h2>
+                <button type="button" disabled={masterSubmitting} onClick={() => setEditingProduct(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"><X className="size-5" aria-hidden="true" /><span className="sr-only">Close</span></button>
+              </div>
+              <form onSubmit={submitTechnicalNameEdit} className="space-y-4">
+                <InputField label="Technical Name (optional)" name="technical_name" defaultValue={editingProduct.technical_name ?? ""} error={masterFormErrors.technical_name} />
+                <p className="text-sm text-muted-foreground">Leave blank if the Technical Name is unknown.</p>
+                {masterFormErrors.form ? <div className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">{masterFormErrors.form}</div> : null}
+                <SubmitRow label="Save Technical Name" submitting={masterSubmitting} />
               </form>
             </div>
           </div>

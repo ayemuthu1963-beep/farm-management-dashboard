@@ -14,6 +14,7 @@ export interface FertiliserProductApiRow {
   category_id: number
   category_name: string
   product_name: string
+  technical_name: string | null
   default_unit: string | null
   minimum_stock: string
   expiry_required: boolean
@@ -32,10 +33,15 @@ export interface FertiliserCategoryCreatePayload {
 export interface FertiliserProductCreatePayload {
   category_id: number
   product_name: string
+  technical_name?: string | null
   default_unit: string
   minimum_stock: string
   expiry_required: boolean
   display_order?: number | null
+}
+
+export interface FertiliserProductTechnicalNamePayload {
+  technical_name: string | null
 }
 
 export interface FertiliserMasterStatusPayload {
@@ -53,7 +59,7 @@ export interface FertiliserCategoryMutationResponse {
 export interface FertiliserProductMutationResponse {
   ok: boolean
   product: FertiliserProductApiRow
-  action: "CREATED" | "DEACTIVATED" | "RESTORED"
+  action: "CREATED" | "UPDATED" | "DEACTIVATED" | "RESTORED"
   changed?: boolean
   write_scope: string
 }
@@ -63,6 +69,7 @@ export interface FertiliserStockApiRow {
   category_id: number
   category_name: string
   product_name: string
+  technical_name: string | null
   category_display_order?: number
   quantity: string | null
   unit: string | null
@@ -455,6 +462,10 @@ export function createFertiliserCategory(payload: FertiliserCategoryCreatePayloa
 
 export function createFertiliserProduct(payload: FertiliserProductCreatePayload): Promise<FertiliserProductMutationResponse> {
   return sendMasterRequest("/api/fertiliser/products", "POST", payload, "Product save failed")
+}
+
+export function updateFertiliserProductTechnicalName(productId: number, payload: FertiliserProductTechnicalNamePayload): Promise<FertiliserProductMutationResponse> {
+  return sendMasterRequest(`/api/fertiliser/products/${productId}`, "PATCH", payload, "Technical Name save failed")
 }
 
 export function deactivateFertiliserCategory(categoryId: number, payload: FertiliserMasterStatusPayload): Promise<FertiliserCategoryMutationResponse> {
