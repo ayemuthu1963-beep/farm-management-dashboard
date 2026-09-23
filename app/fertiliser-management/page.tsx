@@ -29,6 +29,7 @@ import { Panel } from "@/components/farm/panel"
 import { StatCard, StatGrid } from "@/components/farm/stat-card"
 import { publicEnvironmentIdentity } from "@/lib/public-environment"
 import { cn } from "@/lib/utils"
+import { formatStockUnitPrice } from "@/lib/fertiliser-price-format"
 import {
   duplicateConfirmationNotes,
   fertiliserCategories,
@@ -482,7 +483,7 @@ function ProductRegister({
                         <td className="px-3 py-2.5"><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></td>
                         <td className="px-3 py-2.5"><Badge className={stockStatusStyles[stockStatus]}>{stockStatus}</Badge></td>
                         <td className="px-3 py-2.5 font-semibold text-foreground">
-                          {product.latestPurchaseUnitCost ? `${formatRoundedUpInr(product.latestPurchaseUnitCost)} / ${product.unit}` : "Not entered"}
+                          {formatStockUnitPrice(product.latestPurchaseUnitCost, product.unit)}
                         </td>
                         <td className="px-3 py-2.5 text-muted-foreground">{product.latestPurchaseDate ?? "Not entered"}</td>
                       </tr>
@@ -527,7 +528,7 @@ function ProductRegister({
                           <div><dt className="text-xs text-muted-foreground">Unit</dt><dd className="font-semibold text-foreground">{product.unit || "—"}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry</dt><dd className="font-semibold text-foreground">{formatFertiliserExpiry(product.expiryDate)}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Expiry Status</dt><dd><Badge className={expiryStatusStyles[expiryStatus]}>{expiryStatus}</Badge></dd></div>
-                          <div><dt className="text-xs text-muted-foreground">Latest Price / Unit</dt><dd className="font-semibold text-foreground">{product.latestPurchaseUnitCost ? `${formatRoundedUpInr(product.latestPurchaseUnitCost)} / ${product.unit}` : "Not entered"}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Latest Price / Unit</dt><dd className="font-semibold text-foreground">{formatStockUnitPrice(product.latestPurchaseUnitCost, product.unit)}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Latest Purchase</dt><dd className="font-semibold text-foreground">{product.latestPurchaseDate ?? "Not entered"}</dd></div>
                         </dl>
                       </article>
