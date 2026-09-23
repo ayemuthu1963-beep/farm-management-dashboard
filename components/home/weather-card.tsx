@@ -99,12 +99,12 @@ export function WeatherCard({ data }: WeatherCardProps) {
       href={weatherNavigation.href}
       className="flex min-h-[280px] flex-col rounded-xl border border-[#dce9dc] bg-white/95 p-6 text-[#071f13] shadow-[0_8px_22px_rgba(0,0,0,0.09)] transition-shadow hover:shadow-[0_12px_28px_rgba(0,0,0,0.14)]"
     >
-      <div className="grid flex-1 grid-cols-[auto_minmax(0,1fr)] gap-4 sm:flex">
+      <div className="grid flex-1 grid-cols-[auto_minmax(0,1fr)] gap-4">
         <span className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-[#e5f3e2] text-[#0a7a37] sm:size-24">
           <WeatherIcon className="size-12" aria-hidden="true" />
         </span>
-        <div className="contents sm:flex sm:flex-1 sm:flex-col">
-          <h3 className="self-center text-lg font-extrabold tracking-wide text-[#0d3f1e] sm:self-auto">{weatherNavigation.label}</h3>
+        <div className="contents">
+          <h3 className="self-center text-lg font-extrabold tracking-wide text-[#0d3f1e]">{weatherNavigation.label}</h3>
           <div className="col-span-2 mt-2 flex flex-1 items-start justify-between gap-3">
             <div>
               <p className="text-4xl font-black leading-none">
