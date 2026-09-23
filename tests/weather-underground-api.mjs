@@ -65,11 +65,7 @@ assert.equal(weatherNavigation.external, undefined)
 assert.equal(weatherNavigation.showInSidebar, true)
 
 const weatherHistoryNavigation = mfmsNavigationItems.find((item) => item.id === "weather-history")
-assert.ok(weatherHistoryNavigation)
-assert.equal(weatherHistoryNavigation.href, "/weather")
-assert.equal(weatherHistoryNavigation.status, "active")
-assert.equal(weatherHistoryNavigation.showInSidebar, false)
-assert.equal(weatherHistoryNavigation.ctaLabel, "View 7-Day History")
+assert.equal(weatherHistoryNavigation, undefined, "Weather History must not have a homepage tile")
 
 assert.match(envExample, /^WEATHER_UNDERGROUND_STATION_ID=IUDUMA3$/m)
 assert.match(

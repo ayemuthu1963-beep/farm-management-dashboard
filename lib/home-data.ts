@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react"
 import { homepageNavigationItems } from "@/lib/mfms-navigation"
 
 export interface WeatherData {
@@ -28,7 +29,7 @@ export interface ModuleCardData {
   id: string
   title: string
   description: string
-  icon: string
+  icon: LucideIcon
   href: string
   /** external links open in a new tab */
   external?: boolean
@@ -38,15 +39,15 @@ export interface ModuleCardData {
   ctaLabel?: string
 }
 
-// Today's Weather is rendered separately; every other homepage card is
+// Weather and Farm Calendar are rendered separately; every other homepage card is
 // projected from the same authoritative configuration used by the sidebar.
 export const moduleCards: ModuleCardData[] = homepageNavigationItems
-  .filter((item) => item.id !== "todays-weather")
+  .filter((item) => item.id !== "todays-weather" && item.id !== "farm-calendar")
   .map((item) => ({
     id: item.id,
     title: item.label,
     description: item.description ?? "",
-    icon: item.dashboardIcon ?? "/placeholder.svg",
+    icon: item.icon,
     href: item.href,
     external: item.external,
     comingSoon: item.status === "coming-soon",

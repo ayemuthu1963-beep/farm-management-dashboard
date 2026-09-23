@@ -28,17 +28,17 @@ assert.equal(
   "https://calendar.google.com/calendar/u/8/r?tab=wc",
 )
 assert.equal(FARM_CALENDAR_ACCOUNT, "admin.muthufarms@gmail.com")
-assert.match(calendarCard, /<a[\s\S]*href=\{FARM_CALENDAR_URL\}/)
+assert.match(calendarCard, /<a[\s\S]*href=\{calendarNavigation.href\}/)
 assert.match(calendarCard, /target="_blank"/)
 assert.match(calendarCard, /rel="noopener noreferrer"/)
 assert.match(calendarCard, /aria-label="Open Farm Calendar in a new tab"/)
-assert.match(calendarCard, />\s*Farm Calendar\s*</)
-assert.match(calendarCard, />\s*Open Farm Calendar\s*/)
-assert.match(calendarCard, /CalendarDays/)
+assert.match(calendarCard, /\{calendarNavigation.label\}/)
+assert.match(calendarCard, /\{calendarNavigation.ctaLabel\}/)
+assert.match(calendarCard, /const CalendarIcon = calendarNavigation.icon/)
 
 assert.deepEqual(
   homepageNavigationItems
-    .filter((item) => item.id !== "todays-weather")
+    .filter((item) => item.id !== "todays-weather" && item.id !== "farm-calendar")
     .map((item) => item.id),
   [
     "coconut-harvest",
@@ -51,7 +51,6 @@ assert.deepEqual(
     "pipeline-layout-inspection",
     "farm-map",
     "fertiliser-management",
-    "weather-history",
     "farm-reports",
     "worker-management",
     "mfms-intelligence",

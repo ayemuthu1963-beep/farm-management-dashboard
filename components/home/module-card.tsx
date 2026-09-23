@@ -1,4 +1,3 @@
-import Image from "next/image"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import type { ModuleCardData } from "@/lib/home-data"
@@ -8,18 +7,17 @@ interface ModuleCardProps {
 }
 
 export function ModuleCard({ data }: ModuleCardProps) {
+  const Icon = data.icon
   return (
     <Link
       href={data.href}
+      target={data.external ? "_blank" : undefined}
+      rel={data.external ? "noopener noreferrer" : undefined}
       className="flex min-h-[280px] gap-5 rounded-xl border border-[#dce9dc] bg-white/95 p-6 text-[#071f13] shadow-[0_8px_22px_rgba(0,0,0,0.09)] transition-shadow hover:shadow-[0_12px_28px_rgba(0,0,0,0.14)]"
     >
-      <Image
-        src={data.icon || "/placeholder.svg"}
-        alt={data.title}
-        width={112}
-        height={112}
-        className="size-20 shrink-0 rounded-2xl object-contain sm:size-24"
-      />
+      <span className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-[#e5f3e2] text-[#0a7a37] sm:size-24">
+        <Icon className="size-12" aria-hidden="true" />
+      </span>
       <div className="flex flex-1 flex-col">
         <h3 className="text-xl font-extrabold uppercase leading-tight text-[#0d3f1e]">{data.title}</h3>
         <p className="mt-3 text-sm leading-relaxed text-[#4a5d4f]">{data.description}</p>

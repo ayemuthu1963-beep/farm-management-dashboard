@@ -53,6 +53,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <li key={item.id}>
               <Link
                 href={item.href}
+                target={item.external ? "_blank" : undefined}
+                rel={item.external ? "noopener noreferrer" : undefined}
                 aria-current={active ? "page" : undefined}
                 onClick={onNavigate}
                 className={cn(
@@ -63,7 +65,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 )}
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
-                <span className="truncate">{item.label}</span>
+                <span className="min-w-0 break-words">{item.label}</span>
                 {item.status === "coming-soon" ? (
                   <span className="ml-auto rounded bg-sidebar-accent px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
                     Soon
