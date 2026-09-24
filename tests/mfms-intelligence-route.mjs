@@ -242,7 +242,32 @@ try {
     configure(); upstream = { ...upstream, answer: "", status, blocked_reason: "Governed boundary", metabase_call_made: false, provider_call_made: false }
     upstreamStatus = status === "BLOCKED_LIMIT" ? 429 : 200
     const response = await ask({ body: JSON.stringify({ question: "Recommend a treatment" }) })
-    assert.equal(response.status, upstreamStatus); assert.equal((await response.json()).status, status); cases++
+    assert.equal(response.status, upstreamStatus)
+    const governed = await response.json()
+    assert.equal(governed.status, status)
+    assert.equal(governed.blocked_reason, "Governed boundary", "Preserve valid governed limit explanations")
+    cases++
+  }
+  for (const body of [JSON.stringify({ detail: signingSecret }), "not JSON", "", JSON.stringify(validResponse)]) {
+    configure()
+    globalThis.fetch = async (target, init) => {
+      requests.push({ target: String(target), init })
+      return new Response(body, { status: 429 })
+    }
+    const limited = await ask()
+    assert.equal(limited.status, 429, "Backend rate limit must not become a browser 502")
+    assert.equal(limited.headers.get("cache-control"), "no-store, max-age=0")
+    const payload = await limited.json()
+    assert.equal(payload.status, "BLOCKED_LIMIT")
+    assert.equal(payload.blocked_reason, "Request limit reached. Please wait a minute before asking again.")
+    assert.equal(payload.data_source_status, "NOT_QUERIED_FAIL_CLOSED")
+    assert.equal(payload.metabase_call_made, false)
+    assert.equal(payload.provider_call_made, false)
+    assert.equal(payload.table, null)
+    assert.equal(payload.answer, "")
+    assert.ok(!JSON.stringify(payload).includes(signingSecret))
+    assert.equal(requests.length, 1, "A throttled request must never be retried")
+    cases++
   }
   for (const status of [401, 403]) {
     configure(); globalThis.fetch = async () => Response.json({ detail: signingSecret }, { status })
