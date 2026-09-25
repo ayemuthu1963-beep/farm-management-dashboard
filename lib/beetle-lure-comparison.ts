@@ -43,6 +43,16 @@ export function comparisonStartDate(resetDate?: string | null): string {
   return resetDate && resetDate > BEETLE_LURE_START_DATE ? resetDate : BEETLE_LURE_START_DATE
 }
 
+/** Backend end date when available; otherwise the farm's current IST calendar day. */
+export function comparisonEndDate(endDate?: string | null, now = new Date()): string {
+  if (endDate) return endDate
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now)
+  const values = new Map(parts.map((part) => [part.type, part.value]))
+  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`
+}
+
 export function comparisonLocations(
   locations: BeetleTrapLocationRecord[],
   startDate = BEETLE_LURE_START_DATE,

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { bandForCount } from "@/lib/beetle-data"
 
-import { comparisonLocations, comparisonStartDate } from "@/lib/beetle-lure-comparison"
+import { comparisonEndDate, comparisonLocations, comparisonStartDate } from "@/lib/beetle-lure-comparison"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -67,8 +67,11 @@ function inspectionRecords(row: ApiLocationRow): Array<{ inspectionDate: string;
     }))
 }
 
-function toMarker(row: ApiLocationRow): BeetleMarker {
-  const filtered = comparisonLocations([row], comparisonStartDate(row.cumulative_count_start_date))[0]
+function toMarker(row: ApiLocationRow, endDate: string): BeetleMarker {
+  if (!Array.isArray(row.inspection_records)) {
+    throw new Error(`Trap ${row.trap_no} inspection records are unavailable.`)
+  }
+  const filtered = comparisonLocations([row], comparisonStartDate(row.cumulative_count_start_date), endDate)[0]
   const records = inspectionRecords({ ...row, inspection_records: filtered?.inspection_records })
   const cumulativeCount = records.reduce((sum, record) => sum + record.beetleCount, 0)
   const latest = records.toSorted((a, b) => a.inspectionDate.localeCompare(b.inspectionDate)).at(-1)
@@ -113,7 +116,8 @@ export async function GET() {
     }
 
     const rows = (await response.json()) as ApiLocationRow[]
-    const markers = rows.filter((row) => row.active !== false).map(toMarker)
+    const endDate = comparisonEndDate()
+    const markers = rows.filter((row) => row.active !== false).map((row) => toMarker(row, endDate))
 
     return NextResponse.json({
       markers,

@@ -12,7 +12,7 @@ import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
 import type { BeetleTrapLocationRecord } from "@/lib/beetle-trap-matrix"
 
-import { BEETLE_LURE_SERIES, buildBeetleLureComparison, comparisonStartDate } from "@/lib/beetle-lure-comparison"
+import { BEETLE_LURE_SERIES, buildBeetleLureComparison, comparisonEndDate, comparisonStartDate } from "@/lib/beetle-lure-comparison"
 
 export const dynamic = "force-dynamic"
 
@@ -149,7 +149,7 @@ async function getBeetleDashboardData(searchParams: PageSearchParams): Promise<B
   if (!cumulativeStartDate || initial.cumulative_config_status !== "ok") return initial
 
   const activePeriodQuery = new URLSearchParams({ start_date: cumulativeStartDate })
-  if (initial.current_end_date) activePeriodQuery.set("end_date", initial.current_end_date)
+  activePeriodQuery.set("end_date", comparisonEndDate(initial.current_end_date))
 
   return (await fetchBeetleDashboardData(activePeriodQuery)) ?? initial
 }
@@ -381,11 +381,12 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
   ])
   const cards = summaryCards(data)
   const cumulativeStartDate = comparisonStartDate(data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date)
+  const cumulativeEndDate = comparisonEndDate(data?.current_end_date)
   let comparison: ReturnType<typeof buildBeetleLureComparison> | null = null
   let comparisonError = "Trap inspection records are unavailable."
   if (trapLocations !== null) {
     try {
-      comparison = buildBeetleLureComparison(trapLocations, cumulativeStartDate, data?.current_end_date)
+      comparison = buildBeetleLureComparison(trapLocations, cumulativeStartDate, cumulativeEndDate)
     } catch (error) {
       comparisonError = error instanceof Error ? error.message : "Company comparison is unavailable."
     }
@@ -396,7 +397,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
     area_summary: comparison?.areas ?? [],
     area_connected: comparison !== null,
     area_message: comparisonError,
-    cumulative_period_label: `${formatDisplayDate(cumulativeStartDate)} to ${formatDisplayDate(data.current_end_date)}`,
+    cumulative_period_label: `${formatDisplayDate(cumulativeStartDate)} to ${formatDisplayDate(cumulativeEndDate)}`,
   } : null
   const tableRows = dailyTableRows(data, rows, cumulativeStartDate)
   const waterChangeDates = (data?.water_changes ?? []).map((entry) => entry.water_changed_on).filter((date) => date >= cumulativeStartDate)

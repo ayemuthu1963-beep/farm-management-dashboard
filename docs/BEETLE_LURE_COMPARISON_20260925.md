@@ -27,7 +27,7 @@ Total B: 40; total G: 38. The source workbook itself is not published in this re
 
 ## Calculation and failure behavior
 
-The existing authenticated locations API provides individual ODK-synced inspection records for the active reset period. The frontend applies the installation-date boundary and aggregates those records using one shared plot/company/species mapping. No backend deployment, database migration, ODK form edit or catch-data write is needed.
+The existing authenticated locations API provides individual ODK-synced inspection records for the active reset period. The frontend applies the installation-date boundary (or later reset) and an inclusive end-date boundary, then aggregates those records using one shared plot/company/species mapping. Marker totals, latest counts, Top 10 and maps exclude inspections after today in Asia/Kolkata. The comparison uses the backend current end date, falling back to the same IST calendar day when unavailable. Missing/null raw inspection arrays make marker data unavailable rather than reporting false zeros; available empty arrays remain valid. No backend deployment, database migration, ODK form edit or catch-data write is needed.
 
 Recorded zero counts remain zero in the daily comparison. No observation is represented as null/gap, not an invented zero. Multiple records on the same date are summed. Area averages divide recorded catches by installed traps in the matching group; they are not catches per inspection. The UI explains that inspection coverage and dates must be comparable. The existing trap matrix continues to show blank zero/missing cells.
 
@@ -42,6 +42,7 @@ The comparison refuses unmapped traps, duplicates, changed species, incomplete a
 - `pnpm build`: PASS.
 - Built `/beetle-trap` and `/api/beetle-trap/markers` exercised against an isolated synthetic API: PASS. Four company area rows and the B/G matrix row rendered; 78 markers returned; pre-installation records of 999 catches were excluded.
 - `git diff --check`: PASS.
+- Release correction: fixed-clock executable checks cover the real markers route and page comparison fallback immediately before/at IST midnight, future-count exclusion, year rollover, later resets, and null/missing inspection arrays. The corrected candidate passes the comparison/marker tests, cumulative export, water change, daywise matrix and sync regressions, `pnpm typecheck`, and `git diff --check`. Earlier full-suite/build results above predate this correction.
 
 ## Remaining release checks
 
@@ -49,7 +50,7 @@ Not deployed. No production data or sessions were changed. The branch has an exa
 
 Browser automation failed to start in the execution environment, so desktop/mobile visual verification is outstanding. Synthetic server-rendering checks do not substitute for live ODK verification.
 
-Continue from the server-connected Codex environment:
+Continue from the server-connected Codex environment using **GPT-6 Astra with medium reasoning and multi-agent execution**. Use a separate implementation/deployment agent and an independent reviewer. Production deployment is already owner-authorized; complete the established release checks below.
 
 1. Review the pull request diff against the current production revision; reconcile any intervening changes.
 2. Verify the production locations response contains all 78 expected active traps, the reset date is 24 September 2026, and the grouped daily sums reconcile with current ODK-synced counts.

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
+import { mock } from "node:test"
+import { NextResponse } from "next/server.js"
+import * as comparisonModule from "../lib/beetle-lure-comparison.ts"
+import * as beetleData from "../lib/beetle-data.ts"
 import { strFromU8, unzipSync } from "fflate"
 import { BEETLE_LURE_ASSIGNMENTS } from "../lib/beetle-lure-assignments.ts"
-import { BEETLE_LURE_SERIES, buildBeetleLureComparison, comparisonStartDate, lureForTrap, trapLureLabel } from "../lib/beetle-lure-comparison.ts"
+import { BEETLE_LURE_SERIES, buildBeetleLureComparison, comparisonEndDate, comparisonStartDate, lureForTrap, trapLureLabel } from "../lib/beetle-lure-comparison.ts"
 import { buildBeetleTrapMatrix } from "../lib/beetle-trap-matrix.ts"
 import { buildBeetleTrapMatrixWorkbook } from "../lib/beetle-trap-matrix-excel.ts"
 import { buildDailyBeetleCountWorkbook } from "../lib/beetle-daily-count-excel.ts"
@@ -77,3 +83,73 @@ assert.ok(trapSheet.includes('ySplit="5" topLeftCell="B6"'))
 assert.equal((trapSheet.match(/>B<\/t>/g) ?? []).length, 40)
 assert.equal((trapSheet.match(/>G<\/t>/g) ?? []).length, 38)
 console.log("PASS: 78 Excel assignments; eight series; period boundaries; totals/averages; zeros/gaps; mapping failures; both Excel exports.")
+
+// Execute the real markers route with fixed farm time and synthetic upstream data.
+const require = createRequire(import.meta.url)
+const ts = require("typescript")
+const routeSource = readFileSync(new URL("../app/api/beetle-trap/markers/route.ts", import.meta.url), "utf8")
+const routeOutput = ts.transpileModule(routeSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText
+const routeModule = { exports: {} }
+const routeRequire = (specifier) => {
+  if (specifier === "next/server") return { NextResponse }
+  if (specifier === "@/lib/api") return { getApiBaseUrl: () => "https://synthetic.invalid", getBasicAuthHeader: () => "Basic synthetic" }
+  if (specifier === "@/lib/beetle-data") return beetleData
+  if (specifier === "@/lib/beetle-lure-comparison") return comparisonModule
+  throw new Error(`Unexpected markers dependency: ${specifier}`)
+}
+Function("require", "module", "exports", routeOutput)(routeRequire, routeModule, routeModule.exports)
+const originalFetch = globalThis.fetch
+let upstream = fixture.map((row) => ({ ...row, latitude: 12, longitude: 77, cumulative_count_start_date: "2026-09-01" }))
+try {
+  mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-24T18:29:59.999Z") })
+  assert.equal(comparisonEndDate(), "2026-09-24", "Farm day must change at IST midnight, not UTC midnight")
+  assert.equal(comparisonEndDate(null), "2026-09-24")
+  assert.equal(comparisonEndDate("2026-09-23"), "2026-09-23", "An authoritative backend end date remains respected")
+  globalThis.fetch = async () => Response.json(upstream)
+  let response = await routeModule.exports.GET()
+  assert.equal(response.status, 200)
+  let body = await response.json()
+  assert.equal(body.markers.length, 78)
+  for (const marker of body.markers) {
+    assert.equal(marker.cumulativeCount, 1)
+    assert.equal(marker.recordsCount, 1)
+    assert.equal(marker.latestInspectionDate, "2026-09-24")
+    assert.equal(marker.latestCount, 1)
+  }
+  mock.timers.setTime(new Date("2026-09-24T18:30:00.000Z").getTime())
+  assert.equal(comparisonEndDate(), "2026-09-25")
+  const fallbackComparison = buildBeetleLureComparison(fixture, comparisonStartDate(), comparisonEndDate(null))
+  assert.deepEqual(fallbackComparison.daily.map((row) => row.sourceDate), ["2026-09-25", "2026-09-24"])
+  response = await routeModule.exports.GET()
+  body = await response.json()
+  assert.equal(body.markers.reduce((sum, marker) => sum + marker.cumulativeCount, 0),
+    fallbackComparison.areas.reduce((sum, area) => sum + area.red_palm_weevil_count + area.rhinoceros_beetle_count, 0))
+  for (const marker of body.markers) {
+    assert.equal(marker.recordsCount, 2)
+    assert.equal(marker.latestInspectionDate, "2026-09-25")
+    assert.equal(marker.latestCount, 0)
+    assert.equal(marker.countBand, beetleData.bandForCount(1).band)
+  }
+  upstream = [{ ...upstream[0], cumulative_count_start_date: "2026-09-25" }]
+  body = await (await routeModule.exports.GET()).json()
+  assert.equal(body.markers[0].cumulativeCount, 0, "Later reset must still exclude earlier trial records")
+  assert.equal(body.markers[0].recordsCount, 1)
+  upstream = [{ ...upstream[0], inspection_records: [] }]
+  response = await routeModule.exports.GET()
+  assert.equal(response.status, 200, "An available empty inspection array is valid")
+  assert.equal((await response.json()).markers[0].recordsCount, 0)
+  for (const missing of [null, undefined]) {
+    upstream = [{ ...upstream[0], inspection_records: missing }]
+    response = await routeModule.exports.GET()
+    assert.equal(response.status, 502, "Unavailable raw records must not produce false zero markers")
+    assert.match((await response.json()).error, /inspection records are unavailable/)
+  }
+  mock.timers.setTime(new Date("2026-12-31T18:30:00Z").getTime())
+  assert.equal(comparisonEndDate(), "2027-01-01", "IST cutoff must cross year boundaries")
+} finally {
+  globalThis.fetch = originalFetch
+  mock.timers.reset()
+}
+console.log("PASS: real marker route and comparison fallback agree across IST midnight; future catches excluded; reset and missing-record behavior preserved.")
