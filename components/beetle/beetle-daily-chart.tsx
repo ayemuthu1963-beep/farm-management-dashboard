@@ -2,16 +2,9 @@
 
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ReferenceLine, ResponsiveContainer } from "recharts"
 
-export interface BeetleDailyCountRow {
-  date: string
-  sourceDate?: string
-  rhinoceros: number
-  redPalmWeevil: number
-  plot1Rhinoceros: number
-  plot1RedPalmWeevil: number
-  plot2Rhinoceros: number
-  plot2RedPalmWeevil: number
-}
+import { BEETLE_LURE_SERIES, type BeetleLureDailyRow } from "@/lib/beetle-lure-comparison"
+
+export type BeetleDailyCountRow = BeetleLureDailyRow
 
 interface BeetleDailyChartProps {
   counts: BeetleDailyCountRow[]
@@ -43,7 +36,7 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
   ].sort((left, right) => (left.sourceDate ?? "").localeCompare(right.sourceDate ?? ""))
 
   return (
-    <div className="h-72 w-full">
+    <div className="h-[480px] w-full sm:h-96">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -51,10 +44,12 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
           <YAxis width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip labelFormatter={chartDate} contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", backgroundColor: "var(--card)", color: "var(--card-foreground)", fontSize: 12 }} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="plot1RedPalmWeevil" name="Plot 1 — Red Palm Weevil (solid)" stroke="var(--destructive)" strokeWidth={2} connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="plot1Rhinoceros" name="Plot 1 — Rhinoceros Beetle (solid)" stroke="var(--foreground)" strokeWidth={2} connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="plot2RedPalmWeevil" name="Plot 2 — Red Palm Weevil (dashed)" stroke="var(--destructive)" strokeWidth={2} strokeDasharray="5 3" connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="plot2Rhinoceros" name="Plot 2 — Rhinoceros Beetle (dashed)" stroke="var(--foreground)" strokeWidth={2} strokeDasharray="5 3" connectNulls dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          {BEETLE_LURE_SERIES.map((series) => (
+            <Line key={series.key} type="linear" dataKey={series.key}
+              name={`Plot ${series.plot} ${series.company} — ${series.species} (${series.plot === 1 ? "solid" : "dashed"})`}
+              stroke={series.color} strokeWidth={2} strokeDasharray={series.plot === 2 ? "5 3" : undefined}
+              connectNulls={false} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+          ))}
           {pheromoneChangeDate ? (
             <ReferenceLine x={pheromoneChangeDate} stroke="#dc2626" strokeWidth={3} label={{ value: "Pheromone change / reset", position: "insideTopLeft", fill: "#b91c1c", fontSize: 12, fontWeight: 700 }} />
           ) : null}

@@ -22,8 +22,8 @@ assert.match(exportButton, /buildDailyBeetleCountWorkbook\(\{ rows, startDate \}
 assert.match(exportButton, /dailyBeetleWorkbookFilename/)
 assert.match(workbook, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/)
 assert.match(workbook, /daily-beetle-count-\$\{safeStartDate\}\.xlsx/)
-assert.match(workbook, /Rhinoceros Beetle Count/)
-assert.match(workbook, /Red Palm Weevil Count/)
+assert.match(workbook, /BEETLE_LURE_SERIES/)
+assert.match(workbook, /series.species/)
 assert.match(workbook, /Cumulative period start date:/)
 
 console.log("Beetle Trap cumulative-period chart, table, and Excel export contracts passed.")

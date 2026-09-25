@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { bandForCount } from "@/lib/beetle-data"
 
+import { comparisonEndDate, comparisonLocations, comparisonStartDate } from "@/lib/beetle-lure-comparison"
+
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -65,8 +67,14 @@ function inspectionRecords(row: ApiLocationRow): Array<{ inspectionDate: string;
     }))
 }
 
-function toMarker(row: ApiLocationRow): BeetleMarker {
-  const cumulativeCount = toNumber(row.cumulative_beetle_count)
+function toMarker(row: ApiLocationRow, endDate: string): BeetleMarker {
+  if (!Array.isArray(row.inspection_records)) {
+    throw new Error(`Trap ${row.trap_no} inspection records are unavailable.`)
+  }
+  const filtered = comparisonLocations([row], comparisonStartDate(row.cumulative_count_start_date), endDate)[0]
+  const records = inspectionRecords({ ...row, inspection_records: filtered?.inspection_records })
+  const cumulativeCount = records.reduce((sum, record) => sum + record.beetleCount, 0)
+  const latest = records.toSorted((a, b) => a.inspectionDate.localeCompare(b.inspectionDate)).at(-1)
 
   return {
     trapNo: `Trap ${row.trap_no}`,
@@ -74,12 +82,12 @@ function toMarker(row: ApiLocationRow): BeetleMarker {
     latitude: toNumber(row.latitude),
     longitude: toNumber(row.longitude),
     cumulativeCount,
-    latestInspectionDate: formatDate(row.latest_inspection_date),
-    latestCount: toNumber(row.latest_count),
-    recordsCount: toNumber(row.records_count),
+    latestInspectionDate: formatDate(latest?.inspectionDate),
+    latestCount: latest?.beetleCount ?? 0,
+    recordsCount: records.length,
     pheromoneInstalledOn: formatDate(row.pheromone_lure_installed_date),
     resetDate: formatDate(row.cumulative_count_start_date),
-    inspectionRecords: inspectionRecords(row),
+    inspectionRecords: records,
     countBand: bandForCount(cumulativeCount).band,
   }
 }
@@ -108,7 +116,8 @@ export async function GET() {
     }
 
     const rows = (await response.json()) as ApiLocationRow[]
-    const markers = rows.filter((row) => row.active !== false).map(toMarker)
+    const endDate = comparisonEndDate()
+    const markers = rows.filter((row) => row.active !== false).map((row) => toMarker(row, endDate))
 
     return NextResponse.json({
       markers,
