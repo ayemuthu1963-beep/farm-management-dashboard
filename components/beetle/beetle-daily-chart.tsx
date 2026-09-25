@@ -40,10 +40,10 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="sourceDate" tickFormatter={chartDate} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval={0} angle={-30} textAnchor="end" height={56} />
+          <XAxis dataKey="sourceDate" tickFormatter={chartDate} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval={0} angle={-30} textAnchor="end" height={56} padding={{ left: 48, right: 16 }} />
           <YAxis width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip labelFormatter={chartDate} contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", backgroundColor: "var(--card)", color: "var(--card-foreground)", fontSize: 12 }} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 12 }} itemSorter={(item) => BEETLE_LURE_SERIES.findIndex((series) => series.key === item.dataKey)} />
           {BEETLE_LURE_SERIES.map((series) => (
             <Line key={series.key} type="linear" dataKey={series.key}
               name={`Plot ${series.plot} ${series.company} — ${series.species} (${series.plot === 1 ? "solid" : "dashed"})`}
@@ -54,7 +54,7 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
             <ReferenceLine x={pheromoneChangeDate} stroke="#dc2626" strokeWidth={3} label={{ value: "Pheromone change / reset", position: "insideTopLeft", fill: "#b91c1c", fontSize: 12, fontWeight: 700 }} />
           ) : null}
           {waterChangeDates.map((date) => (
-            <ReferenceLine key={`water-change-${date}`} x={date} stroke="#047857" strokeWidth={3} label={{ value: "Water changed", position: "insideTopRight", fill: "#065f46", fontSize: 12, fontWeight: 700 }} />
+            <ReferenceLine key={`water-change-${date}`} x={date} stroke="#047857" strokeWidth={3} label={{ value: "Water changed", position: "insideBottomRight", fill: "#065f46", fontSize: 12, fontWeight: 700 }} />
           ))}
         </LineChart>
       </ResponsiveContainer>

@@ -101,6 +101,7 @@ assert.deepEqual(vercel.git.deploymentEnabled, {
   "codex/intelligence-rate-limit-response-20260924": false,
   "production-release": false,
   "codex/beetle-lure-comparison-20260925": false,
+    "codex/beetle-lure-visual-release-20260925": false,
 })
 
 const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")
