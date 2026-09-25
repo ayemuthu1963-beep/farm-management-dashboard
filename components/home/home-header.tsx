@@ -22,6 +22,7 @@ export function HomeHeader({ displayName, csrf }: { displayName: string | null; 
 
   const dateText = now
     ? now.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
         weekday: "short",
         day: "2-digit",
         month: "short",
@@ -31,6 +32,7 @@ export function HomeHeader({ displayName, csrf }: { displayName: string | null; 
 
   const timeText = now
     ? now.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -137,7 +139,10 @@ export function HomeHeader({ displayName, csrf }: { displayName: string | null; 
       <div className="relative z-10 mx-5 mb-4 text-[#0b3b1b] sm:mx-9 lg:absolute lg:bottom-4 lg:left-14 lg:mx-0 lg:mb-0">
         <div className="rounded-2xl border border-[#d9e7d8] bg-white/75 px-4 py-2 shadow-sm backdrop-blur lg:min-w-[210px]">
           <p className="text-sm font-extrabold leading-tight">{dateText}</p>
-          <p className="text-sm font-extrabold leading-tight">{timeText}</p>
+          <p className="flex flex-wrap items-center gap-x-2 text-sm font-extrabold leading-tight">
+            <span className="tabular-nums">{timeText}</span>
+            <span className="text-xs">Farm Time (IST)</span>
+          </p>
         </div>
       </div>
     </header>

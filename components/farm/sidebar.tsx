@@ -25,6 +25,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const liveDate = now
     ? now.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
         weekday: "short",
         day: "2-digit",
         month: "short",
@@ -33,6 +34,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     : "--"
   const liveTime = now
     ? now.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -53,6 +55,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <li key={item.id}>
               <Link
                 href={item.href}
+                target={item.external ? "_blank" : undefined}
+                rel={item.external ? "noopener noreferrer" : undefined}
                 aria-current={active ? "page" : undefined}
                 onClick={onNavigate}
                 className={cn(
@@ -63,7 +67,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 )}
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
-                <span className="truncate">{item.label}</span>
+                <span className="min-w-0 break-words">{item.label}</span>
                 {item.status === "coming-soon" ? (
                   <span className="ml-auto rounded bg-sidebar-accent px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
                     Soon
@@ -76,7 +80,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </ul>
 
       <div className="mt-6 rounded-xl border border-sidebar-border bg-card p-4">
-        <p className="text-sm font-semibold text-foreground">Today&apos;s Date &amp; Time</p>
+        <p className="text-sm font-semibold text-foreground">Farm Time (IST)</p>
         <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-4 text-primary" aria-hidden="true" />
           <span>{liveDate}</span>
