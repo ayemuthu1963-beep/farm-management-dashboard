@@ -12,6 +12,8 @@ import { getApiBaseUrl, getBasicAuthHeader } from "@/lib/api"
 import { isBeetleTrapManualSyncAvailable } from "@/lib/beetle-sync-availability"
 import type { BeetleTrapLocationRecord } from "@/lib/beetle-trap-matrix"
 
+import { BEETLE_LURE_SERIES, buildBeetleLureComparison, comparisonStartDate } from "@/lib/beetle-lure-comparison"
+
 export const dynamic = "force-dynamic"
 
 type SummaryIcon = "trap" | "rhino" | "weevil" | "calendar" | "alert" | "area"
@@ -37,7 +39,7 @@ interface LiveDailyCount {
 }
 
 interface BeetleAreaSummaryRow {
-  area: "Plot 1" | "Plot 2"
+  area: string
   red_palm_weevil_traps: number
   rhinoceros_beetle_traps: number
   red_palm_weevil_count: number | null
@@ -222,19 +224,6 @@ function summaryCards(data: BeetleDashboardData | null): SummaryCardItem[] {
   ]
 }
 
-function dailyRows(data: BeetleDashboardData | null): BeetleDailyCountRow[] {
-  return (data?.daily_counts ?? []).map((d) => ({
-    date: formatDisplayDate(d.inspection_date),
-    sourceDate: d.inspection_date,
-    rhinoceros: d.rhinoceros,
-    redPalmWeevil: d.red_palm_weevil,
-    plot1Rhinoceros: d.plot_1_rhinoceros,
-    plot1RedPalmWeevil: d.plot_1_red_palm_weevil,
-    plot2Rhinoceros: d.plot_2_rhinoceros,
-    plot2RedPalmWeevil: d.plot_2_red_palm_weevil,
-  }))
-}
-
 type DailyTableRow =
   | { kind: "count"; sourceDate: string; row: BeetleDailyCountRow }
   | { kind: "pheromone-change"; sourceDate: string }
@@ -243,7 +232,7 @@ type DailyTableRow =
 function dailyTableRows(data: BeetleDashboardData | null, rows: BeetleDailyCountRow[], cumulativeStartDate: string | null): DailyTableRow[] {
   const waterChanges = (data?.water_changes ?? [])
     .map((entry) => entry.water_changed_on)
-    .filter((date): date is string => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .filter((date): date is string => /^\d{4}-\d{2}-\d{2}$/.test(date) && (!cumulativeStartDate || date >= cumulativeStartDate))
   const entries: DailyTableRow[] = [
     ...rows.map((row) => ({ kind: "count" as const, sourceDate: row.sourceDate ?? "", row })),
     ...(cumulativeStartDate ? [{ kind: "pheromone-change" as const, sourceDate: cumulativeStartDate }] : []),
@@ -290,8 +279,9 @@ function BeetleAreaTable({ data }: { data: BeetleDashboardData | null }) {
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
         <p><span className="font-semibold text-foreground">Cumulative period:</span> {data.cumulative_period_label ?? data.selected_period?.label ?? "Not configured"}</p>
         {data.cumulative_config_status !== "ok" && data.cumulative_config_message ? <p className="mt-1 text-amber-700">{data.cumulative_config_message}</p> : null}
-        <p className="mt-1">Plot 1: 20 Red Palm Weevil traps · 16 Rhinoceros Beetle traps</p>
-        <p>Plot 2: 19 Red Palm Weevil traps · 23 Rhinoceros Beetle traps</p>
+        <p className="mt-1">B/G identifies the lure company. Averages are recorded catches divided by installed traps in each group, not catches per inspection.</p>
+        {rows.map((row) => <p key={row.area}>{row.area}: {row.red_palm_weevil_traps} Red Palm Weevil traps · {row.rhinoceros_beetle_traps} Rhinoceros Beetle traps</p>)}
+        <p>A dash means no recorded count. Compare groups over the same dates and inspection coverage.</p>
       </div>
       <div className="grid gap-3 md:hidden">
         {rows.map((row) => (
@@ -390,10 +380,26 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
     getBeetleTrapLocations(),
   ])
   const cards = summaryCards(data)
-  const rows = dailyRows(data)
-  const cumulativeStartDate = data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date ?? null
+  const cumulativeStartDate = comparisonStartDate(data?.cumulative_start_date ?? data?.admin_settings?.cumulative_count_start_date)
+  let comparison: ReturnType<typeof buildBeetleLureComparison> | null = null
+  let comparisonError = "Trap inspection records are unavailable."
+  if (trapLocations !== null) {
+    try {
+      comparison = buildBeetleLureComparison(trapLocations, cumulativeStartDate, data?.current_end_date)
+    } catch (error) {
+      comparisonError = error instanceof Error ? error.message : "Company comparison is unavailable."
+    }
+  }
+  const rows = comparison?.daily ?? []
+  const comparisonData = data ? {
+    ...data,
+    area_summary: comparison?.areas ?? [],
+    area_connected: comparison !== null,
+    area_message: comparisonError,
+    cumulative_period_label: `${formatDisplayDate(cumulativeStartDate)} to ${formatDisplayDate(data.current_end_date)}`,
+  } : null
   const tableRows = dailyTableRows(data, rows, cumulativeStartDate)
-  const waterChangeDates = (data?.water_changes ?? []).map((entry) => entry.water_changed_on)
+  const waterChangeDates = (data?.water_changes ?? []).map((entry) => entry.water_changed_on).filter((date) => date >= cumulativeStartDate)
   const latest = data?.summary.latest_inspection
   const manualSyncAvailable = isBeetleTrapManualSyncAvailable()
   const dailyCountTitle = `Daily Beetle Count (Start Date: ${formatDisplayDate(cumulativeStartDate)})`
@@ -429,7 +435,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
         </div>
 
         <BeetleTrapMapArea>
-          <BeetleStatusTiles data={data} latest={latest} />
+          <BeetleStatusTiles data={comparisonData} latest={latest} />
         </BeetleTrapMapArea>
 
         <Panel
@@ -438,7 +444,8 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
           headerRight={<span className="text-xs font-medium text-muted-foreground">Current cumulative period</span>}
           className="border-chart-2/30 bg-chart-2/5"
         >
-          <BeetleDailyChart counts={rows} waterChangeDates={waterChangeDates} pheromoneChangeDate={cumulativeStartDate} />
+          {!comparison ? <NoticePanel title="Company comparison unavailable" message={comparisonError} icon={Info} /> : <BeetleDailyChart counts={rows} waterChangeDates={waterChangeDates} pheromoneChangeDate={cumulativeStartDate} />}
+          <p className="mt-3 text-xs text-muted-foreground">B/G lure comparison from 24 Sept 2026. Plot 1: solid; Plot 2: dashed. G: red / black; B: amber / blue (Red Palm Weevil / Rhinoceros Beetle). Gaps indicate no recorded count.</p>
         </Panel>
 
         <Panel
@@ -449,30 +456,23 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
         >
           <p className="mb-4 text-sm text-muted-foreground">All inspection dates in the current cumulative period, starting {formatDisplayDate(cumulativeStartDate)}.</p>
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
+            <table className="w-full min-w-[1100px] border-collapse text-sm">
               <thead>
                 <tr className="bg-primary/10 text-left text-xs font-semibold uppercase tracking-wide text-primary">
-                  <th className="px-3 py-2.5" rowSpan={2}>Date</th>
-                  <th className="px-3 py-2.5 text-center" colSpan={2}>Plot 1</th>
-                  <th className="px-3 py-2.5 text-center" colSpan={2}>Plot 2</th>
-                </tr>
-                <tr className="border-b border-primary/20 bg-primary/5 text-left text-xs font-semibold text-primary">
-                  <th className="px-3 py-2 text-right">Rhinoceros Beetle Count</th>
-                  <th className="px-3 py-2 text-right">Red Palm Weevil Count</th>
-                  <th className="px-3 py-2 text-right">Rhinoceros Beetle Count</th>
-                  <th className="px-3 py-2 text-right">Red Palm Weevil Count</th>
+                  <th className="px-3 py-2.5">Date</th>
+                  {BEETLE_LURE_SERIES.map((series) => <th key={series.key} className="px-3 py-2.5 text-right">Plot {series.plot} {series.company}<br />{series.species}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {tableRows.map((entry) => entry.kind === "pheromone-change" ? (
                   <tr key={`pheromone-change-${entry.sourceDate}`} className="border-b border-destructive/30 bg-destructive/15 text-destructive">
                     <td className="whitespace-nowrap px-3 py-2.5 font-bold">{formatDisplayDate(entry.sourceDate)}</td>
-                    <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={4}>Pheromone Change Date (Cumulative Count Start Date)</td>
+                    <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={8}>Pheromone Change Date (Cumulative Count Start Date)</td>
                   </tr>
                 ) : entry.kind === "water-change" ? (
                   <tr key={`water-change-${entry.sourceDate}`} className="border-b border-chart-2/30 bg-chart-2/15 text-chart-2">
                     <td className="whitespace-nowrap px-3 py-2.5 font-bold">{formatDisplayDate(entry.sourceDate)}</td>
-                    <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={4}>Water changed — all active traps</td>
+                    <td className="px-3 py-2.5 text-center font-extrabold uppercase tracking-wide" colSpan={8}>Water changed — all active traps</td>
                   </tr>
                 ) : (
                   <tr key={`count-${entry.sourceDate}`} className="border-b border-border last:border-0 hover:bg-muted/50">
@@ -486,15 +486,12 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
                         {entry.row.date}
                       </a>
                     </td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot1Rhinoceros}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot1RedPalmWeevil}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot2Rhinoceros}</td>
-                    <td className="px-3 py-2.5 text-right text-foreground">{entry.row.plot2RedPalmWeevil}</td>
+                    {BEETLE_LURE_SERIES.map((series) => <td key={series.key} className="px-3 py-2.5 text-right text-foreground">{entry.row[series.key] ?? "—"}</td>)}
                   </tr>
                 ))}
                 {tableRows.length === 0 && (
                   <tr>
-                    <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={5}>No Beetle Count records are available yet.</td>
+                    <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={9}>No Beetle Count records are available yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -503,7 +500,7 @@ export default async function BeetleTrapPage({ searchParams }: { searchParams?: 
         </Panel>
 
         <BeetleTrapDailyMatrix
-          locations={trapLocations}
+          locations={comparison?.locations ?? null}
           dashboardDates={rows.map((row) => row.sourceDate ?? "").filter(Boolean)}
         />
 

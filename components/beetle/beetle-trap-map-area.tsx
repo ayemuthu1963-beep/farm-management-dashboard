@@ -12,6 +12,7 @@ import {
 } from "@/components/maps/farm-orthomosaic-map"
 import { bandForCount, countBands } from "@/lib/beetle-data"
 import { BEETLE_TRAP_DATA_UPDATED_EVENT } from "@/lib/beetle-sync"
+import { trapLureLabel } from "@/lib/beetle-lure-comparison"
 import { cn } from "@/lib/utils"
 
 interface BeetleInspectionRecord {
@@ -82,7 +83,7 @@ function markerPopupHtml(marker: BeetleTrapMarker): string {
     : `<tr><td colspan="2" style="border-top:1px solid #d7e3d9;padding:5px 0;color:#34513a;">No inspection records since reset.</td></tr>`
 
   return `<div style="min-width:210px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#0f2415;">
-    <div style="font-weight:800;font-size:15px;margin-bottom:6px;">${escapeHtml(marker.trapNo)}</div>
+    <div style="font-weight:800;font-size:15px;margin-bottom:6px;">${escapeHtml(trapLureLabel(marker.trapNo))}</div>
     <div style="font-size:12px;margin-bottom:8px;"><strong>Cumulative Beetle Count Since Reset:</strong> ${marker.cumulativeCount}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr><th style="padding:0 0 4px;text-align:left;color:#34513a;">Date</th><th style="padding:0 0 4px;text-align:right;color:#34513a;">Beetle Count</th></tr></thead>
@@ -170,7 +171,7 @@ function TrapTable({ markers }: { markers: BeetleTrapMarker[] }) {
           <tbody>
             {visibleMarkers.map((marker) => (
               <tr key={`${marker.trapNo}-${marker.trapType}`} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="whitespace-nowrap px-3 py-2.5 font-bold text-foreground">{marker.trapNo}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 font-bold text-foreground">{trapLureLabel(marker.trapNo)}</td>
                 <td className="px-3 py-2.5 text-foreground">
                   <span className="inline-flex items-center gap-2">
                     <span
@@ -283,9 +284,9 @@ export function BeetleTrapMapArea({ children }: { children?: ReactNode }) {
       })
 
       leaflet
-        .marker([marker.latitude, marker.longitude], { icon, keyboard: true, title: marker.trapNo })
+        .marker([marker.latitude, marker.longitude], { icon, keyboard: true, title: trapLureLabel(marker.trapNo) })
         .bindPopup(markerPopupHtml(marker), { closeButton: true, maxWidth: 260 })
-        .bindTooltip(`${marker.trapNo} · ${marker.trapType} · ${marker.cumulativeCount}`, {
+        .bindTooltip(`${trapLureLabel(marker.trapNo)} · ${marker.trapType} · ${marker.cumulativeCount}`, {
           direction: "top",
           sticky: true,
         })

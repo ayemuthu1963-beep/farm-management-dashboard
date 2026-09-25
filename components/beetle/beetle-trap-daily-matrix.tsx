@@ -89,6 +89,10 @@ export function BeetleTrapDailyMatrix({ locations, dashboardDates }: BeetleTrapD
                   </th>
                 ))}
               </tr>
+              <tr className="bg-primary/10 text-xs font-semibold text-primary">
+                <th scope="row" className="sticky left-0 z-20 border-b border-r border-primary/20 bg-[#e8f3e9] px-3 py-2.5 text-left">B/G</th>
+                {matrix.traps.map((trap) => <td key={`lure-${trap.trapNo}`} className="border-b border-r border-primary/20 px-2 py-2.5 text-center">{trap.company ?? "Unassigned"}</td>)}
+              </tr>
               <tr className="bg-primary/5 font-extrabold">
                 <th scope="row" className="sticky left-0 z-20 border-b border-r border-primary/20 bg-[#f0f9f1] px-3 py-2.5 text-left text-foreground">
                   Total

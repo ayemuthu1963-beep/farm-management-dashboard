@@ -100,6 +100,7 @@ assert.deepEqual(vercel.git.deploymentEnabled, {
   "codex/frontend-alignment-ed62dfa-20260925-a7f3": false,
   "codex/intelligence-rate-limit-response-20260924": false,
   "production-release": false,
+  "codex/beetle-lure-comparison-20260925": false,
 })
 
 const workerManagement = mfmsNavigationItems.find((item) => item.id === "worker-management")

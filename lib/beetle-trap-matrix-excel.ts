@@ -53,16 +53,16 @@ function trapStyle(trapType: BeetleTrapType, row: "header" | "total" | "detail")
 
 function worksheetXml(matrix: BeetleTrapMatrix): string {
   const lastColumn = columnName(matrix.traps.length)
-  const lastRow = Math.max(4, matrix.rows.length + 4)
+  const lastRow = Math.max(5, matrix.rows.length + 5)
   const trapHeaders = matrix.traps
     .map((trap, index) => inlineStringCell(index + 1, 3, trap.trapNo, trapStyle(trap.trapType, "header")))
     .join("")
   const totals = matrix.traps
-    .map((trap, index) => numericCell(index + 1, 4, trap.total, trapStyle(trap.trapType, "total")))
+    .map((trap, index) => numericCell(index + 1, 5, trap.total, trapStyle(trap.trapType, "total")))
     .join("")
   const dateRows = matrix.rows
     .map((row, rowIndex) => {
-      const rowNumber = rowIndex + 5
+      const rowNumber = rowIndex + 6
       const counts = row.counts
         .map((count, trapIndex) => count === null
           ? ""
@@ -75,14 +75,15 @@ function worksheetXml(matrix: BeetleTrapMatrix): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="A1:${lastColumn}${lastRow}"/>
-  <sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="4" topLeftCell="B5" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>
+  <sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="5" topLeftCell="B6" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="20"/>
   <cols><col min="1" max="1" width="18" customWidth="1"/><col min="2" max="${matrix.traps.length + 1}" width="11" customWidth="1"/></cols>
   <sheetData>
     <row r="1" ht="26" customHeight="1">${inlineStringCell(0, 1, "Beetle in Traps", 1)}</row>
     <row r="2">${inlineStringCell(0, 2, "Blank cells indicate zero or no recorded count.", 12)}</row>
     <row r="3" ht="24" customHeight="1">${inlineStringCell(0, 3, "Trap No.", 2)}${trapHeaders}</row>
-    <row r="4" ht="24" customHeight="1">${inlineStringCell(0, 4, "Total", 5)}${totals}</row>
+    <row r="4" ht="24" customHeight="1">${inlineStringCell(0, 4, "B/G", 2)}${matrix.traps.map((trap, index) => inlineStringCell(index + 1, 4, trap.company ?? "Unassigned", trapStyle(trap.trapType, "header"))).join("")}</row>
+    <row r="5" ht="24" customHeight="1">${inlineStringCell(0, 5, "Total", 5)}${totals}</row>
     ${dateRows}
   </sheetData>
   <mergeCells count="2"><mergeCell ref="A1:${lastColumn}1"/><mergeCell ref="A2:${lastColumn}2"/></mergeCells>

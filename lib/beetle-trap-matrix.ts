@@ -1,3 +1,5 @@
+import { lureForTrap, type LureCompany } from "./beetle-lure-comparison.ts"
+
 export type BeetleTrapType = "Rhinoceros Beetle" | "Red Palm Weevil" | "Unknown"
 
 export interface BeetleTrapInspectionRecord {
@@ -15,6 +17,7 @@ export interface BeetleTrapLocationRecord {
 export interface BeetleTrapMatrixColumn {
   trapNo: string
   trapType: BeetleTrapType
+  company: LureCompany | null
   total: number
 }
 
@@ -94,6 +97,7 @@ export function buildBeetleTrapMatrix(
     return {
       trapNo: location.trap_no,
       trapType: normalizeTrapType(location.trap_type),
+      company: lureForTrap(location.trap_no),
       total,
     }
   })

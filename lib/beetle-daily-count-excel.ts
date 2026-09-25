@@ -1,10 +1,6 @@
-export interface BeetleDailyExcelRow {
-  date: string
-  plot1Rhinoceros: number
-  plot1RedPalmWeevil: number
-  plot2Rhinoceros: number
-  plot2RedPalmWeevil: number
-}
+import { BEETLE_LURE_SERIES, type BeetleLureDailyRow } from "./beetle-lure-comparison.ts"
+
+export type BeetleDailyExcelRow = BeetleLureDailyRow
 
 interface DailyBeetleWorkbookInput {
   rows: BeetleDailyExcelRow[]
@@ -43,46 +39,25 @@ function numericCell(column: number, row: number, value: number): string {
 
 function worksheetXml({ rows, startDate }: DailyBeetleWorkbookInput): string {
   const startLabel = startDate ?? "Not available"
-  const dataRows = rows.length > 0
-    ? rows.map((entry, index) => {
-      const row = index + 6
-      return `<row r="${row}">${[
-        inlineStringCell(1, row, entry.date),
-        numericCell(2, row, entry.plot1Rhinoceros),
-        numericCell(3, row, entry.plot1RedPalmWeevil),
-        numericCell(4, row, entry.plot2Rhinoceros),
-        numericCell(5, row, entry.plot2RedPalmWeevil),
-      ].join("")}</row>`
-    }).join("")
-    : `<row r="6">${inlineStringCell(1, 6, "No inspection records are available for this cumulative period.")}</row>`
-
+  const headers = BEETLE_LURE_SERIES.map((series, index) => inlineStringCell(index + 2, 4,
+    `Plot ${series.plot} ${series.company} — ${series.species} Count`)).join("")
+  const dataRows = rows.map((entry, index) => {
+    const row = index + 5
+    return `<row r="${row}">${inlineStringCell(1, row, entry.date)}${BEETLE_LURE_SERIES.map((series, column) => {
+      const count = entry[series.key]
+      return count === null ? inlineStringCell(column + 2, row, "—") : numericCell(column + 2, row, count)
+    }).join("")}</row>`
+  }).join("")
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <cols>
-    <col min="1" max="1" width="18" customWidth="1"/>
-    <col min="2" max="5" width="27" customWidth="1"/>
-  </cols>
+  <cols><col min="1" max="1" width="18" customWidth="1"/><col min="2" max="9" width="43" customWidth="1"/></cols>
   <sheetData>
-    <row r="1">${inlineStringCell(1, 1, "Daily Beetle Count")}</row>
+    <row r="1">${inlineStringCell(1, 1, "Daily Beetle Count — B/G Lure Comparison")}</row>
     <row r="2">${inlineStringCell(1, 2, `Cumulative period start date: ${startLabel}`)}</row>
-    <row r="4">${[
-      inlineStringCell(1, 4, "Date"),
-      inlineStringCell(2, 4, "Plot 1"),
-      inlineStringCell(4, 4, "Plot 2"),
-    ].join("")}</row>
-    <row r="5">${[
-      inlineStringCell(2, 5, "Rhinoceros Beetle Count"),
-      inlineStringCell(3, 5, "Red Palm Weevil Count"),
-      inlineStringCell(4, 5, "Rhinoceros Beetle Count"),
-      inlineStringCell(5, 5, "Red Palm Weevil Count"),
-    ].join("")}</row>
+    <row r="3">${inlineStringCell(1, 3, "B/G lures installed 24 Sept 2026. A dash means no recorded count.")}</row>
+    <row r="4">${inlineStringCell(1, 4, "Date")}${headers}</row>
     ${dataRows}
   </sheetData>
-  <mergeCells count="3">
-    <mergeCell ref="A4:A5"/>
-    <mergeCell ref="B4:C4"/>
-    <mergeCell ref="D4:E4"/>
-  </mergeCells>
 </worksheet>`
 }
 
