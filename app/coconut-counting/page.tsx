@@ -14,6 +14,7 @@ import {
 
 import { CoconutCountingPageHeader } from "@/components/coconut-counting/page-header"
 import { CoconutCountingReconciliationTable } from "@/components/coconut-counting/reconciliation-table"
+import { CoconutCountingSessionAssignmentEditor } from "@/components/coconut-counting/session-assignment-editor"
 import { CoconutCountingSessionControls } from "@/components/coconut-counting/session-controls"
 import { DashboardShell } from "@/components/farm/dashboard-shell"
 import { Header } from "@/components/farm/header"
@@ -168,7 +169,15 @@ function FilterForm({ filters }: { filters: CoconutCountingFilters }) {
   )
 }
 
-function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; filters: CoconutCountingFilters }) {
+function SessionTable({
+  data,
+  filters,
+  suggestedCycle,
+}: {
+  data: CoconutCountingDashboardData
+  filters: CoconutCountingFilters
+  suggestedCycle: number | null
+}) {
   if (data.sessions.length === 0) {
     return <div className="rounded-xl border border-dashed border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">No synchronized coconut-counting sessions were found for this date range.</div>
   }
@@ -200,9 +209,18 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">Entry physical</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.physical_nuts_counted)}</dd></div>
               <div className="rounded-lg bg-muted/60 p-2"><dt className="text-xs font-bold uppercase text-muted-foreground">APK recorded harvested</dt><dd className="mt-1 font-bold tabular-nums">{formatNumber(session.total_nuts_harvested)}</dd></div>
             </dl>
-            <Link href={selectedSessionHref(filters, session.session_uuid)} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">
-              View session <ChevronRight className="size-4" aria-hidden="true" />
-            </Link>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Link href={selectedSessionHref(filters, session.session_uuid)} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">
+                View session <ChevronRight className="size-4" aria-hidden="true" />
+              </Link>
+              <CoconutCountingSessionAssignmentEditor
+                sessionUuid={session.session_uuid}
+                harvestDate={formatDate(session.session_date)}
+                currentCycle={session.harvest_cycle}
+                currentPlot={session.plot}
+                suggestedCycle={suggestedCycle}
+              />
+            </div>
           </article>
         ))}
       </div>
@@ -220,8 +238,8 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
               <th className="w-[8%] px-3 py-3 text-right">Combined</th>
               <th className="w-[9%] px-3 py-3 text-right">Entry physical</th>
               <th className="w-[9%] px-3 py-3 text-right">APK recorded harvested</th>
-              <th className="w-[15%] px-3 py-3">Last sync</th>
-              <th className="w-[9%] px-3 py-3"><span className="sr-only">View</span></th>
+              <th className="w-[13%] px-3 py-3">Last sync</th>
+              <th className="w-[11%] px-3 py-3"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -238,10 +256,19 @@ function SessionTable({ data, filters }: { data: CoconutCountingDashboardData; f
                 <td className="px-3 py-3 text-right tabular-nums">{formatNumber(session.physical_nuts_counted)}</td>
                 <td className="px-3 py-3 text-right font-semibold tabular-nums">{formatNumber(session.total_nuts_harvested)}</td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{formatDateTime(session.server_updated_at)}</td>
-                <td className="px-3 py-3 text-right">
-                  <Link href={selectedSessionHref(filters, session.session_uuid)} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">
-                    View <ChevronRight className="size-4" aria-hidden="true" />
-                  </Link>
+                <td className="px-3 py-3">
+                  <div className="flex flex-col items-end gap-2">
+                    <Link href={selectedSessionHref(filters, session.session_uuid)} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">
+                      View <ChevronRight className="size-4" aria-hidden="true" />
+                    </Link>
+                    <CoconutCountingSessionAssignmentEditor
+                      sessionUuid={session.session_uuid}
+                      harvestDate={formatDate(session.session_date)}
+                      currentCycle={session.harvest_cycle}
+                      currentPlot={session.plot}
+                      suggestedCycle={suggestedCycle}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}
@@ -378,7 +405,13 @@ function CompleteEntryRecords({ entries }: { entries: CoconutCountingEntry[] }) 
   )
 }
 
-function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
+function SessionDetail({
+  detail,
+  suggestedCycle,
+}: {
+  detail: CoconutCountingSessionDetail
+  suggestedCycle: number | null
+}) {
   const session = detail.session
   const recordedTotal = session.total_nuts_harvested
   const physicalCounted = detail.entries.reduce((sum, entry) => sum + (entry.physical_nuts ?? entry.nut_count ?? 0), 0)
@@ -395,6 +428,13 @@ function SessionDetail({ detail }: { detail: CoconutCountingSessionDetail }) {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClass(session.status)}`}>{session.status}</span>
+          <CoconutCountingSessionAssignmentEditor
+            sessionUuid={session.session_uuid}
+            harvestDate={formatDate(session.session_date)}
+            currentCycle={session.harvest_cycle}
+            currentPlot={session.plot}
+            suggestedCycle={suggestedCycle}
+          />
           <CoconutCountingSessionControls
             sessionUuid={session.session_uuid}
             harvestDate={formatDate(session.session_date)}
@@ -525,6 +565,9 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
   }
 
   const reconciliation = await reconciliationRequest
+  const suggestedCycle = reconciliation.status === "error"
+    ? null
+    : (reconciliation.data.cycles[0]?.harvest_cycle ?? null)
 
   return (
     <DashboardShell>
@@ -562,12 +605,12 @@ export default async function CoconutCountingPage({ searchParams }: { searchPara
               <span className="inline-flex items-center gap-1"><Clock3 className="size-3.5" aria-hidden="true" />Server values are read live; the APK remains local-first when offline.</span>
             </div>
 
-            <SessionTable data={dashboard} filters={filters} />
+            <SessionTable data={dashboard} filters={filters} suggestedCycle={suggestedCycle} />
           </>
         ) : null}
 
         {detailError ? <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{detailError}</div> : null}
-        {detail ? <SessionDetail detail={detail} /> : null}
+        {detail ? <SessionDetail detail={detail} suggestedCycle={suggestedCycle} /> : null}
       </div>
     </DashboardShell>
   )

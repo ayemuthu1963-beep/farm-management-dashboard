@@ -12,19 +12,26 @@ import {
 } from "../lib/coconut-counting-reconciliation.ts"
 import {
   isHarvestCycleWriteAllowed,
+  isSessionAssignmentWriteAllowed,
+  REQUIRED_PRODUCTION_SESSION_ASSIGNMENT_APPROVAL,
   REQUIRED_PRODUCTION_WRITE_APPROVAL,
 } from "../lib/coconut-counting-write-gate.ts"
-import { COCONUT_COUNTING_PRODUCTION_WRITE_APPROVAL } from "../lib/coconut-counting-write-policy.ts"
+import {
+  COCONUT_COUNTING_PRODUCTION_WRITE_APPROVAL,
+  COCONUT_COUNTING_SESSION_ASSIGNMENT_PRODUCTION_WRITE_APPROVAL,
+} from "../lib/coconut-counting-write-policy.ts"
 import { getAdminTargetSafetyErrors } from "../lib/preview-admin-write-safety.ts"
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 const component = read("components/coconut-counting/reconciliation-table.tsx")
 const editor = read("components/coconut-counting/harvested-editor.tsx")
+const assignmentEditor = read("components/coconut-counting/session-assignment-editor.tsx")
 const page = read("app/coconut-counting/page.tsx")
 const readRoute = read("app/api/coconut-counting/reconciliation/route.ts")
 const serverApi = read("lib/coconut-counting-reconciliation-api.ts")
 const reconciliationLibrary = read("lib/coconut-counting-reconciliation.ts")
 const writeRoute = read("app/api/coconut-counting-admin/cycles/[cycle]/plots/[plot]/harvested/route.ts")
+const assignmentRoute = read("app/api/coconut-counting-admin/sessions/[sessionUuid]/assignment/route.ts")
 const cycleView = read("app/coconut-harvest/cycle-view/page.tsx")
 const harvestApi = read("lib/coconut-harvest-api.ts")
 
@@ -64,6 +71,18 @@ const gate = ({
   sourceProductionApproval = COCONUT_COUNTING_PRODUCTION_WRITE_APPROVAL,
   runtime = safePreviewWriteEnvironment,
 } = {}) => isHarvestCycleWriteAllowed({
+  explicitFlagValue,
+  targetSafetyErrors,
+  sourceProductionApproval,
+  runtime,
+})
+
+const assignmentGate = ({
+  explicitFlagValue,
+  targetSafetyErrors = [],
+  sourceProductionApproval = COCONUT_COUNTING_SESSION_ASSIGNMENT_PRODUCTION_WRITE_APPROVAL,
+  runtime = safePreviewWriteEnvironment,
+} = {}) => isSessionAssignmentWriteAllowed({
   explicitFlagValue,
   targetSafetyErrors,
   sourceProductionApproval,
@@ -254,6 +273,58 @@ test("manual Harvested is Cycle/Plot scoped, audited and collision-safe", () => 
   assert.match(writeRoute, /expectedRevision > 0 && !reason/)
 })
 
+test("received sessions can be assigned a Cycle and Plot without changing the APK", () => {
+  assert.match(page, /CoconutCountingSessionAssignmentEditor/)
+  assert.match(page, /suggestedCycle=\{suggestedCycle\}/)
+  assert.match(assignmentEditor, /Assign Cycle \/ Plot/)
+  assert.match(assignmentEditor, /Edit Cycle \/ Plot/)
+  assert.match(assignmentEditor, /expected_harvest_cycle: currentCycle/)
+  assert.match(assignmentEditor, /expected_plot: currentPlot/)
+  assert.match(assignmentEditor, /reason: reason\.trim\(\) \|\| null/)
+  assert.match(assignmentEditor, /This changes the website record only\. The APK does not need to be amended\./)
+  assert.match(assignmentEditor, /createRequestAbortScope\(ASSIGNMENT_SAVE_TIMEOUT_MS\)/)
+  assert.match(assignmentRoute, /getAdminTargetSafetyErrors/)
+  assert.match(assignmentRoute, /getAuthenticatedUserAssertionHeaders/)
+  assert.match(assignmentRoute, /MFMS_COCONUT_COUNTING_ASSIGNMENT_WRITES_ENABLED/)
+  assert.match(assignmentRoute, /COCONUT_COUNTING_SESSION_ASSIGNMENT_PRODUCTION_WRITE_APPROVAL/)
+  assert.match(assignmentRoute, /expected_harvest_cycle: expectedHarvestCycle/)
+  assert.match(assignmentRoute, /expected_plot: expectedPlot/)
+  assert.match(assignmentRoute, /\/api\/coconut-counting\/sessions\/\$\{encodeURIComponent\(sessionUuid\)\}\/assignment/)
+})
+
+test("Cycle and Plot assignment write gate is exact for Preview and Production", () => {
+  const safePreviewErrors = getAdminTargetSafetyErrors(
+    safePreviewWriteEnvironment,
+    "http://harvest-api-pilot:8000",
+  )
+  assert.deepEqual(safePreviewErrors, [])
+  assert.equal(assignmentGate({ targetSafetyErrors: safePreviewErrors }), true)
+  assert.equal(assignmentGate({ explicitFlagValue: "false", targetSafetyErrors: safePreviewErrors }), false)
+
+  const safeProductionErrors = getAdminTargetSafetyErrors(
+    safeProductionWriteEnvironment,
+    "http://harvest-api:8000",
+  )
+  assert.deepEqual(safeProductionErrors, [])
+  assert.equal(
+    COCONUT_COUNTING_SESSION_ASSIGNMENT_PRODUCTION_WRITE_APPROVAL,
+    REQUIRED_PRODUCTION_SESSION_ASSIGNMENT_APPROVAL,
+  )
+  assert.equal(assignmentGate({
+    runtime: safeProductionWriteEnvironment,
+    targetSafetyErrors: safeProductionErrors,
+  }), true)
+  assert.equal(assignmentGate({
+    runtime: safeProductionWriteEnvironment,
+    targetSafetyErrors: safeProductionErrors,
+    sourceProductionApproval: "PREVIEW_SOURCE_POLICY__PRODUCTION_ASSIGNMENT_WRITES_DISABLED",
+  }), false)
+  assert.equal(assignmentGate({
+    runtime: { ...safeProductionWriteEnvironment, MFMS_GIT_COMMIT: "short" },
+    targetSafetyErrors: safeProductionErrors,
+  }), false)
+})
+
 test("a completed save cannot replace a newer Cycle selection", () => {
   assert.match(component, /const selectedCycleRef = useRef\(initialState\.selectedCycle\)/)
   assert.match(component, /selectedCycleRef\.current = cycle[\s\S]*?setSelectedCycle\(cycle\)[\s\S]*?loadCycle\(cycle\)/)
@@ -400,8 +471,8 @@ test("Production Harvested writes require source approval and exact Production i
 test("filtered session history remains separate and Cycle View remains restored", () => {
   assert.ok(page.indexOf("<CoconutCountingReconciliationTable") < page.indexOf("<FilterForm filters={filters} />"))
   assert.match(page, /filters apply only to the session summary and detail records below/)
-  assert.match(page, /<SessionTable data=\{dashboard\} filters=\{filters\} \/>/)
-  assert.match(page, /<SessionDetail detail=\{detail\} \/>/)
+  assert.match(page, /<SessionTable data=\{dashboard\} filters=\{filters\} suggestedCycle=\{suggestedCycle\} \/>/)
+  assert.match(page, /<SessionDetail detail=\{detail\} suggestedCycle=\{suggestedCycle\} \/>/)
   assert.match(page, /CoconutCountingSessionControls/)
   assert.match(cycleView, /plotRows\?\.map/)
   assert.match(harvestApi, /fetchCyclePlotSourceRows/)

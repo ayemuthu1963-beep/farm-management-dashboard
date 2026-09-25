@@ -75,6 +75,11 @@ assert.doesNotMatch(
   /PREVIEW_SOURCE_POLICY__PRODUCTION_HARVESTED_WRITES_DISABLED/,
   "Production must not retain Preview's disabled write-policy marker",
 )
+assert.match(
+  harvestedWritePolicy,
+  /COCONUT_COUNTING_SESSION_ASSIGNMENT_PRODUCTION_WRITE_APPROVAL\s*=\s*\n\s*"APPROVE_MFMS_COCONUT_COUNTING_SESSION_ASSIGNMENT_WRITES_V1" as const/,
+  "Production must carry the exact reviewed source approval for Cycle/Plot assignment writes",
+)
 
 const preservedCycleViewSha256 = {
   "app/coconut-harvest/cycle-view/page.tsx": "52d30349241a198664219eaadb01d3bc69d54ae79c3181ea8c9ab722adc4abb6",
