@@ -98,6 +98,7 @@ assert.deepEqual(vercel.git.deploymentEnabled, {
   "codex/production-home-session-20260918": false,
   "codex/production-home-session-controls-20260918": false,
   "codex/frontend-alignment-ed62dfa-20260925-a7f3": false,
+  "codex/intelligence-rate-limit-response-20260924": false,
   "production-release": false,
 })
 

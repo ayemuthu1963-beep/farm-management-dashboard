@@ -23,7 +23,7 @@ const PERIOD_KINDS = new Set(["latest_irrigation_dates", "last_calendar_days", "
 const BEETLE_PERIOD_KINDS = new Set(["latest_inspection_dates", "last_calendar_days", "relative_day", "current_month", "previous_month", "date_range", "all_available"])
 
 function safeError(status: number, message: string) {
-  const blockedStatus = status === 401 || status === 403 ? "BLOCKED_SECURITY" : "BLOCKED_NOT_YET_SUPPORTED"
+  const blockedStatus = status === 429 ? "BLOCKED_LIMIT" : status === 401 || status === 403 ? "BLOCKED_SECURITY" : "BLOCKED_NOT_YET_SUPPORTED"
   return NextResponse.json({
     answer: "", status: blockedStatus, data_as_of: "", period: null,
     period_start: null, period_end: null, cycles: [], denominator: null, quality_flags: [],
@@ -309,7 +309,15 @@ export async function POST(request: NextRequest) {
       method: "POST", headers: { Authorization: authHeader, Accept: "application/json", "Content-Type": "application/json", ...actorHeaders },
       body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     })
+    // FastAPI rate limits return { detail }, not an Intelligence answer envelope.
+    // Preserve the HTTP boundary without exposing upstream text or retrying.
     const payload: unknown = await response.json().catch(() => null)
+    if (response.status === 429) {
+      if (isSafeResponse(payload) && payload.status === "BLOCKED_LIMIT") {
+        return NextResponse.json(payload, { status: 429, headers: NO_STORE_HEADERS })
+      }
+      return safeError(429, "Request limit reached. Please wait a minute before asking again.")
+    }
     if (response.status === 401) return safeError(401, "An authenticated MFMS session is required.")
     if (response.status === 403) return safeError(403, "This MFMS account is not authorized to read Intelligence.")
     if (!isSafeResponse(payload)) return safeError(502, "MFMS Intelligence returned an invalid response.")
