@@ -1,7 +1,9 @@
 import {
   Activity,
   BarChart3,
+  Brain,
   Bug,
+  CalendarDays,
   Citrus,
   CloudSun,
   Droplets,
@@ -10,13 +12,14 @@ import {
   Leaf,
   MapPinned,
   Package,
-  ShieldCheck,
-  Sparkles,
+  ShieldCog,
   Sprout,
   Users,
+  Waves,
   Wrench,
   type LucideIcon,
 } from "lucide-react"
+import { FARM_CALENDAR_URL } from "./farm-calendar.ts"
 
 export type MfmsNavigationStatus = "active" | "coming-soon"
 
@@ -49,7 +52,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
   },
   {
     id: "todays-weather",
-    label: "Today's Weather",
+    label: "Live Weather – Muthu Farms",
     href: "/weather",
     icon: CloudSun,
     dashboardIcon: "/mfms/icons/todays-weather.png",
@@ -59,6 +62,19 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     showInSidebar: true,
     order: 1,
     ctaLabel: "Open Weather Dashboard",
+  },
+  {
+    id: "farm-calendar",
+    label: "Farm Calendar",
+    href: FARM_CALENDAR_URL,
+    icon: CalendarDays,
+    description: "Open the Muthu Farms calendar in Google Calendar.",
+    status: "active",
+    showOnDashboard: true,
+    showInSidebar: true,
+    order: 1.5,
+    external: true,
+    ctaLabel: "Open Farm Calendar",
   },
   {
     id: "coconut-harvest",
@@ -130,7 +146,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     id: "irrigation-management",
     label: "Irrigation Management",
     href: "/irrigation-management",
-    icon: Droplets,
+    icon: Waves,
     dashboardIcon: "/mfms/icons/pipeline-layout-inspection.png",
     description:
       "Monitor irrigation water supplied to each farm zone, water per tree, motor runtime and irrigation history.",
@@ -193,19 +209,6 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     ctaLabel: "Open Dashboard",
   },
   {
-    id: "weather-history",
-    label: "Weather History",
-    href: "/weather",
-    icon: CloudSun,
-    dashboardIcon: "/mfms/icons/weather-history.png",
-    description: "Past weather records and seasonal trends",
-    status: "active",
-    showOnDashboard: true,
-    showInSidebar: false,
-    order: 11,
-    ctaLabel: "View 7-Day History",
-  },
-  {
     id: "farm-reports",
     label: "Farm Reports",
     href: "/under-construction",
@@ -234,7 +237,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     id: "mfms-intelligence",
     label: "MFMS Intelligence",
     href: "/intelligence",
-    icon: Sparkles,
+    icon: Brain,
     dashboardIcon: "/mfms/icons/farm-reports.png",
     description: "Ask governed questions about verified harvest, irrigation, and well-water analytics",
     status: "active",
@@ -260,7 +263,7 @@ export const mfmsNavigationItems: readonly MfmsNavigationItem[] = [
     id: "admin-console",
     label: "Admin Console",
     href: "/admin",
-    icon: ShieldCheck,
+    icon: ShieldCog,
     dashboardIcon: "/mfms/icons/farm-reports.png",
     description: "Local entry hub for farm operations testing and controlled data entry",
     status: "active",

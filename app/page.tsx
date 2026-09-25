@@ -21,7 +21,7 @@ export default async function HomePage() {
           aria-label="Farm modules"
           className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
-          {/* 1. Today's Weather */}
+          {/* 1. Live Weather – Muthu Farms */}
           <WeatherCard data={weatherData} />
 
           {/* 2. Farm Calendar */}

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { formatStockUnitPrice } from "../lib/fertiliser-price-format.ts"
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 
@@ -21,7 +22,13 @@ assert.match(page, /Calculated price per \{incomingUnit \|\| "unit"\}/)
 assert.match(page, /Calculated price per \{item\.unit\}/)
 assert.match(page, /function formatRoundedUpInr\(value: string \| number \| null \| undefined\)/)
 assert.match(page, /Math\.ceil\(numeric\)\.toLocaleString\("en-IN", \{ maximumFractionDigits: 0 \}\)/)
-assert.equal((page.match(/formatRoundedUpInr\(/g) ?? []).length, 6)
+assert.equal((page.match(/formatRoundedUpInr\(/g) ?? []).length, 4)
+assert.equal((page.match(/formatStockUnitPrice\(product\.latestPurchaseUnitCost, product\.unit\)/g) ?? []).length, 2)
+assert.equal(formatStockUnitPrice("27.2560", "Kg"), "₹27.2560 / Kg")
+assert.equal(formatStockUnitPrice("5.9667", "Kg"), "₹5.9667 / Kg")
+assert.equal(formatStockUnitPrice("1234.00", "litre"), "₹1,234.00 / litre")
+assert.equal(formatStockUnitPrice(null, "Kg"), "Not entered")
+assert.equal(formatStockUnitPrice("", "Kg"), "Not entered")
 assert.doesNotMatch(page, /formatInr\([^\n]*, 4\)/)
 
 assert.equal(Math.ceil(111 / 13), 9)

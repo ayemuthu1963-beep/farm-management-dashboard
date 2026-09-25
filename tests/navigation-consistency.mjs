@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import { BarChart3, Brain, CalendarDays, CloudSun, ShieldCog } from "lucide-react"
+import { FARM_CALENDAR_URL } from "../lib/farm-calendar.ts"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -32,13 +34,38 @@ assert.equal(intelligence.showOnDashboard, true)
 assert.equal(intelligence.showInSidebar, true)
 
 const sidebarById = new Map(sidebarNavigationItems.map((item) => [item.id, item]))
-for (const tile of homepageNavigationItems.filter((item) => item.showInSidebar)) {
+for (const tile of homepageNavigationItems) {
   const sidebarItem = sidebarById.get(tile.id)
   assert.ok(sidebarItem, `${tile.label} must appear in the sidebar`)
   assert.equal(sidebarItem.label, tile.label)
   assert.equal(sidebarItem.href, tile.href)
   assert.equal(sidebarItem.icon, tile.icon)
 }
+
+assert.equal(homepageNavigationItems.some((item) => item.id === "weather-history"), false)
+const weather = sidebarById.get("todays-weather")
+assert.ok(weather)
+assert.equal(weather.label, "Live Weather – Muthu Farms")
+assert.equal(weather.href, "/weather")
+assert.equal(weather.icon, CloudSun)
+const calendar = sidebarById.get("farm-calendar")
+assert.ok(calendar)
+assert.equal(calendar.label, "Farm Calendar")
+assert.equal(calendar.href, FARM_CALENDAR_URL)
+assert.equal(calendar.icon, CalendarDays)
+assert.equal(calendar.external, true)
+assert.equal(calendar.showOnDashboard, true)
+assert.equal(intelligence.icon, Brain)
+const admin = sidebarById.get("admin-console")
+assert.ok(admin)
+assert.equal(admin.label, "Admin Console")
+assert.equal(admin.href, "/admin")
+assert.equal(admin.icon, ShieldCog)
+assert.equal(
+  new Set(homepageNavigationItems.map((item) => item.icon)).size,
+  homepageNavigationItems.length,
+  "Homepage modules must use distinct relevant icons",
+)
 
 const motorRuntime = sidebarById.get("motor-runtime")
 const liveHarvestCounter = sidebarById.get("live-harvest-counter")
@@ -65,6 +92,7 @@ assert.equal(existsSync(join(repoRoot, "app", "motor-runtime", "screenshot-analy
 const reports = mfmsNavigationItems.find((item) => item.id === "farm-reports")
 assert.ok(reports)
 assert.equal(reports.label, "Farm Reports")
+assert.equal(reports.icon, BarChart3)
 assert.equal(reports.status, "coming-soon")
 assert.equal(reports.href, "/under-construction")
 assert.notEqual(reports.href, "/coconut-harvest")
@@ -117,4 +145,16 @@ assert.match(sidebarSource, /sidebarNavigationItems/)
 assert.doesNotMatch(sidebarSource, /href:\s*["']#["']/)
 assert.match(shellSource, /<Sidebar onNavigate=\{\(\) => setOpen\(false\)\} \/>/)
 
-console.log("MFMS shared navigation, route, active-state, desktop and mobile invariants: PASS")
+const moduleSource = readFileSync(join(repoRoot, "components/home/module-card.tsx"), "utf8")
+const homeDataSource = readFileSync(join(repoRoot, "lib/home-data.ts"), "utf8")
+const weatherSource = readFileSync(join(repoRoot, "components/home/weather-card.tsx"), "utf8")
+assert.match(homeDataSource, /icon: item.icon/)
+assert.match(moduleSource, /const Icon = data.icon/)
+assert.match(moduleSource, /<Icon /)
+assert.match(weatherSource, /weatherNavigation.label/)
+assert.match(weatherSource, /href=\{weatherNavigation.href\}/)
+assert.match(weatherSource, /const WeatherIcon = weatherNavigation.icon/)
+assert.match(sidebarSource, /target=\{item.external \? "_blank" : undefined\}/)
+assert.doesNotMatch(sidebarSource, /className="truncate"/)
+
+console.log("MFMS shared navigation, route, icon and responsive-source invariants: PASS")

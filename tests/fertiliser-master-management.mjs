@@ -8,6 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 
 const page = read("app/fertiliser-management/page.tsx")
 const api = read("lib/fertiliser-api.ts")
+const productData = read("lib/fertiliser-data.ts")
 const adjustmentTypeHandler = page.split("const handleAdjustmentTypeChange", 2)[1].split("const handleRequirementProductChange", 1)[0]
 
 assert.doesNotMatch(page, /Read-only in FERT-04|validateDisabledMasterForm|Validate Disabled Form/)
@@ -39,5 +40,16 @@ assert.match(api, /masterCategories/)
 assert.match(api, /active_only=false/)
 assert.match(api, /\/api\/fertiliser\/products\/\$\{productId\}\/deactivate/)
 assert.match(api, /\/api\/fertiliser\/categories\/\$\{categoryId\}\/restore/)
+
+const stockTableHeaders = [...page.split('function ProductRegister', 2)[1].split('function ProductMasterTable', 1)[0].matchAll(/<th className="px-3 py-2\.5">([^<]+)<\/th>/g)].map((match) => match[1])
+assert.deepEqual(stockTableHeaders, ["Category", "Product Name", "Technical Name", "Unit", "Expiry Date", "Expiry Status", "Stock Status", "Latest Price / Unit", "Latest Purchase"])
+assert.match(page, /Stock details<\/summary>[\s\S]*Quantity: \{product\.quantityText/)
+assert.match(page, /product\.technicalName \?\? ""/)
+assert.match(page, /product\.technical_name \?\? ""/)
+assert.match(page, /technical_name: technicalName \|\| null/)
+assert.match(api, /updateFertiliserProductTechnicalName[\s\S]*PATCH/)
+assert.match(api, /technical_name: string \| null/)
+assert.match(productData, /technicalName\?: string \| null/)
+assert.doesNotMatch(page, /duplicateConfirmationNotes|Grosure appears in Insecticide/)
 
 console.log("Fertiliser Product and Category Master management invariants: PASS")
