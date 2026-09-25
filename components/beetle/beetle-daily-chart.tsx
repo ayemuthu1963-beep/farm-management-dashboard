@@ -21,6 +21,9 @@ function chartDate(value: unknown): string {
 }
 
 export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate }: BeetleDailyChartProps) {
+  const hasCountData = counts.some((count) => BEETLE_LURE_SERIES.some((series) =>
+    typeof count[series.key] === "number" && Number.isFinite(count[series.key]),
+  ))
   const countDates = new Set(counts.map((count) => count.sourceDate).filter((date): date is string => Boolean(date)))
   const eventDates = new Set([
     ...waterChangeDates,
@@ -41,7 +44,7 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="sourceDate" tickFormatter={chartDate} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval={0} angle={-30} textAnchor="end" height={56} padding={{ left: 48, right: 16 }} />
-          <YAxis width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
+          <YAxis domain={hasCountData ? [0, "auto"] : [0, 1]} width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip labelFormatter={chartDate} contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", backgroundColor: "var(--card)", color: "var(--card-foreground)", fontSize: 12 }} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }} />
           <Legend wrapperStyle={{ fontSize: 12 }} itemSorter={(item) => BEETLE_LURE_SERIES.findIndex((series) => series.key === item.dataKey)} />
           {BEETLE_LURE_SERIES.map((series) => (
