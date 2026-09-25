@@ -44,7 +44,7 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="sourceDate" tickFormatter={chartDate} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval={0} angle={-30} textAnchor="end" height={56} padding={{ left: 48, right: 16 }} />
-          <YAxis domain={hasCountData ? [0, "auto"] : [0, 1]} width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
+          <YAxis domain={hasCountData ? [0, "auto"] : [0, 1]} allowDataOverflow={!hasCountData} width={40} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip labelFormatter={chartDate} contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", backgroundColor: "var(--card)", color: "var(--card-foreground)", fontSize: 12 }} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }} />
           <Legend wrapperStyle={{ fontSize: 12 }} itemSorter={(item) => BEETLE_LURE_SERIES.findIndex((series) => series.key === item.dataKey)} />
           {BEETLE_LURE_SERIES.map((series) => (
@@ -54,7 +54,7 @@ export function BeetleDailyChart({ counts, waterChangeDates, pheromoneChangeDate
               connectNulls={false} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
           ))}
           {pheromoneChangeDate ? (
-            <ReferenceLine x={pheromoneChangeDate} stroke="#dc2626" strokeWidth={3} label={{ value: "Pheromone change / reset", position: "insideTopLeft", fill: "#b91c1c", fontSize: 12, fontWeight: 700 }} />
+            <ReferenceLine x={pheromoneChangeDate} stroke="#dc2626" strokeWidth={3} label={{ value: "Pheromone change / reset", position: "insideTop", fill: "#b91c1c", fontSize: 12, fontWeight: 700 }} />
           ) : null}
           {waterChangeDates.map((date) => (
             <ReferenceLine key={`water-change-${date}`} x={date} stroke="#047857" strokeWidth={3} label={{ value: "Water changed", position: "insideBottomRight", fill: "#065f46", fontSize: 12, fontWeight: 700 }} />
